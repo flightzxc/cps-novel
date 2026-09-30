@@ -93,6 +93,42 @@ type NovelArticleAccessWithIdentity =
       readonly publicPageShortId: string | null;
     });
 
+/**
+ * 2026-09-30（短码语种纠正，对齐短剧站 v8.5.1 `getDramaDetailBySlug`
+ * `site-queries.ts:972-993`）：按短码找到文章后，还要知道它**真正的**语种和
+ * slug，调用方才能判断"这条 URL 是不是它的规范地址、不是就 308 过去"。
+ * 与 `NovelArticleAccessWithIdentity` 的区别只是多带 `locale`/`slug`。
+ */
+export type NovelArticleAccessWithLocation =
+  | { readonly kind: "not_found" }
+  | (Exclude<NovelArticleAccessResult, { kind: "not_found" }> & {
+      readonly title: string;
+      readonly publicPageShortId: string | null;
+      readonly locale: string;
+      readonly slug: string;
+    });
+
+/**
+ * 详情页访问判定读的那一行。`resolveNovelArticlePublicAccess`（按 locale+slug
+ * 找）与 `resolveNovelArticlePublicAccessByShortId`（按短码找）共用同一个
+ * select 与同一个 `classifyNovelArticleAccess`，两条路径对"这一行该算发布 /
+ * 下架 / 撤回 / 404"永远给同一个答案，只在"怎么找到这一行"上不同。
+ */
+const NOVEL_ARTICLE_ACCESS_SELECT = {
+  id: true,
+  title: true,
+  locale: true,
+  slug: true,
+  publicPageShortId: true,
+  novelId: true,
+  status: true,
+  seoVisibility: true,
+  novel: { select: { status: true } },
+  promoLink: { select: { status: true, webUrl: true, appUrl: true } },
+} as const satisfies Prisma.ArticleSelect;
+
+type NovelArticleAccessRow = Prisma.ArticleGetPayload<{ select: typeof NOVEL_ARTICLE_ACCESS_SELECT }>;
+
 /** Same visibility decision plus URL identity, read from one database snapshot.
  * The legacy check above intentionally retains its exact response shape. */
 export async function resolveNovelArticlePublicAccess(
@@ -102,19 +138,37 @@ export async function resolveNovelArticlePublicAccess(
 ): Promise<NovelArticleAccessWithIdentity> {
   const article = await db.article.findFirst({
     where: buildPrimaryArticleWhere({ locale: input.locale, slug: input.slug }),
-    select: {
-      id: true,
-      title: true,
-      publicPageShortId: true,
-      novelId: true,
-      status: true,
-      seoVisibility: true,
-      novel: { select: { status: true } },
-      promoLink: { select: { status: true, webUrl: true, appUrl: true } },
-    },
+    select: NOVEL_ARTICLE_ACCESS_SELECT,
   });
   if (!article) return { kind: "not_found" };
+  return classifyNovelArticleAccess(article, env);
+}
 
+/**
+ * 按公开短码（`Article.publicPageShortId`，全局唯一）找文章，判定口径与
+ * `resolveNovelArticlePublicAccess` 完全相同，另外把文章真实的 `locale`/`slug`
+ * 带回来。短码找不到 → `not_found`。这是"短码是身份、语种前缀和 slug 只是
+ * 展示"的读取入口，见 `resolvePublicArticleBySlugParam`。
+ */
+export async function resolveNovelArticlePublicAccessByShortId(
+  db: PrismaClient | Prisma.TransactionClient,
+  input: { readonly shortId: string },
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<NovelArticleAccessWithLocation> {
+  const article = await db.article.findFirst({
+    where: buildPrimaryArticleWhere({ publicPageShortId: input.shortId }),
+    select: NOVEL_ARTICLE_ACCESS_SELECT,
+  });
+  if (!article) return { kind: "not_found" };
+  const access = classifyNovelArticleAccess(article, env);
+  if (access.kind === "not_found") return access;
+  return { ...access, locale: article.locale, slug: article.slug };
+}
+
+function classifyNovelArticleAccess(
+  article: NovelArticleAccessRow,
+  env: NodeJS.ProcessEnv,
+): NovelArticleAccessWithIdentity {
   // C-27/C-29: `Article.novel` is nullable as of C-27 (blog/listicle/guide
   // articles have no Novel). THIS function stays Novel-article-only
   // permanently — a blog Article's real public path is

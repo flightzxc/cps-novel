@@ -85,6 +85,16 @@ const ALLOWED_EXCEPTIONS_SCOPED: ReadonlySet<string> = new Set([
   "vi:notFoundPage.title",
   "vi:notFoundPage.body",
   "pl:notFoundPage.body",
+  // 2026-09-30 语言切换提示的"非书页"键 `localeSwitcher.fallbackToastPage`，英文原文
+  // "This page isn't available in {locale} yet…"。与上面几条同一类字面重合：
+  //  - `vi:…fallbackToastPage`：越南语"Trang này"= "this page"（通用"本页"，不是
+  //    "trang web này"= "this website"），对应英文原文里的 "This page"；
+  //  - `pl:…fallbackToastPage`：波兰语"Ta strona"= "this page"（"strona"本义就是
+  //    "页面"），同样对应英文原文里的 "This page"。
+  // 两处都不是站点/平台身份声明。（书页那个键 `fallbackToast` 照搬 CPS 句式、
+  // 仅把"剧"换成"书"，用的是"标题/作品/书"，不含这两个词形，不需要例外。）
+  "vi:localeSwitcher.fallbackToastPage",
+  "pl:localeSwitcher.fallbackToastPage",
 ]);
 
 /**
@@ -172,6 +182,68 @@ describe("非英文语种公开文案守卫 · 不提本站/原平台/预览（�
       const key = keyParts.join(":");
       const leaves = flattenLeaves(CATALOGS[locale as SiteLocale]);
       expect(leaves.has(key), `${scoped} 不是 ${locale} 目录里的真实键`).toBe(true);
+    }
+  });
+});
+
+/**
+ * 2026-09-30 语言切换器两个键的显式覆盖（开发单第 5 条；Owner 后续拆成两个键）：
+ *  - `localeSwitcher.fallbackToast`：书页（详情页、章节页）用，**照搬 CPS v8.5.1 句式，
+ *    仅把"剧/影片"换成"书"**（Owner 2026-09-30；zh-Hant/ru/vi 三语种换词，其余原样）；
+ *  - `localeSwitcher.fallbackToastPage`：其它页面（分类页、博客页、404 页、未登记路径）用，
+ *    CPS 没有对应场景，14 语种新译。
+ *
+ * 上面两个 describe 本来就会遍历目录里的**全部**叶子，新键自动在其中。这一块的
+ * 作用是把"两个键确实被扫到、并且守卫对它们真的会响"变成一条不依赖遍历的、可读的
+ * 断言——遍历式守卫有个天然的盲区：如果哪天有人把这个键挪出目录（或改名），
+ * 遍历依旧全绿，守卫却已经不再覆盖它。这里按键名点名：
+ *  1. 两个键存在于全部 15 个目录，且每条译文都保留两处 `{locale}` 占位符；
+ *  2. en 原文与 14 个语种译文都通过与上面完全相同的禁用词判定（含"试读/预览"类词）；
+ *  3. 金丝雀：把禁用词塞回这句话，同一套判定必须命中——证明守卫对这两个键不是
+ *     摆设（见开发单的变异记录）。
+ */
+const TOAST_KEYS = ["localeSwitcher.fallbackToast", "localeSwitcher.fallbackToastPage"] as const;
+
+function bannedEnHits(value: string): string[] {
+  return BANNED_PATTERNS.filter(({ pattern }) => pattern.test(value)).map(({ name }) => name);
+}
+
+function bannedTermHits(locale: Exclude<SiteLocale, "en">, value: string): string[] {
+  const lowered = value.toLowerCase();
+  return NON_EN_BANNED_TERMS[locale].filter((term) => lowered.includes(term.toLowerCase()));
+}
+
+describe.each(TOAST_KEYS)("语言切换提示键 %s 被守卫覆盖（2026-09-30）", (key) => {
+  const enValue = flattenLeaves(en).get(key) as string;
+
+  it("存在于全部 15 个目录，且每条译文都保留两处 {locale} 占位符", () => {
+    for (const locale of SITE_LOCALES) {
+      const value = flattenLeaves(CATALOGS[locale]).get(key);
+      expect(typeof value, `${locale} 缺 ${key}`).toBe("string");
+      expect((value as string).split("{locale}").length - 1, `${locale} 的 {locale} 占位符应恰好两处`).toBe(2);
+    }
+  });
+
+  it("en 原文不含 this site / original platform / source platform / preview", () => {
+    expect(bannedEnHits(enValue)).toEqual([]);
+  });
+
+  it.each(NON_EN_LOCALES)("%s 译文不含该语种登记的禁用词", (locale) => {
+    const value = flattenLeaves(CATALOGS[locale]).get(key) as string;
+    // 例外登记（`ALLOWED_EXCEPTIONS_SCOPED`）里的字面重合词形不在此处再判一次——
+    // 与上面遍历式守卫的口径一致；其余全部照判。
+    if (ALLOWED_EXCEPTIONS_SCOPED.has(`${locale}:${key}`)) return;
+    expect(bannedTermHits(locale, value)).toEqual([]);
+  });
+
+  it("金丝雀：往这句话里塞回禁用词，同一套判定必须命中（en 与每个非英文语种都测）", () => {
+    expect(bannedEnHits(`${enValue} It is on this site.`)).toContain("this site");
+    expect(bannedEnHits(`${enValue} See the original platform.`)).toContain("original platform");
+    expect(bannedEnHits(`${enValue} Preview chapters.`)).toContain("preview");
+    for (const locale of NON_EN_LOCALES) {
+      const value = flattenLeaves(CATALOGS[locale]).get(key) as string;
+      const [firstTerm] = NON_EN_BANNED_TERMS[locale];
+      expect(bannedTermHits(locale, `${value} ${firstTerm}`), `${locale} 的守卫对 ${key} 不响`).toContain(firstTerm);
     }
   });
 });

@@ -21,7 +21,6 @@
 import { getHomeName } from "../breadcrumb-i18n";
 import { buildHreflangAlternates, shouldNoIndex } from "../seo-utils";
 import {
-  buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
   resolveOgImage,
@@ -32,8 +31,9 @@ export interface CategorySeoData {
   name: string;
   slug: string;
   /**
-   * Locale-specific category description (标签资产，按语种)。缺失时 `<meta description>`、og/twitter 描述与 CollectionPage JSON-LD 的 `description` 都改用 `descriptionFallback`（见下，
-   * 同一个值）。永远不回退到中文 `canonical_definition`。
+   * Locale-specific category description (标签资产，按语种)。缺失时 `<meta description>`、
+   * og/twitter 描述与 CollectionPage JSON-LD 的 `description` 都改用 `descriptionFallback`
+   * （见下，同一个值）。永远不回退到中文 `canonical_definition`。
    */
   description?: string | null;
   /**
@@ -50,6 +50,16 @@ export interface CategorySeoData {
   pageSuffix?: string;
   siteName: string;
   defaultOgImage?: string | null;
+  /**
+   * The locales in which this category page really returns 200 (has public
+   * content) — `listCategoryPublicLocales` in `@/lib/site/category-locales`,
+   * plus the page's own locale. Required, no default: a category page that
+   * blind-enumerates all 15 registered locales advertises hreflang URLs that
+   * are 404 (an empty category is a 404 here), which is exactly the defect
+   * this field exists to prevent — same "no silent default" reasoning as
+   * `SiteShell`'s required `locale`.
+   */
+  hreflangLocales: readonly string[];
 }
 
 export function buildCategorySeoMeta(
@@ -60,7 +70,13 @@ export function buildCategorySeoMeta(
   const path = pageNumber >= 2
     ? `/category/${data.slug}?page=${pageNumber}`
     : `/category/${data.slug}`;
-  const canonical = buildCanonical(path);
+  // 2026-09-30: locale-prefixed, like CPS's `buildLocaleCanonical(locale, path)`
+  // (`v8.5.1:src/lib/seo-templates/category.ts`). This used to be the
+  // locale-blind `buildCanonical(path)`, so `/ko/category/x` declared the
+  // bare (en) `/category/x` as its canonical — a URL that is a 404 whenever
+  // the category has no en content (an empty category is a 404 here) — and
+  // contradicted the page's own hreflang self-entry below.
+  const canonical = buildLocaleCanonical(locale, path);
   const title = `${data.name}${data.pageSuffix ?? ""}`;
   const trimmedDescription = data.description?.trim() ?? "";
   const trimmedFallback = data.descriptionFallback?.trim() ?? "";
@@ -104,7 +120,7 @@ export function buildCategorySeoMeta(
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(`/category/${data.slug}`, locale),
+      languages: buildHreflangAlternates(`/category/${data.slug}`, locale, data.hreflangLocales),
     },
     robots: shouldNoIndex(pageNumber) ? { index: false, follow: true } : undefined,
     other: { "application/ld+json": JSON.stringify([collectionLd, breadcrumbLd]) },

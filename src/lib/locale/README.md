@@ -25,7 +25,7 @@ src/lib/locale/root-negotiation.ts   ← L10N P4 新增：根路径 Accept-Langu
 | 层 | 定义 | 住在哪 | 供谁读 |
 | --- | --- | --- | --- |
 | 静态层 | `SITE_LOCALES`（同步、常量、15 语） | `locale-canonical.ts` | 路由（`proxy.ts`/`[locale]/_guard.ts`）、sitemap 默认、IndexNow 资格、hreflang 枚举、后台语种下拉 |
-| 动态层 | `getActiveLocales()`（异步、按公开可见谓词族算出、⊆ 静态层、`en` 恒含） | `active-locales.ts` | 目前只有一处：`SiteChrome.activeLocales` → `SiteHeader` → `LocaleSwitcher` |
+| 动态层 | `getActiveLocales()`（异步、按公开可见谓词族算出、⊆ 静态层、`en` 恒含） | `active-locales.ts` | 决策消费点只有一处：`SiteChrome.activeLocales` → `SiteHeader` → `LocaleSwitcher`；另有一处**仅限成本**的用法——分类页 hreflang 用它缩小要探测的候选语种（是否 200 仍由 `getPublicCategoryPage` 判定，见 `active-locales.ts` 尾注） |
 
 **CPS 用静态集的地方海阅不得换动态集，反之亦然**——两层各自的消费点边界见
 `docs/governance/port-registry.md` 的 L10N P4 小节 §1 清单①②。

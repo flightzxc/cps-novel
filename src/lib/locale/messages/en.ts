@@ -209,6 +209,17 @@ export const en = {
     title: "This page could not be found",
     body: "The address may be wrong, or this page is no longer here.",
   },
+  // 语言切换器（2026-09-30，对齐短剧站 v8.5.1）。目标语种没有"当前这一页"对应
+  // 的内容时先弹提示，再跳到目标语种首页。`{locale}` 是目标语种的本语自称（例如
+  // "한국어"、"Français"），整句出现两次。两句都不提"本站/原平台/预览/试读"。
+  localeSwitcher: {
+    // 书页（详情页、章节页）用：逐字照搬 CPS `src/messages/en.json:136`
+    // （v8.5.1）——文字一个不动，CPS 说 "title" 就是 "title"。
+    fallbackToast: "This title isn't available in {locale} yet. Switched to the {locale} homepage.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）用：CPS 没有对应场景的新键，
+    // Owner 定稿英文原文，句式与上面一致，只把 "title" 换成 "page"。
+    fallbackToastPage: "This page isn't available in {locale} yet. Switched to the {locale} homepage.",
+  },
   pagination: {
     previous: "Previous",
     next: "Next",

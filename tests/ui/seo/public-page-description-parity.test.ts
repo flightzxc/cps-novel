@@ -191,6 +191,10 @@ describe("public page <meta name=description>: non-empty, matches og:description
   // （`meta.categoryDescriptionFallback`，15 语），旧顾虑（英文句子混进非英语页面）不再成立。
   it("category: falls back to the localized fixed sentence when the category has no description", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_NO_DESCRIPTION, chrome: CHROME });
+    // 2026-09-30：分类页元数据现在读动态层活跃语种来算 hreflang（只列有公开内容的
+    // 语种），loader 的 mock 必须返回数组而不是 undefined；这条用例只关心
+    // description，取只有 en 的最简集合（没有其它语种要查）。
+    vi.mocked(publicLoad.loadActiveLocales).mockResolvedValue(["en"]);
     getPublicCategoryPage.mockResolvedValue({
       novels: [CARD_WITH_COVER],
       page: 1,

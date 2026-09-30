@@ -185,8 +185,10 @@ describe.each([
   { locale: "en" as const, prefix: "", name: "Back to home" },
   { locale: "es" as const, prefix: "/es", name: "Volver al inicio" },
 ])("novel-not-found.tsx · NovelNotFoundBody — homeHref ($locale)", ({ locale, prefix, name }) => {
-  it(`"${name}" links to ${prefix || "/"}`, () => {
-    render(NovelNotFoundBody({ locale }));
+  // 2026-09-30：`NovelNotFoundBody` 现在是 async（404 页要加载带站名的 chrome），
+  // 所以先 await 再渲染；链接文案与 href 的断言一字未改。
+  it(`"${name}" links to ${prefix || "/"}`, async () => {
+    render(await NovelNotFoundBody({ locale }));
     const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(prefix ? prefix : "/");
   });

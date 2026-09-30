@@ -181,6 +181,12 @@ const messages = {
     title: "ไม่พบหน้านี้",
     body: "ที่อยู่อาจไม่ถูกต้อง หรือหน้านี้ไม่มีอยู่แล้ว",
   },
+  localeSwitcher: {
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/th.json:136。
+    fallbackToast: "เรื่องนี้ยังไม่มีในภาษา {locale} ระบบพาคุณไปยังหน้าแรกภาษา {locale} แล้ว",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "หน้านี้ยังไม่มีในภาษา {locale} ระบบพาคุณไปยังหน้าแรกภาษา {locale} แล้ว",
+  },
   pagination: {
     previous: "ก่อนหน้า",
     next: "ถัดไป",

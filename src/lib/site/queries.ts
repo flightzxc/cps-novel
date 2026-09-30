@@ -3,7 +3,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { NovelCardView, NovelDetailView, ChapterView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
-import { resolveNovelArticlePublicAccess } from "@/server/publication/access";
+import { asSiteLocale } from "./locale-label";
+import { resolveNovelArticlePublicAccessByShortId } from "@/server/publication/access";
 import {
   buildPrimaryArticleWhere,
   buildPublicListArticleWhere,
@@ -111,10 +112,43 @@ export type PublicArticleAccess =
       shortId: string;
       title: string;
     }
+  /**
+   * 短码能找到一篇已发布文章，但这条 URL 不是它的规范地址（语种前缀不对，或
+   * slug 部分过期）——调用方应 `permanentRedirect`（308）到
+   * `buildArticlePath({ locale, slug: slugPart, shortId })`。CPS 同款：
+   * `getDramaDetailBySlug` 的 `redirectToCanonical`（`site-queries.ts:972-993`）。
+   */
+  | {
+      kind: "redirect";
+      locale: SiteLocale;
+      slugPart: string;
+      shortId: string;
+      title: string;
+    }
   | { kind: "unavailable"; title: string }
   | { kind: "takedown"; title: string }
   | { kind: "not_found" };
 
+/**
+ * 公开详情页/章节页的访问判定入口。
+ *
+ * 2026-09-30（短码语种纠正，照搬短剧站 v8.5.1）：**短码是页面身份，语种前缀
+ * 和 slug 只是展示**。此前这里按 (locale, slug) 找文章、找到后再要求短码相等
+ * ——语种前缀不对（比如把韩语书的路径挂到英文下）就找不到行，直接 404。现在
+ * 改成 CPS `getDramaDetailBySlug` 的顺序：
+ *
+ * 1. 短码解析不出来 → 404（没有短码就没有身份）；
+ * 2. 按短码找文章，找不到 → 404；
+ * 3. 找到且已发布：URL 的语种、slug 与文章真实的一致 → 正常渲染；不一致 →
+ *    `redirect`，由页面 `permanentRedirect`（308）到规范地址；
+ * 4. 找到但是下架（`unavailable`）/撤回（`takedown`）：只有 URL 完全就是它的
+ *    规范地址才沿用原来的页面；语种/slug 不符一律 404——不通过纠正跳转去
+ *    "确认"一篇非公开文章的存在，行为与改动前完全一致（改动前语种不符根本
+ *    找不到行）。
+ *
+ * 🔴 不做批量 301、不删 slug——CPS 的历史教训（跨语言死链事故 f2e4532 /
+ * 265401c）：靠短码就地纠正，永远不靠改库或大批量重定向。
+ */
 export async function resolvePublicArticleBySlugParam(
   db: PrismaClient | Prisma.TransactionClient,
   slugParam: string,
@@ -123,25 +157,36 @@ export async function resolvePublicArticleBySlugParam(
   const parsed = parseArticleSlugParam(slugParam);
   if (!parsed) return { kind: "not_found" };
 
-  const access = await resolveNovelArticlePublicAccess(db, { locale, slug: parsed.slugPart });
+  const access = await resolveNovelArticlePublicAccessByShortId(db, { shortId: parsed.shortId });
   if (access.kind === "not_found") return { kind: "not_found" };
 
-  if (access.publicPageShortId !== parsed.shortId) {
-    return { kind: "not_found" };
-  }
+  const isCanonicalUrl = access.locale === locale && access.slug === parsed.slugPart;
 
   if (access.kind === "published") {
+    if (isCanonicalUrl) {
+      return {
+        kind: "published",
+        articleId: access.articleId,
+        novelId: access.novelId,
+        slugPart: parsed.slugPart,
+        shortId: parsed.shortId,
+        title: access.title,
+      };
+    }
+    // 文章存的语种不在已登记集合里：没有可跳的规范地址，当 404 处理而不是
+    // 跳到一个必然 404 的 `/{未知语种}/novel/…`。
+    const canonicalLocale = asSiteLocale(access.locale);
+    if (!canonicalLocale) return { kind: "not_found" };
     return {
-      kind: "published",
-      articleId: access.articleId,
-      novelId: access.novelId,
-      slugPart: parsed.slugPart,
+      kind: "redirect",
+      locale: canonicalLocale,
+      slugPart: access.slug,
       shortId: parsed.shortId,
       title: access.title,
     };
   }
 
-  return { kind: access.kind, title: access.title };
+  return isCanonicalUrl ? { kind: access.kind, title: access.title } : { kind: "not_found" };
 }
 
 export function toPublicArticle(

@@ -156,6 +156,12 @@ const messages = {
     title: "No se pudo encontrar esta página",
     body: "Es posible que la dirección sea incorrecta o que esta página ya no exista.",
   },
+  localeSwitcher: {
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/es.json:136。
+    fallbackToast: "Este título aún no está disponible en {locale}. Te llevamos a la página principal en {locale}.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "Esta página aún no está disponible en {locale}. Te llevamos a la página principal en {locale}.",
+  },
   pagination: {
     previous: "Anterior",
     next: "Siguiente",

@@ -460,6 +460,106 @@ describe("selectActiveArticleTemplate · 停用模板不可被选中", () => {
   });
 });
 
+// 后台"新建版本"之后，新版本必须真正用于建文章。CPS 的模板是原地编辑（一行一个
+// templateId，没有版本号），本仓把一次编辑落成同一 templateKey 的下一个版本行；
+// 缺陷是兜底分支按"创建时间最早的一行"取，永远拿到 v1。非英语的默认模板键是
+// `system-default-<locale>-v1`，命不中首选的 `system-default-v1`，所以 14 个非英语
+// 语种全部走兜底分支，新版本永不生效。
+//
+// 夹具的 `create` 把每一行的 createdAt 都写成同一个 NOW——同刻并列时
+// `version: "desc"` 次序键恰好把 v2 排在前面，缺陷被夹具本身藏住了（这也是原有
+// 用例一直全绿的原因）。所以这里把 v1 手动回拨到更早，贴近生产真实情况：
+// 15 条默认模板是引导脚本几周前落的，运营今天才建 v2。
+describe("selectActiveArticleTemplate · 新版本生效（先定模板族，再取该族最高 active 版本）", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // 相对夹具的 NOW（2026-09-05）往前拨，不写死日历日——写死的日期一旦晚于 NOW，
+  // "回拨"就变成了"推后"，用例会在修复前误绿。
+  const BOOTSTRAPPED_AT = new Date(NOW.getTime() - 14 * DAY_MS);
+
+  function backdate(db: FakeArticleTemplateDb, templateKey: string, version: number, at: Date) {
+    const row = db.rows.find((candidate) => candidate.templateKey === templateKey && candidate.version === version)!;
+    row.createdAt = new Date(at);
+  }
+
+  async function createVersion(
+    db: FakeArticleTemplateDb,
+    stores: TestOnlyInMemoryAuthStores,
+    template: { templateKey: string; locale: string; status?: "draft" | "active" | "inactive" },
+  ) {
+    const guarded = await authorization(stores, "admin.article_template.create");
+    return createArticleTemplate({ ...guarded, template: { ...VALID_TEMPLATE, ...template } }, deps(db, stores));
+  }
+
+  it("en 默认模板族：system-default-v1 建了 v2 之后选中 v2", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    await createVersion(db, stores, { templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY, locale: "en" });
+    backdate(db, DEFAULT_ARTICLE_TEMPLATE_KEY, 1, BOOTSTRAPPED_AT);
+    const v2 = await createVersion(db, stores, { templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY, locale: "en" });
+
+    const selected = await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "en" });
+    expect(selected).toMatchObject({ id: v2.id, templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY, version: 2 });
+  });
+
+  it("🔴 非英语默认模板族：system-default-ru-v1 建了 v2 之后选中 v2（修复前恒选 v1）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    await createVersion(db, stores, { templateKey: "system-default-ru-v1", locale: "ru" });
+    backdate(db, "system-default-ru-v1", 1, BOOTSTRAPPED_AT);
+    const v2 = await createVersion(db, stores, { templateKey: "system-default-ru-v1", locale: "ru" });
+
+    const selected = await selectActiveArticleTemplate(db.asPrismaClient(), {
+      locale: "ru",
+      applicableArticleType: "novel_article",
+    });
+    expect(selected).toMatchObject({ id: v2.id, templateKey: "system-default-ru-v1", version: 2 });
+  });
+
+  it("🔴 en 也会中招：没有 system-default-v1 时走兜底，自建模板的 v2 同样必须生效", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    await createVersion(db, stores, { templateKey: "tpl-en-custom", locale: "en" });
+    backdate(db, "tpl-en-custom", 1, BOOTSTRAPPED_AT);
+    const v2 = await createVersion(db, stores, { templateKey: "tpl-en-custom", locale: "en" });
+
+    const selected = await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "en" });
+    expect(selected).toMatchObject({ id: v2.id, templateKey: "tpl-en-custom", version: 2 });
+  });
+
+  it("选哪个模板族不变：仍是最早创建的那一族，不会被别的族更高的版本号抢走", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const defaultV1 = await createVersion(db, stores, { templateKey: "system-default-ru-v1", locale: "ru" });
+    backdate(db, "system-default-ru-v1", 1, BOOTSTRAPPED_AT);
+    await createVersion(db, stores, { templateKey: "ru-later", locale: "ru" });
+    backdate(db, "ru-later", 1, new Date(NOW.getTime() - 7 * DAY_MS));
+    await createVersion(db, stores, { templateKey: "ru-later", locale: "ru" });
+    await createVersion(db, stores, { templateKey: "ru-later", locale: "ru" });
+
+    const selected = await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ru" });
+    expect(selected).toMatchObject({ id: defaultV1.id, templateKey: "system-default-ru-v1", version: 1 });
+  });
+
+  it("新版本只有 active 才生效：草稿/停用的 v2 不接管，启用后接管，再停用 v1 也不影响", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const v1 = await createVersion(db, stores, { templateKey: "system-default-ja-v1", locale: "ja" });
+    backdate(db, "system-default-ja-v1", 1, BOOTSTRAPPED_AT);
+    const v2 = await createVersion(db, stores, { templateKey: "system-default-ja-v1", locale: "ja", status: "draft" });
+
+    expect((await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ja" }))?.id).toBe(v1.id);
+
+    db.rows.find((row) => row.id === v2.id)!.status = "inactive";
+    expect((await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ja" }))?.id).toBe(v1.id);
+
+    db.rows.find((row) => row.id === v2.id)!.status = "active";
+    expect((await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ja" }))?.id).toBe(v2.id);
+
+    db.rows.find((row) => row.id === v1.id)!.status = "inactive";
+    expect((await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ja" }))?.id).toBe(v2.id);
+  });
+});
+
 // L10N P3（矩阵 #5，施工提示词 §1.G）：`selectActiveArticleTemplate`/
 // `listActiveArticleTemplateOptions` 不再 OR 一个 `{locale: null}` 通配——
 // locale 精确匹配，ru 请求不会命中 en 模板，反之亦然；一份（理论上不该存在，

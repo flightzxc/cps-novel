@@ -346,7 +346,17 @@ const SENTENCE_COUNT_LOCALES = NON_EN_LOCALES.filter((locale) => locale !== "th"
  *    style choice, not a systemic zh-Hant rule gap. Pre-existing at
  *    `f1ccf6f`; not touched by this pass (施工纪律：不改任何译文措辞).
  */
-const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set(["zh-Hant:nav.footerNote"]);
+const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set([
+  "zh-Hant:nav.footerNote",
+  // 2026-09-30 `localeSwitcher.fallbackToast`（书页提示）是**照搬 CPS v8.5.1 句式，
+  // 仅把"剧"换成"书"**的（Owner 拍板"CPS 有则照搬"，并于同日补充：CPS 说"剧/影片"的
+  // 三个语种只换这个词）。CPS 的繁体中文原文 "此劇目尚未提供{locale}版本，
+  // 已切換至{locale}首頁。" 用逗号连成一句，现为 "此作品尚未提供{locale}版本，
+  // 已切換至{locale}首頁。"——句式与逗号连接保持 CPS 原样；英文原文是两句，与上面
+  // `nav.footerNote` 同一种地道的中文并句，没有任何信息被截断。只登记例外，不拆句。
+  // （非书页那个键 `fallbackToastPage` 是新译，按英文拆成两句，不需要例外。）
+  "zh-Hant:localeSwitcher.fallbackToast",
+]);
 
 describe("message catalog completeness (all 15 registered locales)", () => {
   it("SITE_LOCALES and CATALOGS agree on the set of registered locales", () => {
@@ -616,6 +626,10 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       digest: "abc123",
       current: 2,
       page: 2,
+      // 2026-09-30 语言切换器新键 `localeSwitcher.fallbackToast` 引入的变量：
+      // 目标语种的本语自称。这个采样表必须覆盖每一个插值变量名，否则 `t()`
+      // 对缺变量的键会（按设计）抛 MissingMessagesError。
+      locale: "Sample",
     };
     const leftoverBraces: string[] = [];
     for (const key of EN_KEYS) {

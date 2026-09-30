@@ -41,7 +41,7 @@ describe("public CanonicalTag i18n path guards", () => {
 
   it("category SEO omits description instead of synthesizing English novels. copy", () => {
     process.env.SITE_URL = "https://novel.example";
-    const seo = buildCategorySeoMeta({ name: "판타지", slug: "fantasy", siteName: "Novel", defaultOgImage: "/og.jpg" }, 1, "ko");
+    const seo = buildCategorySeoMeta({ name: "판타지", slug: "fantasy", siteName: "Novel", defaultOgImage: "/og.jpg", hreflangLocales: ["ko"] }, 1, "ko");
     expect(seo.description).toBe("");
     expect(seo.openGraph.description).toBeUndefined();
     expect(JSON.stringify(seo)).not.toMatch(/novels\./);
