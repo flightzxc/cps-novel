@@ -9,6 +9,7 @@ import { CollectionScreen } from "@/features/public-ui/collection/CollectionScre
 import { Pagination } from "@/features/public-ui/collection/Pagination";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
+import { pageSuffixFor } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
@@ -45,14 +46,20 @@ async function load(locale: SiteLocale, slug: string, rawPage: string | string[]
 }
 
 function seoFor(locale: SiteLocale, loaded: NonNullable<Awaited<ReturnType<typeof load>>>) {
+  const t = getPublicT(locale);
+  const name = loaded.category.category.name;
   return generateSeoMeta({
     entity: "category",
     locale,
     pageNumber: loaded.category.page,
     data: {
-      name: loaded.category.category.name,
+      name,
       slug: loaded.category.category.slug,
       description: loaded.category.category.description,
+      // TKD 对齐 CPS（Owner 2026-09-30，照 CPS 分类页）：标题 = 分类名 + 第 2 页起的本地化
+      // 翻页后缀；描述 = 分类描述 || 固定的本地化兜底句。品牌后缀由根布局模板加。
+      descriptionFallback: t("meta.categoryDescriptionFallback", { name }),
+      pageSuffix: pageSuffixFor(loaded.category.page, t),
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage || loaded.category.novels[0]?.coverUrl,
     },
