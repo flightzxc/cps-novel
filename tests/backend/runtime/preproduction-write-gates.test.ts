@@ -519,7 +519,11 @@ describe.each(SITE_MODE_CASES)("$mode preflight.sh 真实行为（不 mock，走
   });
 });
 
-describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", () => {
+// 本组每次断言都要 `docker run --rm` 起一个 bash:5.2 容器：sitemap / auto_tag_write 两条
+// 登记用例在单个 it 里连续起 9～10 个容器。宿主机负载 13～22 时单个容器约 2 秒、单条用例
+// 17～22 秒，会撞上 node project 的全局 testTimeout（15s）而随机失败；负载正常时则能过。
+// 所以只给本 describe 放宽到 60s（约 3 倍余量），全局 testTimeout 与断言一律不动。
+describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", { timeout: 60_000 }, () => {
   const BASH5_IMAGE = "bash:5.2";
   const bash5Available = spawnSync("docker", ["image", "inspect", BASH5_IMAGE], { encoding: "utf8" }).status === 0;
   const maybeIt = bash5Available ? it : it.skip;
