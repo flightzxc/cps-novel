@@ -16,6 +16,16 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.6 —— 准备中（2026-10-01；第一阶段重做；尚未部署）
+
+- 新集成基线 `9274c4aadf7738914e1ddc1ab4167b33f636588e`，基于 v0.5.5 收官 `d38d7c3`，已由 Opus 复核、集成；发布分支 `release/v0.5.6-2026-10-01-redo`。上一轮本地 Final `a98cd9c` 因新增安全公告作废、未推送，工作树与证据保留；本轮全新 npm ci、重新运行全部门禁，不沿用旧结果。Final 与不可变归档身份以本轮第一阶段交付为准。
+- 运营《小说站调整V2》第二轮：后台站点设置新增 Yandex 站长验证码和 Metrica ID；只在公开站且填写有效值后输出。站点地图排除无公开内容语种、categorypage 并入 mainpage（旧路径 308）、免费可索引章节加入 novelpage；B-27 docker bash:5.2 写闸测试单独 60 秒超时已修。
+- 新迁移 `20260930100000_site_setting_yandex` 为 site_setting 追加两列，迁移总数 20 → 21；字典和 web_app 两列 UPDATE grants 已同步。没有新环境变量及 Compose 改动。
+- B-29：Owner 于 2026-10-01 决定将 Next.js 16.3.3 → 16.3.7 安全升级并入本版；@next/third-parties、eslint-config-next 同步升版，lockfile 13 个同系列包变化。GHSA-vcvr-r3jv-pc5j 为 next/og ImageResponse RCE；主控核实海阅只在两个图标使用常量输入，评估不可利用，仍升级修复。本次不开发功能、不再修改依赖。
+- 第一阶段仅本地串行门禁、GitHub 推送及 linux/amd64 归档构建，不连接运维主机，交付后停止。第二阶段须 Owner 暂停批次并单独授权，仅限 haiyue-vps；env 仅改两个版本变量，自动标签值原样保留，由 release.sh 的 migrate-approved 执行迁移及重放 grants。本版没有第三阶段。
+- 不填写 Yandex、不触发站点地图刷新、不改基础设施或业务开关。刷新后只读核验，刷新前结构验收保持待办。本版尚未部署；部署后仅密码保护预生产生效，正式域名切换后才对公网可见，Yandex 仍需运营填写。
+- 回滚目标 v0.5.5 Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`；新增两列对旧版兼容，但 `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` 必须由 Owner 在回滚时明确批准。使用旧版不可变目录与本次 env 备份，不执行 down migration、不删列、不恢复数据。
+
 ### v0.5.5 —— 已发布到预生产（2026-09-30 19:46:54 +0800；Owner + Opus 验收 PASS）
 
 - 集成基线 `5cda72ad391a3f7820b5aa6c2fba09539e15dff6` 经 Opus 复核、集成；语种切换提示经 GPT 两轮第三方验收（PASS_WITH_FIXES → 修订后 PASS），TKD 新文案另经 GPT 验收通过。Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`；发版分支 `release/v0.5.5-2026-09-30`；后续文档提交不改变部署身份。
@@ -312,6 +322,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.6` | 2026-10-01 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | `release/v0.5.6-2026-10-01-redo`；基线 `9274c4a` | 准备中；尚未部署；第二阶段待 Owner 暂停批次并授权 |
 | `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 待只读追加；第三阶段 15 模板标题更新及零变化回读 PASS，approver admin / audit 516113 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
