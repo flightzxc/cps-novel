@@ -21,6 +21,12 @@ import { resolveNotFoundMetadata, resolveRouteMetadata, type ResolvedMetadata } 
  * 数据层（public-load/category-queries/站点设置）用 mock 喂固定数据，被测的是"元数据导出 +
  * Next 合并"这一层，不是数据库查询。
  *
+ * 404 有两条路径，必须分开验：页面 `generateMetadata` 自己返回的 "Not found"（页面没抛 notFound 时才用）
+ * 与 Next 的 not-found 约定（`notFound()` 抛出后的真 404 响应用 not-found 文件自己的元数据，页面
+ * `generateMetadata` 的标题不会出现在 404 响应里）。后者是真实渲染验证（`next build` + `next start`，
+ * 一次性 PostgreSQL）发现的：not-found 文件原先只有 robots、没有标题，真 404 的 `<title>` 落到根布局
+ * `title.default`（站点名），与验收表"Not found | 站点名"不符，已在 not-found 文件补标题。
+ *
  * 反向自检（本轮三处变异，均须让本文件对应用例变红，见施工报告）：
  *  1. 去掉 `_pages/home.tsx` 首页的 `title.absolute`——"/ja 首页不带后缀"等用例红；
  *  2. 去掉 `novel-detail.tsx`/`blog-detail.tsx` 的 `normalizeMetadataTitle` 调用——"已带 | 站点名
@@ -38,6 +44,12 @@ vi.mock("next/navigation", () => ({
 
 const state = vi.hoisted(() => ({
   settings: null as unknown as Record<string, unknown>,
+}));
+
+const headerState = vi.hoisted(() => ({ locale: null as string | null }));
+// `[locale]` 段的 not-found 壳按请求头（`x-novel-locale`）取语种，与 `src/app/layout.tsx` 同一机制。
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: () => headerState.locale }),
 }));
 
 vi.mock("@/app/_lib/public-deps", () => ({ prisma: {} }));
@@ -84,6 +96,7 @@ const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const rootNotFound = await import("@/app/not-found");
 const novelNotFound = await import("@/app/novel/[slugParam]/not-found");
+const localeNovelNotFound = await import("@/app/[locale]/novel/[slugParam]/not-found");
 
 const ORIGIN = "https://example.test";
 const CHROME = { brandHref: "/", navItems: [], footerNote: "© test" };
@@ -446,15 +459,28 @@ describe("404 / 下架 / 不可用（页面元数据仍为 noindex）", () => {
     expect(resolved.title.absolute).toBe("Not found | PulseNovel");
   });
 
-  it("Next 的 not-found 约定（layout 链 + not-found 模块自己的元数据，没有 page 项）：模块没有标题 -> 用根布局 default（站点名），仍 noindex", async () => {
+  it("Next 的 not-found 约定（真 404 响应用的是 not-found 文件自己的元数据，页面 generateMetadata 的标题不会出现在 404 响应里）：'Not found | PulseNovel'，noindex", async () => {
     for (const [name, mod, routeDir] of [
-      ["根 404", rootNotFound, ""],
-      ["小说段 404", novelNotFound, "novel/[slugParam]"],
+      ["根 404（未匹配路由、浏览/分类/博客等的 notFound()）", rootNotFound, ""],
+      ["小说段 404（不带语种前缀）", novelNotFound, "novel/[slugParam]"],
     ] as const) {
       const resolved = await resolveNotFoundMetadata({ routeDir, notFoundModule: mod });
-      expect(resolved.title.absolute, name).toBe("PulseNovel");
+      expect(resolved.title.absolute, name).toBe("Not found | PulseNovel");
       expect(resolved.robots, name).toEqual({ basic: "noindex, nofollow", googleBot: null });
+      // 不带 description 键——不覆盖根布局继承的描述。
+      expect(resolved.description, name).toBe(getPublicT("en")("meta.siteDescription"));
     }
+  });
+
+  it("[locale] 段的 404 壳按请求语种：/ja/... 的 404 标题是 ja 的 'Not found'，后缀仍是站点名；没有语种头时回退英文", async () => {
+    headerState.locale = "ja";
+    const ja = await resolveNotFoundMetadata({ routeDir: "[locale]/novel/[slugParam]", notFoundModule: localeNovelNotFound, params: { locale: "ja", slugParam: "x" } });
+    expect(ja.title.absolute).toBe(`${getPublicT("ja")("meta.notFound")} | PulseNovel`);
+    expect(ja.title.absolute).toBe("見つかりません | PulseNovel");
+    expect(ja.robots).toEqual({ basic: "noindex, nofollow", googleBot: null });
+    headerState.locale = null;
+    const fallback = await resolveNotFoundMetadata({ routeDir: "[locale]/novel/[slugParam]", notFoundModule: localeNovelNotFound, params: { locale: "ja", slugParam: "x" } });
+    expect(fallback.title.absolute).toBe("Not found | PulseNovel");
   });
 });
 

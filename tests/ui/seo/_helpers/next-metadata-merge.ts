@@ -110,7 +110,10 @@ export function metadataModulePaths(routeDir: string): Array<string | null> {
 async function buildItem(path: string | null, request: RouteRequest): Promise<[unknown, null]> {
   if (path === null) return [null, null];
   const mod = (await APP_MODULES[path]!()) as MetadataModule;
-  const isPage = path.endsWith("/page.tsx");
+  return buildItemFromModule(mod, path.endsWith("/page.tsx"), request);
+}
+
+async function buildItemFromModule(mod: MetadataModule, isPage: boolean, request: RouteRequest): Promise<[unknown, null]> {
   const props = isPage
     ? { params: Promise.resolve(request.params ?? {}), searchParams: Promise.resolve(request.searchParams ?? {}) }
     : { params: Promise.resolve(request.params ?? {}) };
@@ -151,6 +154,7 @@ export async function resolveNotFoundMetadata(request: { routeDir: string; notFo
   layoutPaths.push(null); // `__PAGE__` 节点：error 约定下取 layout，没有，null 项
   const routeRequest: RouteRequest = { routeDir: request.routeDir, params: request.params };
   const items = await Promise.all(layoutPaths.map((path) => buildItem(path, routeRequest)));
-  items.push([request.notFoundModule.metadata ?? null, null]);
+  // not-found 模块和其它模块一样可以导出静态 `metadata` 或 `generateMetadata`（`[locale]` 段的壳用后者）。
+  items.push(await buildItemFromModule(request.notFoundModule, false, routeRequest));
   return accumulate(request.routeDir || "/", items, "/", { trailingSlash: false, isStaticMetadataRouteFile: false, pathname: "/" });
 }

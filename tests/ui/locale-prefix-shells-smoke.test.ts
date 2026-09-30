@@ -449,13 +449,24 @@ describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
     notFoundHeaderState.headerValue = null;
   });
 
-  it("metadata re-exported verbatim on both shells", async () => {
+  it("metadata: bare shell re-exports the default-locale constant; [locale] shell builds it per request from the same header (TKD 对齐 CPS: 404 有本语种 Not found 标题 + noindex)", async () => {
     const bare = await import("@/app/novel/[slugParam]/not-found");
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/not-found");
     const pages = await import("@/app/_pages/novel-not-found");
 
     expect(bare.metadata).toEqual(pages.notFoundMetadata);
-    expect(prefixed.metadata).toEqual(pages.notFoundMetadata);
+    expect(pages.notFoundMetadata).toEqual({ title: "Not found", robots: { index: false, follow: false } });
+    // 无请求语种头 -> 与裸路径壳一致。
+    notFoundHeaderState.headerValue = null;
+    expect(await prefixed.generateMetadata()).toEqual(pages.notFoundMetadata);
+    // 有语种头 -> 该语种的标题，仍 noindex，且没有 description 键。
+    notFoundHeaderState.headerValue = "ja";
+    const ja = await prefixed.generateMetadata();
+    expect(ja).toEqual({ title: "見つかりません", robots: { index: false, follow: false } });
+    expect("description" in ja).toBe(false);
+    // 垃圾头值回退 en。
+    notFoundHeaderState.headerValue = "<script>";
+    expect(await prefixed.generateMetadata()).toEqual(pages.notFoundMetadata);
   });
 
   it("bare-path shell still pins PUBLIC_SITE_LOCALE (a bare path has no request locale to read)", async () => {
