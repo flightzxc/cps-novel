@@ -157,6 +157,8 @@ describe("CollectionPage JSON-LD（category 模板）", () => {
     slug: "romance",
     siteName: "PulseNovel",
     defaultOgImage: "https://example.test/og.png",
+    // 对方（语种切换会话）新增的必填字段：hreflang 只列有内容的语种；本用例不关心 alternates。
+    hreflangLocales: ["en"],
   };
   const parse = (seo: { other?: { "application/ld+json": string } }) =>
     JSON.parse(seo.other!["application/ld+json"]) as Array<Record<string, unknown>>;

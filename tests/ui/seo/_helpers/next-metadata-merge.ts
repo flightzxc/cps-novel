@@ -68,7 +68,12 @@ function loadAccumulateMetadata(): AccumulateMetadata {
 }
 
 /** `src/app` 下所有 layout/page 模块的懒加载器（Vite 静态展开，路径含括号/方括号也照常）。 */
-const APP_MODULES = import.meta.glob<Record<string, unknown>>("/src/app/**/{layout,page}.tsx");
+// 不写泛型参数：不同版本的 Next/Vite 类型对 `import.meta.glob` 是否泛型不一致（Next 16.3.3 的类型里不是），
+// 用调用后的类型断言统一成需要的形状。
+const APP_MODULES = import.meta.glob("/src/app/**/{layout,page}.tsx") as unknown as Record<
+  string,
+  () => Promise<Record<string, unknown>>
+>;
 
 type MetadataModule = {
   metadata?: Metadata;
