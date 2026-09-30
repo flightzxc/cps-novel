@@ -222,6 +222,9 @@ describe("article-template-bootstrap real repository assets (真读资产文件)
       expect(seo.metaTitle!.match(/\{[^}]*\}/g), locale).toEqual(["{novel_title}"]);
       expect(seo.metaTitle, `${locale}: 品牌名由布局后缀加，模板里不含`).not.toMatch(/PulseNovel/i);
       expect(seo.metaTitle!.replace("{novel_title}", "").trim().length, locale).toBeGreaterThan(3);
+      // 第三方验收（GPT PASS_WITH_FIXES）要求书名之外的固定部分压到 35 字符内（含前导空格/连字符，
+      // 按 Unicode 码点计，与译文对照表 docs/i18n/tkd-cps-parity-translations.tsv 的长度限制列一致）。
+      expect([...seo.metaTitle!.replace("{novel_title}", "")].length, `${locale}: 书名之外的固定部分应 ≤ 35 字符`).toBeLessThanOrEqual(35);
       if (locale !== "en") {
         expect(seo.metaTitle, `${locale}: 必须是本语种译文，不是英文占位`).not.toBe(en.seoTemplate.metaTitle);
       }
@@ -300,7 +303,7 @@ describe("article-template-bootstrap seoTemplate 不变量（放宽为占位符�
   });
 
   it("拒绝：译文丢了 {novel_title}", () => {
-    expectViolation({ locale: "de", seoOverride: { metaTitle: "Roman - Kostenlose Kapitel online lesen" } }, "seoTemplate.metaTitle placeholder/control-token sequence");
+    expectViolation({ locale: "de", seoOverride: { metaTitle: "Roman: Kapitel online gratis lesen" } }, "seoTemplate.metaTitle placeholder/control-token sequence");
   });
 
   it("拒绝：译文多了一个变量（{novel_description} 混进标题）", () => {

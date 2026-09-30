@@ -77,7 +77,7 @@ const webDb = web as unknown as TemplateTkdDb;
 const DE_TEMPLATE_KEY = "system-default-de-v1";
 const FR_TEMPLATE_KEY = "system-default-fr-v1";
 const OLD_SEO_TEMPLATE = { title: "{novel_title}", metaTitle: "{novel_title}", metaDescription: "{novel_description}" };
-const NEW_DE_TITLE_SUFFIX = " Roman - Kostenlose Kapitel online lesen";
+const NEW_DE_TITLE_SUFFIX = " Roman: Kapitel online gratis lesen";
 
 type Fixture = {
   id: string;

@@ -35,7 +35,7 @@
   ],
   "seoTemplate": {
     "title": "{novel_title}",
-    "metaTitle": "{novel_title} Novela - Lee capítulos gratis online",
+    "metaTitle": "{novel_title} Novela: capítulos gratis online",
     "metaDescription": "{novel_description}"
   },
   "slugTemplate": "",
