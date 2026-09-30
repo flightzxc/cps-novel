@@ -14,8 +14,9 @@
  * 顾虑不存在了。翻页后缀与兜底句都由调用方按请求语种解析好再传进来
  * （`pageSuffix`/`descriptionFallback`），模板本身保持无文案目录依赖。
  *
- * 本轮不动结构化数据：CollectionPage JSON-LD 的 `description` 仍然只在分类自己有描述时
- * 才输出（CPS 会把兜底句也写进去，这里没有跟）。
+ * CollectionPage JSON-LD 的 `description` 与 meta 同源（复核 A2，照 CPS `category.ts:31`：
+ * `rawDesc = description || fallback`，meta 与 JSON-LD 用同一个值）：分类自己的描述，
+ * 没有时用兜底句。JSON-LD 的 `name` 仍是纯分类名，不带翻页后缀。
  */
 import { getHomeName } from "../breadcrumb-i18n";
 import { buildHreflangAlternates, shouldNoIndex } from "../seo-utils";
@@ -31,9 +32,8 @@ export interface CategorySeoData {
   name: string;
   slug: string;
   /**
-   * Locale-specific category description (标签资产，按语种)。缺失时 `<meta description>`
-   * 与 og/twitter 描述改用 `descriptionFallback`（见下）；JSON-LD 仍然省略
-   * `description`。永远不回退到中文 `canonical_definition`。
+   * Locale-specific category description (标签资产，按语种)。缺失时 `<meta description>`、og/twitter 描述与 CollectionPage JSON-LD 的 `description` 都改用 `descriptionFallback`（见下，
+   * 同一个值）。永远不回退到中文 `canonical_definition`。
    */
   description?: string | null;
   /**
@@ -63,18 +63,17 @@ export function buildCategorySeoMeta(
   const canonical = buildCanonical(path);
   const title = `${data.name}${data.pageSuffix ?? ""}`;
   const trimmedDescription = data.description?.trim() ?? "";
-  // JSON-LD 只用分类自己的描述（本轮不动结构化数据）；meta/og/twitter 的描述另外允许兜底句。
-  const structuredDescription = trimmedDescription ? truncateDescription(trimmedDescription) : undefined;
   const trimmedFallback = data.descriptionFallback?.trim() ?? "";
-  const description =
-    structuredDescription ?? (trimmedFallback ? truncateDescription(trimmedFallback) : undefined);
+  // 分类自己的描述 || 兜底句；meta、og、twitter 与 JSON-LD 共用这一个值（CPS 同）。
+  const rawDescription = trimmedDescription || trimmedFallback;
+  const description = rawDescription ? truncateDescription(rawDescription) : undefined;
   const image = resolveOgImage(null, data.defaultOgImage);
   const collectionLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: data.name,
     url: canonical,
-    ...(structuredDescription ? { description: structuredDescription } : {}),
+    ...(description ? { description } : {}),
   };
   const breadcrumbLd = {
     "@context": "https://schema.org",

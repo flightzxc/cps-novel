@@ -10,8 +10,9 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  *    （品牌后缀由根布局模板加，见 `real-metadata-merge.test.ts`）；
  *  - 分类页描述 = 分类自己的描述 || 一句固定的本地化兜底文案（推翻此前"绝不合成描述"）；
  *  - og:title / twitter:title 与 <title> 同（带翻页后缀、不带品牌）；
- *  - 本轮不动结构化数据：CollectionPage JSON-LD 的 name 仍是纯分类名，description 仍只在
- *    分类自己有描述时输出。alternates/hreflang 也不在本测试范围（另一条线在改）。
+ *  - CollectionPage JSON-LD 的 name 仍是纯分类名（不带翻页后缀）；description 与 meta 同源
+ *    （分类自己的描述 || 兜底句，照 CPS `category.ts:31`，复核 A2）。
+ *    alternates/hreflang 不在本测试范围（另一条线在改）。
  */
 
 const NOT_FOUND = Symbol("next-not-found");
@@ -150,7 +151,7 @@ describe("分类页描述：分类自己的描述 || 固定的本地化兜底句
   });
 });
 
-describe("本轮不动结构化数据（category 模板的 JSON-LD）", () => {
+describe("CollectionPage JSON-LD（category 模板）", () => {
   const base = {
     name: "Romance",
     slug: "romance",
@@ -160,7 +161,7 @@ describe("本轮不动结构化数据（category 模板的 JSON-LD）", () => {
   const parse = (seo: { other?: { "application/ld+json": string } }) =>
     JSON.parse(seo.other!["application/ld+json"]) as Array<Record<string, unknown>>;
 
-  it("CollectionPage 的 name 永远是纯分类名（不带翻页后缀），描述缺失时仍省略 description", () => {
+  it("name 永远是纯分类名（不带翻页后缀）；分类没有描述时 description 用兜底句，与 meta/og/twitter 同一个值", () => {
     const seo = generateSeoMeta({
       entity: "category",
       locale: "en",
@@ -168,24 +169,39 @@ describe("本轮不动结构化数据（category 模板的 JSON-LD）", () => {
       data: { ...base, description: null, descriptionFallback: "Discover Romance novels on PulseNovel.", pageSuffix: " - Page 2" },
     });
     const [collection] = parse(seo);
-    expect(collection).toMatchObject({ "@type": "CollectionPage", name: "Romance" });
-    expect("description" in collection!).toBe(false);
+    expect(collection).toMatchObject({ "@type": "CollectionPage", name: "Romance", description: "Discover Romance novels on PulseNovel." });
+    expect(collection!.description).toBe(seo.description);
+    expect(collection!.description).toBe(seo.openGraph.description);
+    expect(collection!.description).toBe(seo.twitter.description);
     expect(seo.title).toBe("Romance - Page 2");
-    expect(seo.description).toBe("Discover Romance novels on PulseNovel.");
   });
 
-  it("分类有描述时 JSON-LD 仍带该描述", () => {
+  it("分类有描述时 JSON-LD 带该描述（兜底句不覆盖它）", () => {
     const seo = generateSeoMeta({
       entity: "category",
       locale: "en",
       data: { ...base, description: "Own description.", descriptionFallback: "fallback" },
     });
     expect(parse(seo)[0]).toMatchObject({ description: "Own description." });
+    expect(seo.description).toBe("Own description.");
   });
 
-  it("不传兜底句/后缀时保持旧行为（描述为空串、标题是纯分类名）", () => {
+  it("页面层：分类无描述时 JSON-LD description 是本语种兜底句（en/ja）", async () => {
+    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    const { CategoryBody } = await import("@/app/_pages/category");
+    for (const locale of ["en", "ja"] as const) {
+      const tree = await CategoryBody({ locale, params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
+      const children = (tree as unknown as { props: { children: unknown[] } }).props.children;
+      const node = children.find((child) => typeof child === "object" && child !== null && typeof (child as { props?: { json?: unknown } }).props?.json === "string") as { props: { json: string } };
+      const [collection] = JSON.parse(node.props.json) as Array<Record<string, unknown>>;
+      expect(collection!.description, locale).toBe(getPublicT(locale)("meta.categoryDescriptionFallback", { name: "Romance" }));
+    }
+  });
+
+  it("不传兜底句/后缀时保持旧行为（描述为空串、JSON-LD 无 description、标题是纯分类名）", () => {
     const seo = generateSeoMeta({ entity: "category", locale: "en", data: { ...base, description: null } });
     expect(seo.title).toBe("Romance");
     expect(seo.description).toBe("");
+    expect("description" in parse(seo)[0]!).toBe(false);
   });
 });
