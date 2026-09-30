@@ -184,8 +184,9 @@ const messages = {
     body: "Địa chỉ có thể sai, hoặc trang này không còn tồn tại.",
   },
   localeSwitcher: {
-    // 书页（详情页、章节页）：照搬 CPS v8.5.1 src/messages/vi.json:136 的句式，仅把“phim”换成“sách”（Owner 2026-09-30）。
-    fallbackToast: "Tựa sách này chưa có bằng {locale}. Đã chuyển đến trang chủ {locale}.",
+    // 书页（详情页、章节页）：CPS v8.5.1 src/messages/vi.json:136 的句式是“Tựa phim này…”；Owner 2026-09-30 先换成“Tựa sách”，
+    // 按第三方验收（GPT，2026-09-30）+ Owner 拍板，再改用更自然的“Cuốn sách này”（这本书），其余句式不变。
+    fallbackToast: "Cuốn sách này chưa có bằng {locale}. Đã chuyển đến trang chủ {locale}.",
     // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
     fallbackToastPage: "Trang này chưa có bằng {locale}. Đã chuyển đến trang chủ {locale}.",
   },

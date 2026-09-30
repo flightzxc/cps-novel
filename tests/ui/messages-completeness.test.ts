@@ -344,12 +344,14 @@ const SENTENCE_COUNT_LOCALES = NON_EN_LOCALES.filter((locale) => locale !== "th"
  */
 const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set([
   "zh-Hant:nav.footerNote",
-  // 2026-09-30 `localeSwitcher.fallbackToast`（书页提示）是**照搬 CPS v8.5.1 句式，
-  // 仅把"剧"换成"书"**的（Owner 拍板"CPS 有则照搬"，并于同日补充：CPS 说"剧/影片"的
-  // 三个语种只换这个词）。CPS 的繁体中文原文 "此劇目尚未提供{locale}版本，
-  // 已切換至{locale}首頁。" 用逗号连成一句，现为 "此作品尚未提供{locale}版本，
-  // 已切換至{locale}首頁。"——句式与逗号连接保持 CPS 原样；英文原文是两句，与上面
-  // `nav.footerNote` 同一种地道的中文并句，没有任何信息被截断。只登记例外，不拆句。
+  // 2026-09-30 `localeSwitcher.fallbackToast`（书页提示）以 CPS v8.5.1 句式为底
+  // （Owner 拍板"CPS 有则照搬"，并于同日补充：CPS 说"剧/影片"的三个语种只换这个词）。
+  // CPS 的繁体中文原文 "此劇目尚未提供{locale}版本，已切換至{locale}首頁。" 用逗号
+  // 连成一句，现为 "此作品尚未提供{locale}版本，已切換至{locale}首頁。"——句式与逗号
+  // 连接保持 CPS 原样；英文原文是两句，与上面 `nav.footerNote` 同一种地道的中文并句，
+  // 没有任何信息被截断。只登记例外，不拆句。
+  // 第三方验收（GPT，2026-09-30）后 fr/ko/ru/cs/pl/vi 六个语种的书页句有改动，但改后
+  // 仍与英文一样是两句，句数门禁照常通过，不新增例外；zh-Hant 未被验收改动，例外原样保留。
   // （非书页那个键 `fallbackToastPage` 是新译，按英文拆成两句，不需要例外。）
   "zh-Hant:localeSwitcher.fallbackToast",
 ]);

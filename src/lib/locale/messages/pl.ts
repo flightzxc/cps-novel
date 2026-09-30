@@ -192,8 +192,9 @@ const messages = {
     body: "Adres może być nieprawidłowy albo ta strona już nie istnieje.",
   },
   localeSwitcher: {
-    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/pl.json:136。
-    fallbackToast: "Ten tytuł nie jest jeszcze dostępny w języku {locale}. Przełączono na stronę główną {locale}.",
+    // 书页（详情页、章节页）：CPS v8.5.1 src/messages/pl.json:136 把语种自称直接放在“w języku”后，波兰语无法变格；
+    // 按第三方验收（GPT，2026-09-30）+ Owner 拍板，改成与下面非书页句同一种写法“w języku „{locale}””，主语仍是“Ten tytuł”。
+    fallbackToast: "Ten tytuł nie jest jeszcze dostępny w języku „{locale}”. Przełączono na stronę główną w języku „{locale}”.",
     // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
     fallbackToastPage: "Ta strona nie jest jeszcze dostępna w języku „{locale}”. Przełączono na stronę główną w języku „{locale}”.",
   },
