@@ -7,7 +7,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { getSiteUrl, toAbsoluteUrl } from "@/lib/seo/site-url";
-import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
+import { buildArticlePath, buildBlogPath, localePrefix } from "@/lib/slug/article-path";
 import {
   buildPublicArticleWhere,
   buildPublicBlogArticleWhere,
@@ -244,9 +244,14 @@ async function buildCategoryPageFiles(
     ]).toISOString();
     const pageCount = Math.max(1, Math.ceil(matching.length / BROWSE_PAGE_SIZE));
     for (let page = 1; page <= pageCount; page += 1) {
-      const path = page === 1
-        ? `/category/${category.slug}`
-        : `/category/${category.slug}?page=${page}`;
+      // 2026-09-30：分类页 URL 必须带该分片所属语种的前缀（`localePrefix`，与
+      // 同文件 novelpage/blogpage/mainpage 三个家族一致，也与短剧站
+      // `${localePrefix}${getPagePath("category", …)}` 一致）。此前这里漏了前缀，
+      // ko 的分类分片里全是无前缀的 en 地址——而海阅的空分类是 404（en 没有
+      // 这个分类），生产实测 `/category/female-audience` 404，
+      // `/ko/category/female-audience` 200。
+      const categoryPath = `${localePrefix(locale)}/category/${category.slug}`;
+      const path = page === 1 ? categoryPath : `${categoryPath}?page=${page}`;
       entries.push({
         loc: toAbsoluteUrl(path),
         lastmod,
