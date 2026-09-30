@@ -16,6 +16,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.5 —— 准备中（2026-09-30；本版本尚未部署）
+
+- 集成基线 `5cda72ad391a3f7820b5aa6c2fba09539e15dff6` 经 Opus 复核、集成；语种切换提示经 GPT 两轮第三方验收（PASS_WITH_FIXES → 修订后 PASS），TKD 新文案另经 GPT 验收通过。发版分支 `release/v0.5.5-2026-09-30`；Final 与归档身份以第一阶段交付为准。
+- 本版发布语种切换、真实 404 与跨语种链接对齐 CPS，前台 TKD 与 15 个默认模板 SEO 标题资产对齐，Next.js 16.3.3 安全升级，非英文模板最高已启用版本兜底，以及同书并发创建唯一冲突收敛。无新迁移、环境变量或 Compose 改动，不做功能开发。
+- 第一阶段只在本地升版、运行完整门禁、推送 GitHub 并构建 linux/amd64 镜像归档，不连接运维主机；交付 Final 与归档身份后停止。第二阶段须 Owner 暂停领取批次并单独授权，仅部署 `haiyue-vps`；部署前存在 pending/processing 定类任务或站名不符合 PulseNovel 品牌则停止报告。env 只改两个版本号，标签开关、写闸登记与白名单原样保留。
+- 第三阶段更新生产库 15 个默认模板须 Owner 再次单独授权并指定 approver；先备份，dry-run 必须恰为 15 条仅修改 `seoTemplate.metaTitle` 的 update。已发布文章 TKD 回填不在本次范围内。当前第三阶段未执行。
+- 回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`；用原发布目录与本次 env 备份，不重建 postgres。代码回滚不自动恢复模板，模板恢复另行授权。改动部署到带访问密码的预生产后才生效，正式域名切换后才对公网可见；Next 16.3.3 上线后才满足正式切换的该项前置条件。
+
 ### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
 
 - 集成基线 `c4ea5bb85721cc68df7310b3a17f59b156f4f909` 经 Opus 复核，译文经 GPT 两轮第三方验收（第一轮 PASS_WITH_FIXES，修订后增量 PASS）。Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，annotated tag `v0.5.4` 固定于 Final；镜像 `cps-novel:0.5.4-0260d8d`（linux/amd64），归档 SHA256 `acc69c44b4271e06562d1b606f3391d4b6a95caa15008f641bb243168048197f`。
@@ -299,6 +307,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.5` | 2026-09-30 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | `release/v0.5.5-2026-09-30`；集成基线 `5cda72a` 经 Opus 复核 | 准备中；尚未部署；部署及模板写库分别待 Owner 授权 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
