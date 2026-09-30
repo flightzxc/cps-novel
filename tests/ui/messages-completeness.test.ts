@@ -207,8 +207,10 @@ const EXPECTED_PLURAL_CATEGORIES: Readonly<Record<SiteLocale, readonly string[]>
  * English value — an exhaustive, justified allowlist, not a place to hide
  * an unreviewed translation gap. Every entry needs a reason:
  *
- *  - `blog.listTitle` ("Blog"): deliberately unchanged in all 15 locales —
- *    same call CPS made for its own `blog.title` (工单三 §10.3 item 6).
+ *  - `blog.listTitle` ("Blog"): TKD 对齐 CPS 一轮（2026-09-30）把 ar/ja/ko/ru/th/zh-Hant
+ *    译成了本语种的词；es/pt-BR/fr/de/pl/cs/id/vi 这 8 个语种沿用通用借词
+ *    "Blog"（CPS 的 `blog.title` 同样如此），所以这个键仍必须留在按键的
+ *    白名单里——它已不再是"15 语全部不译"，而是"这 8 个语种的正确译法就是 Blog"。
  *  - `pagination.pageOf` ("{current} / {total}"): a locale-agnostic digit
  *    ratio, not prose — CPS's `common.pageOf` is identical across all 15
  *    of its locales for the same reason.
@@ -224,13 +226,15 @@ const EXPECTED_PLURAL_CATEGORIES: Readonly<Record<SiteLocale, readonly string[]>
  *    the etymological source of the English word, not a leftover.
  *  - `pagination.label` ("Pagination") in `fr`: same — French is the
  *    etymological source of the English word.
+ *  - `meta.pageSuffix` (" - Page {page}") in `fr`: 法语的 "Page" 与英文同形，
+ *    沿用 CPS v8.5.1 的 fr `seo.pageSuffix`（" - Page {page}"），不是漏译。
  */
 const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set([
   "blog.listTitle",
   "pagination.pageOf",
   "chapter.previewPosition",
 ]);
-const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "fr:pagination.label"]);
+const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "fr:pagination.label", "fr:meta.pageSuffix"]);
 
 const NON_EN_LOCALES = SITE_LOCALES.filter((locale) => locale !== "en");
 
@@ -623,6 +627,7 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       date: "2026-09-08",
       digest: "abc123",
       current: 2,
+      page: 2,
       // 2026-09-30 语言切换器新键 `localeSwitcher.fallbackToast` 引入的变量：
       // 目标语种的本语自称。这个采样表必须覆盖每一个插值变量名，否则 `t()`
       // 对缺变量的键会（按设计）抛 MissingMessagesError。

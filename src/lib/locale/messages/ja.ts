@@ -161,7 +161,7 @@ const messages = {
     returnHome: "ホームに戻る",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "ブログ",
     // C: 「本サイトの」表現を削除。
     listDescription: "記事と最新情報です。",
     empty: "まだブログ記事がありません。",
@@ -197,6 +197,9 @@ const messages = {
     chapterNotFound: "章が見つかりません",
     // C: 「試し読み」表現を削除。
     siteDescription: "小説を見つけて、無料の章から読み始めよう。",
+    homeTitleFallback: "PulseNovel - 小説を見つけて無料で読もう",
+    pageSuffix: " - {page}ページ",
+    categoryDescriptionFallback: "PulseNovelで{name}の小説を見つけよう。",
   },
 } satisfies LocaleMessages;
 

@@ -201,6 +201,9 @@ const messages = {
     chapterNotFound: "Không tìm thấy chương",
     // C: bỏ "xem trước".
     siteDescription: "Khám phá tiểu thuyết và bắt đầu đọc chương miễn phí.",
+    homeTitleFallback: "PulseNovel - Khám phá tiểu thuyết và đọc sách miễn phí",
+    pageSuffix: " - Trang {page}",
+    categoryDescriptionFallback: "Khám phá tiểu thuyết {name} trên PulseNovel.",
   },
 } satisfies LocaleMessages;
 

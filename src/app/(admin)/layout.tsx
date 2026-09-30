@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import { AdminDocumentLang } from "@/features/admin-ui/admin-document-lang";
 
 export const metadata = {
-  title: "海外阅读后台",
+  // 绝对标题：根布局有 `%s | 站点名` 模板（TKD 对齐 CPS，2026-09-30），后台标题
+  // 不该带公开站的品牌后缀。写成字符串会被模板套一次，见 `src/app/layout.tsx`
+  // 头注释与 `tests/ui/seo/real-metadata-merge.test.ts`。
+  title: { absolute: "海外阅读后台" },
   robots: { index: false, follow: false },
 };
 

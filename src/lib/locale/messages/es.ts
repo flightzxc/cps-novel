@@ -172,6 +172,9 @@ const messages = {
     notFound: "No encontrado",
     chapterNotFound: "Capítulo no encontrado",
     siteDescription: "Descubre novelas y empieza a leer capítulos gratis.",
+    homeTitleFallback: "PulseNovel - Descubre novelas y lee libros gratis",
+    pageSuffix: " - Página {page}",
+    categoryDescriptionFallback: "Descubre novelas de {name} en PulseNovel.",
   },
 } satisfies LocaleMessages;
 

@@ -35,7 +35,7 @@
   ],
   "seoTemplate": {
     "title": "{novel_title}",
-    "metaTitle": "{novel_title}",
+    "metaTitle": "{novel_title} Роман - Читать бесплатные главы онлайн",
     "metaDescription": "{novel_description}"
   },
   "slugTemplate": "",

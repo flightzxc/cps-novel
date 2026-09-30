@@ -210,6 +210,9 @@ const messages = {
     chapterNotFound: "Kapitola nenalezena",
     // C: 去掉"ukázkové"（preview）。
     siteDescription: "Objevujte romány a začněte číst bezplatné kapitoly.",
+    homeTitleFallback: "PulseNovel - objevujte romány a čtěte knihy zdarma",
+    pageSuffix: " - Strana {page}",
+    categoryDescriptionFallback: "Objevujte romány {name} na PulseNovel.",
   },
 } satisfies LocaleMessages;
 

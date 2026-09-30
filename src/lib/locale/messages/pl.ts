@@ -209,6 +209,9 @@ const messages = {
     chapterNotFound: "Nie znaleziono rozdziału",
     // C: 去掉"przykładowe"（preview）。
     siteDescription: "Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
+    homeTitleFallback: "PulseNovel - odkrywaj powieści i czytaj książki za darmo",
+    pageSuffix: " - strona {page}",
+    categoryDescriptionFallback: "Odkrywaj powieści z kategorii {name} na PulseNovel.",
   },
 } satisfies LocaleMessages;
 

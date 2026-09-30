@@ -12,6 +12,7 @@ import {
   type ArticleTemplateBootstrapDb,
 } from "../../../scripts/l10n/article-template-bootstrap";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
+import { DEFAULT_ARTICLE_TEMPLATE } from "@/server/content-creation/default-article-template";
 
 /**
  * L10N P3（`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md`
@@ -188,7 +189,43 @@ describe("article-template-bootstrap real repository assets (真读资产文件)
       { type: "paragraph", content: "{if preview_chapter_count}Free preview chapters available: {preview_chapter_count}{endif}" },
       { type: "cta", content: "Start Reading" },
     ]);
-    expect(en.seoTemplate).toEqual({ title: "{novel_title}", metaTitle: "{novel_title}", metaDescription: "{novel_description}" });
+    // TKD 对齐 CPS（Owner 2026-09-30）：SEO 标题原地更新成自然语言，title/metaDescription 不动。
+    expect(en.seoTemplate).toEqual({
+      title: "{novel_title}",
+      metaTitle: "{novel_title} Novel - Read Free Chapters Online",
+      metaDescription: "{novel_description}",
+    });
+    // 代码内置兜底模板与英文资产是同一句，改一边忘一边就红。
+    expect(DEFAULT_ARTICLE_TEMPLATE.metaTitle).toBe(en.seoTemplate.metaTitle);
+    expect(DEFAULT_ARTICLE_TEMPLATE.title).toBe(en.seoTemplate.title);
+    expect(DEFAULT_ARTICLE_TEMPLATE.metaDescription).toBe(en.seoTemplate.metaDescription);
+  });
+
+  it("原地更新而不是发新版本：15 份资产的 version/schemaVersion 仍是 1，模板键不变", () => {
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    for (const locale of SITE_LOCALES) {
+      const asset = artifacts.assetsByLocale.get(locale)!;
+      expect(asset.version, locale).toBe(1);
+      expect(asset.schemaVersion, locale).toBe(1);
+      expect(asset.templateKey, locale).toBe(locale === "en" ? "system-default-v1" : `system-default-${locale}-v1`);
+    }
+  });
+
+  it("15 语 SEO 标题：都是自然语言（各语种译文，不同于英文、不含品牌名），变量恰好一个 {novel_title}；title 与 metaDescription 仍是裸变量", () => {
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    const en = artifacts.assetsByLocale.get("en")!;
+    for (const locale of SITE_LOCALES) {
+      const seo = artifacts.assetsByLocale.get(locale)!.seoTemplate;
+      expect(seo.title, locale).toBe("{novel_title}");
+      expect(seo.metaDescription, locale).toBe("{novel_description}");
+      expect(seo.metaTitle, locale).toContain("{novel_title}");
+      expect(seo.metaTitle!.match(/\{[^}]*\}/g), locale).toEqual(["{novel_title}"]);
+      expect(seo.metaTitle, `${locale}: 品牌名由布局后缀加，模板里不含`).not.toMatch(/PulseNovel/i);
+      expect(seo.metaTitle!.replace("{novel_title}", "").trim().length, locale).toBeGreaterThan(3);
+      if (locale !== "en") {
+        expect(seo.metaTitle, `${locale}: 必须是本语种译文，不是英文占位`).not.toBe(en.seoTemplate.metaTitle);
+      }
+    }
   });
 });
 
@@ -246,6 +283,52 @@ describe("article-template-bootstrap artifact loading (fixture-sized, mirrors th
   });
 });
 
+describe("article-template-bootstrap seoTemplate 不变量（放宽为占位符序列一致，自然语言可以不同）", () => {
+  const expectViolation = (opts: Parameters<typeof mirrorRealAssetsWithOverride>[1], detail: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "tkd-parity-seo-invariant-"));
+    mirrorRealAssetsWithOverride(dir, opts);
+    expect(() => loadArticleTemplateBootstrapArtifacts(dir, ".")).toThrowError(
+      expect.objectContaining({ code: "asset_invariant_violation", message: expect.stringContaining(detail) }),
+    );
+  };
+
+  it("放行：非英语语种的 metaTitle 用本语种自然语言，只要 {novel_title} 序列与英文一致", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tkd-parity-seo-ok-"));
+    mirrorRealAssetsWithOverride(dir, { locale: "ru", seoOverride: { metaTitle: "Совсем другой текст {novel_title} и ещё слова" } });
+    const artifacts = loadArticleTemplateBootstrapArtifacts(dir, ".");
+    expect(artifacts.assetsByLocale.get("ru")!.seoTemplate.metaTitle).toBe("Совсем другой текст {novel_title} и ещё слова");
+  });
+
+  it("拒绝：译文丢了 {novel_title}", () => {
+    expectViolation({ locale: "de", seoOverride: { metaTitle: "Roman - Kostenlose Kapitel online lesen" } }, "seoTemplate.metaTitle placeholder/control-token sequence");
+  });
+
+  it("拒绝：译文多了一个变量（{novel_description} 混进标题）", () => {
+    expectViolation({ locale: "de", seoOverride: { metaTitle: "{novel_title} {novel_description} Roman" } }, "seoTemplate.metaTitle placeholder/control-token sequence");
+  });
+
+  it("拒绝：多了 {if}/{endif} 控制符也算序列不一致", () => {
+    expectViolation({ locale: "de", seoOverride: { metaTitle: "{if cover_url}{novel_title}{endif} Roman" } }, "seoTemplate.metaTitle placeholder/control-token sequence");
+  });
+
+  it("拒绝：description 槽位把变量换了（原来是裸变量的字段，序列同样受约束）", () => {
+    expectViolation({ locale: "fr", seoOverride: { metaDescription: "{novel_title}" } }, "seoTemplate.metaDescription placeholder/control-token sequence");
+  });
+
+  it("拒绝：夹带 HTML 标签", () => {
+    expectViolation({ locale: "fr", seoOverride: { metaTitle: "<b>{novel_title}</b> Roman" } }, "seoTemplate.metaTitle");
+  });
+
+  it("拒绝：字段集合与英文不同（缺 metaTitle / 多出未知字段）", () => {
+    expectViolation({ locale: "ja", seoOverride: { dropKey: "metaTitle" } }, "seoTemplate field set differs");
+    expectViolation({ locale: "ja", seoOverride: { addKey: "metaKeywords" } }, "seoTemplate field set differs");
+  });
+
+  it("拒绝：字段是纯空白", () => {
+    expectViolation({ locale: "ja", seoOverride: { metaTitle: "   " } }, "seoTemplate.metaTitle");
+  });
+});
+
 /**
  * Copies the repository's real 15 assets/article-templates/*.json + manifest.json
  * into `targetDir`, optionally corrupting one locale's file (dropping a
@@ -262,6 +345,8 @@ function mirrorRealAssetsWithOverride(
     dropPlaceholderInBody?: boolean;
     swapHeadingTagInBody?: boolean;
     manifestShaOverride?: string;
+    /** 改写该语种 `seoTemplate` 的字段（manifest SHA 随之重算，只测不变量而非 SHA 钉）。 */
+    seoOverride?: Partial<Record<"title" | "metaTitle" | "metaDescription", string>> & { dropKey?: string; addKey?: string };
   },
 ) {
   const REAL_DIR = join(process.cwd(), "assets/article-templates");
@@ -284,6 +369,16 @@ function mirrorRealAssetsWithOverride(
       // only the surrounding tag name changes, so this mutation is invisible
       // to `tokenSequence` and must be caught by `htmlTagSequence` alone.
       doc.bodyTemplate = doc.bodyTemplate.replace("<h1>", "<h2>").replace("</h1>", "</h2>");
+      const json = JSON.stringify(doc, null, 2) + "\n";
+      bytes = Buffer.from(json, "utf8");
+      entry.sha256 = sha256(bytes);
+      entry.bytes = bytes.byteLength;
+    } else if (entry.locale === opts.locale && opts.seoOverride) {
+      const doc = JSON.parse(bytes.toString("utf8")) as { seoTemplate: Record<string, string> };
+      const { dropKey, addKey, ...fields } = opts.seoOverride;
+      Object.assign(doc.seoTemplate, fields);
+      if (dropKey) delete doc.seoTemplate[dropKey];
+      if (addKey) doc.seoTemplate[addKey] = "extra";
       const json = JSON.stringify(doc, null, 2) + "\n";
       bytes = Buffer.from(json, "utf8");
       entry.sha256 = sha256(bytes);
@@ -511,3 +606,70 @@ describe("article-template-bootstrap apply", () => {
     expect(db.rows).toHaveLength(SITE_LOCALES.length);
   });
 });
+
+describe("article-template-bootstrap 原地更新 15 个默认模板的 SEO 标题（不发新版本）", () => {
+  /** 生产上现存的样子：本轮之前按旧资产引导出来的 15 行——除 metaTitle 是旧的裸变量，其余与新资产完全一致。 */
+  function seedProductionRowsFromPreviousAssetSet(db: FakeArticleTemplateBootstrapDb, artifacts: ReturnType<typeof loadArticleTemplateBootstrapArtifacts>) {
+    for (const locale of SITE_LOCALES) {
+      const asset = artifacts.assetsByLocale.get(locale)!;
+      db.rows.push({
+        id: `prod-${locale}`,
+        ...structuredClone(asset),
+        contentTemplate: structuredClone(asset.contentTemplate),
+        seoTemplate: { title: "{novel_title}", metaTitle: "{novel_title}", metaDescription: "{novel_description}" },
+        deletedAt: null,
+      });
+    }
+  }
+
+  it("预演：15 行都是 update，且每行唯一变化的字段是 seoTemplate.metaTitle（其它字段出现在这里就说明运营改过生产行，须先核对）", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    seedProductionRowsFromPreviousAssetSet(db, artifacts);
+    const report = await runArticleTemplateBootstrapCli(db, { apply: false, approver: null }, artifacts);
+    expect(report.planned).toEqual({ create: 0, update: SITE_LOCALES.length, unchanged: 0, softDeleted: 0 });
+    expect(report.changes).toHaveLength(SITE_LOCALES.length);
+    for (const change of report.changes) {
+      expect(change.category).toBe("update");
+      expect(change.changedFields, change.templateKey).toEqual(["seoTemplate.metaTitle"]);
+    }
+    expect(report.wrote).toBe(false);
+    expect(db.calls).not.toContain("articleTemplate.upsert");
+  });
+
+  it("预演能点名运营改过的字段：生产行的 templateName/bodyTemplate 被改过时，changedFields 里会出现它们", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    seedProductionRowsFromPreviousAssetSet(db, artifacts);
+    const de = db.rows.find((row) => row.locale === "de")!;
+    de.templateName = "运营改过的名字";
+    de.bodyTemplate = de.bodyTemplate.replace("<article>", "<article class=\"x\">");
+    const report = await runArticleTemplateBootstrapCli(db, { apply: false, approver: null, locale: "de" }, artifacts);
+    expect(report.changes).toEqual([
+      { templateKey: "system-default-de-v1", locale: "de", category: "update", changedFields: ["templateName", "bodyTemplate", "seoTemplate.metaTitle"] },
+    ]);
+  });
+
+  it("apply：原地覆盖——仍是 15 行、version 仍是 1、没有 version 2；metaTitle 换成新句式，其余字段字节不变；再跑一次零变化", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    seedProductionRowsFromPreviousAssetSet(db, artifacts);
+    const before = structuredClone(db.rows);
+    const first = await runArticleTemplateBootstrapCli(db, { apply: true, approver: "approver-1" }, artifacts);
+    expect(first.applied).toEqual({ created: 0, updated: SITE_LOCALES.length, unchanged: 0, softDeleted: 0 });
+    expect(db.rows).toHaveLength(SITE_LOCALES.length);
+    for (const row of db.rows) {
+      const original = before.find((candidate) => candidate.id === row.id)!;
+      const asset = artifacts.assetsByLocale.get(row.locale)!;
+      expect(row.version, row.locale).toBe(1);
+      expect(row.templateKey, row.locale).toBe(original.templateKey);
+      expect(row.seoTemplate, row.locale).toEqual(asset.seoTemplate);
+      expect((row.seoTemplate as { metaTitle: string }).metaTitle, row.locale).not.toBe("{novel_title}");
+      // metaTitle 之外全部不变。
+      expect({ ...row, seoTemplate: undefined }).toEqual({ ...original, seoTemplate: undefined });
+    }
+    const second = await runArticleTemplateBootstrapCli(db, { apply: true, approver: "approver-1" }, artifacts);
+    expect(second.applied).toEqual({ created: 0, updated: 0, unchanged: SITE_LOCALES.length, softDeleted: 0 });
+  });
+});
+

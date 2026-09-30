@@ -9,8 +9,10 @@ import { Pagination } from "@/features/public-ui/collection/Pagination";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { isArticleBlogEnabled } from "@/lib/flags";
+import { withPageSuffix } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { paginateBlogCards } from "@/lib/site/blog-queries";
 
 /**
@@ -81,13 +83,17 @@ export async function buildBlogListMetadata(
   }
 
   const t = getPublicT(locale);
+  // 只有默认语种读后台"站点描述"（单值，不分语种），其余语种走文案；标题第 2 页起加
+  // 本地化翻页后缀（TKD 对齐 CPS，Owner 2026-09-30；CPS 把 " - Page" 写死成英文，
+  // 这里不照抄，走 `meta.pageSuffix`）。
+  const useSettingsMetadata = locale === PUBLIC_SITE_LOCALE;
   const seo = generateSeoMeta({
     entity: "collection",
     locale,
     pageNumber: loaded.paged.page,
     data: {
-      title: t("blog.listTitle"),
-      description: loaded.settings.siteDescription || t("blog.listDescription"),
+      title: withPageSuffix(t("blog.listTitle"), loaded.paged.page, t),
+      description: (useSettingsMetadata && loaded.settings.siteDescription) || t("blog.listDescription"),
       canonicalPath: "/blog",
       items: loaded.paged.posts.map((post) => ({ name: post.title, url: post.href })),
       siteName: loaded.settings.siteName,

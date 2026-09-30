@@ -28,6 +28,13 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+// 根布局的元数据现在是 `generateMetadata`（读站点设置拿品牌名，TKD 对齐 CPS），
+// 与 `root-layout-locale-dir.test.tsx` 同样把 DB 读取 mock 掉。
+vi.mock("@/app/_lib/public-deps", () => ({ prisma: {} }));
+vi.mock("@/server/site-settings/service", () => ({
+  getSiteSetting: vi.fn(async () => ({ siteName: "PulseNovel", ga4MeasurementId: null, googleSearchConsoleVerification: "" })),
+}));
+
 const routeModule = await import("@/app/dev-preview/chapter/[chapterNumber]/page");
 const layoutModule = await import("@/app/dev-preview/chapter/layout");
 const previewLayoutModule = await import("@/app/dev-preview/layout");
@@ -49,6 +56,16 @@ async function visit(chapterNumber: string): Promise<"NOT_FOUND" | { type: unkno
 
 async function metadataFor(chapterNumber: string) {
   return routeModule.generateMetadata({ params: Promise.resolve({ chapterNumber }) });
+}
+
+/**
+ * 预览路由的标题写成 `title.absolute`（不吃根布局的 `%s | 站点名` 模板），
+ * 这里取出最终文本。
+ */
+function titleText(metadata: Awaited<ReturnType<typeof metadataFor>>): string {
+  const title = metadata.title;
+  if (typeof title === "object" && title !== null && "absolute" in title) return String(title.absolute);
+  return String(title);
 }
 
 describe("章节预览路由 · 章号规范化", () => {
@@ -121,20 +138,23 @@ describe("章节预览路由 · robots 与 canonical", () => {
   it("标题逐章不同，客户端切章时元数据不会停在第一章", async () => {
     const first = await metadataFor("1");
     const second = await metadataFor("2");
-    expect(first.title).not.toBe(second.title);
-    expect(String(first.title)).toContain("Chapter 1");
-    expect(String(second.title)).toContain("Chapter 2");
+    expect(titleText(first)).not.toBe(titleText(second));
+    expect(titleText(first)).toContain("Chapter 1");
+    expect(titleText(second)).toContain("Chapter 2");
+    // 绝对标题：不带品牌后缀（预览路由保持原样）。
+    expect(first.title).toEqual({ absolute: titleText(first) });
   });
 
   it("章号不存在时标题降级但仍然 noindex——404 页面也不能被收录", async () => {
     const metadata = await metadataFor(String(MOCK_PREVIEW_CHAPTER_TOTAL + 1));
-    expect(metadata.title).toBe("Chapter not found");
+    expect(titleText(metadata)).toBe("Chapter not found");
+    expect(metadata.title).toEqual({ absolute: "Chapter not found" });
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 
-  it("三层布局各自显式声明 noindex，改一层不等于放开索引", () => {
+  it("三层布局各自显式声明 noindex，改一层不等于放开索引", async () => {
     for (const [name, metadata] of [
-      ["根布局", rootLayoutModule.metadata],
+      ["根布局", await rootLayoutModule.generateMetadata()],
       ["dev-preview 布局", previewLayoutModule.metadata],
       ["章节布局", layoutModule.metadata],
     ] as const) {

@@ -54,6 +54,47 @@ describe("generateSeoMeta", () => {
     );
   });
 
+  // TKD 对齐 CPS（Owner 2026-09-30，复核 A1）：模板 SEO 标题改成自然语言后，`title` 不再等于书名。
+  // <title>/og/twitter 用 `title`；Book JSON-LD 的 name、面包屑第 2 级、og:image alt 只用干净书名 `name`
+  // （CPS 剧集详情页同样把两者分开）。
+  describe("novel: `name` keeps JSON-LD on the clean book title when `title` is a natural-language SEO title", () => {
+    const seoTitle = "Lost Kingdom Novel - Read Free Chapters Online";
+    const build = (extra: { name?: string } = {}) =>
+      generateSeoMeta({
+        entity: "novel",
+        data: {
+          title: seoTitle,
+          ...extra,
+          description: "A kingdom lost beyond the sea.",
+          canonicalPath: "/novel/lost-kingdom-pabc123",
+          coverUrl: "/covers/lost.jpg",
+          siteName: "PulseNovel",
+          hreflangAlternates: { "x-default": `${ORIGIN}/novel/lost-kingdom-pabc123` },
+        },
+      });
+    const ld = (seo: ReturnType<typeof build>) =>
+      JSON.parse(seo.other!["application/ld+json"]) as Array<Record<string, unknown> & { itemListElement?: Array<{ position: number; name: string }> }>;
+
+    it("with name: title/og/twitter carry the SEO title; Book.name, breadcrumb level 2 and og image alt are the clean title", () => {
+      const seo = build({ name: "Lost Kingdom" });
+      expect(seo.title).toBe(seoTitle);
+      expect(seo.openGraph.title).toBe(seoTitle);
+      expect(seo.twitter.title).toBe(seoTitle);
+      const [book, breadcrumb] = ld(seo);
+      expect(book).toMatchObject({ "@type": "Book", name: "Lost Kingdom" });
+      expect(breadcrumb!.itemListElement!.find((item) => item.position === 2)!.name).toBe("Lost Kingdom");
+      expect(seo.openGraph.images[0]!.alt).toBe("Lost Kingdom");
+      expect(JSON.stringify(ld(seo))).not.toContain("Read Free Chapters Online");
+    });
+
+    it("without name: falls back to title (previous behavior, byte-identical for existing callers)", () => {
+      const seo = build();
+      const [book, breadcrumb] = ld(seo);
+      expect(book).toMatchObject({ name: seoTitle });
+      expect(breadcrumb!.itemListElement!.find((item) => item.position === 2)!.name).toBe(seoTitle);
+    });
+  });
+
   it("builds home metadata", () => {
     const seo = generateSeoMeta({
       entity: "home",

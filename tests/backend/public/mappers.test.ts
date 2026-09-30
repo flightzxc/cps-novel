@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { getPublicT } from "@/lib/locale/messages";
 import { buildArticlePath } from "@/lib/slug/article-path";
 import { buildChapterPath, buildChapterRoutePath } from "@/lib/seo/chapter-path";
 import { toChapterView, toNovelCardView, toNovelDetailView } from "@/lib/site/mappers";
@@ -91,5 +92,35 @@ describe("public view mappers", () => {
     expect(
       toChapterView(article, { canonicalChapterNumber: 1, title: "Empty", body: "  \n" }, previews),
     ).toBeNull();
+  });
+
+  // TKD 对齐 CPS（Owner 2026-09-30）：章节名缺失时的兜底标题按语种走文案，
+  // 不再是写死的英文 "Chapter N"。这个值同时是章节页 <title>、H1 与章节列表条目文字。
+  describe("章节名缺失时的兜底标题按语种本地化", () => {
+    const unnamed = [
+      { canonicalChapterNumber: 1, title: null },
+      { canonicalChapterNumber: 2, title: "   " },
+      { canonicalChapterNumber: 3, title: "The Gate" },
+    ];
+
+    it("en：仍是 'Chapter N'（与改动前字节一致），有名字的章节不受影响", () => {
+      const detail = toNovelDetailView(article, unnamed);
+      expect(detail?.previewChapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Chapter 2", "The Gate"]);
+      const chapter = toChapterView(article, { canonicalChapterNumber: 1, title: null, body: "First." }, unnamed);
+      expect(chapter?.title).toBe("Chapter 1");
+    });
+
+    it("非英语语种：走该语种的 novel.chapterHeading，且不再出现英文 'Chapter'", () => {
+      for (const locale of ["ja", "ko", "zh-Hant", "ru", "ar", "de"] as const) {
+        const localized = { ...article, locale, novel: { ...article.novel, locale } };
+        const t = getPublicT(locale);
+        const detail = toNovelDetailView(localized, unnamed);
+        expect(detail?.previewChapters[0]?.title, locale).toBe(t("novel.chapterHeading", { number: 1 }));
+        expect(detail?.previewChapters[2]?.title, locale).toBe("The Gate");
+        const chapter = toChapterView(localized, { canonicalChapterNumber: 2, title: "", body: "First." }, unnamed);
+        expect(chapter?.title, locale).toBe(t("novel.chapterHeading", { number: 2 }));
+        expect(chapter?.title, locale).not.toMatch(/^Chapter /);
+      }
+    });
   });
 });

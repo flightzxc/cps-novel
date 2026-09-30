@@ -231,6 +231,14 @@ export const en = {
     chapterNotFound: "Chapter not found",
     // C: 去掉"preview"一词。
     siteDescription: "Discover novels and start reading free chapters.",
+    // TKD 对齐 CPS（Owner 2026-09-30）：首页标题兜底。只有默认语种读后台"首页标题"，
+    // 其余语种直接读这个键；品牌名写在文案里（照 CPS `seo.homeTitleFallback`）。
+    homeTitleFallback: "PulseNovel - Discover Novels and Read Free Books",
+    // 翻页后缀，第 2 页起拼在分类页/浏览页/博客列表标题末尾；{page} 为页码。
+    pageSuffix: " - Page {page}",
+    // 分类页在分类自身没有描述时用的固定兜底句：所有分类共用同一个句式，
+    // 不是逐个分类生成描述（照 CPS `seo.categoryDescriptionFallback`）。
+    categoryDescriptionFallback: "Discover {name} novels on PulseNovel.",
   },
 } as const;
 

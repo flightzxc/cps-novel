@@ -170,6 +170,9 @@ const messages = {
     notFound: "Nicht gefunden",
     chapterNotFound: "Kapitel nicht gefunden",
     siteDescription: "Entdecke Romane und lies kostenlose Kapitel.",
+    homeTitleFallback: "PulseNovel - Romane entdecken und Bücher kostenlos lesen",
+    pageSuffix: " - Seite {page}",
+    categoryDescriptionFallback: "Entdecke {name}-Romane auf PulseNovel.",
   },
 } satisfies LocaleMessages;
 

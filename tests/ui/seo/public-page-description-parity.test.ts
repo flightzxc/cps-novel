@@ -186,7 +186,10 @@ describe("public page <meta name=description>: non-empty, matches og:description
     expect(metadata.description).toBe(t("blog.listDescription"));
   });
 
-  it("category: omits meta description when the category has no locale-specific copy (no English novels. fallback)", async () => {
+  // Owner 2026-09-30（TKD 对齐 CPS，照 CPS v8.5.1 `seo-templates/category.ts:29-31`）推翻了
+  // 此前"分类没有描述就整体省略、绝不合成描述"的决定：改用一句固定的本地化兜底文案
+  // （`meta.categoryDescriptionFallback`，15 语），旧顾虑（英文句子混进非英语页面）不再成立。
+  it("category: falls back to the localized fixed sentence when the category has no description", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_NO_DESCRIPTION, chrome: CHROME });
     // 2026-09-30：分类页元数据现在读动态层活跃语种来算 hreflang（只列有公开内容的
     // 语种），loader 的 mock 必须返回数组而不是 undefined；这条用例只关心
@@ -212,8 +215,8 @@ describe("public page <meta name=description>: non-empty, matches og:description
       Promise.resolve({ slug: "fantasy" }),
       Promise.resolve({}),
     );
-    expect(metadata.description).toBe("");
-    expect(JSON.stringify(metadata)).not.toMatch(/novels\./);
+    assertNonEmptyConsistentDescription(metadata as Record<string, any>, "category");
+    expect(metadata.description).toBe(t("meta.categoryDescriptionFallback", { name: "Fantasy" }));
   });
 
   it("novel detail: description is the truncated Novel/Article synopsis and matches og:description", async () => {

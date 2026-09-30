@@ -127,9 +127,19 @@ describe("novel 段 not-found 壳：真正的 404 页，页头页脚带后台设
     expect(screen.queryByTestId("site-header")).toBeNull();
   });
 
-  it("元数据仍是 noindex,nofollow", () => {
+  // 裸路径壳导出默认语种的 `metadata` 常量；[locale] 壳改为 `generateMetadata`，按 x-novel-locale 取本语种
+  // 的 "Not found" 标题（TKD 对齐 CPS：真 404 响应用的是 not-found 文件自己的元数据，标题此前只有站名）。
+  it("元数据仍是 noindex,nofollow，并带本语种的 Not found 标题（品牌后缀由根布局加）", async () => {
     expect(bareShell.metadata.robots).toEqual({ index: false, follow: false });
-    expect(localeShell.metadata.robots).toEqual({ index: false, follow: false });
+    expect(bareShell.metadata.title).toBe(getPublicT("en")("meta.notFound"));
+    headerState.value = "ko";
+    const ko = await localeShell.generateMetadata();
+    expect(ko.robots).toEqual({ index: false, follow: false });
+    expect(ko.title).toBe(getPublicT("ko")("meta.notFound"));
+    headerState.value = null;
+    const fallback = await localeShell.generateMetadata();
+    expect(fallback.robots).toEqual({ index: false, follow: false });
+    expect(fallback.title).toBe(getPublicT("en")("meta.notFound"));
   });
 
   it("HTTP 404 由 Next 的 not-found 边界给出（notFound() → 404 由 tests/backend/public/not-found-status.test.ts 钉住）；这里钉的是两棵路由树里确实各有 novel 段的 not-found.tsx 边界文件", () => {

@@ -9,8 +9,10 @@ import { CollectionScreen } from "@/features/public-ui/collection/CollectionScre
 import { Pagination } from "@/features/public-ui/collection/Pagination";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
+import { withPageSuffix } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
 import { paginateCards } from "@/lib/site/queries";
 
@@ -96,13 +98,25 @@ export async function buildBrowseMetadata(
   }
 
   const t = getPublicT(locale);
+  // 后台"站点描述"只有一个值（不分语种），只有默认语种读它，其余语种走文案
+  // （TKD 对齐 CPS，Owner 2026-09-30，同首页）。分类自身的描述（标签资产，按语种）不受影响。
+  const useSettingsMetadata = locale === PUBLIC_SITE_LOCALE;
   const seo = generateSeoMeta({
     entity: "collection",
     locale,
     pageNumber: loaded.paged.page,
     data: {
-      title: loaded.category ? t("collection.categoryTitle", { name: loaded.category.name }) : t("collection.allWorksTitle"),
-      description: loaded.category?.description || loaded.settings.siteDescription || t("collection.browseSeoDescription"),
+      // 第 2 页起标题加本地化翻页后缀；品牌后缀由根布局模板加。这个 `title` 同时会进
+      // og:title/twitter:title（CPS 契约：同样带翻页后缀、不带品牌）。
+      title: withPageSuffix(
+        loaded.category ? t("collection.categoryTitle", { name: loaded.category.name }) : t("collection.allWorksTitle"),
+        loaded.paged.page,
+        t,
+      ),
+      description:
+        loaded.category?.description ||
+        (useSettingsMetadata && loaded.settings.siteDescription) ||
+        t("collection.browseSeoDescription"),
       canonicalPath: loaded.category ? `/browse?category=${encodeURIComponent(loaded.category.slug)}` : "/browse",
       items: loaded.paged.novels.map((novel) => ({ name: novel.title, url: novel.href })),
       siteName: loaded.settings.siteName,

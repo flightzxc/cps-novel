@@ -8,6 +8,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
  * Home page shared body (WO-1 `施工工单_WO1-3_多语种公开站地基_2026-09-08.md`
@@ -49,24 +50,49 @@ import { localePrefix } from "@/lib/slug/article-path";
  * a third tier closes that gap without inventing new copy — the same
  * sentence root layout already uses.
  */
+/**
+ * 首页 SEO 输入的唯一取法（`buildHomeMetadata` 与 `HomeBody` 共用，复核 A3）：
+ *
+ * 后台"首页标题/首页描述/站点描述"只有一个值（不分语种），运营一填，15 语的首页都会显示同一句
+ * 英文——所以只有默认语种（英文）读它们，其余语种直接读各自的文案（TKD 对齐 CPS，Owner
+ * 2026-09-30；照 CPS `(site)/page.tsx` 的 `useSettingsMetadata = locale === "en"`）。判断用仓库
+ * 现成的默认语种常量 `PUBLIC_SITE_LOCALE`，不另写字面量。
+ *
+ * `HomeBody` 里的 WebSite JSON-LD 曾经保留旧的后台值链（为"本轮不动结构化数据"），结果 `/ja`
+ * 首页的 `<meta description>` 是 ja 文案、JSON-LD 的 description 却是英文后台值。两处现在共用
+ * 这个函数，不会再分叉；`tests/ui/seo/default-locale-only-settings.test.ts` 钉住 meta 与 JSON-LD
+ * 两侧。
+ */
+function homeSeoData(
+  locale: SiteLocale,
+  settings: Awaited<ReturnType<typeof loadChrome>>["settings"],
+  novels: Awaited<ReturnType<typeof loadHomeNovels>>,
+) {
+  const t = getPublicT(locale);
+  const useSettingsMetadata = locale === PUBLIC_SITE_LOCALE;
+  return {
+    siteName: settings.siteName,
+    title: (useSettingsMetadata && settings.homeMetaTitle) || t("meta.homeTitleFallback"),
+    description:
+      (useSettingsMetadata && (settings.homeMetaDescription || settings.siteDescription)) ||
+      t("meta.siteDescription"),
+    defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
+  };
+}
+
 export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
   const categories = await loadPublicCategories(locale);
   const [{ settings }, novels] = await Promise.all([
     loadChrome(locale, "home", categories),
     loadHomeNovels(locale),
   ]);
-  const t = getPublicT(locale);
-  const seo = generateSeoMeta({
-    entity: "home",
-    locale,
-    data: {
-      siteName: settings.siteName,
-      title: settings.homeMetaTitle || settings.siteName,
-      description: settings.homeMetaDescription || settings.siteDescription || t("meta.siteDescription"),
-      defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
-    },
-  });
-  return toNextMetadata(seo);
+  const seo = generateSeoMeta({ entity: "home", locale, data: homeSeoData(locale, settings, novels) });
+  // 🔴 `title.absolute`，不是字符串：根布局有 `%s | 站点名` 模板（TKD 对齐 CPS，
+  // Owner 2026-09-30），首页标题不套模板（CPS 首页同样不带后缀）。英文首页与根布局
+  // 同层、本来就不套；`/ja` 等非英语首页隔了一层 `[locale]` 布局，会被 Next 16.1.6
+  // 套上后缀，不写绝对标题 15 语首页就不一致。og:title/twitter:title 本来就不带后缀，
+  // 沿用 `seo.openGraph.title`。见 `tests/ui/seo/real-metadata-merge.test.ts`。
+  return { ...toNextMetadata(seo), title: { absolute: seo.title } };
 }
 
 export async function HomeBody({ locale }: { locale: SiteLocale }) {
@@ -77,17 +103,9 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
     loadHomeNovels(locale),
     loadHomeCarousel(locale),
   ]);
-  const t = getPublicT(locale);
-  const seo = generateSeoMeta({
-    entity: "home",
-    locale,
-    data: {
-      siteName: settings.siteName,
-      title: settings.homeMetaTitle || settings.siteName,
-      description: settings.homeMetaDescription || settings.siteDescription || t("meta.siteDescription"),
-      defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
-    },
-  });
+  // 与 `buildHomeMetadata` 同一个 `homeSeoData`：这里的 `seo` 只取 JSON-LD（`seo.other`），不输出
+  // <title>/<meta>，但 WebSite JSON-LD 的 description 必须与 meta 一致（复核 A3）。
+  const seo = generateSeoMeta({ entity: "home", locale, data: homeSeoData(locale, settings, novels) });
 
   return (
     <>

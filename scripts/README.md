@@ -104,3 +104,14 @@ MOBOREADER_FOUNDATION_OPERATOR=<operator> \
 
 - 脚本不得对 CPS 只读参考路径（`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux`）产生任何写入，包括临时文件、日志、缓存；
 - 隔离检查脚本需覆盖：无 symlink / submodule / 相对路径引用 CPS 目录；CPS 工作区 `git status --porcelain` 恒为 0 行。
+
+## 模板 SEO 字段回写（TKD 对齐 CPS，2026-09-30）
+
+`l10n/repair-template-tkd.ts` 把 15 个默认模板"原地更新"之后的新 `seoTemplate.metaTitle` 刷到**存量文章**
+的 `Article.seoMetadata`（只写 `metaTitle`/`metaDescription` 两个键，自动跳过 `contentMode = manual`）。
+薄壳；逻辑与全部安全闸在 `src/server/article-templates/tkd-repair.ts`（头注释有清单）。默认只预演；
+`--apply` 需要预期篇数、备份、操作人与理由、执行清单、游标；**不要用前台应用角色 `web_app` 跑**，
+用 `worker_app`。完整的 L2 流程与示例命令见脚本文件头注释。真实库验证：
+`scripts/run-tkd-repair-postgres-verification.sh`。模板引导脚本 `l10n/article-template-bootstrap.ts`
+的 dry-run 报告新增 `changes[]`，逐行列出将写入的行与差异字段——生产上 `--apply` 前应恰好是 15 行
+`update`、每行只有 `seoTemplate.metaTitle`。

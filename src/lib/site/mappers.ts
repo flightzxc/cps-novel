@@ -6,12 +6,28 @@ import type {
   PreviewChapterRef,
   SiteTag,
 } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { isPublicRedirectCodeFormatValid } from "@/lib/redirect";
 import { buildArticlePath } from "@/lib/slug/article-path";
 import { buildChapterPath } from "@/lib/seo/chapter-path";
 
 import { asSiteLocale, localeBadge } from "./locale-label";
 import { splitChapterParagraphs } from "./paragraphs";
+
+/**
+ * 章节没有自己的名字时的兜底标题：按文章所属语种走文案 `novel.chapterHeading`
+ * （"Chapter {number}"，15 语已译），不再写死英文字面量（TKD 对齐 CPS，Owner
+ * 2026-09-30）。选这个键是因为章节列表的编号徽标渲染的就是它
+ * （`ChapterListBody.tsx`），兜底标题与徽标在同一语种下读起来一致；`chapter.heading`
+ * 已无渲染点，不复用。
+ *
+ * 影响面：这个值同时是章节页 `<title>`（`chapter.tsx` 拼 `${chapter.title} · ${书名}`）、
+ * 章节页 H1 与章节列表条目的显示文字，三处随之本地化——这是预期效果，不是副作用。
+ */
+function chapterFallbackTitle(locale: SiteLocale, number: number): string {
+  return getPublicT(locale)("novel.chapterHeading", { number });
+}
 
 export type PublicNovelRecord = {
   id: string;
@@ -126,7 +142,7 @@ export function toPreviewChapterRefs(
 
   return chapters.map((chapter) => ({
     number: chapter.canonicalChapterNumber,
-    title: chapter.title?.trim() || `Chapter ${chapter.canonicalChapterNumber}`,
+    title: chapter.title?.trim() || chapterFallbackTitle(locale, chapter.canonicalChapterNumber),
     href: buildChapterPath({
       locale,
       slug: article.slug,
@@ -191,7 +207,7 @@ export function toChapterView(
 
   return {
     number: chapter.canonicalChapterNumber,
-    title: chapter.title?.trim() || `Chapter ${chapter.canonicalChapterNumber}`,
+    title: chapter.title?.trim() || chapterFallbackTitle(locale, chapter.canonicalChapterNumber),
     paragraphs,
     novel,
     previewPosition: { index: index + 1, total: previewChapters.length },

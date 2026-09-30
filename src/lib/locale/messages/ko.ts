@@ -159,7 +159,7 @@ const messages = {
     returnHome: "홈으로 돌아가기",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "블로그",
     // C: "이 사이트의" 표현 제거.
     listDescription: "글과 소식입니다.",
     empty: "아직 블로그 게시물이 없습니다.",
@@ -198,6 +198,9 @@ const messages = {
     chapterNotFound: "챕터를 찾을 수 없음",
     // C: "미리보기" 표현 제거.
     siteDescription: "소설을 만나보고 무료 챕터부터 읽어보세요.",
+    homeTitleFallback: "PulseNovel - 소설을 만나보고 무료로 읽어보세요",
+    pageSuffix: " - {page}페이지",
+    categoryDescriptionFallback: "PulseNovel에서 {name} 소설을 만나보세요.",
   },
 } satisfies LocaleMessages;
 
