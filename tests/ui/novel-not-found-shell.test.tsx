@@ -56,6 +56,8 @@ const SETTINGS = {
   indexNowKey: "",
   indexNowKeyLocation: "",
   ga4MeasurementId: null,
+  yandexVerification: "",
+  yandexMetricaId: null,
   updatedAt: new Date("2026-09-30T00:00:00Z"),
 };
 

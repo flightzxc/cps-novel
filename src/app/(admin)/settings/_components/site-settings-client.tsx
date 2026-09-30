@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { YANDEX_METRICA_ID_RE, YANDEX_VERIFICATION_RE } from "@/lib/seo/yandex-metrica";
 
 import type { AdminSiteSettingView, SiteSettingMutationResult } from "../_lib/site-setting-types";
 
@@ -173,6 +174,8 @@ export function SiteSettingsClient({
   const [footerDisclaimerText, setFooterDisclaimerText] = useState(setting?.footerDisclaimerText ?? "");
   const [friendLinksJson, setFriendLinksJson] = useState(JSON.stringify(setting?.friendLinks ?? [], null, 2));
   const [ga4MeasurementId, setGa4MeasurementId] = useState(setting?.ga4MeasurementId ?? "");
+  const [yandexVerification, setYandexVerification] = useState(setting?.yandexVerification ?? "");
+  const [yandexMetricaId, setYandexMetricaId] = useState(setting?.yandexMetricaId ?? "");
   const [siteReason, setSiteReason] = useState("");
 
   // `settingsManage !== "granted"` and `setting === null` travel together —
@@ -222,6 +225,8 @@ export function SiteSettingsClient({
       setFooterDisclaimerText(next.footerDisclaimerText);
       setFriendLinksJson(JSON.stringify(next.friendLinks, null, 2));
       setGa4MeasurementId(next.ga4MeasurementId ?? "");
+      setYandexVerification(next.yandexVerification);
+      setYandexMetricaId(next.yandexMetricaId ?? "");
     }
   }
 
@@ -295,7 +300,15 @@ export function SiteSettingsClient({
     footerCopyrightText: footerCopyrightText.trim(),
     footerDisclaimerText: footerDisclaimerText.trim(),
     ga4MeasurementId: ga4MeasurementId.trim(),
+    yandexVerification: yandexVerification.trim(),
+    yandexMetricaId: yandexMetricaId.trim(),
   };
+  // 运营 V2：与服务端同一组正则（`@/lib/seo/yandex-metrica`）。这里只负责"提前说清楚为什么
+  // 不能保存"，真正的拒绝仍在服务端——非法字符一律不保存，不做静默清洗。
+  const yandexVerificationInvalid =
+    yandexVerification.trim() !== "" && !YANDEX_VERIFICATION_RE.test(yandexVerification.trim());
+  const yandexMetricaIdInvalid =
+    yandexMetricaId.trim() !== "" && !YANDEX_METRICA_ID_RE.test(yandexMetricaId.trim());
   let parsedFriendLinks: unknown = null;
   let friendLinksValid = true;
   try { parsedFriendLinks = JSON.parse(normalizedFriendLinksJson || "[]"); } catch { friendLinksValid = false; }
@@ -309,12 +322,20 @@ export function SiteSettingsClient({
     || siteFields.footerCopyrightText !== current.footerCopyrightText
     || siteFields.footerDisclaimerText !== current.footerDisclaimerText
     || siteFields.ga4MeasurementId !== (current.ga4MeasurementId ?? "")
+    || siteFields.yandexVerification !== current.yandexVerification
+    || siteFields.yandexMetricaId !== (current.yandexMetricaId ?? "")
     || JSON.stringify(parsedFriendLinks) !== JSON.stringify(current.friendLinks)
   );
 
   const siteBlockReason = saveBlockReason({
     busy: siteBusy,
-    invalid: friendLinksValid ? null : "友链 JSON 格式无效，请修正后再保存",
+    invalid: !friendLinksValid
+      ? "友链 JSON 格式无效，请修正后再保存"
+      : yandexVerificationInvalid
+        ? "Yandex 站长验证码只能包含字母、数字、下划线和短横线，请修正后再保存"
+        : yandexMetricaIdInvalid
+          ? "Yandex Metrica 计数器 ID 只能填写 1～12 位数字，请修正后再保存"
+          : null,
     dirty: siteDirty,
     reasonFilled: siteReason.trim().length > 0,
   });
@@ -347,6 +368,8 @@ export function SiteSettingsClient({
   async function handleSiteSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!current || !siteDirty || !siteReason.trim() || !friendLinksValid) return;
+    // 与按钮置灰同一条件：Yandex 两项含非法字符时不发请求（服务端仍会拒绝，这里只是不多打一次）。
+    if (yandexVerificationInvalid || yandexMetricaIdInvalid) return;
     await submitPatch(
       siteFields,
       siteReason,
@@ -393,6 +416,14 @@ export function SiteSettingsClient({
           <label className="block"><span className="mb-1 block text-xs text-gray-500">首页 Meta Description</span><textarea value={homeMetaDescription} onChange={(event) => setHomeMetaDescription(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">Google Search Console 验证码</span><input value={gscVerification} onChange={(event) => setGscVerification(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">GA4 Measurement ID</span><input value={ga4MeasurementId} onChange={(event) => setGa4MeasurementId(event.target.value.toUpperCase())} placeholder="G-XXXXXXXXXX" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" /></label>
+          <div>
+            <label className="block"><span className="mb-1 block text-xs text-gray-500">Yandex 站长验证码</span><input value={yandexVerification} onChange={(event) => setYandexVerification(event.target.value)} aria-invalid={yandexVerificationInvalid} placeholder="例如 1a2b3c4d5e6f7890" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" /></label>
+            {yandexVerificationInvalid ? <span className="mt-1 block text-xs text-red-700">只能包含字母、数字、下划线和短横线</span> : <span className="mt-1 block text-xs text-gray-400">只填验证码本身（meta 标签 content 里的值）；留空则前台不输出</span>}
+          </div>
+          <div>
+            <label className="block"><span className="mb-1 block text-xs text-gray-500">Yandex Metrica 计数器 ID</span><input value={yandexMetricaId} onChange={(event) => setYandexMetricaId(event.target.value)} inputMode="numeric" aria-invalid={yandexMetricaIdInvalid} placeholder="例如 12345678" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" /></label>
+            {yandexMetricaIdInvalid ? <span className="mt-1 block text-xs text-red-700">只能填写 1～12 位数字</span> : <span className="mt-1 block text-xs text-gray-400">只填数字；留空则前台不输出统计代码</span>}
+          </div>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚版权</span><textarea value={footerCopyrightText} onChange={(event) => setFooterCopyrightText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚免责声明</span><textarea value={footerDisclaimerText} onChange={(event) => setFooterDisclaimerText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">友链 JSON</span><textarea value={friendLinksJson} onChange={(event) => setFriendLinksJson(event.target.value)} rows={5} aria-invalid={!friendLinksValid} className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs" />{!friendLinksValid ? <span className="mt-1 block text-xs text-red-700">JSON 格式无效</span> : null}</label>

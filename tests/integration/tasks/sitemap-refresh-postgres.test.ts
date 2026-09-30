@@ -14,6 +14,7 @@ import {
   SITEMAP_REFRESH_TASK_TYPE,
   type TaskLease,
 } from "@/lib/tasks";
+import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import { refreshStaticSitemap } from "@/lib/seo/sitemap-refresh-state";
 import { createSitemapRefreshHandler } from "../../../worker/handlers/sitemap-refresh";
@@ -53,6 +54,10 @@ async function resetDatabase() {
 }
 
 async function publishedKoreanArticle(ordinal: number) {
+  return (await publishedKoreanBook(ordinal)).url;
+}
+
+async function publishedKoreanBook(ordinal: number) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 10);
   const channel = await owner.channel.create({ data: { code: `sitemap-${suffix}`, name: "Sitemap fixture" } });
   const sourceApp = await owner.sourceApp.create({ data: { code: `sitemap-source-${suffix}`, name: "Sitemap source" } });
@@ -82,7 +87,22 @@ async function publishedKoreanArticle(ordinal: number) {
     publicPageShortId: suffix, title: novel.title, body: "Fixture", status: "published",
     publishedAt: new Date(),
   } });
-  return `https://sitemap-test.example/ko/novel/${slug}-p${suffix}`;
+  return { url: `https://sitemap-test.example/ko/novel/${slug}-p${suffix}`, novelId: novel.id };
+}
+
+/** 运营 V2：给一本书加一章。`content: false` = 没有正文行（锁定/撤回章节的真实形态）。 */
+async function addChapter(
+  novelId: string,
+  number: number,
+  options: { status?: string; deleted?: boolean; content?: boolean } = {},
+) {
+  await owner.novelChapter.create({ data: {
+    novelId, canonicalChapterNumber: number, title: `Chapter ${number}`, status: options.status ?? "preview",
+    deletedAt: options.deleted ? new Date() : null,
+    ...(options.content === false ? {} : { content: { create: {
+      body: `Body of chapter ${number}`, charCount: 24, contentHash: String(number).padStart(64, "0"), materializedAt: new Date(),
+    } } }),
+  } });
 }
 
 async function rootDir() {
@@ -336,6 +356,48 @@ describe.skipIf(!enabled).sequential("sitemap refresh on disposable PostgreSQL 1
     expect((await getAdminSitemapState(web, root, enabledEnv)).task?.status).toBe("failed");
     expect(await readlink(path.join(root, "current"))).toBe(current);
     expect(await xml(root)).toContain(expectedUrl);
+  });
+
+
+  // 运营 V2（Owner 2026-09-30）：章节页写进 novelpage 分片。真实角色（worker_app）读 novel_chapter /
+  // novel_chapter_content，真实约束（status CHECK、活跃章节号部分唯一索引）。
+  it("worker_app lists the free preview chapters right after their book, and never a locked/stale/withdrawn/deleted/content-less chapter or an unpublished book's chapters", async () => {
+    const root = await rootDir();
+    const book = await publishedKoreanBook(1);
+    await addChapter(book.novelId, 1);
+    await addChapter(book.novelId, 2);
+    await addChapter(book.novelId, 3, { status: "locked", content: false });
+    await addChapter(book.novelId, 4, { status: "stale" });
+    await addChapter(book.novelId, 5, { status: "withdrawn", content: false });
+    await addChapter(book.novelId, 6, { deleted: true });
+    await addChapter(book.novelId, 7, { content: false });
+    const unpublished = await publishedKoreanBook(2);
+    await owner.novel.update({ where: { id: unpublished.novelId }, data: { status: "unpublished" } });
+    await addChapter(unpublished.novelId, 1);
+
+    expect((await handler(root)(context(standaloneLease()))).status).toBe("success");
+
+    const locs = [...(await xml(root)).matchAll(/<loc>([^<]*)<\/loc>/g)].map((match) => match[1]);
+    expect(locs).toEqual([book.url, `${book.url}/chapter/1`, `${book.url}/chapter/2`]);
+  });
+
+  it("worker_app: a locale with no public content gets no shard at all (mainpage included) and the populated one does; site_setting's new Yandex columns are readable by the worker role", async () => {
+    const root = await rootDir();
+    await publishedKoreanBook(1);
+    // Real worker_app read of the whole site_setting row (getSiteSetting) happens inside the mainpage builder.
+    const result = await generateStaticSitemaps({
+      buildFamily: createSitemapFamilyBuilder(worker, enabledEnv),
+      rootDir: root,
+      runId: "empty-locale-real-role",
+      routeLocales: ["ko", "en"],
+    });
+    expect([...result.manifest.sitemapFiles].sort()).toEqual([
+      "sitemap/site_mainpage_ko.xml",
+      "sitemap/site_novelpage_ko.xml",
+    ]);
+    const index = await readFile(path.join(root, "current", "sitemap.xml"), "utf8");
+    expect(index).not.toContain("_en.xml");
+    expect(index).not.toContain("categorypage");
   });
 
 });

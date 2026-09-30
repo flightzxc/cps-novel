@@ -65,8 +65,10 @@ afterEach(() => {
 });
 
 describe("SITEMAP_TYPES", () => {
-  it("has four families, blogpage last", () => {
-    expect(SITEMAP_TYPES).toEqual(["mainpage", "novelpage", "categorypage", "blogpage"]);
+  // 运营 V2（Owner 2026-09-30）：categorypage 并入 mainpage（照 CPS v8.5.1 只有
+  // mainpage/dramapage/blogpage 三类），所以由四个家族变成三个。
+  it("has three families (categorypage folded into mainpage), blogpage last", () => {
+    expect(SITEMAP_TYPES).toEqual(["mainpage", "novelpage", "blogpage"]);
   });
 });
 
@@ -83,8 +85,8 @@ describe("getSitemapFileName / parseSitemapFileName: blogpage", () => {
     expect(parseSitemapFileName(name)).toEqual({ type: "blogpage", locale: "en", index: 1 });
   });
 
-  it("parses all four known families correctly", () => {
-    for (const type of ["mainpage", "novelpage", "categorypage", "blogpage"] as const) {
+  it("parses all three known families correctly", () => {
+    for (const type of ["mainpage", "novelpage", "blogpage"] as const) {
       expect(parseSitemapFileName(getSitemapFileName(type, "en", 0))?.type).toBe(type);
     }
   });

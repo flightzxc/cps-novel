@@ -6,6 +6,13 @@ import "@/styles/globals.css";
 import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { resolveSiteBrandName } from "@/lib/seo/site-brand";
+import {
+  buildYandexMetricaNoscriptHtml,
+  buildYandexMetricaScript,
+  normalizeYandexMetricaId,
+  normalizeYandexVerification,
+} from "@/lib/seo/yandex-metrica";
+import { isAdminHostRequest } from "@/lib/site/admin-origin";
 import { pickSiteLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-locale";
 import { getTextDirection } from "@/lib/site/text-direction";
 import { prisma } from "@/app/_lib/public-deps";
@@ -85,20 +92,43 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const settings = await getSiteSetting(prisma);
 
   let locale = PUBLIC_SITE_LOCALE;
+  // 运营 V2（Owner 2026-09-30）：Yandex 只在公开站输出，后台站（admin host）不输出。
+  // 读不到请求头时按"不是后台站"处理（与上面 locale 读取失败时回落到默认值同一姿态）。
+  let adminHostRequest = false;
   try {
     const requestHeaders = await headers();
     locale = pickSiteLocale(requestHeaders.get(SITE_LOCALE_REQUEST_HEADER));
+    adminHostRequest = isAdminHostRequest(requestHeaders.get("host"));
   } catch {
     locale = PUBLIC_SITE_LOCALE;
   }
   const dir = getTextDirection(locale);
 
+  // 渲染时再校验一次（不信任"保存时校验过"）：不合法就整段不输出。
+  const yandexVerification = adminHostRequest
+    ? null
+    : normalizeYandexVerification(settings.yandexVerification);
+  const yandexMetricaId = adminHostRequest ? null : normalizeYandexMetricaId(settings.yandexMetricaId);
+  const yandexScript = yandexMetricaId ? buildYandexMetricaScript(yandexMetricaId) : null;
+  const yandexNoscript = yandexMetricaId ? buildYandexMetricaNoscriptHtml(yandexMetricaId) : null;
+
   return (
     <html lang={locale} dir={dir}>
-      {settings.googleSearchConsoleVerification ? (
-        <head><meta name="google-site-verification" content={settings.googleSearchConsoleVerification} /></head>
+      {settings.googleSearchConsoleVerification || yandexVerification || yandexScript ? (
+        <head>
+          {settings.googleSearchConsoleVerification ? (
+            <meta name="google-site-verification" content={settings.googleSearchConsoleVerification} />
+          ) : null}
+          {yandexVerification ? <meta name="yandex-verification" content={yandexVerification} /> : null}
+          {/* 运营要求脚本放 <head>。 */}
+          {yandexScript ? <script dangerouslySetInnerHTML={{ __html: yandexScript }} /> : null}
+        </head>
       ) : null}
-      <body className="site">{children}</body>
+      <body className="site">
+        {/* noscript 里是 <div>，放在 <head> 里不是合法 HTML（浏览器会把它挪走），所以放 <body> 开头。 */}
+        {yandexNoscript ? <noscript dangerouslySetInnerHTML={{ __html: yandexNoscript }} /> : null}
+        {children}
+      </body>
       {settings.ga4MeasurementId ? <GoogleAnalytics gaId={settings.ga4MeasurementId} /> : null}
     </html>
   );

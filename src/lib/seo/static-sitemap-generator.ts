@@ -5,6 +5,7 @@ import process from "node:process";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { getStaticSitemapRoot } from "@/lib/seo/static-sitemap-cache";
 import {
+  extractIndexedSitemapFileNames,
   renderSitemapIndexXml,
   renderUrlSetXml,
   SITEMAP_TYPES,
@@ -129,12 +130,6 @@ async function replaceCurrentSymlink(rootDir: string, releaseName: string): Prom
   await fs.rm(tmpLink, { force: true, recursive: true });
   await fs.symlink(path.join("releases", releaseName), tmpLink, "dir");
   await fs.rename(tmpLink, currentLink);
-}
-
-function extractIndexedSitemapFileNames(indexXml: string): string[] {
-  return Array.from(indexXml.matchAll(/<loc>[^<]*\/sitemap\/([^/<]+\.xml)<\/loc>/g)).map(
-    (match) => match[1]!,
-  );
 }
 
 async function validateReleaseDirectory(

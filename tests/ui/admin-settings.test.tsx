@@ -30,6 +30,8 @@ const BASE_SETTING: AdminSiteSettingView = {
   indexNowKey: "",
   indexNowKeyLocation: "",
   ga4MeasurementId: null,
+  yandexVerification: "",
+  yandexMetricaId: null,
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 
@@ -683,5 +685,110 @@ describe("写：区块内回执与置灰原因", () => {
     );
     expect(within(ogForm()).getByRole("status").textContent).toContain("已保存");
     expect(screen.getAllByRole("status")).toHaveLength(2);
+  });
+});
+
+describe("写：Yandex 站长验证码与 Metrica 计数器 ID（运营 V2，Owner 2026-09-30）", () => {
+  const reasonInput = () => within(siteForm()).getByLabelText("修改原因（必填，写入审计）");
+  const blockReason = () => within(siteForm()).getByTestId("site-block-reason").textContent;
+
+  it("站点区有两个 Yandex 输入框，未设置时为空", () => {
+    renderClient();
+    expect((within(siteForm()).getByLabelText("Yandex 站长验证码") as HTMLInputElement).value).toBe("");
+    expect((within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID") as HTMLInputElement).value).toBe("");
+  });
+
+  it("已有值回显", () => {
+    renderClient({ setting: { ...BASE_SETTING, yandexVerification: "abc_DEF-123", yandexMetricaId: "12345678" } });
+    expect((within(siteForm()).getByLabelText("Yandex 站长验证码") as HTMLInputElement).value).toBe("abc_DEF-123");
+    expect((within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID") as HTMLInputElement).value).toBe("12345678");
+  });
+
+  it("填写合法值并填原因后可保存：PATCH 带上两个字段（去首尾空白），成功后回填服务端值", async () => {
+    const NEXT: AdminSiteSettingView = {
+      ...BASE_SETTING,
+      yandexVerification: "abc_DEF-123",
+      yandexMetricaId: "12345678",
+      updatedAt: "2026-08-20T01:00:00.000Z",
+    };
+    const { calls } = queueFetch({ body: { ok: true, data: { setting: NEXT, replayed: false } } });
+    renderClient();
+
+    await type(within(siteForm()).getByLabelText("Yandex 站长验证码"), "  abc_DEF-123  ");
+    await type(within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID"), " 12345678 ");
+    await type(reasonInput(), "接入 Yandex");
+    await submit(siteForm());
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(parseBody(calls[0])).toMatchObject({
+      reason: "接入 Yandex",
+      yandexVerification: "abc_DEF-123",
+      yandexMetricaId: "12345678",
+    });
+    await waitFor(() => expect(within(siteForm()).getByRole("status").textContent).toContain("已保存"));
+    expect((within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID") as HTMLInputElement).value).toBe("12345678");
+  });
+
+  it("清空已有的两项并保存：PATCH 发空串（服务端存空串 / NULL）", async () => {
+    const { calls } = queueFetch({
+      body: { ok: true, data: { setting: { ...BASE_SETTING, updatedAt: "2026-08-20T01:00:00.000Z" }, replayed: false } },
+    });
+    renderClient({ setting: { ...BASE_SETTING, yandexVerification: "old-code", yandexMetricaId: "42" } });
+
+    await type(within(siteForm()).getByLabelText("Yandex 站长验证码"), "");
+    await type(within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID"), "");
+    await type(reasonInput(), "下线 Yandex");
+    await submit(siteForm());
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const body = parseBody(calls[0]);
+    expect(body.yandexVerification).toBe("");
+    expect(body.yandexMetricaId).toBe("");
+  });
+
+  it.each([
+    ["含空格", "abc def"],
+    ["含点号", "abc.def"],
+    ["含尖括号", "<script>"],
+    ["含中文", "验证码"],
+  ])("验证码%s：按钮置灰并说明原因，强行提交也不发请求", async (_label, value) => {
+    const { calls } = queueFetch({ body: { ok: true, data: null } });
+    renderClient();
+    await type(within(siteForm()).getByLabelText("Yandex 站长验证码"), value);
+    await type(reasonInput(), "r");
+
+    expect(blockReason()).toBe("Yandex 站长验证码只能包含字母、数字、下划线和短横线，请修正后再保存");
+    expect((within(siteForm()).getByRole("button", { name: "保存站点 SEO 设置" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(siteForm()).getByText("只能包含字母、数字、下划线和短横线")).toBeTruthy();
+    await submit(siteForm());
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["带字母", "12ab"],
+    ["带小数点", "1.5"],
+    ["超过 12 位", "1234567890123"],
+    ["带引号的注入串", "1');alert(1);//"],
+  ])("Metrica ID %s：按钮置灰并说明原因，强行提交也不发请求", async (_label, value) => {
+    const { calls } = queueFetch({ body: { ok: true, data: null } });
+    renderClient();
+    await type(within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID"), value);
+    await type(reasonInput(), "r");
+
+    expect(blockReason()).toBe("Yandex Metrica 计数器 ID 只能填写 1～12 位数字，请修正后再保存");
+    expect((within(siteForm()).getByRole("button", { name: "保存站点 SEO 设置" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(siteForm()).getByText("只能填写 1～12 位数字")).toBeTruthy();
+    await submit(siteForm());
+    expect(calls).toHaveLength(0);
+  });
+
+  it("服务端仍拒绝时（site_setting_invalid）走通用『参数无效』文案，不静默清洗", async () => {
+    queueFetch({ status: 400, body: { ok: false, status: 400, code: "site_setting_invalid" } });
+    renderClient();
+    await type(within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID"), "123");
+    await type(reasonInput(), "r");
+    await submit(siteForm());
+    await waitFor(() => expect(within(siteForm()).getByRole("status").textContent).toContain("站点设置参数无效"));
+    expect((within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID") as HTMLInputElement).value).toBe("123");
   });
 });

@@ -98,6 +98,26 @@ export function resolveSiteHostSafely(): string | null {
   }
 }
 
+/**
+ * True only when the request arrived on the configured admin host
+ * (`ADMIN_CANONICAL_ORIGIN`) AND that host differs from the public site host —
+ * the same RC-9 split `evaluateAdminHostAccess` enforces (on the admin host every
+ * public path is 404, so anything rendered there is admin/login UI).
+ *
+ * Consumed by `src/app/layout.tsx` to keep third-party analytics (Yandex Metrica)
+ * off the admin surface. Fail-open on the *detection* side by design: a missing
+ * header, an unconfigured/invalid `ADMIN_CANONICAL_ORIGIN`, or the same-origin dev
+ * fallback (admin host == site host, where the two surfaces cannot be told apart)
+ * all return `false`, i.e. "treat as public".
+ */
+export function isAdminHostRequest(hostHeader: string | null | undefined): boolean {
+  const requestHost = normalizeRequestHost(hostHeader);
+  if (requestHost === null) return false;
+  const adminHost = resolveAdminHost(readAdminCanonicalOrigin());
+  if (!adminHost.ok || adminHost.host !== requestHost) return false;
+  return adminHost.host !== resolveSiteHostSafely();
+}
+
 /** Strips an optional port from a raw `Host` request header value, tolerant of IPv6 bracket notation. Returns `null` for empty/missing input. */
 export function normalizeRequestHost(hostHeader: string | null | undefined): string | null {
   const raw = hostHeader?.trim();

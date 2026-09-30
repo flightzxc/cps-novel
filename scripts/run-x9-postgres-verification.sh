@@ -62,19 +62,28 @@ docker exec -i "$container_name" psql --no-psqlrc -U x9_admin -d postgres \
 docker exec -i "$container_name" psql --no-psqlrc -U x9_admin -d postgres \
   <"$secret_dir/role-passwords.sql" >/dev/null
 # Keep an independent old-schema migration directory for the populated upgrade.
+# 旧库基线 = 守卫迁移"之前"的全部迁移：守卫迁移本身以及时间戳晚于它的迁移（例如运营 V2 的
+# 20260930100000_site_setting_yandex）都不属于这次升级演练的旧基线，之后再新增迁移也不必再改这里。
+guard_migration=20260927090000_side_effect_manual_review_guard
 mkdir -p "$secret_dir/upgrade/migrations"
 cp prisma/schema.prisma "$secret_dir/upgrade/schema.prisma"
 cp prisma/migrations/migration_lock.toml "$secret_dir/upgrade/migrations/"
 for migration in prisma/migrations/*/; do
-  [[ "$migration" == *20260927090000_side_effect_manual_review_guard/ ]] && continue
+  migration_name="$(basename "${migration%/}")"
+  # 显式 if：本机 /bin/bash 3.2 下单独成行的 `[[ ]]` 判假不会触发 set -e。
+  if [ "${migration_name%%_*}" -ge "${guard_migration%%_*}" ]; then
+    continue
+  fi
   cp -R "${migration%/}" "$secret_dir/upgrade/migrations/"
 done
+expected_total_migrations="$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
+expected_baseline_migrations="$(find "$secret_dir/upgrade/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
 
 db_query() {
   docker exec "$container_name" psql --no-psqlrc -v ON_ERROR_STOP=1 -U x9_admin -d "$database_name" -Atqc "$1"
 }
 
-migration_digest_sql="SELECT md5(string_agg(migration_name || ':' || checksum || ':' || finished_at::text, ',' ORDER BY migration_name)) FROM _prisma_migrations WHERE migration_name <> '20260927090000_side_effect_manual_review_guard' AND finished_at IS NOT NULL AND rolled_back_at IS NULL"
+migration_digest_sql="SELECT md5(string_agg(migration_name || ':' || checksum || ':' || finished_at::text, ',' ORDER BY migration_name)) FROM _prisma_migrations WHERE migration_name < '20260927090000_side_effect_manual_review_guard' AND finished_at IS NOT NULL AND rolled_back_at IS NULL"
 fixture_digest_sql="SELECT md5(json_build_object('intents',(SELECT json_agg(s ORDER BY id) FROM side_effect_intent s WHERE operation_type='x9.upgrade_probe'),'schedule',(SELECT json_agg(s ORDER BY id) FROM schedule_run s WHERE schedule_key='x9.upgrade_probe'))::text)"
 
 for scenario in empty upgrade; do
@@ -87,7 +96,7 @@ for scenario in empty upgrade; do
 
   if [[ "$scenario" == upgrade ]]; then
     DATABASE_URL="$owner_url" npx prisma migrate deploy --schema "$secret_dir/upgrade/schema.prisma"
-    [[ "$(db_query 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')" == 19 ]] || { echo 'X9_UPGRADE_BASELINE_COUNT=FAIL'; exit 1; }
+    [[ "$(db_query 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')" == "$expected_baseline_migrations" ]] || { echo 'X9_UPGRADE_BASELINE_COUNT=FAIL'; exit 1; }
     docker exec -i "$container_name" psql --no-psqlrc -v ON_ERROR_STOP=1 -U migration_owner -d "$database_name" <<'SQL'
 INSERT INTO side_effect_intent (id,effect_key,operation_type,idempotency_key,target_type,target_id,status,request_summary,response_shape)
 SELECT gen_random_uuid(), md5(status)||md5(status), 'x9.upgrade_probe', md5(status)||md5(status),
@@ -101,14 +110,14 @@ SQL
   fi
 
   DATABASE_URL="$owner_url" npx prisma migrate deploy
-  [[ "$(db_query 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')" == 20 ]] || { echo 'X9_MIGRATION_COUNT=FAIL'; exit 1; }
+  [[ "$(db_query 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')" == "$expected_total_migrations" ]] || { echo 'X9_MIGRATION_COUNT=FAIL'; exit 1; }
   [[ "$(db_query "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'")" == 53 ]] || { echo 'X9_TABLE_COUNT=FAIL'; exit 1; }
   if [[ "$scenario" == upgrade ]]; then
     [[ "$(db_query "$migration_digest_sql")" == "$before_migrations" ]] || { echo "X9_OLD_MIGRATION_DIGEST=FAIL"; exit 1; }
     [[ "$(db_query "$fixture_digest_sql")" == "$before_fixture" ]] || { echo "X9_UPGRADE_DATA_DIGEST=FAIL"; exit 1; }
     echo "X9_UPGRADE_OLD_MIGRATIONS_AND_DATA=UNCHANGED"
   fi
-  echo "X9_MIGRATION_${scenario}=PASS migrations=20 tables=53"
+  echo "X9_MIGRATION_${scenario}=PASS migrations=${expected_total_migrations} tables=53"
 
   for replay in 1 2; do
     docker exec -i "$container_name" psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 \

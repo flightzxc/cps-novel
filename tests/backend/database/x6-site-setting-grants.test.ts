@@ -50,7 +50,9 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       .split("\n")
       .map((line) => JSON.parse(line))
       .filter((record) => record.table_name === "site_setting");
-    expect(records).toHaveLength(19);
+    // 19 + 2: 运营 V2 (20260930100000_site_setting_yandex) adds the
+    // yandex_verification and yandex_metrica_id field records.
+    expect(records).toHaveLength(21);
     const fields = new Map(records.filter((record) => record.record_kind === "field")
       .map((record) => [record.field_name, record]));
     // PR6 lane E: scheduler_app reads exactly `id` and `carousel_config_json`

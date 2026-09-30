@@ -26,6 +26,8 @@ function fakeSettings(overrides: Partial<SiteSettingSnapshot> = {}): SiteSetting
     indexNowKey: "",
     indexNowKeyLocation: "",
     ga4MeasurementId: null,
+    yandexVerification: "",
+    yandexMetricaId: null,
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };

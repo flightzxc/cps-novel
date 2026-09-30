@@ -1032,6 +1032,13 @@ model SiteSetting {
   indexNowKey                     String   @default("") @map("indexnow_key") @db.VarChar(255)
   indexNowKeyLocation             String   @default("") @map("indexnow_key_location") @db.VarChar(255)
   ga4MeasurementId                String?  @map("ga4_measurement_id") @db.VarChar(64)
+  /// 运营 V2 需求（Owner 2026-09-30）：Yandex 站长验证码，公开站 `<head>` 输出
+  /// `<meta name="yandex-verification">`；只允许 `[A-Za-z0-9_-]`、1～255 位，空串表示不输出。
+  /// 无 CPS 对应（NOVEL_ONLY）。
+  yandexVerification              String   @default("") @map("yandex_verification") @db.VarChar(255)
+  /// 运营 V2 需求（Owner 2026-09-30）：Yandex Metrica 计数器 ID，只允许 1～12 位数字，
+  /// NULL 表示不输出统计代码。无 CPS 对应（NOVEL_ONLY）。
+  yandexMetricaId                 String?  @map("yandex_metrica_id") @db.VarChar(32)
   carouselConfigJson              Json     @default("{}") @map("carousel_config_json") @db.JsonB
   updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

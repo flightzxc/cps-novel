@@ -34,6 +34,9 @@ function candidate(overrides: Record<string, unknown> = {}) {
 function db(rows: ReturnType<typeof candidate>[]) {
   return {
     article: { findMany: vi.fn().mockResolvedValue(rows) },
+    // 运营 V2：novelpage 分片会读章节、mainpage 会读分类归属；这些用例不关心它们，给空结果。
+    novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     siteSetting: {
       findUnique: vi.fn().mockResolvedValue({
         siteName: "Fixture",
@@ -49,6 +52,8 @@ function db(rows: ReturnType<typeof candidate>[]) {
         indexNowKey: "",
         indexNowKeyLocation: "",
         ga4MeasurementId: null,
+        yandexVerification: "",
+        yandexMetricaId: null,
         updatedAt: new Date("2026-08-04T00:00:00.000Z"),
       }),
     },

@@ -36,6 +36,8 @@ const BASE_ROW = {
   indexNowKey: "",
   indexNowKeyLocation: "",
   ga4MeasurementId: null,
+  yandexVerification: "",
+  yandexMetricaId: null as string | null,
   updatedAt: BEFORE,
 };
 
@@ -199,6 +201,103 @@ describe("updateAdminSiteSetting", () => {
       siteName: "Haiyue", googleSearchConsoleVerification: "google-code", ga4MeasurementId: "G-ABC123",
       friendLinks: [{ name: "Partner", url: "https://partner.example/", nofollow: true }],
     });
+  });
+
+  // 运营 V2（Owner 2026-09-30）：Yandex 两个新字段，与 GA4 字段同一条保存路径。
+  it("Yandex: saves a valid verification code and a digits-only Metrica id, audits both, and the next read sees them (cache invalidated)", async () => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    await getSiteSetting(db.asPrismaClient(), { ttlMs: 30_000, now: () => NOW.getTime() });
+
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "add yandex",
+      yandexVerification: "  1a2B3c_4-d5e6f7890  ",
+      yandexMetricaId: " 12345678 ",
+    }, dependencies(db, stores));
+
+    expect(result.setting).toMatchObject({ yandexVerification: "1a2B3c_4-d5e6f7890", yandexMetricaId: "12345678" });
+    expect(db.audits).toHaveLength(1);
+    const audit = db.audits[0] as unknown as { beforeSnapshot: Record<string, unknown>; afterSnapshot: Record<string, unknown> };
+    expect(audit.beforeSnapshot).toMatchObject({ yandexVerification: "", yandexMetricaId: null });
+    expect(audit.afterSnapshot).toMatchObject({ yandexVerification: "1a2B3c_4-d5e6f7890", yandexMetricaId: "12345678" });
+
+    const fresh = await getSiteSetting(db.asPrismaClient(), { ttlMs: 30_000, now: () => NOW.getTime() });
+    expect(fresh).toMatchObject({ yandexVerification: "1a2B3c_4-d5e6f7890", yandexMetricaId: "12345678" });
+  });
+
+  it("Yandex: empty strings are allowed and clear the values (verification -> '', Metrica id -> NULL)", async () => {
+    const db = new FakeSiteSettingDb({ ...BASE_ROW, yandexVerification: "abc", yandexMetricaId: "42" });
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "clear yandex",
+      yandexVerification: "   ",
+      yandexMetricaId: "",
+    }, dependencies(db, stores));
+    expect(result.setting).toMatchObject({ yandexVerification: "", yandexMetricaId: null });
+    expect(db.row).toMatchObject({ yandexVerification: "", yandexMetricaId: null });
+  });
+
+  it.each([
+    ["a space inside", "abc def"],
+    ["a dot", "abc.def"],
+    ["an angle bracket / script", "<script>alert(1)</script>"],
+    ["a double quote", 'abc"def'],
+    ["a non-ASCII letter", "验证码123"],
+    ["more than 255 characters", "a".repeat(256)],
+  ])("Yandex: rejects a verification code with %s and writes nothing", async (_label, value) => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    await expect(updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "r",
+      yandexVerification: value,
+    }, dependencies(db, stores))).rejects.toBeInstanceOf(SiteSettingValidationError);
+    expect(db.updateCalls).toBe(0);
+    expect(db.audits).toHaveLength(0);
+  });
+
+  it.each([
+    ["letters", "abc123"],
+    ["a decimal point", "123.45"],
+    ["a minus sign", "-1"],
+    ["a quote-breaking payload", "1);alert(1);//"],
+    ["more than 12 digits", "1234567890123"],
+    ["a full-width digit", "１２３"],
+  ])("Yandex: rejects a Metrica id with %s and writes nothing", async (_label, value) => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    await expect(updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "r",
+      yandexMetricaId: value,
+    }, dependencies(db, stores))).rejects.toBeInstanceOf(SiteSettingValidationError);
+    expect(db.updateCalls).toBe(0);
+    expect(db.audits).toHaveLength(0);
+  });
+
+  it("Yandex: exactly 12 digits and exactly 255 verification characters are accepted (boundaries)", async () => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "boundary",
+      yandexVerification: "a".repeat(255),
+      yandexMetricaId: "123456789012",
+    }, dependencies(db, stores));
+    expect(result.setting.yandexVerification).toHaveLength(255);
+    expect(result.setting.yandexMetricaId).toBe("123456789012");
   });
 
   it("rejects a non-empty invalid GA4 id instead of silently clearing it", async () => {
