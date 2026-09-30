@@ -201,3 +201,56 @@ describe("buildCategoryMetadata — hreflang 不再盲枚举 15 个语种", () =
     expect(getPublicCategoryPage).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 同一轮里顺带发现并修的第三处：category / collection（/browse、/blog 列表）模板的
+ * canonical 用的是不带语种前缀的 `buildCanonical`，`/ko/category/x` 的 canonical 因此是
+ * 裸的 `/category/x`——空分类是 404，所以这常常是个 404 地址，还与页面自己的 hreflang
+ * 自引用条目（`/ko/category/x`）互相矛盾。CPS 的 category 模板用的是
+ * `buildLocaleCanonical(locale, path)`（`v8.5.1:src/lib/seo-templates/category.ts`）。
+ */
+describe("category / collection canonical carry the page's own locale prefix", () => {
+  it("category：ko 的 canonical 是 /ko/category/x（含 ?page=2），en 保持无前缀，且与 hreflang 自引用一致", () => {
+    const ko = buildCategorySeoMeta(
+      { name: "Romance", slug: "romance", siteName: "Novel", defaultOgImage: "/og.jpg", hreflangLocales: ["ko"] },
+      1,
+      "ko",
+    );
+    expect(ko.canonical).toBe(`${ORIGIN}/ko/category/romance`);
+    expect(ko.alternates.canonical).toBe(`${ORIGIN}/ko/category/romance`);
+    expect(ko.alternates.languages.ko).toBe(ko.canonical);
+    expect(ko.openGraph.url).toBe(ko.canonical);
+
+    const koPage2 = buildCategorySeoMeta(
+      { name: "Romance", slug: "romance", siteName: "Novel", defaultOgImage: "/og.jpg", hreflangLocales: ["ko"] },
+      2,
+      "ko",
+    );
+    expect(koPage2.canonical).toBe(`${ORIGIN}/ko/category/romance?page=2`);
+
+    const en = buildCategorySeoMeta(
+      { name: "Romance", slug: "romance", siteName: "Novel", defaultOgImage: "/og.jpg", hreflangLocales: ["en"] },
+      1,
+      "en",
+    );
+    expect(en.canonical).toBe(`${ORIGIN}/category/romance`);
+  });
+
+  it("collection（/browse、/blog 列表）：ko 的 canonical 带 /ko 前缀，第 2 页保留 query，en 无前缀", async () => {
+    const { buildCollectionSeoMeta } = await import("@/lib/seo/seo-templates/collection");
+    const data = {
+      title: "All works",
+      description: "Works.",
+      canonicalPath: "/browse",
+      items: [],
+      siteName: "Novel",
+      defaultOgImage: "/og.jpg",
+    };
+    expect(buildCollectionSeoMeta(data, 1, "ko").canonical).toBe(`${ORIGIN}/ko/browse`);
+    expect(buildCollectionSeoMeta(data, 2, "ko").canonical).toBe(`${ORIGIN}/ko/browse?page=2`);
+    expect(buildCollectionSeoMeta({ ...data, canonicalPath: "/browse?category=romance" }, 2, "ko").canonical).toBe(
+      `${ORIGIN}/ko/browse?category=romance&page=2`,
+    );
+    expect(buildCollectionSeoMeta(data, 1, "en").canonical).toBe(`${ORIGIN}/browse`);
+  });
+});

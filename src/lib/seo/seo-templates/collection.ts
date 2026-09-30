@@ -1,7 +1,6 @@
 import { getHomeName } from "../breadcrumb-i18n";
 import { buildHreflangAlternates, generateItemListJsonLd, shouldNoIndex } from "../seo-utils";
 import {
-  buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
   resolveOgImage,
@@ -32,7 +31,10 @@ export function buildCollectionSeoMeta(
   const pagePath = pageNumber > 1
     ? `${data.canonicalPath}${data.canonicalPath.includes("?") ? "&" : "?"}page=${pageNumber}`
     : data.canonicalPath;
-  const canonical = buildCanonical(pagePath);
+  // 2026-09-30: locale-prefixed (`buildLocaleCanonical`) — same fix and same
+  // reason as `category.ts`: `/ko/browse` and `/ko/blog` used to declare the
+  // bare en path as their canonical.
+  const canonical = buildLocaleCanonical(locale, pagePath);
   const ogImage = resolveOgImage(null, data.defaultOgImage);
   const ogLocale = openGraphLocaleTag(locale);
   const homeName = getHomeName(locale);

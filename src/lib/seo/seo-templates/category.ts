@@ -7,7 +7,6 @@
 import { getHomeName } from "../breadcrumb-i18n";
 import { buildHreflangAlternates, shouldNoIndex } from "../seo-utils";
 import {
-  buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
   resolveOgImage,
@@ -46,7 +45,13 @@ export function buildCategorySeoMeta(
   const path = pageNumber >= 2
     ? `/category/${data.slug}?page=${pageNumber}`
     : `/category/${data.slug}`;
-  const canonical = buildCanonical(path);
+  // 2026-09-30: locale-prefixed, like CPS's `buildLocaleCanonical(locale, path)`
+  // (`v8.5.1:src/lib/seo-templates/category.ts`). This used to be the
+  // locale-blind `buildCanonical(path)`, so `/ko/category/x` declared the
+  // bare (en) `/category/x` as its canonical — a URL that is a 404 whenever
+  // the category has no en content (an empty category is a 404 here) — and
+  // contradicted the page's own hreflang self-entry below.
+  const canonical = buildLocaleCanonical(locale, path);
   const trimmedDescription = data.description?.trim() ?? "";
   const description = trimmedDescription ? truncateDescription(trimmedDescription) : undefined;
   const image = resolveOgImage(null, data.defaultOgImage);
