@@ -240,7 +240,7 @@ async function seedFetchedPromo(db: PrismaClient, novelId: string, prefix: strin
       offerType: "cps",
       publicRedirectCode: `${prefix}${randomUUID().replaceAll("-", "").slice(0, 10)}`,
       idempotencyKey: randomUUID().replaceAll("-", "").padEnd(64, "0").slice(0, 64),
-      origin: "claim",
+      origin: "claimed",
       status: "fetched",
       webUrl: "https://example.com/read",
       fetchedAt: new Date(),
