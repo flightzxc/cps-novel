@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
@@ -138,6 +138,18 @@ export async function ChapterBody({
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
+  // 与小说详情页同一条纠正：短码对得上已发布文章、语种前缀或 slug 不对，就 308
+  // 到该文章章节页的规范地址（章节号原样带上）。
+  if (access.kind === "redirect") {
+    permanentRedirect(
+      buildChapterPath({
+        locale: access.locale,
+        slug: access.slugPart,
+        shortId: access.shortId,
+        chapterNumber,
+      }),
+    );
+  }
   if (access.kind === "unavailable") {
     return (
       <UnavailableScreen

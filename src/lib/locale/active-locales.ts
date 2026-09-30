@@ -103,6 +103,16 @@ export async function queryActiveLocales(
  * §1 清单①. Do not add a second consumer here without first checking that
  * CPS's own equivalent boundary also reads the dynamic layer, not the
  * static one — see this repo's "CPS 用静态集的地方不得换动态集" discipline.
+ *
+ * 2026-09-30 one bounded, cost-only exception (not a second decision
+ * consumer): `src/app/_pages/category.tsx`'s `hreflangLocalesFor` uses this
+ * set to bound WHICH locales get probed when computing a category page's
+ * hreflang (each probe is a full `getPublicCategoryPage`). Correctness never
+ * comes from this set — a locale is listed in hreflang only if
+ * `getPublicCategoryPage(…, 1)` itself returns a page, i.e. the page really
+ * is HTTP 200; a locale missing here merely postpones its hreflang entry by at
+ * most this cache's 300s (the safe direction). The set is a superset of every
+ * locale that can have a list-visible category (collectability ⊇ list).
  */
 export const getActiveLocales = unstable_cache(
   () => queryActiveLocales(),

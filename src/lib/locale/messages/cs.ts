@@ -192,6 +192,12 @@ const messages = {
     title: "Tuto stránku nelze najít",
     body: "Adresa může být chybná, nebo tato stránka již neexistuje.",
   },
+  localeSwitcher: {
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/cs.json:136。
+    fallbackToast: "Tento titul zatím není dostupný v jazyce {locale}. Přepnuto na domovskou stránku {locale}.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "Tato stránka zatím není dostupná v jazyce „{locale}“. Zobrazena domovská stránka v jazyce „{locale}“.",
+  },
   pagination: {
     previous: "Předchozí",
     next: "Další",

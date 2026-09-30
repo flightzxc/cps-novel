@@ -133,6 +133,15 @@ function acceptanceClient(db: FakePublishGateDb) {
         ? snapshot
         : null;
     }
+    // 2026-09-30（短码语种纠正）：公开详情页的访问判定现在按短码找文章
+    // （`resolveNovelArticlePublicAccessByShortId`，where 是
+    // `{ publicPageShortId }`），不再按 (locale, slug)。这个 fake 只是把新的
+    // 查找形状接进同一份快照；生产代码依旧不 mock。
+    const shortIdWhere = and.find((entry) => typeof entry.publicPageShortId === "string");
+    if (shortIdWhere) {
+      const snapshot = articleSnapshot();
+      return snapshot.publicPageShortId === shortIdWhere.publicPageShortId ? snapshot : null;
+    }
 
     const result = await originalFindFirst(args) as Record<string, unknown> | null;
     if (result && where.id === ARTICLE_ID) {

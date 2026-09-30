@@ -120,6 +120,15 @@ export function canonicalUrl(path: string) {
  * dead link, which is exactly the difference from a detail page's sibling
  * enumeration (`novel-hreflang.ts`, which stays a real DB lookup).
  *
+ * 2026-09-30: `locales` (third argument) narrows the enumerated set. The
+ * default (`SITE_LOCALES`) is exactly the same-relative-path guarantee above
+ * — safe for home `/` and `/browse`, which exist in every registered
+ * locale. A page whose existence in a given locale depends on DATA — the
+ * category page: an empty category is a 404 in this project — must pass the
+ * locales where it really returns 200 (`@/lib/site/category-locales`), or
+ * hreflang advertises dead URLs (e.g. `/category/romance` in a locale with
+ * no romance books). `x-default` keeps the same rule either way.
+ *
  * `currentLocale` is always included regardless — this is the URL the
  * caller is actually rendering right now (self-referencing hreflang is
  * expected practice), and omitting it would be a regression versus today's
@@ -130,9 +139,10 @@ export function canonicalUrl(path: string) {
 export function buildHreflangAlternates(
   path: string,
   currentLocale: string = "en",
+  locales: readonly string[] = SITE_LOCALES,
 ): Record<string, string> {
   const result: Record<string, string> = {};
-  for (const locale of SITE_LOCALES) {
+  for (const locale of locales) {
     result[locale] = buildLocaleCanonical(locale, path);
   }
   result[currentLocale] = buildLocaleCanonical(currentLocale, path);

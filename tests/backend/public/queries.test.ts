@@ -35,6 +35,36 @@ function listed(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * 2026-09-30（短码语种纠正，照搬短剧站 v8.5.1 `getDramaDetailBySlug`）：
+ * `resolvePublicArticleBySlugParam` 现在**按短码**找文章（短码是页面身份，语种
+ * 前缀与 slug 只是展示），找到已发布文章后比对 URL 里的语种/slug 与文章真实的：
+ * 一致 → `published`；不一致 → `redirect`（页面 308 到规范地址）。
+ *
+ * 因此本块所有 fixture 行都带 `locale`/`slug`（真实库里这两列恒有值，旧 fixture
+ * 因为当时按 (locale, slug) 查询、行里没有它们）；"短码不符即 not_found" 的旧用例
+ * 换成"短码找不到即 not_found"——语义随需求改变，不是放宽：下架/撤回/hidden 等
+ * 判定口径、以及"下架/撤回只对规范 URL 生效"这些断言都保持原样（见各用例）。
+ */
+function accessRow(overrides: Record<string, unknown> = {}) {
+  return {
+    title: "Lantern",
+    locale: "en",
+    slug: "lantern",
+    publicPageShortId: "abc123",
+    id: "article-1",
+    novelId: "novel-1",
+    status: "published",
+    novel: { status: "published" },
+    promoLink: READY_PROMO,
+    ...overrides,
+  };
+}
+
+function dbReturning(row: ReturnType<typeof accessRow> | null) {
+  return { article: { findFirst: vi.fn().mockResolvedValue(row) } } as unknown as PrismaClient;
+}
+
 describe("resolvePublicArticleBySlugParam", () => {
   afterEach(() => vi.unstubAllEnvs());
   it("returns not_found when the slug param cannot be parsed", async () => {
@@ -45,43 +75,24 @@ describe("resolvePublicArticleBySlugParam", () => {
     expect(db.article.findFirst).not.toHaveBeenCalled();
   });
 
-  it("returns not_found when the short id does not match", async () => {
-    const db = {
-      article: {
-        findFirst: vi.fn().mockImplementation(async () => {
-          return {
-            title: "Lantern", publicPageShortId: "otherid",
-            id: "article-1",
-            novelId: "novel-1",
-            status: "published",
-            novel: { status: "published" },
-            promoLink: READY_PROMO,
-          };
-        }),
-      },
-    } as unknown as PrismaClient;
-
-    await expect(
-      resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en"),
-    ).resolves.toEqual({ kind: "not_found" });
+  it("returns not_found when no article carries the short id — the URL's locale/slug cannot conjure one", async () => {
+    const db = dbReturning(null);
+    await expect(resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en")).resolves.toEqual({
+      kind: "not_found",
+    });
+    expect(db.article.findFirst).toHaveBeenCalledTimes(1);
   });
 
-  it("returns published when access and short id both match", async () => {
-    const db = {
-      article: {
-        findFirst: vi.fn().mockImplementation(async () => {
-          return {
-            title: "Lantern", publicPageShortId: "abc123",
-            id: "article-1",
-            novelId: "novel-1",
-            status: "published",
-            novel: { status: "published" },
-            promoLink: READY_PROMO,
-          };
-        }),
-      },
-    } as unknown as PrismaClient;
+  it("looks the article up by short id alone (not by locale + slug)", async () => {
+    const db = dbReturning(accessRow());
+    await resolvePublicArticleBySlugParam(db, "lantern-pabc123", "ko");
+    expect(vi.mocked(db.article.findFirst).mock.calls[0]![0]).toMatchObject({
+      where: { AND: [{ deletedAt: null }, { publicPageShortId: "abc123" }] },
+    });
+  });
 
+  it("returns published when access, locale and slug all match the URL", async () => {
+    const db = dbReturning(accessRow());
     await expect(resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en")).resolves.toEqual({
       kind: "published",
       articleId: "article-1",
@@ -93,6 +104,48 @@ describe("resolvePublicArticleBySlugParam", () => {
     expect(db.article.findFirst).toHaveBeenCalledTimes(1);
   });
 
+  it("wrong locale prefix: the short id finds a published article whose locale differs -> redirect to its canonical locale (CPS redirectToCanonical), not 404", async () => {
+    // The Korean edition's path grafted onto the bare (en) tree — exactly what
+    // the old prefix-swap locale switcher produced.
+    const db = dbReturning(accessRow({ locale: "ko", slug: "deungdae-jigi" }));
+    await expect(resolvePublicArticleBySlugParam(db, "deungdae-jigi-pabc123", "en")).resolves.toEqual({
+      kind: "redirect",
+      locale: "ko",
+      slugPart: "deungdae-jigi",
+      shortId: "abc123",
+      title: "Lantern",
+    });
+  });
+
+  it("stale slug part: right locale, slug renamed since the URL was issued -> redirect to the current slug", async () => {
+    const db = dbReturning(accessRow({ slug: "lantern-keeper" }));
+    await expect(resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en")).resolves.toEqual({
+      kind: "redirect",
+      locale: "en",
+      slugPart: "lantern-keeper",
+      shortId: "abc123",
+      title: "Lantern",
+    });
+  });
+
+  it("both the locale prefix and the slug part are wrong -> still a single redirect to the canonical address", async () => {
+    const db = dbReturning(accessRow({ locale: "fr", slug: "la-lanterne" }));
+    await expect(resolvePublicArticleBySlugParam(db, "lantern-pabc123", "ko")).resolves.toEqual({
+      kind: "redirect",
+      locale: "fr",
+      slugPart: "la-lanterne",
+      shortId: "abc123",
+      title: "Lantern",
+    });
+  });
+
+  it("an article stored under an unregistered locale has no canonical address to redirect to -> not_found, never a redirect into /{unknown}/novel/…", async () => {
+    const db = dbReturning(accessRow({ locale: "xx-unregistered" }));
+    await expect(resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en")).resolves.toEqual({
+      kind: "not_found",
+    });
+  });
+
   it.each([
     ["draft", "published", "public", READY_PROMO, "not_found"],
     ["published", "published", "hidden", READY_PROMO, "not_found"],
@@ -101,58 +154,38 @@ describe("resolvePublicArticleBySlugParam", () => {
     ["published", "takedown", "public", READY_PROMO, "takedown"],
   ])("keeps visibility for %s/%s/%s", async (status, novelStatus, seoVisibility, promoLink, kind) => {
     vi.stubEnv("FEATURE_ARTICLE_SEO_VISIBILITY", "true");
-    const findFirst = vi.fn().mockResolvedValue({
-      id: "a", title: "Lantern", publicPageShortId: "abc123", novelId: "n",
-      status, seoVisibility, novel: { status: novelStatus }, promoLink,
-    });
+    const findFirst = vi.fn().mockResolvedValue(
+      accessRow({ id: "a", novelId: "n", status, seoVisibility, novel: { status: novelStatus }, promoLink }),
+    );
     const db = { article: { findFirst } } as unknown as PrismaClient;
     const result = await resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en");
     expect(result.kind).toBe(kind);
     expect(findFirst).toHaveBeenCalledTimes(1);
     expect(findFirst.mock.calls[0][0]).toMatchObject({
-      where: { AND: [{ deletedAt: null }, { locale: "en", slug: "lantern" }] },
+      where: { AND: [{ deletedAt: null }, { publicPageShortId: "abc123" }] },
       select: { title: true, publicPageShortId: true, promoLink: { select: { status: true, webUrl: true, appUrl: true } } },
     });
   });
 
   it("returns unavailable / takedown from the foundation access check", async () => {
-    const takedownDb = {
-      article: {
-        findFirst: vi.fn().mockImplementation(async () => {
-          return {
-            title: "Lantern", publicPageShortId: "abc123",
-            id: "article-1",
-            novelId: "novel-1",
-            status: "takedown",
-            novel: { status: "published" },
-            promoLink: READY_PROMO,
-          };
-        }),
-      },
-    } as unknown as PrismaClient;
-    await expect(resolvePublicArticleBySlugParam(takedownDb, "lantern-pabc123", "en")).resolves.toEqual({
-      kind: "takedown",
-      title: "Lantern",
-    });
+    await expect(
+      resolvePublicArticleBySlugParam(dbReturning(accessRow({ status: "takedown" })), "lantern-pabc123", "en"),
+    ).resolves.toEqual({ kind: "takedown", title: "Lantern" });
 
-    const unpublishedDb = {
-      article: {
-        findFirst: vi.fn().mockImplementation(async () => {
-          return {
-            title: "Lantern", publicPageShortId: "abc123",
-            id: "article-1",
-            novelId: "novel-1",
-            status: "unpublished",
-            novel: { status: "published" },
-            promoLink: READY_PROMO,
-          };
-        }),
-      },
-    } as unknown as PrismaClient;
-    await expect(resolvePublicArticleBySlugParam(unpublishedDb, "lantern-pabc123", "en")).resolves.toEqual({
-      kind: "unavailable",
-      title: "Lantern",
-    });
+    await expect(
+      resolvePublicArticleBySlugParam(dbReturning(accessRow({ status: "unpublished" })), "lantern-pabc123", "en"),
+    ).resolves.toEqual({ kind: "unavailable", title: "Lantern" });
+  });
+
+  it("unavailable / takedown only apply at the article's own canonical URL: a wrong locale prefix or a stale slug is a plain not_found, never a redirect that would confirm a non-public article exists (unchanged from before — those URLs used to find no row at all)", async () => {
+    for (const status of ["unpublished", "takedown"]) {
+      await expect(
+        resolvePublicArticleBySlugParam(dbReturning(accessRow({ status, locale: "ko" })), "lantern-pabc123", "en"),
+      ).resolves.toEqual({ kind: "not_found" });
+      await expect(
+        resolvePublicArticleBySlugParam(dbReturning(accessRow({ status, slug: "renamed" })), "lantern-pabc123", "en"),
+      ).resolves.toEqual({ kind: "not_found" });
+    }
   });
 });
 

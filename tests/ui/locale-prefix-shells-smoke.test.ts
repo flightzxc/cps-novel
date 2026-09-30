@@ -66,9 +66,19 @@ import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailable
 
 const NOT_FOUND = Symbol("next-not-found");
 
+// 短码语种纠正（2026-09-30）：详情页/章节页对"短码对得上、语种/slug 不对"的
+// 请求调 `permanentRedirect(path)`。真实的 `permanentRedirect` 抛一个带 308 的
+// 内部错误；这里抛带目标路径的标记对象，用例据此断言"跳到哪儿"。
+class PermanentRedirect {
+  constructor(readonly path: string) {}
+}
+
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw NOT_FOUND;
+  },
+  permanentRedirect: (path: string) => {
+    throw new PermanentRedirect(path);
   },
 }));
 
@@ -123,6 +133,7 @@ const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
+const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
@@ -244,6 +255,10 @@ beforeEach(() => {
   bypassGuard();
   loadChrome.mockReset();
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
+  // 分类页元数据现在读活跃语种来算 hreflang（2026-09-30）：给一个只有 en 的
+  // 最简集合，没有其它语种要查。
+  loadActiveLocales.mockReset();
+  loadActiveLocales.mockResolvedValue(["en"]);
   loadHomeNovels.mockReset();
   loadHomeNovels.mockResolvedValue([CARD]);
   loadHomeCarousel.mockReset();
@@ -442,12 +457,61 @@ describe("novel detail: bare-path and [locale]-prefixed shells agree", () => {
     await expect(bare.default({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params: prefixedParams })).rejects.toBe(NOT_FOUND);
   });
+
+  // 2026-09-30（短码语种纠正）：这一条取代了"短码对得上但语种/slug 不对 →
+  // notFound()"的旧行为——`resolvePublicArticleBySlugParam` 现在对这种请求返回
+  // `redirect`，页面 `permanentRedirect`（308）到规范地址。下架/撤回/找不到短码
+  // 仍是 404（上一条用例原样保留，没有放宽）。
+  it("redirect（短码对得上已发布文章、语种前缀或 slug 不对）：两个壳都 permanentRedirect 到规范地址，而不是 404", async () => {
+    loadArticleAccess.mockResolvedValue({
+      kind: "redirect",
+      locale: "ko",
+      slugPart: "deungdae",
+      shortId: "abc123",
+      title: DETAIL.title,
+    });
+
+    const bare = await import("@/app/novel/[slugParam]/page");
+    const prefixed = await import("@/app/[locale]/novel/[slugParam]/page");
+    const params = Promise.resolve(NOVEL_PARAMS);
+    const prefixedParams = Promise.resolve({ locale: "en", ...NOVEL_PARAMS });
+
+    for (const render of [() => bare.default({ params }), () => prefixed.default({ params: prefixedParams })]) {
+      const thrown = await render().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(thrown).toBeInstanceOf(PermanentRedirect);
+      expect((thrown as PermanentRedirect).path).toBe("/ko/novel/deungdae-pabc123");
+    }
+
+    // 目标是 en 时规范地址无前缀。
+    loadArticleAccess.mockResolvedValue({
+      kind: "redirect",
+      locale: "en",
+      slugPart: "lantern-keepers-daughter",
+      shortId: "abc123",
+      title: DETAIL.title,
+    });
+    await expect(bare.default({ params })).rejects.toMatchObject({ path: "/novel/lantern-keepers-daughter-pabc123" });
+
+    // 元数据阶段不抛、不建 canonical/hreflang，只给 noindex 占位。
+    const meta = await bare.generateMetadata({ params });
+    expect(meta.robots).toEqual({ index: false, follow: false });
+  });
 });
 
 describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
   beforeEach(() => {
     notFoundHeaderState.headerValue = null;
   });
+
+  // 2026-09-30（404 页面照搬 CPS）：两个壳不再渲染 `UnavailableScreen`
+  // （"暂时不可用"下架文案，且不带 chrome），而是 `SiteShell`（带站名的页头页脚）
+  // 包着一个 404 面板。语种断言因此从 `UnavailableScreen` 的 props 换成 `SiteShell`
+  // 的 `locale` 与面板的 `homeHref`；断言的内容（bare 壳钉 en、`[locale]` 壳读
+  // `x-novel-locale` 头、缺头/乱码回落 en）一条没变。
+  const panelOf = (tree: { props: { children: { props: { homeHref: string } } } }) => tree.props.children;
 
   it("metadata re-exported verbatim on both shells", async () => {
     const bare = await import("@/app/novel/[slugParam]/not-found");
@@ -460,9 +524,9 @@ describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
 
   it("bare-path shell still pins PUBLIC_SITE_LOCALE (a bare path has no request locale to read)", async () => {
     const bare = await import("@/app/novel/[slugParam]/not-found");
-    const fromBare = bare.default();
+    const fromBare = await bare.default();
     expect(fromBare.props.locale).toBe("en");
-    expect(fromBare.props.homeHref).toBe("/");
+    expect(panelOf(fromBare).props.homeHref).toBe("/");
   });
 
   // L10N P4 review fix (B-1): the `[locale]`-prefixed shell used to pin
@@ -478,8 +542,8 @@ describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
     notFoundHeaderState.headerValue = null;
     const fromPrefixed = await prefixed.default();
     expect(fromPrefixed.props.locale).toBe("en");
-    expect(fromPrefixed.props.homeHref).toBe("/");
-    expect(fromPrefixed).toEqual(bare.default());
+    expect(panelOf(fromPrefixed).props.homeHref).toBe("/");
+    expect(fromPrefixed).toEqual(await bare.default());
   });
 
   it("[locale]-prefixed shell renders ru copy with homeHref /ru when x-novel-locale: ru is present", async () => {
@@ -488,7 +552,7 @@ describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
     notFoundHeaderState.headerValue = "ru";
     const fromPrefixed = await prefixed.default();
     expect(fromPrefixed.props.locale).toBe("ru");
-    expect(fromPrefixed.props.homeHref).toBe("/ru");
+    expect(panelOf(fromPrefixed).props.homeHref).toBe("/ru");
   });
 
   it("[locale]-prefixed shell falls back to en when the header carries an unregistered/garbage locale", async () => {
@@ -497,7 +561,7 @@ describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
     notFoundHeaderState.headerValue = "<script>";
     const fromPrefixed = await prefixed.default();
     expect(fromPrefixed.props.locale).toBe("en");
-    expect(fromPrefixed.props.homeHref).toBe("/");
+    expect(panelOf(fromPrefixed).props.homeHref).toBe("/");
   });
 });
 
@@ -550,6 +614,37 @@ describe("chapter: bare-path and [locale]-prefixed shells agree", () => {
 
     await expect(bare.default({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params: prefixedParams })).rejects.toBe(NOT_FOUND);
+  });
+
+  it("redirect：语种前缀或 slug 不对的章节页 permanentRedirect 到该文章章节页的规范地址（章节号原样带上）", async () => {
+    loadArticleAccess.mockResolvedValue({
+      kind: "redirect",
+      locale: "ko",
+      slugPart: "deungdae",
+      shortId: "abc123",
+      title: DETAIL.title,
+    });
+    const bare = await import("@/app/novel/[slugParam]/chapter/[chapterNumber]/page");
+    const prefixed = await import("@/app/[locale]/novel/[slugParam]/chapter/[chapterNumber]/page");
+    const params = Promise.resolve({ ...CHAPTER_PARAMS, chapterNumber: "7" });
+    const prefixedParams = Promise.resolve({ locale: "fr", ...CHAPTER_PARAMS, chapterNumber: "7" });
+
+    await expect(bare.default({ params })).rejects.toMatchObject({ path: "/ko/novel/deungdae-pabc123/chapter/7" });
+    await expect(prefixed.default({ params: prefixedParams })).rejects.toMatchObject({
+      path: "/ko/novel/deungdae-pabc123/chapter/7",
+    });
+    // 章节号不合法时先 404，不会因为文章存在就跳。
+    const badNumber = Promise.resolve({ ...CHAPTER_PARAMS, chapterNumber: "01" });
+    await expect(bare.default({ params: badNumber })).rejects.toBe(NOT_FOUND);
+  });
+
+  it("短码找不到 / 下架 / 撤回：仍然 404（没有因为加了纠正跳转而放宽）", async () => {
+    const bare = await import("@/app/novel/[slugParam]/chapter/[chapterNumber]/page");
+    const params = Promise.resolve(CHAPTER_PARAMS);
+    loadArticleAccess.mockResolvedValue({ kind: "not_found" });
+    await expect(bare.default({ params })).rejects.toBe(NOT_FOUND);
+    loadArticleAccess.mockResolvedValue({ kind: "takedown", title: DETAIL.title });
+    await expect(bare.default({ params })).rejects.toBe(NOT_FOUND);
   });
 });
 
