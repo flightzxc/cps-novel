@@ -40,10 +40,12 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  *   才直接切换，其它默认走保底，不会再把用户送进 404。
  *
  * 提示有两个键（Owner 2026-09-30 拍板）：书页（详情页、章节页）用
- * `localeSwitcher.fallbackToast`——逐字照搬 CPS 原文（"This title isn't
- * available…"）；其它页面（分类页、博客页、404 页、未登记路径）用
- * `localeSwitcher.fallbackToastPage`——CPS 没有对应场景的新键（"This page
- * isn't available…"）。选哪个键由 `isBookPagePath` 决定。
+ * `localeSwitcher.fallbackToast`——照搬 CPS 句式，仅把"剧/影片"换成"书"
+ * （Owner 2026-09-30；en 的 "This title isn't available…" 与 CPS 相同，
+ * zh-Hant/ru/vi 三个语种的"剧/影片"换成"作品/книга/sách"）；其它页面
+ * （分类页、博客页、404 页、未登记路径）用 `localeSwitcher.fallbackToastPage`
+ * ——CPS 没有对应场景的新键（"This page isn't available…"）。选哪个键由
+ * `isBookPagePath` 决定。
  *
  * 分页等 query 参数**照 CPS 保留**：CPS 的 `switchLocale` 对非详情页走
  * `buildPathOnlyLocaleHref`，原样带上 search（和 hash），所以 `/browse?page=N`
@@ -218,9 +220,9 @@ export function planLocaleSwitch(pathname: string, search?: string): LocaleSwitc
 
 /**
  * 书页 = 小说详情页（`/novel/{slug}`）与章节页（`/novel/{slug}/chapter/{n}`）。
- * 决定切换提示用哪个键：书页用逐字照搬 CPS 的 `fallbackToast`，其它页面用
- * `fallbackToastPage`。与 `planLocaleSwitch` 各管一件事：一个决定"去哪儿"，
- * 一个决定"说什么"。
+ * 决定切换提示用哪个键：书页用照搬 CPS 句式（仅把"剧"换成"书"）的
+ * `fallbackToast`，其它页面用 `fallbackToastPage`。与 `planLocaleSwitch` 各管
+ * 一件事：一个决定"去哪儿"，一个决定"说什么"。
  */
 export function isBookPagePath(pathname: string): boolean {
   const segments = stripLocalePrefix(pathname).split("/").filter(Boolean);
