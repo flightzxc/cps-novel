@@ -26,7 +26,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - Owner 于 2026-10-01（JST）提供已登录 Chrome 实测、主控 Opus 截图核对结论：第二阶段全部通过。404 页品牌及韩语正文正常，标题 `찾을 수 없음 | PulseNovel`；纠正此前 HTTP 解析未读到页头站名的判断。小说和章节选 English 均跳至无前缀英文首页，按钮下方 ko fallbackToast 与 GPT 验收文案逐字一致；菜单仅 한국어 + 始终保留 English；浏览页 title `전체 작품 | PulseNovel`、15 本。
 - 本版新布局仅 404，Owner Chrome 375px 手机截图已确认、图片由 Owner 另附；不冒称 Codex 已收到或保存图片文件。首页 absolute / 404 本地化标题按 Owner 收官裁决接受；博客原开关 false，正常列表未启用，不为验收改开关。跨语种同书直达目前无公开数据，由单测覆盖，首次出现数据时补实测。详细口径见 [ADR](../adr/ADR-V055-PREPRODUCTION-ACCEPTANCE.md)。
 - 分类 sitemap 旧缓存按 Owner 裁决后续只读检查分片内页面 URL 的 /ko/category/ 前缀；一次性线程跟进 `v0-5-5-sitemap` 已安排 2026-10-02 04:35 JST（03:35 +0800）。目前未执行、未冒称通过；不主动刷新或创建任务。正式收官不移动部署 Final。
-- 第三阶段仍未获授权、未执行，时间/approver/模板备份路径均无；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
+- 第三阶段已按 Owner 单独授权完成，仅限 haiyue-vps；apply 时间 2026-10-01 00:47:21 +0900（台账 2026-09-30 23:47:21 +0800），approver `admin`，审计 `516113`。15 条 update、0 create，仅 metaTitle 与 updated_at 改变；再次 dry-run `changes=[]`，行数 15、version 全部 1。备份 `/opt/cps-novel/backups/v055-article-template-before-20260930T153857Z.json`（15 行 / 5039 字节，SHA256 `1d03cc22d0a8154e1c2ff4f9dfad65835552bb998afe7489e81b40e711ea1106`）；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
 - annotated tag `v0.5.5` 固定于 Final，已生成 CHANGELOG，正式发版开发日志与版本台账已更新；Notion 当前快照、版本表与正式手账已同步并回读一致。收官记录时间 2026-09-30 23:22:25 +0800（JST 2026-10-01 00:22:25 +0900）。预生产已生效，Next 16.3.3 正式切换前置条件满足；公网可见仍须正式域名切换。
 
 ### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
@@ -312,7 +312,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 待只读追加；第三阶段未执行 |
+| `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 待只读追加；第三阶段 15 模板标题更新及零变化回读 PASS，approver admin / audit 516113 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |

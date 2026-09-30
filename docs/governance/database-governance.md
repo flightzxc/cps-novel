@@ -98,6 +98,8 @@ Migration 演进，当前 Credential 状态增量为
 | `article_template` | CPS_PARITY_ADAPTED | 模板版本与 SEO 模板；P2-02B 补 template_name/applicable_article_type/content_template/slug_template/meta_keywords_template 五列，body_template 改由 content_template 编译得到；L10N P3（2026-09-10）locale 收口为 `NOT NULL DEFAULT 'en'`（CPS `3a76877:prisma/schema.prisma:518` 同型），无通用模板语义 | template key+version 唯一；applicable_article_type 五值 CHECK；locale 非空有默认 | 作者/国家/完结模板变量；slug_template 只是候选字符串，不是最终 Article.slug |
 | `article` | CPS_PARITY_ADAPTED | Novel 的 locale 页面快照、模板渲染 SEO 正文、页面身份和确定 PromoLink | novel+locale 唯一；复合 FK 保证 Article 与 PromoLink 属于同一 Novel；published 行内 CHECK | 换租客、评论生成、跨 Novel hreflang、渠道版权试读正文 |
 
+> v0.5.5 数据操作（2026-09-30 23:47:21 +0800）：Owner 单独授权，haiyue-vps 15 个 version=1 默认模板仅 seo_template.metaTitle 与 updated_at 原地更新，审计 516113 / approver admin。未改变字段、约束、状态或版本语义，机器字典无需结构变更。备份及零变化回读见 [发布记录](releases/v0.5.5-preproduction.md#第三阶段默认模板-seo-标题原地更新owner-单独授权pass)。
+
 ### 3.4 任务、外部副作用与调度
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
@@ -512,6 +514,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 
 | 日期 | 任务 | 变更 | 执行者 | 状态 |
 | --- | --- | --- | --- | --- |
+| 2026-09-30 23:47:21 +0800 | v0.5.5 第三阶段（数据操作） | haiyue-vps 15 个默认模板仅 SEO metaTitle 与 updated_at 更新；version=1、行数 15；备份 `/opt/cps-novel/backups/v055-article-template-before-20260930T153857Z.json` / SHA256 `1d03cc22d0a8154e1c2ff4f9dfad65835552bb998afe7489e81b40e711ea1106`；未改 schema、迁移、grants 或 JSONL 字典语义 | Codex / GPT-6，Owner 指定 approver admin | PASS：apply updated=15 / created=0，审计 516113；再次 dry-run changes=0，逐列及 article 未变化验证通过 |
 | 2026-08-02 | P1-05A | 建立 37 表 Prisma 草案、状态真源、机器字典、约束与评审基线；未创建 Migration | Codex | 待 Claude 领域评审 |
 | 2026-08-03 | P1-05A-REVISION | 修复 Claude 10 项领域评审：canonical 只补空、Article CHECK/复合 FK、serving 当前快照、locale、字典语义与 CPS pattern registry；仍未创建 Migration | Codex | 待 Claude 领域复评 |
 | 2026-08-03 | P1-05B | 建立 37 表 PostgreSQL 初始 Migration，落地 66 个 CHECK、部分唯一/claim/recovery 索引与 2 个保护 trigger；在 PostgreSQL 16.14 完成空库、重放、零 drift 与真实正负测试 | Codex | 已验证 |

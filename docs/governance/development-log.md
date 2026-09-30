@@ -45,13 +45,13 @@
 
 **背景**：集成代码由 Opus 复核；Owner 2026-09-30 裁决语种切换照搬 CPS、剧/影片改书，fr/ko/ru/cs/pl 两类提示语法统一，vi 用 Cuốn sách này。GPT 提示两轮 `PASS_WITH_FIXES → PASS`，TKD 文案一轮 PASS。Owner 在已登录 Chrome 实测，主控 Opus 核对截图，并于 2026-10-01（JST）明确确认第二阶段全部通过、授权 tag 与治理收官。
 
-**变更内容**：Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`，annotated tag `v0.5.5` 固定于 Final。语种切换、真实 404、跨语种 SEO/TKD、Next 16.3.3、非英文模板最高启用版本兜底及同书并发创建唯一冲突收敛随本版部署。无新迁移、环境变量、Compose 行为或功能开发；env 先备份，仅改两个版本变量。15 个默认模板 SEO 资产代码已合入，第三阶段数据库原地更新未授权、未执行。
+**变更内容**：Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`，annotated tag `v0.5.5` 固定于 Final。语种切换、真实 404、跨语种 SEO/TKD、Next 16.3.3、非英文模板最高启用版本兜底及同书并发创建唯一冲突收敛随本版部署。无新迁移、环境变量、Compose 行为或功能开发；env 先备份，仅改两个版本变量。15 个默认模板 SEO 资产代码已合入，第三阶段已按 Owner 单独授权完成，仅限 haiyue-vps；apply 时间 2026-10-01 00:47:21 +0900（台账 2026-09-30 23:47:21 +0800），approver `admin`，审计 `516113`。15 条 update、0 create，仅 metaTitle 与 updated_at 改变；再次 dry-run `changes=[]`，行数 15、version 全部 1。
 
-**影响范围**：仅密码保护的预生产，正式域名切换后才对公网可见；Next 16.3.3 正式切换前置条件满足。标签开关、写闸与白名单保持原值；领取批次保持 paused，由 Owner 恢复。本轮治理不重启服务、不改 env、不写模板或已发布文章 TKD。
+**影响范围**：仅密码保护的预生产，正式域名切换后才对公网可见；Next 16.3.3 正式切换前置条件满足。标签开关、写闸与白名单保持原值；领取批次保持 paused，由 Owner 恢复。收官治理不重启服务、不改 env；其后第三阶段仅写入默认模板标题及审计，不回写已发布文章 TKD。
 
-**验证方式**：tsc 0、lint 0 error / 19 warnings，486 files / 7485 tests passed，0 failed / Unhandled；build、27 运行器、迁移和字典 drift 0、nginx 矩阵、变异、品牌图、三套 Compose / 身份通过。线上 20 条迁移与 Final 一致；在线备份、restore-list、归档身份、RELEASE=PASS、health 0.5.5 / Final、五应用服务健康、postgres ID 不变、backup health ok、写闸前后一致、核验时近五分钟错误日志 0、容器 Next 16.3.3。Owner Chrome 实测 404 品牌 / 韩语文案、小说和章节切换 English / 英文首页提示、菜单 한국어 + English、浏览页 title 与 15 本均通过；404 375px 新布局截图由 Owner 确认，Opus 核对，图片另附。此前 HTTP 未读到 404 页头站名属于读取方式问题，已纠正。B-24 四条 KNOWN_FINDING、B-25 Turbopack 追踪警告、B-26 npm audit 9 项按既有登记保留。
+**验证方式**：tsc 0、lint 0 error / 19 warnings，486 files / 7485 tests passed，0 failed / Unhandled；build、27 运行器、迁移和字典 drift 0、nginx 矩阵、变异、品牌图、三套 Compose / 身份通过。线上 20 条迁移与 Final 一致；在线备份、restore-list、归档身份、RELEASE=PASS、health 0.5.5 / Final、五应用服务健康、postgres ID 不变、backup health ok、写闸前后一致、核验时近五分钟错误日志 0、容器 Next 16.3.3。Owner Chrome 实测 404 品牌 / 韩语文案、小说和章节切换 English / 英文首页提示、菜单 한국어 + English、浏览页 title 与 15 本均通过；404 375px 新布局截图由 Owner 确认，Opus 核对，图片另附。此前 HTTP 未读到 404 页头站名属于读取方式问题，已纠正。B-24 四条 KNOWN_FINDING、B-25 Turbopack 追踪警告、B-26 npm audit 9 项按既有登记保留。第三阶段已验证 15 行仅 seo_template.metaTitle / updated_at 改变，version 均 1；再预演 changes=0，15 条 article 完整行指纹不变，env / 容器 ID 未变、服务 healthy。
 
-**后续待办**：分类 sitemap 按 Owner 裁决于 2026-10-02 04:35 JST 只读核对分片内 /ko/category/ 前缀并追加记录，不主动刷新；跨语种同书直达由单测覆盖，首次出现公开数据时补测。Owner 另附截图后归档。第三阶段模板写库等待单独授权及 approver，当前时间 / approver / 模板备份路径均无；不执行已发布文章 TKD 回填。领取批次只由 Owner 恢复。回滚用 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c` 原目录及本次 env 备份，保留标签配置；模板恢复另行授权。详见 [发布记录](releases/v0.5.5-preproduction.md)。
+**后续待办**：分类 sitemap 按 Owner 裁决于 2026-10-02 04:35 JST 只读核对分片内 /ko/category/ 前缀并追加记录，不主动刷新；跨语种同书直达由单测覆盖，首次出现公开数据时补测。Owner 另附截图后归档。第三阶段已另行授权并完成：备份 `/opt/cps-novel/backups/v055-article-template-before-20260930T153857Z.json`，15 行、5039 字节、SHA256 `1d03cc22d0a8154e1c2ff4f9dfad65835552bb998afe7489e81b40e711ea1106`，apply / 再次预演 / 逐列回读 PASS；不执行已发布文章 TKD 回填。领取批次只由 Owner 恢复。回滚用 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c` 原目录及本次 env 备份，保留标签配置；模板恢复另行授权。详见 [发布记录](releases/v0.5.5-preproduction.md)。
 
 ### 2026-09-29 18:20 - codex（GPT-6，发版执行；时间 +0800）
 
