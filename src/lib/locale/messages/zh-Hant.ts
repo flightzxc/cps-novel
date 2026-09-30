@@ -177,8 +177,8 @@ const messages = {
     body: "網址可能有誤,或此頁面已不存在。",
   },
   localeSwitcher: {
-    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/zh-Hant.json:136。
-    fallbackToast: "此劇目尚未提供{locale}版本，已切換至{locale}首頁。",
+    // 书页（详情页、章节页）：照搬 CPS v8.5.1 src/messages/zh-Hant.json:136 的句式，仅把“劇目”换成“作品”（Owner 2026-09-30）。
+    fallbackToast: "此作品尚未提供{locale}版本，已切換至{locale}首頁。",
     // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
     fallbackToastPage: "此頁面尚未提供{locale}版本。已切換至{locale}首頁。",
   },

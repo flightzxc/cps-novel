@@ -57,8 +57,8 @@ function clickLocale(nativeName: string) {
 
 /**
  * 两个提示键（Owner 2026-09-30）：书页（详情页、章节页）用 `fallbackToast`
- * （逐字照搬 CPS），其它页面用 `fallbackToastPage`。用例里按页面类型显式指定期望
- * 的键——选错键（书页弹了"page"、分类页弹了"title"）必须变红。
+ * （照搬 CPS 句式，仅把"剧"换成"书"），其它页面用 `fallbackToastPage`。用例里按
+ * 页面类型显式指定期望的键——选错键（书页弹了"page"、分类页弹了"title"）必须变红。
  */
 type ToastKey = "localeSwitcher.fallbackToast" | "localeSwitcher.fallbackToastPage";
 const BOOK_TOAST: ToastKey = "localeSwitcher.fallbackToast";
@@ -296,7 +296,7 @@ describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应�
   });
 });
 
-describe("提示用哪个键：书页 → fallbackToast（逐字照搬 CPS），其它页面 → fallbackToastPage", () => {
+describe("提示用哪个键：书页 → fallbackToast（照搬 CPS 句式，仅把“剧”换成“书”），其它页面 → fallbackToastPage", () => {
   it.each([
     ["/novel/deungdae-pabc12345", true],
     ["/ko/novel/deungdae-pabc12345", true],
