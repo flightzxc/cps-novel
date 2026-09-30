@@ -402,8 +402,8 @@ describe.skipIf(!enabled).sequential("TKD 回写工具（真实 PostgreSQL，wor
 
   let executionManifestPath: string;
   let cursorFilePath: string;
-  /** CAS 用例造的两篇（c1 模板模式、c2 被"运营"改成 manual），最后一个用例会用到。 */
-  const cFixtures = { c1: "", c2: "" };
+  /** CAS 用例造的三篇（c1 旧标题、c2 被"运营"改成 manual、c3 被别的脚本改了标题），最后一个用例会用到。 */
+  const cFixtures = { c1: "", c2: "", c3: "" };
 
   it("执行清单：冻结模板内容哈希/目标篇数/签字排除集", async () => {
     executionManifestPath = path.join(dir, "exec.json");
@@ -611,39 +611,62 @@ describe.skipIf(!enabled).sequential("TKD 回写工具（真实 PostgreSQL，wor
     expect(cursor.lastAfterId).not.toBeNull();
   });
 
-  it("CAS：读到之后、写入之前文章被运营改过（updatedAt 变了）-> 整批回滚，备份已写但一篇没动，也没有审计", async () => {
-    // 造一批新的待回写文章（旧标题），用库函数直接走"取计划 -> 改 -> 写"，模拟读-写之间的竞争。
+  it("CAS：读到之后、写入之前文章被改过 -> 整批回滚，备份已写但一篇没动，也没有审计（两种竞争都拦住）", async () => {
+    // 造待回写文章（旧标题），用库函数直接走"取计划 -> 改 -> 写"，模拟读-写之间的竞争。
     const c1 = await seedArticle({ label: "c1", templateId: deTemplateId, seoMetadata: { metaTitle: "Roman c1", metaDescription: "alt" } });
     const c2 = await seedArticle({ label: "c2", templateId: deTemplateId, seoMetadata: { metaTitle: "Roman c2", metaDescription: "alt" } });
+    const c3 = await seedArticle({ label: "c3", templateId: deTemplateId, seoMetadata: { metaTitle: "Roman c3", metaDescription: "alt" } });
     cFixtures.c1 = c1.id;
     cFixtures.c2 = c2.id;
+    cFixtures.c3 = c3.id;
     const template = await loadTemplateForTkdRepair(workerDb, { templateKey: DE_TEMPLATE_KEY, templateVersion: 1 });
-    const plan = await buildTemplateTkdRepairPlan(workerDb, template, { articleIds: [c1.id, c2.id] });
-    expect(plan.blockers).toEqual([]);
-    expect(plan.changes).toHaveLength(2);
 
-    // 运营在这两篇之间的空档改了 c2（后台编辑保存：标 manual、换标题、updatedAt 前进）。
-    await owner!.article.update({ where: { id: c2.id }, data: { contentMode: "manual", seoMetadata: { metaTitle: "运营刚改的标题", metaDescription: "x" } } });
-    const beforeC1 = await articleRow(c1.id);
-    const auditsBefore = (await auditRows(TEMPLATE_TKD_APPLY_AUDIT_ACTION)).length;
-    const backupPath = path.join(dir, "backup-cas.json");
-    await expect(
-      applyTemplateTkdBatch(workerDb, {
-        plan,
-        operator: "codex-tkd-1",
-        reason: "cas test",
-        requestId: "cas-1",
-        backupPath,
-        executionManifestSha256: null,
-        scope: { articleIds: [c1.id, c2.id] },
-      }),
-    ).rejects.toThrow(new RegExp(`article ${c2.id} changed since it was read`));
-    // 整批回滚：c1 虽然自己没被改过，也没有被写。
-    expect(await articleRow(c1.id)).toEqual(beforeC1);
-    expect((await articleRow(c2.id)).seoMetadata).toEqual({ metaTitle: "运营刚改的标题", metaDescription: "x" });
-    expect((await auditRows(TEMPLATE_TKD_APPLY_AUDIT_ACTION)).length).toBe(auditsBefore);
-    // 备份是写库前落的，所以文件在——但库里什么都没变，它只是一份"想改而没改"的记录。
-    expect(existsSync(backupPath)).toBe(true);
+    const attempt = async (label: string, concurrentEdit: () => Promise<void>, racedId: string) => {
+      const plan = await buildTemplateTkdRepairPlan(workerDb, template, { articleIds: [c1.id, racedId] });
+      expect(plan.blockers).toEqual([]);
+      expect(plan.changes).toHaveLength(2);
+      await concurrentEdit();
+      const beforeC1 = await articleRow(c1.id);
+      const racedBefore = await articleRow(racedId);
+      const auditsBefore = (await auditRows(TEMPLATE_TKD_APPLY_AUDIT_ACTION)).length;
+      const backupPath = path.join(dir, `backup-cas-${label}.json`);
+      await expect(
+        applyTemplateTkdBatch(workerDb, {
+          plan,
+          operator: "codex-tkd-1",
+          reason: `cas ${label}`,
+          requestId: `cas-${label}`,
+          backupPath,
+          executionManifestSha256: null,
+          scope: { articleIds: [c1.id, racedId] },
+        }),
+        label,
+      ).rejects.toThrow(new RegExp(`article ${racedId} changed since it was read`));
+      // 整批回滚：c1 自己没被改过，也没有被写；被抢先改的那篇保持对方写入的样子。
+      expect(await articleRow(c1.id), label).toEqual(beforeC1);
+      expect(await articleRow(racedId), label).toEqual(racedBefore);
+      expect((await auditRows(TEMPLATE_TKD_APPLY_AUDIT_ACTION)).length, label).toBe(auditsBefore);
+      // 备份是写库前落的，所以文件在——但库里什么都没变，它只是一份"想改而没改"的记录。
+      expect(existsSync(backupPath), label).toBe(true);
+    };
+
+    // (i) 后台编辑保存：标 manual、换标题、updatedAt 前进。
+    await attempt(
+      "admin-edit",
+      async () => {
+        await owner!.article.update({ where: { id: c2.id }, data: { contentMode: "manual", seoMetadata: { metaTitle: "运营刚改的标题", metaDescription: "x" } } });
+      },
+      c2.id,
+    );
+    // (ii) 不经后台（contentMode 仍是 template）只改了 SEO 字段：只有 updatedAt 这道 CAS 拦得住它
+    // （去掉 CAS 里的 updatedAt 条件，这一支就会让写入悄悄覆盖对方的改动）。
+    await attempt(
+      "silent-update",
+      async () => {
+        await owner!.article.update({ where: { id: c3.id }, data: { seoMetadata: { metaTitle: "别的脚本刚写的标题", metaDescription: "y" } } });
+      },
+      c3.id,
+    );
   });
 
   it("执行清单漂移守卫：模板的 SEO 标题在冻结之后被改了 -> 这一批停，不写库", async () => {
@@ -767,13 +790,14 @@ describe.skipIf(!enabled).sequential("TKD 回写工具（真实 PostgreSQL，wor
       const cursor = parseTemplateTkdCursor(JSON.parse(await readFile(round2Cursor, "utf8")));
       expect(cursor.lastAfterId, `batch ${batch}`).toBe(afterId);
     }
-    // 上一步回滚过的 a1 a2 a8 在这一轮被重新回写；a3(manual) a5(已是新标题) a6(排除) 都不在。c1 c2（CAS 用例造的）也属于该模板：c1 被回写，c2 是 manual 被跳过。
-    expect(changedIds.sort()).toEqual([fx.a1.id, fx.a2.id, fx.a8.id, cFixtures.c1].sort());
+    // 上一步回滚过的 a1 a2 a8 在这一轮被重新回写；a3(manual) a5(已是新标题) a6(排除) 都不在。CAS 用例造的三篇也属于该模板：c1、c3 被回写，c2 是 manual 被跳过。
+    expect(changedIds.sort()).toEqual([fx.a1.id, fx.a2.id, fx.a8.id, cFixtures.c1, cFixtures.c3].sort());
     expect(scannedIds.length).toBe(changedIds.length);
     expect((await articleRow(fx.a1.id)).seoMetadata).toMatchObject({ metaTitle: `Roman a1${NEW_DE_TITLE_SUFFIX}`, coverUrl: "https://cdn.example.test/a1.jpg" });
     expect((await articleRow(fx.a3.id)).seoMetadata).toEqual({ metaTitle: "Handgeschriebener Titel", metaDescription: "Handgeschrieben" });
     expect((await articleRow(cFixtures.c2)).seoMetadata).toEqual({ metaTitle: "运营刚改的标题", metaDescription: "x" });
+    expect((await articleRow(cFixtures.c3)).seoMetadata).toEqual({ metaTitle: `Roman c3${NEW_DE_TITLE_SUFFIX}`, metaDescription: "Beschreibung von c3." });
     const cursor = parseTemplateTkdCursor(JSON.parse(await readFile(round2Cursor, "utf8")));
-    expect(cursor.appliedTotal).toBe(4);
+    expect(cursor.appliedTotal).toBe(5);
   });
 });
