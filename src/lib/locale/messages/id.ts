@@ -162,6 +162,9 @@ const messages = {
     notFound: "Tidak ditemukan",
     chapterNotFound: "Bab tidak ditemukan",
     siteDescription: "Temukan novel dan mulai membaca bab gratis.",
+    homeTitleFallback: "PulseNovel - Temukan novel dan baca buku gratis",
+    pageSuffix: " - Halaman {page}",
+    categoryDescriptionFallback: "Temukan novel {name} di PulseNovel.",
   },
 } satisfies LocaleMessages;
 

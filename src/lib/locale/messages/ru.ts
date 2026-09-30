@@ -173,7 +173,7 @@ const messages = {
     returnHome: "Вернуться на главную",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "Блог",
     // C: 去掉"этого сайта"。
     listDescription: "Статьи и новости.",
     empty: "Пока нет записей в блоге.",
@@ -203,6 +203,9 @@ const messages = {
     chapterNotFound: "Глава не найдена",
     // C: 去掉"ознакомительные"（preview）。
     siteDescription: "Открывайте романы и начинайте читать бесплатные главы.",
+    homeTitleFallback: "PulseNovel - открывайте романы и читайте книги бесплатно",
+    pageSuffix: " - страница {page}",
+    categoryDescriptionFallback: "Открывайте романы в категории «{name}» на PulseNovel.",
   },
 } satisfies LocaleMessages;
 

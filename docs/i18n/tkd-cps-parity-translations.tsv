@@ -1,0 +1,76 @@
+语种	键	英文原文	译文	语境	长度限制
+en	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Discover Novels and Read Free Books	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+en	meta.pageSuffix	 - Page {page}	 - Page {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+en	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Discover {name} novels on PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+en	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+en	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Novel - Read Free Chapters Online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+es	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Descubre novelas y lee libros gratis	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+es	meta.pageSuffix	 - Page {page}	 - Página {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+es	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Descubre novelas de {name} en PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+es	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+es	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Novela - Lee capítulos gratis online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+pt-BR	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Descubra romances e leia livros grátis	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+pt-BR	meta.pageSuffix	 - Page {page}	 - Página {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+pt-BR	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Descubra romances de {name} no PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+pt-BR	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+pt-BR	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Romance - Leia capítulos grátis online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+fr	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Découvrez des romans et lisez gratuitement	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+fr	meta.pageSuffix	 - Page {page}	 - Page {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+fr	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Découvrez des romans {name} sur PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+fr	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+fr	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Roman - Lire des chapitres gratuits en ligne	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+de	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Romane entdecken und Bücher kostenlos lesen	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+de	meta.pageSuffix	 - Page {page}	 - Seite {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+de	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Entdecke {name}-Romane auf PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+de	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+de	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Roman - Kostenlose Kapitel online lesen	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+pl	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - odkrywaj powieści i czytaj książki za darmo	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+pl	meta.pageSuffix	 - Page {page}	 - strona {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+pl	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Odkrywaj powieści z kategorii {name} na PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+pl	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+pl	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Powieść - Czytaj darmowe rozdziały online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+cs	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - objevujte romány a čtěte knihy zdarma	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+cs	meta.pageSuffix	 - Page {page}	 - Strana {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+cs	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Objevujte romány {name} na PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+cs	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+cs	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Román - Čtěte bezplatné kapitoly online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+ru	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - открывайте романы и читайте книги бесплатно	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+ru	meta.pageSuffix	 - Page {page}	 - страница {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+ru	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Открывайте романы в категории «{name}» на PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+ru	blog.listTitle	Blog	Блог	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+ru	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Роман - Читать бесплатные главы онлайн	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+ar	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - اكتشف الروايات واقرأ الكتب مجانًا	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+ar	meta.pageSuffix	 - Page {page}	 - الصفحة {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+ar	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	اكتشف روايات {name} على PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+ar	blog.listTitle	Blog	المدونة	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+ar	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} رواية - اقرأ فصولًا مجانية عبر الإنترنت	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+id	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Temukan novel dan baca buku gratis	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+id	meta.pageSuffix	 - Page {page}	 - Halaman {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+id	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Temukan novel {name} di PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+id	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+id	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Novel - Baca bab gratis online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+vi	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - Khám phá tiểu thuyết và đọc sách miễn phí	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+vi	meta.pageSuffix	 - Page {page}	 - Trang {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+vi	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	Khám phá tiểu thuyết {name} trên PulseNovel.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+vi	blog.listTitle	Blog	Blog	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+vi	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} Tiểu thuyết - Đọc chương miễn phí online	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+th	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - ค้นพบนิยายและอ่านหนังสือฟรี	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+th	meta.pageSuffix	 - Page {page}	 - หน้า {page}	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+th	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	ค้นพบนิยาย{name}บน PulseNovel	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+th	blog.listTitle	Blog	บล็อก	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+th	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} นิยาย - อ่านตอนฟรีออนไลน์	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+ja	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - 小説を見つけて無料で読もう	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+ja	meta.pageSuffix	 - Page {page}	 - {page}ページ	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+ja	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	PulseNovelで{name}の小説を見つけよう。	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+ja	blog.listTitle	Blog	ブログ	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+ja	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} 小説 - 無料の章をオンラインで読む	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+ko	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - 소설을 만나보고 무료로 읽어보세요	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+ko	meta.pageSuffix	 - Page {page}	 - {page}페이지	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+ko	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	PulseNovel에서 {name} 소설을 만나보세요.	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+ko	blog.listTitle	Blog	블로그	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+ko	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} 소설 - 무료 챕터 온라인으로 읽기	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符
+zh-Hant	meta.homeTitleFallback	PulseNovel - Discover Novels and Read Free Books	PulseNovel - 探索小說，免費閱讀書籍	首页 `<title>` 兜底（后台首页标题字段为空、或非英语语种时使用）；品牌名写在文案里，不加布局后缀	≤60 字符（SEO title 上限）
+zh-Hant	meta.pageSuffix	 - Page {page}	 - 第{page}頁	分类页/浏览页/博客列表第 2 页起拼在标题末尾；含 `{page}` 插值，前导空格与连字符为格式的一部分	≤14 字符（含前导空格，不含插值）
+zh-Hant	meta.categoryDescriptionFallback	Discover {name} novels on PulseNovel.	在PulseNovel探索{name}小說。	分类页没有分类描述时的固定兜底句（所有分类共用同一句式）；含 `{name}` 插值	单句，≤155 字符（SEO description 上限）
+zh-Hant	blog.listTitle	Blog	部落格	博客列表页标题（`<title>` 与页面标题）	≤20 字符
+zh-Hant	assets/article-templates/<locale>.json#seoTemplate.metaTitle	{novel_title} Novel - Read Free Chapters Online	{novel_title} 小說 - 線上閱讀免費章節	小说详情页默认模板的 SEO 标题（不属于文案目录，写在 15 份模板资产里）；含 `{novel_title}` 变量，变量必须原样保留	书名之外的固定部分 ≤35 字符

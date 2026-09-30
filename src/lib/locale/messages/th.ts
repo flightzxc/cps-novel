@@ -162,7 +162,7 @@ const messages = {
     returnHome: "กลับหน้าแรก",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "บล็อก",
     // C: ตัดคำว่า "จากเว็บไซต์นี้" ออก
     listDescription: "บทความและข่าวสาร",
     empty: "ยังไม่มีบทความบล็อก",
@@ -192,6 +192,9 @@ const messages = {
     chapterNotFound: "ไม่พบตอน",
     // C: ตัดคำว่า "ตัวอย่าง" ออก
     siteDescription: "ค้นพบนิยายและเริ่มอ่านตอนฟรี",
+    homeTitleFallback: "PulseNovel - ค้นพบนิยายและอ่านหนังสือฟรี",
+    pageSuffix: " - หน้า {page}",
+    categoryDescriptionFallback: "ค้นพบนิยาย{name}บน PulseNovel",
   },
 } satisfies LocaleMessages;
 

@@ -180,7 +180,7 @@ const messages = {
     returnHome: "العودة إلى الرئيسية",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "المدونة",
     // C: 去掉"من هذا الموقع"。
     listDescription: "مقالات وتحديثات.",
     empty: "لا توجد تدوينات بعد.",
@@ -210,6 +210,9 @@ const messages = {
     chapterNotFound: "الفصل غير موجود",
     // C: 去掉"فصول المعاينة"（preview）。
     siteDescription: "اكتشف الروايات وابدأ بقراءة فصول مجانية.",
+    homeTitleFallback: "PulseNovel - اكتشف الروايات واقرأ الكتب مجانًا",
+    pageSuffix: " - الصفحة {page}",
+    categoryDescriptionFallback: "اكتشف روايات {name} على PulseNovel.",
   },
 } satisfies LocaleMessages;
 

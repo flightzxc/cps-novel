@@ -166,6 +166,9 @@ const messages = {
     notFound: "Introuvable",
     chapterNotFound: "Chapitre introuvable",
     siteDescription: "Découvrez des romans et commencez à lire des chapitres gratuits.",
+    homeTitleFallback: "PulseNovel - Découvrez des romans et lisez gratuitement",
+    pageSuffix: " - Page {page}",
+    categoryDescriptionFallback: "Découvrez des romans {name} sur PulseNovel.",
   },
 } satisfies LocaleMessages;
 

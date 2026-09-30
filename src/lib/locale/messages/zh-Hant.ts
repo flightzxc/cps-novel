@@ -157,7 +157,7 @@ const messages = {
     returnHome: "回首頁",
   },
   blog: {
-    listTitle: "Blog",
+    listTitle: "部落格",
     // C: 去掉「本站的」表述。
     listDescription: "文章與最新消息。",
     empty: "目前尚無部落格文章。",
@@ -187,6 +187,9 @@ const messages = {
     chapterNotFound: "找不到章節",
     // C: 去掉「試讀」表述。
     siteDescription: "探索小說，開始閱讀免費章節。",
+    homeTitleFallback: "PulseNovel - 探索小說，免費閱讀書籍",
+    pageSuffix: " - 第{page}頁",
+    categoryDescriptionFallback: "在PulseNovel探索{name}小說。",
   },
 } satisfies LocaleMessages;
 
