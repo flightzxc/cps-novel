@@ -156,6 +156,9 @@ const messages = {
     title: "Esta página não pôde ser encontrada",
     body: "O endereço pode estar incorreto ou esta página não existe mais.",
   },
+  localeSwitcher: {
+    fallbackToast: "Este livro ainda não está disponível em {locale}. Você foi levado para a página inicial em {locale}.",
+  },
   pagination: {
     previous: "Anterior",
     next: "Próxima",

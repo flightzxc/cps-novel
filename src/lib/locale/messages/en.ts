@@ -209,6 +209,13 @@ export const en = {
     title: "This page could not be found",
     body: "The address may be wrong, or this page is no longer here.",
   },
+  // 语言切换器（2026-09-30，对齐短剧站 v8.5.1 `localeSwitcher.fallbackToast`）：
+  // 目标语种没有"当前这一页"对应的内容时先弹这句，再跳到目标语种首页。意思照
+  // CPS 原句，只把"title（剧）"换成"book（书）"。`{locale}` 是目标语种的本语
+  // 自称（例如 "한국어"、"Français"），整句出现两次。不提"本站/原平台/预览"。
+  localeSwitcher: {
+    fallbackToast: "This book isn't available in {locale} yet. Switched to the {locale} homepage.",
+  },
   pagination: {
     previous: "Previous",
     next: "Next",

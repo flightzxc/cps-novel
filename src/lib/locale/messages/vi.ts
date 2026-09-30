@@ -183,6 +183,9 @@ const messages = {
     title: "Không tìm thấy trang này",
     body: "Địa chỉ có thể sai, hoặc trang này không còn tồn tại.",
   },
+  localeSwitcher: {
+    fallbackToast: "Cuốn sách này chưa có bằng {locale}. Đã chuyển đến trang chủ {locale}.",
+  },
   pagination: {
     previous: "Trước",
     next: "Sau",

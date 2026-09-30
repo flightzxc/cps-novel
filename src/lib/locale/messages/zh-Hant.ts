@@ -176,6 +176,9 @@ const messages = {
     title: "找不到此頁面",
     body: "網址可能有誤,或此頁面已不存在。",
   },
+  localeSwitcher: {
+    fallbackToast: "本書尚未提供{locale}版本。已切換至{locale}首頁。",
+  },
   pagination: {
     previous: "上一頁",
     next: "下一頁",

@@ -199,6 +199,9 @@ const messages = {
     title: "تعذر العثور على هذه الصفحة",
     body: "قد يكون العنوان غير صحيح، أو أن هذه الصفحة لم تعد موجودة.",
   },
+  localeSwitcher: {
+    fallbackToast: "هذا الكتاب غير متاح بعد باللغة {locale}. تم نقلك إلى الصفحة الرئيسية باللغة {locale}.",
+  },
   pagination: {
     previous: "السابق",
     next: "التالي",

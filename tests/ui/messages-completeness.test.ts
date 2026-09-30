@@ -611,6 +611,10 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       date: "2026-09-08",
       digest: "abc123",
       current: 2,
+      // 2026-09-30 语言切换器新键 `localeSwitcher.fallbackToast` 引入的变量：
+      // 目标语种的本语自称。这个采样表必须覆盖每一个插值变量名，否则 `t()`
+      // 对缺变量的键会（按设计）抛 MissingMessagesError。
+      locale: "Sample",
     };
     const leftoverBraces: string[] = [];
     for (const key of EN_KEYS) {

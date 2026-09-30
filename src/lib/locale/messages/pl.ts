@@ -191,6 +191,9 @@ const messages = {
     title: "Nie można znaleźć tej strony",
     body: "Adres może być nieprawidłowy albo ta strona już nie istnieje.",
   },
+  localeSwitcher: {
+    fallbackToast: "Ta książka nie jest jeszcze dostępna w języku „{locale}”. Przełączono na stronę główną w języku „{locale}”.",
+  },
   pagination: {
     previous: "Poprzednia",
     next: "Następna",

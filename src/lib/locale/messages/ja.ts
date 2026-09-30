@@ -180,6 +180,9 @@ const messages = {
     title: "このページは見つかりませんでした",
     body: "アドレスが間違っているか、このページはすでに存在しません。",
   },
+  localeSwitcher: {
+    fallbackToast: "この作品はまだ{locale}で利用できません。{locale}のホームに移動しました。",
+  },
   pagination: {
     previous: "前へ",
     next: "次へ",

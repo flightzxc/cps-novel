@@ -181,6 +181,9 @@ const messages = {
     title: "ไม่พบหน้านี้",
     body: "ที่อยู่อาจไม่ถูกต้อง หรือหน้านี้ไม่มีอยู่แล้ว",
   },
+  localeSwitcher: {
+    fallbackToast: "หนังสือเล่มนี้ยังไม่มีในภาษา {locale} ระบบพาคุณไปยังหน้าแรกภาษา {locale} แล้ว",
+  },
   pagination: {
     previous: "ก่อนหน้า",
     next: "ถัดไป",

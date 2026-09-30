@@ -156,6 +156,9 @@ const messages = {
     title: "Cette page est introuvable",
     body: "L'adresse est peut-être incorrecte, ou cette page n'existe plus.",
   },
+  localeSwitcher: {
+    fallbackToast: "Ce livre n'est pas encore disponible en {locale}. Passage à la page d'accueil {locale}.",
+  },
   pagination: {
     previous: "Précédent",
     next: "Suivant",

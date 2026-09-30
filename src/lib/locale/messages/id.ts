@@ -152,6 +152,9 @@ const messages = {
     title: "Halaman ini tidak dapat ditemukan",
     body: "Alamatnya mungkin salah, atau halaman ini sudah tidak ada lagi.",
   },
+  localeSwitcher: {
+    fallbackToast: "Buku ini belum tersedia dalam {locale}. Dialihkan ke beranda {locale}.",
+  },
   pagination: {
     previous: "Sebelumnya",
     next: "Berikutnya",

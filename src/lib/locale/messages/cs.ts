@@ -192,6 +192,9 @@ const messages = {
     title: "Tuto stránku nelze najít",
     body: "Adresa může být chybná, nebo tato stránka již neexistuje.",
   },
+  localeSwitcher: {
+    fallbackToast: "Tato kniha zatím není dostupná v jazyce „{locale}“. Zobrazena domovská stránka v jazyce „{locale}“.",
+  },
   pagination: {
     previous: "Předchozí",
     next: "Další",

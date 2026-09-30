@@ -178,6 +178,9 @@ const messages = {
     title: "이 페이지를 찾을 수 없습니다",
     body: "주소가 잘못되었거나 이 페이지가 더 이상 존재하지 않습니다.",
   },
+  localeSwitcher: {
+    fallbackToast: "이 작품은 아직 {locale}로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
+  },
   pagination: {
     previous: "이전",
     next: "다음",
