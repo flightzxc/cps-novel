@@ -175,3 +175,57 @@ describe("非英文语种公开文案守卫 · 不提本站/原平台/预览（�
     }
   });
 });
+
+/**
+ * 2026-09-30 语言切换器新键 `localeSwitcher.fallbackToast` 的显式覆盖（开发单第 5
+ * 条：更新守卫，让它覆盖新键）。
+ *
+ * 上面两个 describe 本来就会遍历目录里的**全部**叶子，新键自动在其中。这一块的
+ * 作用是把"新键确实被扫到、并且守卫对它真的会响"变成一条不依赖遍历的、可读的
+ * 断言——遍历式守卫有个天然的盲区：如果哪天有人把这个键挪出目录（或改名），
+ * 遍历依旧全绿，守卫却已经不再覆盖它。这里按键名点名：
+ *  1. 该键存在于全部 15 个目录，且每条译文都保留两处 `{locale}` 占位符；
+ *  2. en 原文与 14 个语种译文都通过与上面完全相同的禁用词判定；
+ *  3. 金丝雀：把禁用词塞回这句话，同一套判定必须命中——证明守卫对这个键不是
+ *     摆设（见开发单的变异记录）。
+ */
+const NEW_KEY = "localeSwitcher.fallbackToast";
+
+function bannedEnHits(value: string): string[] {
+  return BANNED_PATTERNS.filter(({ pattern }) => pattern.test(value)).map(({ name }) => name);
+}
+
+function bannedTermHits(locale: Exclude<SiteLocale, "en">, value: string): string[] {
+  const lowered = value.toLowerCase();
+  return NON_EN_BANNED_TERMS[locale].filter((term) => lowered.includes(term.toLowerCase()));
+}
+
+describe(`新键 ${NEW_KEY} 被守卫覆盖（语言切换提示，2026-09-30）`, () => {
+  it("存在于全部 15 个目录，且每条译文都保留两处 {locale} 占位符", () => {
+    for (const locale of SITE_LOCALES) {
+      const value = flattenLeaves(CATALOGS[locale]).get(NEW_KEY);
+      expect(typeof value, `${locale} 缺 ${NEW_KEY}`).toBe("string");
+      expect((value as string).split("{locale}").length - 1, `${locale} 的 {locale} 占位符应恰好两处`).toBe(2);
+    }
+  });
+
+  it("en 原文不含 this site / original platform / source platform / preview", () => {
+    expect(bannedEnHits(en.localeSwitcher.fallbackToast)).toEqual([]);
+  });
+
+  it.each(NON_EN_LOCALES)("%s 译文不含该语种登记的禁用词", (locale) => {
+    const value = flattenLeaves(CATALOGS[locale]).get(NEW_KEY) as string;
+    expect(bannedTermHits(locale, value)).toEqual([]);
+  });
+
+  it("金丝雀：往这句话里塞回禁用词，同一套判定必须命中（en 与每个非英文语种都测）", () => {
+    expect(bannedEnHits(`${en.localeSwitcher.fallbackToast} It is on this site.`)).toContain("this site");
+    expect(bannedEnHits(`${en.localeSwitcher.fallbackToast} See the original platform.`)).toContain("original platform");
+    expect(bannedEnHits(`${en.localeSwitcher.fallbackToast} Preview chapters.`)).toContain("preview");
+    for (const locale of NON_EN_LOCALES) {
+      const value = flattenLeaves(CATALOGS[locale]).get(NEW_KEY) as string;
+      const [firstTerm] = NON_EN_BANNED_TERMS[locale];
+      expect(bannedTermHits(locale, `${value} ${firstTerm}`), `${locale} 的守卫对本键不响`).toContain(firstTerm);
+    }
+  });
+});
