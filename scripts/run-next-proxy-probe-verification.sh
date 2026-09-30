@@ -18,6 +18,8 @@ set +x
 #   NEXT_PROBE_OUT_DIR=<dir>    where probe JSON + server log land (default: .tmp/next-proxy-probe)
 #   NEXT_PROBE_ALLOW_FAIL=1     record probe failures but exit 0 (used to capture the *pre-upgrade* evidence;
 #                               the printed NEXT_PROXY_PROBE= line still says FAIL)
+#   NEXT_PROBE_SERVER=standalone  serve with `node .next/standalone/server.js` (the shape the Dockerfile ships)
+#                               instead of `next start` (default); both share Next's router, so both are worth a run
 #
 # Acceptance: prints NEXT_PROXY_PROBE=PASS and NEXT_PROXY_PROBE_VERIFICATION=PASS.
 # On a vulnerable Next it is expected to print NEXT_PROXY_PROBE=FAIL (see the
@@ -63,7 +65,12 @@ trap cleanup EXIT INT TERM
 trap 'status=$?; printf "NEXT_PROBE_ERROR line=%s status=%s\n" "$LINENO" "$status" >&2; exit "$status"' ERR
 
 next_version="$(node -p 'require("next/package.json").version')"
-label="${NEXT_PROBE_LABEL:-next-${next_version}}"
+server_mode="${NEXT_PROBE_SERVER:-next-start}"
+case "$server_mode" in
+  next-start|standalone) ;;
+  *) echo "NEXT_PROBE_ERROR: NEXT_PROBE_SERVER must be next-start or standalone" >&2; exit 64 ;;
+esac
+label="${NEXT_PROBE_LABEL:-next-${next_version}-${server_mode}}"
 printf 'NEXT_VERSION_UNDER_TEST=%s\n' "$next_version"
 
 umask 077
@@ -150,14 +157,24 @@ server_port="$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.
 public_host="${PROBE_PUBLIC_HOST:-novel.test}"
 admin_host="zbcwf.${PROBE_PUBLIC_HOST:-novel.test}"
 
-DATABASE_URL="$web_url" \
-SITE_URL="https://${public_host}" \
-ADMIN_CANONICAL_ORIGIN="https://${admin_host}" \
-TOTP_ENCRYPTION_KEY="$totp_key" \
-TRACKING_HASH_SALT="$tracking_salt" \
-NEXT_TELEMETRY_DISABLED=1 \
-NODE_ENV=production \
-  node_modules/.bin/next start -H 127.0.0.1 -p "$server_port" >"$server_log" 2>&1 &
+if [ "$server_mode" = standalone ] && ! test -f .next/standalone/server.js; then
+  echo 'PROBE_ERROR: .next/standalone/server.js missing (standalone mode needs a build with output: "standalone")' >&2
+  exit 1
+fi
+(
+  export DATABASE_URL="$web_url"
+  export SITE_URL="https://${public_host}"
+  export ADMIN_CANONICAL_ORIGIN="https://${admin_host}"
+  export TOTP_ENCRYPTION_KEY="$totp_key"
+  export TRACKING_HASH_SALT="$tracking_salt"
+  export NEXT_TELEMETRY_DISABLED=1
+  export NODE_ENV=production
+  if [ "$server_mode" = standalone ]; then
+    cd .next/standalone
+    PORT="$server_port" HOSTNAME=127.0.0.1 exec node server.js
+  fi
+  exec node_modules/.bin/next start -H 127.0.0.1 -p "$server_port"
+) >"$server_log" 2>&1 &
 server_pid=$!
 
 ready=0
@@ -174,7 +191,7 @@ if [ "$ready" != 1 ]; then
   tail -n 30 "$server_log" >&2 || true
   exit 1
 fi
-printf 'PROBE_SERVER=READY port=%s next=%s\n' "$server_port" "$next_version"
+printf 'PROBE_SERVER=READY mode=%s port=%s next=%s\n' "$server_mode" "$server_port" "$next_version"
 
 probe_json="$out_dir/probe-${label}.json"
 probe_status=0
