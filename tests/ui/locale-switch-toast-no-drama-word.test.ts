@@ -8,9 +8,12 @@ import { CATALOGS } from "@/lib/locale/messages";
  *
  * 背景：`localeSwitcher.fallbackToast`（书页专用）最初逐字照搬短剧站 CPS v8.5.1，
  * 而 CPS 在 zh-Hant / ru / vi 三个语种里说的是"剧/影片"（"此劇目"、"Этот сериал"、
- * "Tựa phim"），放在小说站上不对。Owner 拍板：句式照旧，只把这个词换成"作品/书"
- * （现为"此作品"、"Эта книга"、"Tựa sách"）。本文件把"这两个键在 15 个语种里都不得
+ * "Tựa phim"），放在小说站上不对。Owner 拍板：把这个词换成"作品/书"
+ * （现为"此作品"、"Эта книга"、"Cuốn sách này"）。本文件把"这两个键在 15 个语种里都不得
  * 出现表示剧/影片/剧集的词"固化成回归守卫，防止有人再从 CPS 原文整段搬回来。
+ *
+ * 文件末尾另有一组"语法守卫"（GPT 验收 2026-09-30）：`{locale}` 是目标语种的本语自称，
+ * fr/ko/ru/cs/pl 若沿用 CPS 原句写法会出语法问题，守卫固化改后的写法。
  *
  * 覆盖的键：`fallbackToast`（书页）与 `fallbackToastPage`（其它页面），15 个语种全查。
  *
@@ -168,5 +171,75 @@ describe("语言切换提示不得说“剧/影片/剧集”（Owner 2026-09-30�
     expect(dramaWordHits("es", "Esta novela aún no está disponible.")).toEqual([]);
     expect(dramaWordHits("en", "Dramatic titles and showcase pages.")).toEqual([]);
     expect(dramaWordHits("de", "Diese Seriennummer ist unbekannt.")).toEqual([]);
+  });
+});
+
+/**
+ * 语法守卫（依据：第三方验收 GPT 2026-09-30 + Owner 同日拍板）。
+ *
+ * `{locale}` 运行时被替换成目标语种的本语自称（Français、한국어、Русский、繁體中文……）。
+ * 自称本身不会随句子变格/变音，所以 CPS 原句"名词直接跟在介词/助词后"的写法在部分语种里
+ * 语法不通：
+ *  - fr：语种名前缺介词，须写 "page d'accueil en {locale}"；
+ *  - ko：助词"로/으로"取决于前一个词是否以辅音收尾，自称无法判断，须写 "{locale} 버전으로"，
+ *    不得再出现 "{locale}로"；
+ *  - ru / cs / pl：自称无法变格，须用本语种的引号把 {locale} 整体包住
+ *    （ru «…»，cs „…“，pl „…”）。
+ * 两个键（书页 fallbackToast、其它页面 fallbackToastPage）都要满足。
+ */
+const GRAMMAR_KEYS = ["fallbackToast", "fallbackToastPage"] as const;
+
+/** 本语种的引号对（码位写死，避免编辑器/复制把弯引号替换成直引号）。 */
+const LOCALE_QUOTES: Readonly<Record<"ru" | "cs" | "pl", { open: string; close: string }>> = {
+  ru: { open: "«", close: "»" }, // « »
+  cs: { open: "„", close: "“" }, // „ “
+  pl: { open: "„", close: "”" }, // „ ”
+};
+
+/** 返回 `{locale}` 出现次数，以及其中被本语种引号紧紧包住的次数。 */
+function quotedLocaleCounts(locale: keyof typeof LOCALE_QUOTES, text: string): { total: number; quoted: number } {
+  const { open, close } = LOCALE_QUOTES[locale];
+  return {
+    total: text.split("{locale}").length - 1,
+    quoted: text.split(`${open}{locale}${close}`).length - 1,
+  };
+}
+
+describe("语言切换提示的语法写法（GPT 验收 2026-09-30）", () => {
+  describe.each(GRAMMAR_KEYS)("localeSwitcher.%s", (key) => {
+    it("fr：含 “page d'accueil en {locale}”（语种名前要有介词 en）", () => {
+      expect(toastOf("fr", key)).toContain("page d'accueil en {locale}");
+    });
+
+    it("ko：含 “{locale} 버전으로”，且不得出现 “{locale}로”（助词不能直接接语种自称）", () => {
+      const value = toastOf("ko", key);
+      expect(value).toContain("{locale} 버전으로");
+      expect(value).not.toContain("{locale}로");
+    });
+
+    it.each(Object.keys(LOCALE_QUOTES) as (keyof typeof LOCALE_QUOTES)[])(
+      "%s：两处 {locale} 都被本语种引号包住（自称无法变格）",
+      (locale) => {
+        const value = toastOf(locale, key);
+        const { total, quoted } = quotedLocaleCounts(locale, value);
+        expect(total, `${locale}.${key} = ${value}`).toBe(2);
+        expect(quoted, `${locale}.${key} 的 {locale} 必须都被 ${LOCALE_QUOTES[locale].open}…${LOCALE_QUOTES[locale].close} 包住：${value}`).toBe(2);
+      },
+    );
+  });
+
+  it("金丝雀：CPS 原句写法与错位引号必须被判为不合格（证明上面的守卫会响）", () => {
+    // ru：CPS 原句 "на {locale}" 没有引号；cs/pl：直接放在 "v jazyce / w języku" 后。
+    expect(quotedLocaleCounts("ru", "Эта книга пока недоступна на {locale}. Открыта главная страница {locale}.")).toEqual({ total: 2, quoted: 0 });
+    expect(quotedLocaleCounts("cs", "Tento titul zatím není dostupný v jazyce {locale}. Přepnuto na domovskou stránku {locale}.")).toEqual({ total: 2, quoted: 0 });
+    expect(quotedLocaleCounts("pl", "Ten tytuł nie jest jeszcze dostępny w języku {locale}. Przełączono na stronę główną {locale}.")).toEqual({ total: 2, quoted: 0 });
+    // 只包一处、或用了别的语种的引号，都不算。
+    expect(quotedLocaleCounts("ru", "на языке «{locale}». на языке {locale}.")).toEqual({ total: 2, quoted: 1 });
+    expect(quotedLocaleCounts("cs", "v jazyce „{locale}”")).toEqual({ total: 1, quoted: 0 }); // 用了 pl 的收引号 ”
+    expect(quotedLocaleCounts("pl", "w języku „{locale}“")).toEqual({ total: 1, quoted: 0 }); // 用了 cs 的收引号 “
+    // fr / ko：CPS 原句写法不含守卫要求的片段。
+    expect("Passage à la page d'accueil {locale}.").not.toContain("page d'accueil en {locale}");
+    expect("이 작품은 아직 {locale}로 제공되지 않습니다.").not.toContain("{locale} 버전으로");
+    expect("이 작품은 아직 {locale}로 제공되지 않습니다.").toContain("{locale}로");
   });
 });

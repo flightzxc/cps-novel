@@ -179,10 +179,13 @@ const messages = {
     body: "주소가 잘못되었거나 이 페이지가 더 이상 존재하지 않습니다.",
   },
   localeSwitcher: {
-    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/ko.json:136。
-    fallbackToast: "이 작품은 아직 {locale}로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
-    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
-    fallbackToastPage: "이 페이지는 아직 {locale}로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
+    // 书页（详情页、章节页）：CPS v8.5.1 src/messages/ko.json:136 原句是“{locale}로 제공되지…”，助词“로”写死；
+    // 韩语的“로/으로”取决于前一个词是否以辅音收尾，语种自称（Français、Русский、繁體中文…）无法判断，写死会不合语法。
+    // 按第三方验收（GPT，2026-09-30）+ Owner 拍板，改成与下面非书页句同一种写法“{locale} 버전으로”
+    // （“버전”是固定名词，助词接在它后面），主语仍是“이 작품”。
+    fallbackToast: "이 작품은 아직 {locale} 버전으로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景；2026-09-30 验收后由“{locale}로”改为“{locale} 버전으로”。
+    fallbackToastPage: "이 페이지는 아직 {locale} 버전으로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
   },
   pagination: {
     previous: "이전",

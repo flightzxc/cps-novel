@@ -91,8 +91,8 @@ const ALLOWED_EXCEPTIONS_SCOPED: ReadonlySet<string> = new Set([
   //    "trang web này"= "this website"），对应英文原文里的 "This page"；
   //  - `pl:…fallbackToastPage`：波兰语"Ta strona"= "this page"（"strona"本义就是
   //    "页面"），同样对应英文原文里的 "This page"。
-  // 两处都不是站点/平台身份声明。（书页那个键 `fallbackToast` 照搬 CPS 句式、
-  // 仅把"剧"换成"书"，用的是"标题/作品/书"，不含这两个词形，不需要例外。）
+  // 两处都不是站点/平台身份声明。（书页那个键 `fallbackToast` 以 CPS 句式为底，
+  // 主语用的是"标题/作品/书"，不含这两个词形，不需要例外。）
   "vi:localeSwitcher.fallbackToastPage",
   "pl:localeSwitcher.fallbackToastPage",
 ]);
@@ -188,8 +188,9 @@ describe("非英文语种公开文案守卫 · 不提本站/原平台/预览（�
 
 /**
  * 2026-09-30 语言切换器两个键的显式覆盖（开发单第 5 条；Owner 后续拆成两个键）：
- *  - `localeSwitcher.fallbackToast`：书页（详情页、章节页）用，**照搬 CPS v8.5.1 句式，
- *    仅把"剧/影片"换成"书"**（Owner 2026-09-30；zh-Hant/ru/vi 三语种换词，其余原样）；
+ *  - `localeSwitcher.fallbackToast`：书页（详情页、章节页）用，**以 CPS v8.5.1 句式为底**
+ *    （Owner 2026-09-30；15 语种中 8 个与 CPS 逐字相同，7 个偏离：zh-Hant/ru/vi 换词，
+ *    fr/ko/ru/cs/pl 按 GPT 验收 2026-09-30 + Owner 拍板做语法对齐）；
  *  - `localeSwitcher.fallbackToastPage`：其它页面（分类页、博客页、404 页、未登记路径）用，
  *    CPS 没有对应场景，14 语种新译。
  *

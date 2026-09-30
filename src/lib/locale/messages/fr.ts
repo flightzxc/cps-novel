@@ -157,10 +157,11 @@ const messages = {
     body: "L'adresse est peut-être incorrecte, ou cette page n'existe plus.",
   },
   localeSwitcher: {
-    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/fr.json:136。
-    fallbackToast: "Ce titre n'est pas encore disponible en {locale}. Passage à la page d'accueil {locale}.",
-    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
-    fallbackToastPage: "Cette page n'est pas encore disponible en {locale}. Passage à la page d'accueil {locale}.",
+    // 书页（详情页、章节页）：CPS v8.5.1 src/messages/fr.json:136 原句末尾是“la page d'accueil {locale}”，语种名前缺介词；
+    // 按第三方验收（GPT，2026-09-30）+ Owner 拍板，改成与下面非书页句同一种写法“page d'accueil en {locale}”，主语仍是“Ce titre”。
+    fallbackToast: "Ce titre n'est pas encore disponible en {locale}. Passage à la page d'accueil en {locale}.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景；2026-09-30 验收后补上“en”。
+    fallbackToastPage: "Cette page n'est pas encore disponible en {locale}. Passage à la page d'accueil en {locale}.",
   },
   pagination: {
     previous: "Précédent",
