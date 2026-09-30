@@ -3,7 +3,61 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-29 · 共 937 个 commit
+生成时间：2026-09-30 · 共 988 个 commit
+- `0bf3fb8` 2026-09-30 文档(发版)：确认 v0.5.5 未收官状态的 Notion 同步回读  — _codex · GPT-6_
+- `bab52db` 2026-09-30 文档(发版)：登记 v0.5.5 部署结果与页面验收阻塞  — _codex · GPT-6_
+- `8d60d66` 2026-09-30 文档(发版)：登记海阅 v0.5.5 第一阶段门禁与归档身份  — _codex · GPT-6_
+
+## v0.5.5
+
+- `b44b9e2` 2026-09-30 发布：准备海阅 v0.5.5 版本身份  — _codex · GPT-6_
+- `5cda72a` 2026-09-30 合并(v0.5.5)：修复 TKD 回写续跑游标用例随机失败（仅测试；feat/tkd-cps-parity @9e18114）  — _claude-code · Claude Opus 5.5_
+- `9e18114` 2026-09-30 测试(TKD)：修续跑游标用例随机失败——跳批 id 取保证不等于上次终点的夹具  — _claude-code · claude-sonnet-5-5_
+- `1ed8fd0` 2026-09-30 合并(v0.5.5)：TKD 9 语种小说标题模板按第三方验收修订（feat/tkd-cps-parity @25a705f）  — _claude-code · Claude Opus 5.5_
+- `25a705f` 2026-09-30 文案(TKD)：按第三方验收把 9 语种小说详情标题模板压到 35 字符内  — _claude-code · claude-sonnet-5-5_
+- `4866e8b` 2026-09-30 合并(v0.5.5)：前台 TKD 对齐 CPS（feat/tkd-cps-parity @ff4e02a，已含集成@def891c 的冲突解决与 Next 16.3.3 适配）  — _claude-code · Claude Opus 5.5_
+- `15b508e` 2026-09-30 合并(v0.5.5)：语种切换提示按 GPT 验收修订（fr/ko 两键语法；书页句 ru/cs/pl 对齐非书页句写法；vi 改 Cuốn sách này）+语法守卫（fix/locale-switch-cps-parity @51dd9fd）  — _claude-code · Claude Opus 5.5_
+- `51dd9fd` 2026-09-30 fix(i18n): 语种切换提示按验收意见修正 fr/ko/ru/cs/pl/vi 的语法写法  — _claude-code · Claude Sonnet 5_
+- `ff4e02a` 2026-09-30 测试(合并后)：适配 Next 16.3.3 类型与对方新增的 hreflangLocales 必填字段  — _claude-code · claude-sonnet-5-5_
+- `3a11745` 2026-09-30 合并(v0.5.5)：集成分支 integration/v0.5.5-2026-09-30 @def891c 并入前台 TKD 对齐 CPS 一轮  — _claude-code · claude-sonnet-5-5_
+- `32480ad` 2026-09-30 修复(SEO)：首页 WebSite JSON-LD 与 meta 共用同一套"只有默认语种读后台值"的取值  — _claude-code · claude-sonnet-5-5_
+- `ce3131b` 2026-09-30 修复(SEO)：分类页 CollectionPage JSON-LD 的 description 与 meta 同源（含兜底句）  — _claude-code · claude-sonnet-5-5_
+- `55d01e4` 2026-09-30 修复(SEO)：小说详情 JSON-LD 与面包屑用干净书名，不用营销句式的 SEO 标题  — _claude-code · claude-sonnet-5-5_
+- `def891c` 2026-09-30 合并(v0.5.5)：Next.js 16.1.6→16.3.3 安全升级 + proxy 绕过黑盒探针运行器（fix/next-security-16.3.3 @99870ca，源码零改动）  — _claude-code · Claude Opus 5.5_
+- `99870ca` 2026-09-30 安全(proxy)：探针运行器支持 standalone 服务形态  — _claude-code · Claude Sonnet 5_
+- `52a8a53` 2026-09-30 合并(v0.5.5)：语种切换书页提示在 zh-Hant/ru/vi 把'剧/影片'换成'书'+禁用词守卫（fix/locale-switch-cps-parity @0711fb0，Owner 2026-09-30）  — _claude-code · Claude Opus 5.5_
+- `0711fb0` 2026-09-30 fix(i18n): 语种切换书页提示把"剧/影片"换成"书"（zh-Hant/ru/vi）  — _claude-code · Claude Sonnet 5_
+- `5c79599` 2026-09-30 安全(依赖)：Next.js 16.1.6 -> 16.3.3 安全升级  — _claude-code · Claude Sonnet 5_
+- `d71a7d4` 2026-09-30 安全(proxy)：新增 Next proxy 绕过黑盒探针与运行器  — _claude-code · Claude Sonnet 5_
+- `c6a7384` 2026-09-30 合并(v0.5.5)：两个孤儿真实库运行器接线 + 并发 materialize 的 novel(locale, slug) 冲突收敛（test/orphan-postgres-runners 3ee7b45/5028829 + fix/materialize-slug-race @f8ed4d0）  — _claude-code · Claude Opus 5.5_
+- `81a3728` 2026-09-30 合并(v0.5.5)：非英文文章模板兜底取最新版本（fix/article-template-locale-latest-version @137d89e）  — _claude-code · Claude Opus 5.5_
+- `4e67b8c` 2026-09-30 合并(v0.5.5)：语种切换、404 页面与跨语种链接对齐 CPS（fix/locale-switch-cps-parity @768d772）  — _claude-code · Claude Opus 5.5_
+- `60e211d` 2026-09-30 修复(SEO)：真 404 响应补 "Not found" 标题，与验收表"Not found | 站点名"一致  — _claude-code · claude-sonnet-5-5_
+- `f8ed4d0` 2026-09-30 修复(小说物化)：同一 source item 并发 materialize 时 novel(locale, slug) 唯一冲突收敛为 already_exists  — _claude-code · Claude Sonnet 5_
+- `5028829` 2026-09-30 测试(运行器)：给从没跑过的小说/文章解耦真实库探针接上运行器，修正夹具里无效的 promo_link.origin  — _claude-code · Claude Opus 5.5_
+- `3ee7b45` 2026-09-30 测试(运行器)：给两个从没跑过的 P2-02B 真实库冒烟接上一次性 PostgreSQL 运行器  — _claude-code · Claude Opus 5.5_
+- `e28a8ce` 2026-09-30 测试(模板)：回写工具 CAS 用例补"只改 SEO 字段、contentMode 仍是 template"的静默竞争  — _claude-code · claude-sonnet-5-5_
+- `2e1bfff` 2026-09-30 功能(模板)：模板 SEO 字段回写工具（照 CPS 只写标题/描述两个键，安全闸齐全）  — _claude-code · claude-sonnet-5-5_
+- `b70c65e` 2026-09-30 测试(SEO)：去掉真实合并测试里多余的 eslint-disable  — _claude-code · claude-sonnet-5-5_
+- `137d89e` 2026-09-30 fix(article-templates): 兜底选版先定模板族再取最高启用版本，后台新建的模板版本真正生效  — _claude-code · Claude Opus 5.5_
+- `768d772` 2026-09-30 i18n(locale-switcher): 提示拆成两个键——书页逐字照搬 CPS，其它页面新键 fallbackToastPage  — _claude-code · Claude Sonnet 5_
+- `8600122` 2026-09-30 docs(locale): 注明分类页 hreflang 对动态层活跃语种的"仅限成本"用法  — _claude-code · Claude Sonnet 5_
+- `f1beabd` 2026-09-30 测试(SEO)：用 Next 16.1.6 自己的元数据合并函数做真实合并验证  — _claude-code · claude-sonnet-5-5_
+- `8e87ec1` 2026-09-30 功能(模板)：15 个默认模板原地更新 SEO 标题为自然语言，引导脚本放宽校验并列出预演差异  — _claude-code · claude-sonnet-5-5_
+- `143d18f` 2026-09-30 功能(SEO)：分类页标题/描述照 CPS 分类页，章节名缺失兜底按语种本地化  — _claude-code · claude-sonnet-5-5_
+- `317d9af` 2026-09-30 docs(governance): port-registry 补登记 category/collection canonical 补语种前缀  — _claude-code · Claude Sonnet 5_
+- `101c464` 2026-09-30 功能(SEO)：首页/浏览页/博客列表只有默认语种读后台单值，第 2 页起加翻页后缀  — _claude-code · claude-sonnet-5-5_
+- `4a2581a` 2026-09-30 fix(seo): 分类页与列表页（/browse、/blog）canonical 补语种前缀，对齐 CPS  — _claude-code · Claude Sonnet 5_
+- `3df52f0` 2026-09-30 功能(SEO)：品牌后缀统一挂在根布局，数据库来源标题先去重  — _claude-code · claude-sonnet-5-5_
+- `9a623b4` 2026-09-30 文案(i18n)：新增 TKD 对齐三键与博客列表标题 14 语译文  — _claude-code · claude-sonnet-5-5_
+- `e44f405` 2026-09-30 docs(governance): port-registry 登记语种切换/404/短码纠正/分类 hreflang 对 CPS v8.5.1 的搬运  — _claude-code · Claude Sonnet 5_
+- `a362633` 2026-09-30 fix(sitemap): categorypage 分片 URL 补语种前缀，并钉住"总索引不列空语种分片"  — _claude-code · Claude Sonnet 5_
+- `87e60c3` 2026-09-30 feat(public): 短码语种纠正 308、真正的 404 页、分类页 hreflang 只列有内容的语种  — _claude-code · Claude Sonnet 5_
+- `5b39575` 2026-09-30 feat(locale-switcher): 语种切换照搬 CPS switchLocale，目标语种没有该页面时提示并回目标首页  — _claude-code · Claude Sonnet 5_
+- `1a22d1a` 2026-09-30 i18n(locale-switcher): 新增语言切换提示键 localeSwitcher.fallbackToast（15 语种 + 对照表）  — _claude-code · Claude Sonnet 5_
+- `cdd71dc` 2026-09-29 文档(发版)：确认 v0.5.4 Notion 手账同步回读  — _codex · GPT-6_
+- `1437940` 2026-09-29 文档(发版)：补记 v0.5.4 页面交互与手机截图验收  — _codex · GPT-6_
+- `a5f230a` 2026-09-29 文档(发版)：登记海阅 v0.5.4 预生产部署与治理  — _codex · GPT-6_
 
 ## v0.5.4
 

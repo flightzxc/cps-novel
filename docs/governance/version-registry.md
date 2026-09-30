@@ -12,20 +12,22 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.5.5 当前运行快照、版本表与部署记录（页面验收未收官）已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.5 初轮部署状态已同步回读；当前按 Owner + Opus 验收更新为正式收官状态，本轮最终 Notion 同步回读见发布记录。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
-### v0.5.5 —— 部署成功，页面验收未收官（2026-09-30 19:46:54 +0800）
+### v0.5.5 —— 已发布到预生产（2026-09-30 19:46:54 +0800；Owner + Opus 验收 PASS）
 
 - 集成基线 `5cda72ad391a3f7820b5aa6c2fba09539e15dff6` 经 Opus 复核、集成；语种切换提示经 GPT 两轮第三方验收（PASS_WITH_FIXES → 修订后 PASS），TKD 新文案另经 GPT 验收通过。Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`；发版分支 `release/v0.5.5-2026-09-30`；后续文档提交不改变部署身份。
 - 本版发布语种切换、真实 404 与跨语种链接对齐 CPS，前台 TKD 与 15 个默认模板 SEO 标题资产对齐，Next.js 16.3.3 安全升级，非英文模板最高已启用版本兜底，以及同书并发创建唯一冲突收敛。无新迁移、环境变量或 Compose 改动，不做功能开发。
 - 第一阶段 tsc 0、lint 0 errors / 19 warnings、全量 486 files / 7,485 tests 0 failed / 无 Unhandled，生产 build、27 个运行器、静态/live 字典与迁移 drift 0、nginx 矩阵、公开变异、品牌图、三套 Compose 与身份核验均通过。首次 Compose identity 因遗漏本地 helper 缺变量，加载既有 helper 后重跑通过。proxy 1,530 条 0 失败，4 条 B-24 KNOWN_FINDING；B-25 追踪警告和 B-26 audit 项已记录。
 - 镜像 `cps-novel:0.5.5-b44b9e2`（linux/amd64），归档 331,232,586 字节，SHA256 `944bedab2d7d950591b435bc110074f57014cd4605e9e5217317dac1f56faa47`；离线与本地载入身份核验通过，镜像内 Next 16.3.3。第一阶段构建后，第二阶段已按 Owner 单独授权部署 haiyue-vps；详细身份和日志见 [v0.5.5 发布记录](releases/v0.5.5-preproduction.md)。
 - 第二阶段仅部署 haiyue-vps，站名原值 PulseNovel；前后批次 paused、运行领取任务与定类在途计数 0，线上 20 条迁移与 Final 一致。在线备份及 restore-list、目标机归档与载入身份核验通过；env 备份后仅改两版本号，标签开关、写闸、白名单和其它 env 字节不变。PREPROD_APPROVED_MIGRATION=YES 下 RELEASE=PASS / EXIT=0，health 0.5.5 / Final，五应用服务及 postgres healthy、postgres ID 未变，备份 ok、核验时近五分钟错误日志 0，容器 Next 16.3.3。
-- 页面 HTTP：小说、章节、浏览、分类 title/OG、分类 canonical/hreflang、错前缀 308、不存在短码 404/noindex/无占位符通过相应子项。分类 sitemap 仍为旧缓存、页面网址缺 /ko；首页 absolute 标题、ko 404 本地化标题与提示词口径有差异；404 HTTP HTML 未见页头页脚品牌，待真实浏览器确认；博客既有开关 false，正常列表不可测；15 个公开 ko 书页均无其它语种同书版。Browser 扩展连接超时，交互及 375px 截图未完成，等待 Owner 重连登录和口径裁决。未修改门禁、功能、开关或主动写业务数据。
-- 第三阶段未获授权、未执行，时间/approver/模板备份路径均无；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
-- tag、生成 CHANGELOG、正式发布开发日志待页面验收收官；Notion 当前快照、台账行与部署记录已按实际阻塞状态同步并回读，未冒称正式验收收官。本版已切换运行身份，不能宣称第二阶段全项验收或 Next 正式切换前置条件已满足；公网可见仍须正式域名切换。
+- Owner 于 2026-10-01（JST）提供已登录 Chrome 实测、主控 Opus 截图核对结论：第二阶段全部通过。404 页品牌及韩语正文正常，标题 `찾을 수 없음 | PulseNovel`；纠正此前 HTTP 解析未读到页头站名的判断。小说和章节选 English 均跳至无前缀英文首页，按钮下方 ko fallbackToast 与 GPT 验收文案逐字一致；菜单仅 한국어 + 始终保留 English；浏览页 title `전체 작품 | PulseNovel`、15 本。
+- 本版新布局仅 404，Owner Chrome 375px 手机截图已确认、图片由 Owner 另附；不冒称 Codex 已收到或保存图片文件。首页 absolute / 404 本地化标题按 Owner 收官裁决接受；博客原开关 false，正常列表未启用，不为验收改开关。跨语种同书直达目前无公开数据，由单测覆盖，首次出现数据时补实测。详细口径见 [ADR](../adr/ADR-V055-PREPRODUCTION-ACCEPTANCE.md)。
+- 分类 sitemap 旧缓存按 Owner 裁决后续只读检查分片内页面 URL 的 /ko/category/ 前缀；一次性线程跟进 `v0-5-5-sitemap` 已安排 2026-10-02 04:35 JST（03:35 +0800）。目前未执行、未冒称通过；不主动刷新或创建任务。正式收官不移动部署 Final。
+- 第三阶段仍未获授权、未执行，时间/approver/模板备份路径均无；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
+- annotated tag `v0.5.5` 固定于 Final，已生成 CHANGELOG，正式发版开发日志与版本台账已更新；本轮 Notion 最终同步回读随后确认。收官记录时间 2026-09-30 23:22:25 +0800（JST 2026-10-01 00:22:25 +0900）。预生产已生效，Next 16.3.3 正式切换前置条件满足；公网可见仍须正式域名切换。
 
 ### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
 
@@ -310,7 +312,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 部署成功；页面验收未收官；批次暂停；第三阶段未授权未执行 |
+| `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 待只读追加；第三阶段未执行 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
