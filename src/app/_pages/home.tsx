@@ -66,7 +66,12 @@ export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
       defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
     },
   });
-  return toNextMetadata(seo);
+  // 🔴 `title.absolute`，不是字符串：根布局有 `%s | 站点名` 模板（TKD 对齐 CPS，
+  // Owner 2026-09-30），首页标题不套模板（CPS 首页同样不带后缀）。英文首页与根布局
+  // 同层、本来就不套；`/ja` 等非英语首页隔了一层 `[locale]` 布局，会被 Next 16.1.6
+  // 套上后缀，不写绝对标题 15 语首页就不一致。og:title/twitter:title 本来就不带后缀，
+  // 沿用 `seo.openGraph.title`。见 `tests/ui/seo/real-metadata-merge.test.ts`。
+  return { ...toNextMetadata(seo), title: { absolute: seo.title } };
 }
 
 export async function HomeBody({ locale }: { locale: SiteLocale }) {

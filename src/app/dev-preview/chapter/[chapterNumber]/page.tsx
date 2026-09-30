@@ -47,9 +47,13 @@ export async function generateMetadata({
   const t = getPublicT(PUBLIC_SITE_LOCALE);
 
   return {
-    title: chapter
-      ? `${t("chapter.heading", { number: chapter.number })} ${chapter.title} · ${chapter.novel.title}`
-      : t("meta.chapterNotFound"),
+    // 绝对标题：根布局有 `%s | 站点名` 模板（TKD 对齐 CPS，2026-09-30），预览路由的
+    // 标题保持原样，不带公开站的品牌后缀。
+    title: {
+      absolute: chapter
+        ? `${t("chapter.heading", { number: chapter.number })} ${chapter.title} · ${chapter.novel.title}`
+        : t("meta.chapterNotFound"),
+    },
     robots: { index: false, follow: false },
   };
 }

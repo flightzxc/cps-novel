@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { AdminDocumentLang } from "@/features/admin-ui/admin-document-lang";
 
 export const metadata = {
-  title: "海外阅读后台",
+  // 绝对标题，理由同 `(admin)/layout.tsx`：不吃根布局的品牌后缀模板。
+  title: { absolute: "海外阅读后台" },
   // Root layout (`src/app/layout.tsx`) already defaults to noindex,follow:
   // false for the whole site; this restates it explicitly, same as
   // `(admin)/layout.tsx`, so the login/2FA surface never depends on the

@@ -8,7 +8,8 @@ import { BlogDetailScreen } from "@/features/public-ui/blog/BlogDetailScreen";
 import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailableScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
-import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { generateSeoMeta, normalizeMetadataTitle } from "@/lib/seo/seo-meta-generator";
+import { resolveSiteBrandName } from "@/lib/seo/site-brand";
 import { buildBlogPath, decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 import type { BlogDetailView } from "@/lib/site/blog-queries";
 import type { BlogArticleAccessResult } from "@/server/publication/access";
@@ -47,6 +48,15 @@ import type { BlogArticleAccessResult } from "@/server/publication/access";
 
 export type BlogDetailRouteParams = { slug: string };
 
+/**
+ * 博客详情页交给布局的标题：运营填的 SEO 标题（`metaTitle`，缺失时用文章标题）先去掉
+ * 末尾已有的 `| 站点名` 再交出去——根布局的标题模板会再加一次（TKD 对齐 CPS，
+ * Owner 2026-09-30）。理由与站点名取法同 `novel-detail.tsx` 的 `metadataTitleFor`。
+ */
+function metadataTitleFor(post: { metaTitle?: string | null; title: string }, siteName: string): string {
+  return normalizeMetadataTitle(post.metaTitle ?? post.title, resolveSiteBrandName(siteName)) || post.title;
+}
+
 type LoadedBlogPage =
   | { access: Exclude<BlogArticleAccessResult, { kind: "published" }>; post: null }
   | { access: Extract<BlogArticleAccessResult, { kind: "published" }>; post: BlogDetailView };
@@ -80,7 +90,7 @@ export async function buildBlogDetailMetadata(
     entity: "blog",
     locale,
     data: {
-      title: post.metaTitle ?? post.title,
+      title: metadataTitleFor(post, settings.siteName),
       description: post.metaDescription ?? post.summary ?? settings.siteDescription,
       canonicalPath: routePath,
       coverUrl: post.coverUrl,
@@ -125,7 +135,7 @@ export async function BlogDetailBody({
     entity: "blog",
     locale,
     data: {
-      title: post.metaTitle ?? post.title,
+      title: metadataTitleFor(post, settings.siteName),
       description: post.metaDescription ?? post.summary ?? settings.siteDescription,
       canonicalPath: routePath,
       coverUrl: post.coverUrl,

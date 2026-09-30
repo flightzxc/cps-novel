@@ -17,7 +17,8 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { buildFaqJsonLd } from "@/lib/seo/faq-extract";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
-import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { generateSeoMeta, normalizeMetadataTitle } from "@/lib/seo/seo-meta-generator";
+import { resolveSiteBrandName } from "@/lib/seo/site-brand";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
 import { buildArticlePath, decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 
@@ -40,6 +41,18 @@ import { buildArticlePath, decodeSlugParam, localePrefix } from "@/lib/slug/arti
  */
 
 export type NovelRouteParams = { slugParam: string };
+
+/**
+ * 小说详情页交给布局的标题：文章 SEO 标题（`seoMetadata.metaTitle`，缺失时用书名）
+ * 先去掉末尾已有的 `| 站点名` 再交出去——根布局的标题模板会再加一次
+ * （TKD 对齐 CPS，Owner 2026-09-30；CPS 剧集详情页同样先 `normalizeMetadataTitle`
+ * 再交给布局）。运营在后台单篇改 SEO 标题时可能自己写了 `| PulseNovel`，不去重就会
+ * 出现双后缀。去重后为空（标题只有品牌名）时退回书名。站点名的取法与根布局共用
+ * `resolveSiteBrandName`。
+ */
+function metadataTitleFor(novel: { seoTitle?: string | null; title: string }, siteName: string): string {
+  return normalizeMetadataTitle(novel.seoTitle ?? novel.title, resolveSiteBrandName(siteName)) || novel.title;
+}
 
 /**
  * Resolves this page's `alternates.languages` — the filtered layer required
@@ -97,7 +110,7 @@ export async function buildNovelMetadata(
     entity: "novel",
     locale,
     data: {
-      title: novel.seoTitle ?? novel.title,
+      title: metadataTitleFor(novel, settings.siteName),
       description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,
@@ -151,7 +164,7 @@ export async function NovelBody({
     entity: "novel",
     locale,
     data: {
-      title: novel.seoTitle ?? novel.title,
+      title: metadataTitleFor(novel, settings.siteName),
       description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,
