@@ -26,3 +26,7 @@ Codex 按上述口径重新实测 F.1，两层实际响应与裁决一致。F.2 
 Owner 已审阅 G 样本，明确保留 bp-008 “Excerpt from”：这类简介是书中任意片段（多为序言/致谢），不是故事简介；命中 20 本基本为非虚构老书，小说题材标签会造成误导。清单与三个 authority 不变；只授权 en，其它 14 个语种不跑，指定 apply request-id `b23-reclassify-20261002-en`。
 
 执行前线上只读核验全部通过，但原 CLI 的 dry-run 也创建持久化任务；mode 纳入 requestFingerprint，requestToken 只由 request-id 构成。因此原提示词要求同参数先 dry-run 再 apply，会在 apply 触发 IDEMPOTENCY_CONFLICT。按“提示词与脚本矛盾时停止”在建任务前停止；已向 Owner 提出 dry-run 用 `b23-reclassify-20261002-en-dry-run`、apply 保持原 ID 的方案，等待该参数差异裁决。没有创建任何第三阶段任务、没有改写标签；不能把授权记为已经执行。
+
+## 2026-10-02：取消 dry-run，直接执行单 ID apply
+
+Owner 转交主控 Opus 最终裁决：不使用两个ID，取消dry-run。dry-run会持久化任务并逐本分类，耗费worker时间与条目写入；第二阶段impact-report已经是真正只读预演。此前停止及两ID提案为历史，已解除且未执行。仅以原ID b23-reclassify-20261002-en直接apply；全部automatic英文书标签原样重写和每本新增分类记录属于工具设计行为。每30分钟只读监测；失败条目或非预期worker错误即停止后续操作、报告且不重试/补跑。验收仍是前后source=auto差集133/0/133/126，保留证据，批次paused且不开关变更。实际任务/进度与未完成项见 [英文执行记录](../governance/releases/v0.5.7-reclassification.md)。
