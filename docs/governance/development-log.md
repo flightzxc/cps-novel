@@ -41,17 +41,17 @@
 
 ### 2026-10-01 22:41 - codex（GPT-6，发版执行；时间 +0800）
 
-**变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E PASS，F 入口验收阻断，G 尚未开始，尚未收官。第三阶段未授权、未执行。
+**变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E/F/G PASS；2026-10-02（JST）在同一条发版记录补记验收完成。第三阶段未授权、未执行。
 
-**背景**：Owner 授权第二阶段并保持领取批次暂停，恢复仅由 Owner 操作。代码经 Opus 复核集成，新基线 ab2d600 修复 B-21 脚本引用 Docker 排除的 tests 路径；旧候选 43fcfaa 作废未推送。本轮只发布和验证，没有功能开发。B-23 范围由主控于 2026-10-01 在 Owner 授权下裁决：只修公版套话；Alpha / chef 依据 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察。15 条套话来自常见出版说明，仍需生产样本验证。
+**背景**：Owner 授权第二阶段并保持领取批次暂停，恢复仅由 Owner 操作。代码经 Opus 复核集成，新基线 ab2d600 修复 B-21 脚本引用 Docker 排除的 tests 路径；旧候选 43fcfaa 作废未推送。本轮只发布和验证，没有功能开发。B-23 范围由主控于 2026-10-01 在 Owner 授权下裁决：只修公版套话；Alpha / chef 依据 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察。15 条套话来自常见出版说明；现已采集 24 本生产样本，其中 bp-008 出现正文摘录，须 Owner 审阅排除范围。
 
 **变更内容**：Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；B-24 无法规范化后台路径 fail-closed，应用公开主机返回空 body 404；B-21 定类建任务分页读取、分块写入；B-23 配置 2026-10-01-b23-description-boilerplate-v1 命中公版套话时简介不参与匹配，标题照常匹配；冻结 OWNER_FINAL 不变。原 release.sh 完成 2026-10-01 23:35:53 JST，RELEASE=PASS / EXIT=0；21 迁移无 pending，grants 重放 PASS。没有新依赖/env/Compose/schema 变化。
 
 **影响范围**：仅密码保护预生产运行，正式域名切换后才对公网可见。env 备份 `/opt/cps-novel/shared/env/preprod.env.bak-v057-20261001T143450Z`，只改两个版本号，其它字节及标签开关/写闸/白名单不变；postgres ID 不变，批次 paused，定类 pending/processing 条目各 0。未改 nginx、证书、DNS、NAS、业务开关，未触发 sitemap 刷新、定类建任务或 apply，未回滚。
 
-**验证方式**：第一阶段 496 files / 7642 tests passed、0 failed / Unhandled，27 运行器全 PASS、strict proxy 1646 / known_findings=0，B21 en 331.9 MiB，真实 Docker TS2307=0，21 迁移/drift=0，build/brand/nginx/变异/Compose/归档通过；audit 0 critical / 指定五项 high。第二阶段运输/身份/备份通过，E 全通过：health 0.5.7 / Final，五应用及 postgres healthy，核验时近五分钟错误日志各 0，backup ok、Next 16.3.7。F HTTPS 实测偏差：编码斜杠、反斜杠均 404 / body 162 字节，非法编码 400；直连应用三者均 404 / 0 字节。既有 nginx 公开后台路径 location 直接 return 404，入口与要求不一致；按提示词停止，G 报告、样本与前快照未采集。诊断包装器 nginx -T 权限问题已改只读启用配置并重跑通过，真实 F 偏差没有被覆盖。
+**验证方式**：第一阶段 496 files / 7642 tests passed、0 failed / Unhandled，27 运行器全 PASS、strict proxy 1646 / known_findings=0，B21 en 331.9 MiB，真实 Docker TS2307=0，21 迁移/drift=0，build/brand/nginx/变异/Compose/归档通过；audit 0 critical / 指定五项 high。第二阶段运输/身份/备份通过，E 全通过：health 0.5.7 / Final，五应用及 postgres healthy，核验时近五分钟错误日志各 0，backup ok、Next 16.3.7。F.1 原入口要求经 Owner 转交主控 Opus 2026-10-02 裁决纠正：nginx 外层 404/162、404/162、400/166 是既有防护；B-24 以直连 web 三条空 body 404 为准，复测 PASS。F.2 全部指定正常页面 200；F.3 登录、2FA、后台小说页、退出和未登录 Next 流式跳转正常，PAGE_F=PASS / EXIT=0。G web_app / READ_ONLY，15 语种各一次原报告，扫描 80,006 / 手动跳过 0；只有 en 套话 583、集合变化 133、失去全部自动标签 126，预计移除 133 / 新增 0，另 1 本仅评分变化。8 非零句式各 3 本样本，全部读取 novel.description 前 200 字符。报告累计 38.977 秒，全流程 56.307 秒；三 authority 各语种一致。en 全量 source=auto 前快照 50,120 对，SHA256 3a4b145db66e185671499ff0c24b79a505c495b7e3222ac1e96ad8e149656da7；英文 updated_at 与标题/简介指纹另存。33 文件远端独立校验 PASS，32 个本地报告/样本/汇总/自动标签文件独立校验 PASS；完整书目文本元数据保留目标机。自写包装器曾漏识别流式 HTML 跳转、读取尚在运输的空文件，已修正/等待校验后重跑；此前 nginx -T 权限诊断纠正和原暂停日志均保留。
 
-**后续待办**：Owner / 主控裁决 F 入口要求与 nginx 行为后继续剩余 F/G；第三阶段须审阅报告另行授权，以前后 source=auto 快照差集核验。第三阶段当前实际执行语种为无、生产定类 apply 次数 0；没有可报告的实际标签增删数，不把未测数据写成 0。套话清单待真实样本核对，Alpha/chef 继续观察。tag/生成 CHANGELOG 待 F 完成；Notion 已同步阻断事实并回读 PASS（2026-10-01T14:44:11.397Z），历史记录保留。回滚目标 v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408，schema 兼容标志必须 Owner 回滚时明确批准，恢复本次 env 备份；代码回滚不恢复第三阶段自动标签。详见 [发布记录](releases/v0.5.7-preproduction.md)。
+**后续待办**：第二阶段完成后停止，Owner 审阅 [汇总与 24 本样本](releases/v0.5.7-impact-report.md)，尤其 bp-008 正文摘录是否符合只修公版套话的范围；若改规则，重新验证配置、报告和前快照。第三阶段须单独授权，只对有变化的 en 逐语种 reclassify_existing，覆盖 43,431 本与变化 133 本分别展示，按 source=auto 前后差集验收。当前实际执行语种为无、定类 apply 0，实际增删未测量；不把预计移除 133 当作实际结果。Alpha/chef 继续观察。annotated v0.5.7 固定 Final 已推送，CHANGELOG 按生成器更新，本地治理完成；Notion 已同步并回读 PASS（2026-10-01T16:01:28.183Z），24 本样本/ID 逐段核对，旧历史与模板保留。领取批次只由 Owner 恢复。回滚目标 v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408，兼容标志必须 Owner 回滚时明确批准并恢复本次 env 备份；代码回滚不恢复第三阶段自动标签。详见 [发布记录](releases/v0.5.7-preproduction.md) 与 [F.1 裁决 ADR](../adr/ADR-V057-PREPRODUCTION-ACCEPTANCE.md)。
 
 ### 2026-10-01 11:32 - codex（GPT-6，发版执行；时间 +0800）
 

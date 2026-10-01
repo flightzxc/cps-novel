@@ -3,7 +3,27 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-01 · 共 1004 个 commit
+生成时间：2026-10-01 · 共 1021 个 commit
+- `23fb1e5` 2026-10-01 文档：登记海阅 v0.5.7 预生产部署与入口验收阻断  — _codex · GPT-6_
+- `a980cb4` 2026-10-01 文档：补记发版收尾包装器纠正与参考仓复核  — _codex · GPT-6_
+- `229a951` 2026-10-01 文档：归档海阅 v0.5.7 新基线第一阶段门禁与发布身份  — _codex · GPT-6_
+
+## v0.5.7
+
+- `bbb0625` 2026-10-01 发布：从镜像构建修复基线重做海阅 v0.5.7 版本身份  — _codex · GPT-6_
+- `ab2d600` 2026-10-01 合并(v0.5.7)：修复镜像构建 TS2307——B-21 旧实现由 tests/ 搬到 scripts/lib，新增'构建上下文不得引用被排除路径'守卫（fix/v057-docker-tests-import @00e2bbd）  — _claude-code · Claude Opus 5.5_
+- `00e2bbd` 2026-10-01 修复(镜像构建)：B-21 旧实现搬出 tests/，并加 Docker 构建上下文守卫  — _claude-code · Claude Sonnet 5_
+- `e0329d3` 2026-10-01 合并(v0.5.7)：B-21 定类建任务按块写入（en 峰值 2.6GiB→0.33GiB）+ B-23 公版套话简介不参与关键词匹配、新分类器配置版本与只读影响报告（fix/b21-b23-tagging-calibration @b12be71）  — _claude-code · Claude Opus 5.5_
+- `aa35855` 2026-10-01 合并(v0.5.7)：B-24 后台路径判定对无法规范化的路径 fail-closed（fix/b24-admin-path-fail-closed @dc80453）  — _claude-code · Claude Opus 5.5_
+- `b12be71` 2026-10-01 测试(标签)：B-23 用真实库钉住 reclassify_existing 对三类标签的语义  — _claude-code · Claude Sonnet 5_
+- `e19c062` 2026-10-01 修复(标签)：B-23 影响报告的局部变量改名，避开语种映射唯一真源扫描器  — _claude-code · Claude Sonnet 5_
+- `c92927e` 2026-10-01 测试(标签)：B-23 "指纹随清单变化"用例改为同路径对比  — _claude-code · Claude Sonnet 5_
+- `a804ff1` 2026-10-01 测试(标签)：B-23 补一条"只因清单不同也拒绝旧指纹"的用例  — _claude-code · Claude Sonnet 5_
+- `8cd5ef6` 2026-10-01 功能(标签)：B-23 公版老书套话简介不参与关键词匹配，新增分类器配置版本与只读影响报告  — _claude-code · Claude Sonnet 5_
+- `de81791` 2026-10-01 修复(标签)：B-21 建定类任务按块写入，英文峰值内存由约 2.6 GiB 降到约 0.33 GiB  — _claude-code · Claude Sonnet 5_
+- `dc80453` 2026-10-01 修复(安全)：isAdminPath 对无法规范化的路径 fail-closed，关闭 B-24  — _claude-code · Claude Sonnet 5_
+- `6bc6a11` 2026-10-01 文档(发版)：确认 v0.5.6 tag 与 Notion 收官回读  — _codex · GPT-6_
+- `9f9cacd` 2026-10-01 文档(发版)：完成 v0.5.6 刷新后验收与本地收官治理  — _codex · GPT-6_
 - `ac9042c` 2026-10-01 文档(发版)：登记 v0.5.6 预生产部署及 E/F 验收  — _codex · GPT-6_
 - `3aa2ecd` 2026-10-01 文档(发版)：登记海阅 v0.5.6 重做门禁与不可变归档  — _codex · GPT-6_
 
