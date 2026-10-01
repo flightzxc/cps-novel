@@ -197,7 +197,7 @@ export async function readNovelClassificationSnapshot(db: Db, novelId: string): 
   return classificationSnapshotFromRow(novel as NovelInputRow);
 }
 
-type NovelClassificationScope = { novelId?: string; novelIds?: readonly string[]; locale?: string; all?: true };
+export type NovelClassificationScope = { novelId?: string; novelIds?: readonly string[]; locale?: string; all?: true };
 
 /**
  * Pages through the Novels selected by `scope`, yielding one bounded page of

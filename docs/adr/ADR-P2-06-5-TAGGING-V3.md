@@ -368,6 +368,16 @@ Owner Final 已冻结 production config 为 `30 / 30 / 30 / 3`，production load
 状态、版本或 SHA 不一致仍 fail closed 为 `CONFIG_NOT_READY`；`AUTO_WRITE_AUTHORIZED=NO` 是独立写闸。
 Worker、service、CLI 和测试不得各自保存候选 production 数值。
 
+> **增补（2026-10-01，B-23）**：production config 现在由 `classifier-config-b23-v1.json` 解析，它**扩展**
+> 而不修改已冻结的 `classifier-config-final.json`（权重与阈值仍取自后者，并校验其版本与指纹）。
+> 新增一条规则：简介命中 `description-boilerplate-v1.json`（公版重印书的出版说明套话清单）时，
+> 简介整体不参与关键词匹配，标题照常匹配；上游映射标签与人工标签不经过分类器，不受影响。
+> 新版本号 `2026-10-01-b23-description-boilerplate-v1`，清单的内容指纹进入 config 指纹，
+> 因此 `reclassify_existing --all --apply` 必须带新指纹。把 `enabled` 改为 `false` 即整体关闭，
+> 此时 production config 就是原冻结 config 本身（版本与指纹不变，分类结果逐字节一致）。
+> 原 config 保留为 `LEGACY_TAG_CLASSIFIER_CONFIG_V2`。Alpha 比喻用法与法语 chef 同形词按
+> `keyword-eligibility-v2` 的 Owner Final 结论不加规则，继续作为观察项。
+
 ## 9. Lifecycle
 
 `initializeNovelTagSnapshot(novelId)` 是新 Novel 首次分类服务契约。当前仓库没有 Novel 创建/绑定

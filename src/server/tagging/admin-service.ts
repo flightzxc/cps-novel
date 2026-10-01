@@ -78,6 +78,21 @@ type NormalizedPage = Readonly<{
   active: AdminTagActiveFilter;
 }>;
 
+/**
+ * The production classifier config as the admin diagnostics see it. The B-23
+ * boilerplate list is summarised (version, fingerprint, size); the phrases
+ * themselves stay in the artifact and are not shipped to the admin UI.
+ */
+function adminClassifierView(config: typeof PRODUCTION_TAG_CLASSIFIER_CONFIG) {
+  const { descriptionBoilerplate, ...rest } = config;
+  return {
+    ...rest,
+    ...(descriptionBoilerplate
+      ? { descriptionBoilerplate: { version: descriptionBoilerplate.version, sha256: descriptionBoilerplate.sha256, patternCount: descriptionBoilerplate.patterns.length } }
+      : {}),
+  };
+}
+
 export type NormalizedCanonicalTagGet =
   | Readonly<{ mode: "detail"; id: string }>
   | Readonly<{ mode: "list" } & NormalizedPage>;
@@ -343,7 +358,7 @@ export async function readAdminTagAuthority(db: PrismaClient): Promise<AdminTagA
       keywordEligibilityVersion: CURRENT_KEYWORD_ELIGIBILITY_VERSION,
       keywordEligibilitySha256: CURRENT_KEYWORD_ELIGIBILITY_SHA256,
     },
-    classifier: { ...PRODUCTION_TAG_CLASSIFIER_CONFIG },
+    classifier: adminClassifierView(PRODUCTION_TAG_CLASSIFIER_CONFIG),
   };
 }
 

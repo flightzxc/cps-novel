@@ -29,10 +29,11 @@ container_name="cps-novel-tagging-auto-preview-pg16-${run_id}"
 database_name="cps_novel_tagging_auto_preview_${run_id//-/_}"
 secret_dir="$(mktemp -d "${TMPDIR:-/tmp}/cps-novel-tagging-auto-preview-secrets.XXXXXX")"
 mutation_file="$project_root/scripts/.mutation-check.tagging-auto-preview.ts"
+impact_mutation_file="$project_root/scripts/p2-06-5-production/.mutation-check.tagging-backfill.ts"
 cleanup_complete="no"
 
 cleanup() {
-  rm -f "$mutation_file"
+  rm -f "$mutation_file" "$impact_mutation_file"
   docker rm -f "$container_name" >/dev/null 2>&1 || true
   rm -rf "$secret_dir"
   if ! docker ps -a --format '{{.Names}}' | grep -Fx "$container_name" >/dev/null 2>&1; then
@@ -95,8 +96,8 @@ docker exec \
   -e PGUSER=migration_owner -e PGPASSWORD="$migration_password" \
   "$container_name" psql --no-psqlrc --file=/workspace/infra/postgres/grants.sql >/dev/null
 
-echo "== seeding fixtures (123 CanonicalTag v1 + fixture novels, en/ja) =="
-DATABASE_URL="$owner_url" npx tsx scripts/tagging-auto-preview-fixtures.ts --locales en,ja
+echo "== seeding fixtures (123 CanonicalTag v1 + fixture novels, en/ja; plus 6 B-23 boilerplate novels in locale b23) =="
+DATABASE_URL="$owner_url" npx tsx scripts/tagging-auto-preview-fixtures.ts --locales en,ja --boilerplate-locale b23 | tee "$secret_dir/fixtures.json"
 
 echo "== snapshotting table counts BEFORE the preview script runs =="
 DATABASE_URL="$owner_url" npx tsx scripts/tagging-auto-preview-table-counts.ts >"$secret_dir/counts-before.json"
@@ -112,6 +113,12 @@ DATABASE_URL="$web_url" npx tsx scripts/tagging-auto-preview.ts \
 echo "== run 2 (web_app, same seed -- reproducibility) =="
 DATABASE_URL="$web_url" npx tsx scripts/tagging-auto-preview.ts \
   --seed "$seed" --sample-per-locale 8 --locales en,ja --out-dir "$run2_dir"
+
+echo "== B-23 impact report (web_app, read-only): per locale and --all =="
+impact_b23="$secret_dir/impact-b23.json"
+impact_all="$secret_dir/impact-all.json"
+P2_06_5_TAGGING_TASK_DATABASE_URL="$web_url" npx tsx scripts/p2-06-5-production/tagging-backfill.ts --impact-report --locale b23 >"$impact_b23"
+P2_06_5_TAGGING_TASK_DATABASE_URL="$web_url" npx tsx scripts/p2-06-5-production/tagging-backfill.ts --impact-report --all >"$impact_all"
 
 echo "== snapshotting table counts AFTER both runs =="
 DATABASE_URL="$owner_url" npx tsx scripts/tagging-auto-preview-table-counts.ts >"$secret_dir/counts-after.json"
@@ -194,6 +201,48 @@ for (const summary of localeSummaries) {
 console.log("TAGGING_AUTO_PREVIEW_OUTPUT_SHAPE=PASS");
 NODE
 
+echo "== asserting the B-23 impact report matches the fixture's expectation =="
+node - "$secret_dir/fixtures.json" "$impact_b23" "$impact_all" <<'NODE'
+const fs = require("node:fs");
+const [, , fixturesPath, b23Path, allPath] = process.argv;
+const fixtureLine = fs.readFileSync(fixturesPath, "utf8").trim().split("\n").filter((line) => line.startsWith("{")).at(-1);
+const expected = JSON.parse(fixtureLine).boilerplateExpectedImpact;
+if (!expected) throw new Error("TAGGING_IMPACT_REPORT_FIXTURE_EXPECTATION_MISSING");
+const b23 = JSON.parse(fs.readFileSync(b23Path, "utf8"));
+const all = JSON.parse(fs.readFileSync(allPath, "utf8"));
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const fail = (code, detail) => { throw new Error(`${code} ${JSON.stringify(detail)}`); };
+
+for (const report of [b23, all]) {
+  if (report.databaseRole !== "web_app" || report.transactionMode !== "READ_ONLY") fail("TAGGING_IMPACT_REPORT_WRONG_ROLE_OR_MODE", { role: report.databaseRole, mode: report.transactionMode });
+  if (!report.candidate.descriptionBoilerplate || report.candidate.classifierConfigFingerprint === report.baseline.classifierConfigFingerprint) {
+    fail("TAGGING_IMPACT_REPORT_CANDIDATE_NOT_NEW", report.candidate);
+  }
+  const authority = report.applyAuthority;
+  if (!/^[0-9a-f]{64}$/.test(authority.taxonomySha256) || !/^[0-9a-f]{64}$/.test(authority.keywordFingerprint)
+      || authority.classifierConfigFingerprint !== report.candidate.classifierConfigFingerprint) {
+    fail("TAGGING_IMPACT_REPORT_APPLY_AUTHORITY_INVALID", authority);
+  }
+}
+if (b23.perLocale.length !== 1 || b23.perLocale[0].locale !== "b23") fail("TAGGING_IMPACT_REPORT_LOCALE_SCOPE_WRONG", b23.perLocale.map((entry) => entry.locale));
+const { locale: _locale, ...b23Counts } = b23.perLocale[0];
+if (!same(b23Counts, expected)) fail("TAGGING_IMPACT_REPORT_COUNTS_MISMATCH", { expected, actual: b23Counts });
+if (!same(b23.totals, expected)) fail("TAGGING_IMPACT_REPORT_TOTALS_MISMATCH", { expected, actual: b23.totals });
+
+// --all: every locale shows up (en/ja = 20 untouched books each, none matching), b23 is identical to its own scoped run
+const locales = all.perLocale.map((entry) => entry.locale);
+if (!same(locales, ["b23", "en", "ja"])) fail("TAGGING_IMPACT_REPORT_ALL_LOCALES_WRONG", locales);
+const sum = (key) => all.perLocale.reduce((total, entry) => total + entry[key], 0);
+for (const key of ["novelsScanned", "novelsManualSkipped", "novelsEligible", "novelsBoilerplateMatched", "novelsChanged", "novelsScoreOnlyChanged", "novelsLosingAllAutoTags", "tagsRemoved", "tagsAdded"]) {
+  if (all.totals[key] !== sum(key)) fail("TAGGING_IMPACT_REPORT_TOTALS_NOT_THE_SUM", { key, total: all.totals[key], sum: sum(key) });
+}
+for (const entry of all.perLocale.filter((row) => row.locale !== "b23")) {
+  if (entry.novelsScanned !== 20 || entry.novelsBoilerplateMatched !== 0 || entry.novelsChanged !== 0 || entry.tagsRemoved !== 0) fail("TAGGING_IMPACT_REPORT_UNTOUCHED_LOCALE_CHANGED", entry);
+}
+if (!same(all.perLocale.find((row) => row.locale === "b23"), b23.perLocale[0])) fail("TAGGING_IMPACT_REPORT_ALL_VS_SCOPED_MISMATCH", {});
+console.log(`TAGGING_IMPACT_REPORT=PASS matched=${all.totals.novelsBoilerplateMatched} changed=${all.totals.novelsChanged} tagsRemoved=${all.totals.tagsRemoved} locales=${locales.join(",")}`);
+NODE
+
 echo "== mutation: a write injected after the role check must be rejected by the read-only transaction =="
 sed \
   -e 's/if (role !== "web_app") throw new TaggingAutoPreviewError("wrong_database_role", { role, expected: "web_app" });/if (role !== "web_app") throw new TaggingAutoPreviewError("wrong_database_role", { role, expected: "web_app" });\n    await tx.canonicalTag.updateMany({ where: { id: "00000000-0000-0000-0000-000000000000" }, data: { slug: "mutation-check-must-be-rejected" } });/' \
@@ -222,6 +271,31 @@ if ! grep -qi "read-only transaction" "$mutation_out"; then
   exit 1
 fi
 echo "TAGGING_AUTO_PREVIEW_MUTATION_CAUGHT=PASS exit_code=$mutation_status"
+
+echo "== mutation: a write injected into the B-23 impact report transaction must be rejected too =="
+sed \
+  -e 's/await setTransactionReadOnly(tx);/await setTransactionReadOnly(tx);\n    await tx.canonicalTag.updateMany({ where: { id: "00000000-0000-0000-0000-000000000000" }, data: { slug: "mutation-check-must-be-rejected" } });/' \
+  scripts/p2-06-5-production/tagging-backfill.ts >"$impact_mutation_file"
+if diff -q scripts/p2-06-5-production/tagging-backfill.ts "$impact_mutation_file" >/dev/null; then
+  echo "TAGGING_IMPACT_MUTATION_SETUP_FAILED: sed did not inject the write call" >&2
+  exit 1
+fi
+impact_mutation_out="$secret_dir/impact-mutation.out"
+impact_mutation_status=0
+P2_06_5_TAGGING_TASK_DATABASE_URL="$web_url" npx tsx scripts/p2-06-5-production/.mutation-check.tagging-backfill.ts --impact-report --locale b23 \
+  >"$impact_mutation_out" 2>&1 || impact_mutation_status=$?
+rm -f "$impact_mutation_file"
+if [[ "$impact_mutation_status" -eq 0 ]]; then
+  echo "TAGGING_IMPACT_MUTATION_NOT_CAUGHT: mutated report exited 0" >&2
+  cat "$impact_mutation_out" >&2
+  exit 1
+fi
+if ! grep -qi "read-only transaction" "$impact_mutation_out"; then
+  echo "TAGGING_IMPACT_MUTATION_WRONG_FAILURE_MODE: expected a read-only-transaction error" >&2
+  cat "$impact_mutation_out" >&2
+  exit 1
+fi
+echo "TAGGING_IMPACT_MUTATION_CAUGHT=PASS exit_code=$impact_mutation_status"
 
 echo "== re-snapshotting table counts AFTER the rejected mutation attempt =="
 DATABASE_URL="$owner_url" npx tsx scripts/tagging-auto-preview-table-counts.ts >"$secret_dir/counts-after-mutation.json"

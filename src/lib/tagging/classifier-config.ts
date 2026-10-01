@@ -1,6 +1,12 @@
+import b23Config from "./artifacts/classifier-config-b23-v1.json";
 import laneCFinalConfig from "./artifacts/classifier-config-final.json";
 
 import { TaggingError } from "./contracts";
+import {
+  descriptionBoilerplateFingerprint,
+  loadDescriptionBoilerplateAuthority,
+  type DescriptionBoilerplateAuthority,
+} from "./description-boilerplate";
 import {
   CURRENT_KEYWORD_ELIGIBILITY_SHA256,
   CURRENT_KEYWORD_ELIGIBILITY_VERSION,
@@ -23,6 +29,12 @@ export interface TagClassifierConfig {
   threshold: number | null;
   maxTextTags: number | null;
   fingerprint: string | null;
+  /**
+   * B-23. Absent (not null) on every config that predates it, so those
+   * configs' fingerprints are unchanged. When present, a description that
+   * matches the list is excluded from keyword matching (title unaffected).
+   */
+  descriptionBoilerplate?: DescriptionBoilerplateAuthority | null;
 }
 
 export interface FrozenTagClassifierConfig extends TagClassifierConfig {
@@ -34,13 +46,20 @@ export interface FrozenTagClassifierConfig extends TagClassifierConfig {
   fingerprint: string;
 }
 
-function configPayload(config: Pick<FrozenTagClassifierConfig, "version" | "titleWeight" | "descriptionWeight" | "threshold" | "maxTextTags">) {
+function configPayload(config: Pick<FrozenTagClassifierConfig, "version" | "titleWeight" | "descriptionWeight" | "threshold" | "maxTextTags"> & {
+  descriptionBoilerplate?: DescriptionBoilerplateAuthority | null;
+}) {
   return {
     version: config.version,
     titleWeight: config.titleWeight,
     descriptionWeight: config.descriptionWeight,
     threshold: config.threshold,
     maxTextTags: config.maxTextTags,
+    // Only present when the rule is on, so a config without it keeps the
+    // exact payload (and therefore the exact fingerprint) it always had.
+    ...(config.descriptionBoilerplate
+      ? { descriptionBoilerplate: { version: config.descriptionBoilerplate.version, sha256: config.descriptionBoilerplate.sha256 } }
+      : {}),
   };
 }
 
@@ -73,7 +92,54 @@ function productionConfigFromFinalAuthority(): FrozenTagClassifierConfig {
   });
 }
 
-export const PRODUCTION_TAG_CLASSIFIER_CONFIG: FrozenTagClassifierConfig = productionConfigFromFinalAuthority();
+/**
+ * The config in force through v0.5.6 (Owner Final 2026-08-17). Kept as the
+ * historical version and as the "rule off" state of B-23: production
+ * classification with the boilerplate rule disabled is exactly this config.
+ */
+export const LEGACY_TAG_CLASSIFIER_CONFIG_V2: FrozenTagClassifierConfig = productionConfigFromFinalAuthority();
+
+interface B23ConfigArtifact {
+  status: string;
+  version: string;
+  extends: { artifact: string; version: string; fingerprint: string };
+  description_boilerplate: { enabled: boolean; version: string; sha256: string };
+  auto_write_authorized: string;
+}
+
+/** Resolves the production config from the B-23 artifact on top of the frozen Owner Final base. */
+export function resolveProductionTagClassifierConfig(
+  artifact: B23ConfigArtifact = b23Config,
+  base: FrozenTagClassifierConfig = LEGACY_TAG_CLASSIFIER_CONFIG_V2,
+): FrozenTagClassifierConfig {
+  if (
+    artifact.status !== "FROZEN"
+    || artifact.extends.artifact !== "classifier-config-final.json"
+    || artifact.extends.version !== base.version
+    || artifact.extends.fingerprint !== base.fingerprint
+    || artifact.auto_write_authorized !== "NO"
+    || typeof artifact.version !== "string" || artifact.version.trim().length === 0
+    || artifact.version === base.version
+  ) {
+    throw new TaggingError("CONFIG_NOT_READY", "B-23 classifier config is inconsistent with the Owner Final base");
+  }
+  const rule = artifact.description_boilerplate;
+  if (!rule.enabled) return base;
+  const authority = loadDescriptionBoilerplateAuthority(rule.version);
+  if (authority.sha256 !== rule.sha256) {
+    throw new TaggingError("CONFIG_NOT_READY", "Description boilerplate list does not match the pinned fingerprint");
+  }
+  return createFrozenTagClassifierConfig({
+    version: artifact.version,
+    titleWeight: base.titleWeight,
+    descriptionWeight: base.descriptionWeight,
+    threshold: base.threshold,
+    maxTextTags: base.maxTextTags,
+    descriptionBoilerplate: authority,
+  });
+}
+
+export const PRODUCTION_TAG_CLASSIFIER_CONFIG: FrozenTagClassifierConfig = resolveProductionTagClassifierConfig();
 
 export function loadTagClassifierConfig(
   configured: TagClassifierConfig = PRODUCTION_TAG_CLASSIFIER_CONFIG,
@@ -88,6 +154,12 @@ export function loadTagClassifierConfig(
   }
   if (!configured.version.trim() || configured.fingerprint === null) throw new TaggingError("CONFIG_NOT_READY");
   const frozen = configured as FrozenTagClassifierConfig;
+  if (frozen.descriptionBoilerplate) {
+    const { version, sha256, patterns } = frozen.descriptionBoilerplate;
+    if (descriptionBoilerplateFingerprint(version, patterns) !== sha256) {
+      throw new TaggingError("CONFIG_NOT_READY", "Description boilerplate fingerprint mismatch");
+    }
+  }
   if (fingerprint(configPayload(frozen)) !== frozen.fingerprint) {
     throw new TaggingError("CONFIG_NOT_READY", "Classifier config fingerprint mismatch");
   }

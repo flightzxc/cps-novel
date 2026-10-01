@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "artifact_name": "P2-06.5 classifier config — B-23 description boilerplate",
+  "status": "FROZEN",
+  "decided_at": "2026-10-01",
+  "decision": "B-23 (主控裁决 2026-10-01): 只修公版老书套话简介一类。简介命中套话清单时，简介不参与关键词匹配，标题照常匹配。",
+  "version": "2026-10-01-b23-description-boilerplate-v1",
+  "extends": {
+    "artifact": "classifier-config-final.json",
+    "version": "2026-08-17-owner-final-c1-final",
+    "fingerprint": "2236bd35997c9ea933140a6fb0bac2e76ac75ebf5fcd8bef25ca3fc63d09d2d1",
+    "note": "Weights, threshold and maxTextTags are read from the frozen Owner Final artifact, which is not modified. Only the description boilerplate rule is new."
+  },
+  "description_boilerplate": {
+    "enabled": true,
+    "version": "description-boilerplate-v1",
+    "sha256": "bd686eabb7fa9345c26a32693665d3ada7e82b9ce52e13870b5fd2bb5a8cbde7",
+    "disable_note": "Set enabled to false to switch the rule off as a whole. The production config then resolves to the extended Owner Final config itself (same version string, same fingerprint, no boilerplate key), so classification is byte-for-byte what it was before B-23 and a reclassification needs the old fingerprint again."
+  },
+  "not_changed": [
+    "keyword-eligibility-v2 (Owner Final 2026-08-17) and the CanonicalTag/keyword lexicon",
+    "Alpha used figuratively and French 'chef' are observation items, not rules: single-sample cases get no rule and blanket per-locale suppression falsely removed ~40% of correct tags (keyword-eligibility-v2 notes)",
+    "Upstream-mapped (source label) tags and manual tags: this rule is read only by the deterministic text classifier"
+  ],
+  "auto_write_authorized": "NO"
+}

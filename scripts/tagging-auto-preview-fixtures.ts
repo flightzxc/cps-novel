@@ -60,8 +60,16 @@
  *    total but must be excluded from both the mapped and the
  *    eligible-unmapped sampling pool.
  *
+ * With `--boilerplate-locale <code>` (B-23) it additionally seeds six novels in
+ * that ONE extra locale -- deliberately not in `--locales`, so the preview
+ * run's fixed 20-per-locale pool arithmetic is untouched -- to exercise the
+ * read-only rule-impact report (`tagging-backfill.ts --impact-report`):
+ * publisher-template descriptions (the template sentences only, never a real
+ * book's blurb) next to the real production keyword seed "Adventure".
+ *
  * Usage: `DATABASE_URL=<migration_owner URL> npx tsx
- * scripts/tagging-auto-preview-fixtures.ts --locales en,ja`
+ * scripts/tagging-auto-preview-fixtures.ts --locales en,ja
+ * [--boilerplate-locale b23]`
  */
 import { randomUUID } from "node:crypto";
 
@@ -260,8 +268,54 @@ async function seedNovelsForLocale(
   }
 }
 
+// Expected `--impact-report --locale <code>` result for the six novels below,
+// kept next to the data so the runner and this fixture cannot drift apart.
+const BOILERPLATE_FIXTURE_EXPECTED = {
+  novelsScanned: 6,
+  novelsManualSkipped: 1,
+  novelsEligible: 5,
+  novelsBoilerplateMatched: 4,
+  novelsChanged: 1,
+  novelsScoreOnlyChanged: 1,
+  novelsLosingAllAutoTags: 1,
+  tagsRemoved: 1,
+  tagsAdded: 0,
+  patternHits: { "bp-001": 3, "bp-008": 1 },
+} as const;
+
+async function seedBoilerplateNovels(prisma: PrismaClient, locale: string): Promise<void> {
+  const create = async (n: number, title: string, description: string, mode?: "manual") => {
+    const novel = await prisma.novel.create({
+      data: {
+        businessId: `fixture-tagging-b23-${locale}-${n}-${randomUUID()}`,
+        title,
+        description,
+        locale,
+        slug: `fixture-tagging-b23-${locale}-${n}`,
+      },
+      select: { id: true },
+    });
+    if (mode) await prisma.novelTagState.create({ data: { novelId: novel.id, mode } });
+  };
+  const template = "This work has been selected by scholars as being culturally important and is part of the knowledge base of civilization as we know it.";
+  // 1: boilerplate + keyword only in the description -> loses its only auto tag
+  await create(1, "Fixture boilerplate loses tag", `${template} A tale of Adventure.`);
+  // 2: boilerplate under a different pattern (start-anchored), keyword only in the title -> unchanged
+  await create(2, "Fixture Adventure title", "Excerpt from a long forgotten volume.");
+  // 3: ordinary description with the keyword -> not matched, untouched
+  await create(3, "Fixture ordinary", "A tale of Adventure on the high seas.");
+  // 4: manual mode + boilerplate -> never reclassified, never counted as changed
+  await create(4, "Fixture manual boilerplate", `${template} A tale of Adventure.`, "manual");
+  // 5: typographic dressing, keyword in title AND description -> same tag, score 60 -> 30
+  await create(5, "Fixture Adventure both", `${template.toUpperCase().replace("AS BEING", "AS\u00a0BEING")} It\u2019s an ADVENTURE.`);
+  // 6: boilerplate with no keywords at all -> matched, nothing to change
+  await create(6, "Fixture bare boilerplate", template);
+}
+
 async function main(): Promise<void> {
   const locales = requireLocales(process.argv.slice(2));
+  const boilerplateLocaleIndex = process.argv.indexOf("--boilerplate-locale");
+  const boilerplateLocale = boilerplateLocaleIndex >= 0 ? process.argv[boilerplateLocaleIndex + 1] : undefined;
   const prisma = new PrismaClient();
   try {
     const idByStableId = await seedCanonicalTaxonomy(prisma);
@@ -271,11 +325,13 @@ async function main(): Promise<void> {
     for (const locale of locales) {
       await seedNovelsForLocale(prisma, locale, mapping);
     }
+    if (boilerplateLocale) await seedBoilerplateNovels(prisma, boilerplateLocale);
     console.log(JSON.stringify({
       result: "TAGGING_AUTO_PREVIEW_FIXTURES_OK",
       canonicalTagCount: idByStableId.size,
       locales,
       novelsPerLocale: 20,
+      ...(boilerplateLocale ? { boilerplateLocale, boilerplateNovels: 6, boilerplateExpectedImpact: BOILERPLATE_FIXTURE_EXPECTED } : {}),
     }));
   } finally {
     await prisma.$disconnect();
