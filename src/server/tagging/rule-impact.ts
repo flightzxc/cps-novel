@@ -103,13 +103,13 @@ export interface SummarizeRuleImpactInput {
 
 export async function summarizeRuleImpact(db: Db, input: SummarizeRuleImpactInput): Promise<RuleImpactReport> {
   const { artifact, baseline, candidate } = input;
-  const byLocale = new Map<string, RuleImpactCounts>();
+  const tallies = new Map<string, RuleImpactCounts>();
   const rule = candidate.descriptionBoilerplate ?? null;
 
   for await (const page of iterateNovelClassificationSnapshotPages(db, input.scope, { pageSize: input.pageSize })) {
     for (const snapshot of page) {
-      const counts = byLocale.get(snapshot.locale) ?? emptyCounts();
-      byLocale.set(snapshot.locale, counts);
+      const counts = tallies.get(snapshot.locale) ?? emptyCounts();
+      tallies.set(snapshot.locale, counts);
       counts.novelsScanned += 1;
       if (snapshot.mode !== "automatic") {
         counts.novelsManualSkipped += 1;
@@ -136,7 +136,7 @@ export async function summarizeRuleImpact(db: Db, input: SummarizeRuleImpactInpu
   }
 
   const totals = emptyCounts();
-  const perLocale: LocaleRuleImpact[] = [...byLocale.entries()]
+  const rows: LocaleRuleImpact[] = [...tallies.entries()]
     .sort(([left], [right]) => left.localeCompare(right, "en"))
     .map(([locale, counts]) => {
       addInto(totals, counts);
@@ -158,7 +158,7 @@ export async function summarizeRuleImpact(db: Db, input: SummarizeRuleImpactInpu
       keywordFingerprint: artifact.keywordFingerprint,
     },
     totals,
-    perLocale,
+    perLocale: rows,
     assumptions: [
       "Baseline = what the baseline config classifies from each book's CURRENT title and description with the CURRENT keyword authority; it equals the stored auto tags only for books classified by that config on unchanged text.",
       "Books whose description does not match the boilerplate list are not classified: both configs give them identical output.",
