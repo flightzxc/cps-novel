@@ -18,7 +18,7 @@ output_name="$(basename "$output")"
 temporary_name="$(basename "$temporary")"
 (
   cd "$source_dir"
-  find . -type f ! -name "$output_name" ! -name "$temporary_name" -print0 | sort -z | while IFS= read -r -d '' file; do
+  find . -type f ! -name "$output_name" ! -name "$temporary_name" -print0 | LC_ALL=C sort -z | while IFS= read -r -d '' file; do
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$file"; else shasum -a 256 "$file"; fi
   done
 ) >"$temporary"
