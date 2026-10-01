@@ -16,18 +16,16 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.7 —— 第一阶段重做完成（2026-10-01 21:27:23 +0800；尚未部署）
+### v0.5.7 —— 已部署预生产，第二阶段 F 阻断（2026-10-01 22:35:53 +0800；G 未开始）
 
-- 唯一集成基线 `ab2d600c250d530aaa350378edfa7f9de4faa7b4`，基于 v0.5.6 收官 `6bc6a11`，代码已由 Opus 复核、集成；发布分支 `release/v0.5.7-2026-10-01-redo`。上一轮本地候选 Final `43fcfaa` 已作废、未推送，原工作树与证据保留。本轮新工作树、全新 npm ci、全部门禁和镜像构建从头重跑，仅同步六个版本身份文件，不做功能开发。
-- 本轮 Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`，tree `ae80be834ebb71c73487b630f76b2acde557c12d`；镜像 `cps-novel:0.5.7-bbb0625`（linux/amd64，Next 16.3.7），归档 331,482,934 字节 / SHA256 `2d803e13d89e93d360059661f18e30d093ee63428ffd26fe941ed304b129c3a0`。发布分支已推送；原归档构建器、消费端离线校验、本地加载和独立身份核验全部通过，后续治理提交不改变 Final 或归档身份。
-- 全新实跑：tsc 0、lint 0 errors / 19 warnings、496 files / 7,642 tests passed，0 failed / 0 Unhandled；build、drift 0、27/27 运行器通过；x9 两场景 migrations=21。严格 proxy 1646 / known_findings=0；B21 完整测量 PASS、新版 en 331.9 MiB；nginx 矩阵、公开变异、brand image、三套 Compose 及身份核验通过；本轮 Docker TS2307=0。audit 0 critical / 恰好五项指定 high。详见 [v0.5.7 发布记录](releases/v0.5.7-preproduction.md)。
-- B-24：无法规范化的后台路径 fail-closed，公开主机由 proxy 返回空 body 404；严格探针应为 Next 16.3.7 / 1,646 条 / known_findings=0。B-21：定类建任务按块写入、读取分页，英文峰值由约 2.6 GiB 降至约 0.33 GiB，完整测量门禁上限 1,024 MiB。
-- B-23：分类器配置 `2026-10-01-b23-description-boilerplate-v1`，命中 15 条公版重印套话句式时简介不参与关键词匹配，标题照常匹配；冻结 OWNER_FINAL 不变。Alpha / chef 依 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察；主控于 2026-10-01 在 Owner 授权下裁决范围。套话清单按常见出版说明整理，以第二阶段生产样本核对为准。
-- 镜像构建修复已在基线完成：`fix/v057-docker-tests-import` @ `00e2bbd` 将 B-21 冻结旧实现原样移到 scripts/lib，新增 Docker 构建上下文不得引用 tests/ 或其它被排除路径的守卫；主控已实测 BRAND_IMAGE=PASS、TS2307 为 0。本轮不再修改该修复，独立重跑原镜像门禁。
-- 没有新迁移（仍为 21 条）、新环境变量、Compose 改动或依赖变化。部署后新书立即使用新配置，旧指纹在途条目会被 worker 判为 authority_changed，部署前必须确认 pending / processing 定类条目均为 0。
-- 第一阶段只做本地串行门禁、GitHub 推送、linux/amd64 归档与本地身份核验，交付后停止；第二阶段须 Owner 暂停批次并明确授权，仅限 haiyue-vps，部署并交付 15 语种只读影响报告、句式样本和受影响语种全部 source=auto 标签对前快照。第三阶段须 Owner 审阅报告后另行授权，逐语种重新定类，以前后快照差集核验增删数和变化书本数，不要求固定旧/新配置影响报告归零。
-- 尚未部署，第三阶段未执行；部署后仅带访问密码的预生产生效，正式域名切换后才对公网可见。不改 nginx、证书、DNS、NAS 入口或业务开关，不触发 sitemap 刷新。第一阶段已完成，Final 与归档身份固定为上述值；共享重型锁已释放、CPS 参考仓前后状态一致。annotated tag、生成 CHANGELOG、正式发版开发日志待部署后；Notion 第一阶段记录已同步并回读 PASS（2026-10-01T13:32:26.469Z），完整交接稿保留。
-- 回滚代码目标 v0.5.6 Final `8625021d064f17d37e610d6038023c3ffecd9408`，无 schema 变化；回滚时 SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES 仍须 Owner 明确批准。第三阶段已改写的自动标签不因代码回滚恢复，数据恢复须单独授权。
+- Owner 已于 2026-10-01 明确授权第二阶段，仅 haiyue-vps。Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；tree `ae80be834ebb71c73487b630f76b2acde557c12d`；image `cps-novel:0.5.7-bbb0625`（linux/amd64，Next 16.3.7）；分支 `release/v0.5.7-2026-10-01-redo`。原 release.sh `RELEASE=PASS / EXIT=0`，health 0.5.7 / 完整 Final、release-state ready、current 指向 Final。后续治理提交不改变部署身份。
+- 新基线 ab2d600；旧候选 43fcfaa 作废且未推送。第一阶段从新工作树全新 npm ci 重跑：tsc 0、lint 0 errors / 19 warnings、496 files / 7642 tests passed、0 failed / Unhandled；27/27 运行器、21 迁移、drift 0、strict proxy 1646 / known_findings=0、B21 en 331.9 MiB、nginx/变异/brand/Compose/归档全 PASS，真实 Docker TS2307=0；audit 0 critical / 指定五项 high。归档 SHA256 `2d803e13d89e93d360059661f18e30d093ee63428ffd26fe941ed304b129c3a0`，331,482,934 字节；完整 OCI 身份见发布记录。
+- E PASS：五应用及 postgres healthy、postgres ID 不变、21 条迁移名称和校验和一致、空迁移检查/grants 重放通过、核验时近五分钟错误日志各 0、backup health ok、Next 16.3.7。env 先备份 `/opt/cps-novel/shared/env/preprod.env.bak-v057-20261001T143450Z`，仅 0.5.6→0.5.7 / v0.5.6→v0.5.7 两版本值变化，其余字节、写闸、标签配置与白名单不变。批次 paused；运行领取任务 0，定类 pending / processing 条目各 0；批次仅 Owner 恢复。
+- **F 未通过，已停止**：公开入口编码斜杠/反斜杠路径 404 但 body=162 字节；非法编码为 400。直连应用三者均空 body 404；目标机既有 nginx 第 70–72 行在公开主机直接 return 404，入口行为与提示词要求不一致。未改 nginx 或将直连结果冒充入口验收；正常页整组 F 验收尚未完成。
+- **G 尚未开始**：15 语种影响报告、句式样本、三个报告指纹、全部 source=auto 前快照及文本指纹未采集；没有定类任务/apply，第三阶段未授权、未执行。Owner / 主控须先裁决 F，之后继续剩余 F/G。第三阶段按前后快照差集验收，不要求 impact-report 归零。
+- B-24/B-21/B-23 应用代码已在密码保护预生产运行；正式域名切换后才对公网可见。B-23 仅公版重印套话，Alpha / chef 依据 2026-08-17 Owner Final 不变、继续观察；套话清单仍待 G 节生产样本核对。没有新迁移/env/Compose/依赖变化，冻结 OWNER_FINAL 未改；未动业务开关、nginx/证书/DNS/NAS、postgres 或 sitemap 刷新。
+- 发布记录、台账和同一发版级开发日志登记部署及阻断；tag/生成 CHANGELOG 待 F 裁决/完成，尚未收官。Notion 第二阶段阻断状态已同步并回读 PASS（2026-10-01T14:44:11.397Z）；第一阶段同步事实保留。详见 [v0.5.7 发布记录](releases/v0.5.7-preproduction.md)。
+- 回滚目标 v0.5.6 Final `8625021d064f17d37e610d6038023c3ffecd9408`，使用原发布目录与本次 env 备份；SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES 必须 Owner 回滚时明确批准。本次未回滚；第三阶段若改写标签，代码回滚不会恢复标签，数据恢复另行授权。
 
 ### v0.5.6 —— 已部署预生产（2026-10-01 03:38:32 +0800；E/F/G PASS，已收官）
 
@@ -337,7 +335,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.7` | 2026-10-01 21:27:23 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 测试依赖边界修复；无新迁移 | Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；image `cps-novel:0.5.7-bbb0625`；`release/v0.5.7-2026-10-01-redo` | 第一阶段重做完成；旧候选 43fcfaa 作废未推送；尚未部署，第二、第三阶段分别待 Owner 授权；tag/CHANGELOG/正式日志待部署后；Notion 第一阶段同步回读 PASS |
+| `v0.5.7` | 2026-10-01 22:35:53 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 边界修复；无新迁移 | Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；image `cps-novel:0.5.7-bbb0625`；`release/v0.5.7-2026-10-01-redo` | 预生产已部署；E PASS，F 入口响应偏差阻断；G 未开始；第三阶段未授权；tag/CHANGELOG 待 F 裁决；批次 paused |
 | `v0.5.6` | 2026-10-01 03:38:32 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | Final `8625021d064f17d37e610d6038023c3ffecd9408`；image `cps-novel:0.5.6-8625021`；发布分支 `release/v0.5.6-2026-10-01-redo` | 预生产已发布；E/F/G PASS；tag/CHANGELOG/正式日志/Notion 同步回读完成 |
 | `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 已在 v0.5.6 G 节只读验收了结；第三阶段 15 模板标题更新及零变化回读 PASS，approver admin / audit 516113 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |

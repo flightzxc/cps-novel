@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-01 22:41 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E PASS，F 入口验收阻断，G 尚未开始，尚未收官。第三阶段未授权、未执行。
+
+**背景**：Owner 授权第二阶段并保持领取批次暂停，恢复仅由 Owner 操作。代码经 Opus 复核集成，新基线 ab2d600 修复 B-21 脚本引用 Docker 排除的 tests 路径；旧候选 43fcfaa 作废未推送。本轮只发布和验证，没有功能开发。B-23 范围由主控于 2026-10-01 在 Owner 授权下裁决：只修公版套话；Alpha / chef 依据 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察。15 条套话来自常见出版说明，仍需生产样本验证。
+
+**变更内容**：Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；B-24 无法规范化后台路径 fail-closed，应用公开主机返回空 body 404；B-21 定类建任务分页读取、分块写入；B-23 配置 2026-10-01-b23-description-boilerplate-v1 命中公版套话时简介不参与匹配，标题照常匹配；冻结 OWNER_FINAL 不变。原 release.sh 完成 2026-10-01 23:35:53 JST，RELEASE=PASS / EXIT=0；21 迁移无 pending，grants 重放 PASS。没有新依赖/env/Compose/schema 变化。
+
+**影响范围**：仅密码保护预生产运行，正式域名切换后才对公网可见。env 备份 `/opt/cps-novel/shared/env/preprod.env.bak-v057-20261001T143450Z`，只改两个版本号，其它字节及标签开关/写闸/白名单不变；postgres ID 不变，批次 paused，定类 pending/processing 条目各 0。未改 nginx、证书、DNS、NAS、业务开关，未触发 sitemap 刷新、定类建任务或 apply，未回滚。
+
+**验证方式**：第一阶段 496 files / 7642 tests passed、0 failed / Unhandled，27 运行器全 PASS、strict proxy 1646 / known_findings=0，B21 en 331.9 MiB，真实 Docker TS2307=0，21 迁移/drift=0，build/brand/nginx/变异/Compose/归档通过；audit 0 critical / 指定五项 high。第二阶段运输/身份/备份通过，E 全通过：health 0.5.7 / Final，五应用及 postgres healthy，核验时近五分钟错误日志各 0，backup ok、Next 16.3.7。F HTTPS 实测偏差：编码斜杠、反斜杠均 404 / body 162 字节，非法编码 400；直连应用三者均 404 / 0 字节。既有 nginx 公开后台路径 location 直接 return 404，入口与要求不一致；按提示词停止，G 报告、样本与前快照未采集。诊断包装器 nginx -T 权限问题已改只读启用配置并重跑通过，真实 F 偏差没有被覆盖。
+
+**后续待办**：Owner / 主控裁决 F 入口要求与 nginx 行为后继续剩余 F/G；第三阶段须审阅报告另行授权，以前后 source=auto 快照差集核验。第三阶段当前实际执行语种为无、生产定类 apply 次数 0；没有可报告的实际标签增删数，不把未测数据写成 0。套话清单待真实样本核对，Alpha/chef 继续观察。tag/生成 CHANGELOG 待 F 完成；Notion 已同步阻断事实并回读 PASS（2026-10-01T14:44:11.397Z），历史记录保留。回滚目标 v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408，schema 兼容标志必须 Owner 回滚时明确批准，恢复本次 env 备份；代码回滚不恢复第三阶段自动标签。详见 [发布记录](releases/v0.5.7-preproduction.md)。
+
 ### 2026-10-01 11:32 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.6`（PATCH）；仅 `haiyue-vps`，Owner 授权第二阶段并通知后台站点地图刷新成功，E/F/G 全部通过后收官。
