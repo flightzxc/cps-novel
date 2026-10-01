@@ -30,3 +30,9 @@ Owner 已审阅 G 样本，明确保留 bp-008 “Excerpt from”：这类简介
 ## 2026-10-02：取消 dry-run，直接执行单 ID apply
 
 Owner 转交主控 Opus 最终裁决：不使用两个ID，取消dry-run。dry-run会持久化任务并逐本分类，耗费worker时间与条目写入；第二阶段impact-report已经是真正只读预演。此前停止及两ID提案为历史，已解除且未执行。仅以原ID b23-reclassify-20261002-en直接apply；全部automatic英文书标签原样重写和每本新增分类记录属于工具设计行为。每30分钟只读监测；失败条目或非预期worker错误即停止后续操作、报告且不重试/补跑。验收仍是前后source=auto差集133/0/133/126，保留证据，批次paused且不开关变更。实际任务/进度与未完成项见 [英文执行记录](../governance/releases/v0.5.7-reclassification.md)。
+
+## 2026-10-02：第三阶段实际验收证据
+
+第三阶段仅 en 已完成且差集 PASS：任务 `51e9d41e-afb3-4351-a085-63d2e865b184`，43,431 条全部成功，失败 0、skipped(stale) 0（原因分布为空），2026-10-02 05:16:10 JST 完成；实际移除 133 / 新增 0 / 涉及 133 本 / 126 本失去全部 auto，与原 G 报告一致。公开可见自动标签 0 → 0，报告后标题/简介指纹变化 0；批次 paused，业务开关不变。次日备份只读复核安排于 2026-10-03 06:00 JST。
+
+不修改Owner裁决或配置；原报告的预期现由actual before/after差集验证，13460.664秒处理43431条，覆盖本数与变化本数分别记录。无dry-run、无补跑/重试，所有书目文本指纹未变；前后证据保留，恢复另批。[完整最终验收](../governance/releases/v0.5.7-reclassification.md)。

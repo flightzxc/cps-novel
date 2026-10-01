@@ -41,19 +41,19 @@
 
 ### 2026-10-01 22:41 - codex（GPT-6，发版执行；时间 +0800）
 
-**变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E/F/G PASS；2026-10-02（JST）在同一条发版记录补记验收完成。第三阶段已授权仅en，按最新裁决取消dry-run，apply处理中。
+**变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E/F/G PASS；2026-10-02（JST）在同一条发版记录补记验收完成。第三阶段仅en已完成，按最新裁决取消dry-run，实际差集133/0/133/126 PASS。
 
 **背景**：Owner 授权第二阶段并保持领取批次暂停，恢复仅由 Owner 操作。代码经 Opus 复核集成，新基线 ab2d600 修复 B-21 脚本引用 Docker 排除的 tests 路径；旧候选 43fcfaa 作废未推送。本轮只发布和验证，没有功能开发。B-23 范围由主控于 2026-10-01 在 Owner 授权下裁决：只修公版套话；Alpha / chef 依据 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察。15 条套话来自常见出版说明；现已采集 24 本生产样本，其中bp-008正文摘录已由Owner审阅并裁决保留，配置不变。
 
 **变更内容**：Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；B-24 无法规范化后台路径 fail-closed，应用公开主机返回空 body 404；B-21 定类建任务分页读取、分块写入；B-23 配置 2026-10-01-b23-description-boilerplate-v1 命中公版套话时简介不参与匹配，标题照常匹配；冻结 OWNER_FINAL 不变。原 release.sh 完成 2026-10-01 23:35:53 JST，RELEASE=PASS / EXIT=0；21 迁移无 pending，grants 重放 PASS。没有新依赖/env/Compose/schema 变化。
 
-**影响范围**：仅密码保护预生产运行，正式域名切换后才对公网可见。env 备份 `/opt/cps-novel/shared/env/preprod.env.bak-v057-20261001T143450Z`，只改两个版本号，其它字节及标签开关/写闸/白名单不变；postgres ID 不变，批次 paused；执行前定类 pending/processing各0，现仅英文apply任务处理中。未改nginx、证书、DNS、NAS、业务开关，未触发sitemap刷新或回滚。
+**影响范围**：仅密码保护预生产运行，正式域名切换后才对公网可见。env 备份 `/opt/cps-novel/shared/env/preprod.env.bak-v057-20261001T143450Z`，只改两个版本号，其它字节及标签开关/写闸/白名单不变；postgres ID 不变，批次 paused；执行前定类 pending/processing各0，英文apply已completed，43,431成功/0失败/skipped，当前定类pending/processing仍0。未改nginx、证书、DNS、NAS、业务开关，未触发sitemap刷新或回滚。
 
 **验证方式**：第一阶段 496 files / 7642 tests passed、0 failed / Unhandled，27 运行器全 PASS、strict proxy 1646 / known_findings=0，B21 en 331.9 MiB，真实 Docker TS2307=0，21 迁移/drift=0，build/brand/nginx/变异/Compose/归档通过；audit 0 critical / 指定五项 high。第二阶段运输/身份/备份通过，E 全通过：health 0.5.7 / Final，五应用及 postgres healthy，核验时近五分钟错误日志各 0，backup ok、Next 16.3.7。F.1 原入口要求经 Owner 转交主控 Opus 2026-10-02 裁决纠正：nginx 外层 404/162、404/162、400/166 是既有防护；B-24 以直连 web 三条空 body 404 为准，复测 PASS。F.2 全部指定正常页面 200；F.3 登录、2FA、后台小说页、退出和未登录 Next 流式跳转正常，PAGE_F=PASS / EXIT=0。G web_app / READ_ONLY，15 语种各一次原报告，扫描 80,006 / 手动跳过 0；只有 en 套话 583、集合变化 133、失去全部自动标签 126，预计移除 133 / 新增 0，另 1 本仅评分变化。8 非零句式各 3 本样本，全部读取 novel.description 前 200 字符。报告累计 38.977 秒，全流程 56.307 秒；三 authority 各语种一致。en 全量 source=auto 前快照 50,120 对，SHA256 3a4b145db66e185671499ff0c24b79a505c495b7e3222ac1e96ad8e149656da7；英文 updated_at 与标题/简介指纹另存。33 文件远端独立校验 PASS，32 个本地报告/样本/汇总/自动标签文件独立校验 PASS；完整书目文本元数据保留目标机。自写包装器曾漏识别流式 HTML 跳转、读取尚在运输的空文件，已修正/等待校验后重跑；此前 nginx -T 权限诊断纠正和原暂停日志均保留。
 
-**后续待办**：完成现有en任务后只读验收source=auto差集133/0/133/126，并交skipped原因、WAL/数据库增量、公开自动标签可见数和次日备份。当前实际增删未测量；Alpha/chef继续观察。annotated v0.5.7与CHANGELOG既已完成，不改变Final/归档身份。Notion本次启动状态同步并回读PASS（2026-10-01T16:37:07.993Z），26代码块（含24样本）及模板保留；首次包装整块校验因Notion空行规范化误报，改为逐段正文检查后通过。批次由Owner恢复；代码回滚不恢复自动标签，兼容标志和数据恢复须Owner另批。回滚目标仍v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408。见 [英文执行记录](releases/v0.5.7-reclassification.md)。
+**后续待办**：仅2026-10-03 06:00 JST次日备份只读复核待执行（heartbeat v0-5-7-2）；本轮实际差集/公开auto/skipped原因/WAL与DB增量已验收。Alpha/chef继续观察。annotated v0.5.7固定Final；CHANGELOG由原生成器更新，最终Notion同步并回读PASS（2026-10-01T20:42:52.094Z），26代码块（含24样本）、旧版本和模板保留。批次由Owner恢复；回滚目标仍v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408，代码回滚不恢复自动标签，兼容标志及数据恢复须Owner另批。
 
-**第三阶段追加（2026-10-02 JST）**：Owner最新裁决取消dry-run，不使用两个ID，直接执行en apply。UTC16:31:33–16:31:49原CLI入队/EXIT=0，任务 `51e9d41e-afb3-4351-a085-63d2e865b184` 覆盖43,431本，与原G一致，比本次约42,595估计多836。首次成功34/失败0/跳过0、worker错误0；批次paused。无变化书重写及每本分类记录新增属于工具设计行为；只调用一次apply。每30分钟只读heartbeat v0-5-7已启用；after/实际差集仍待完成。此前请求冲突停止及两ID提案已被最新裁决解除，未创建dry-run任务。自写文档包装曾误匹配顶部模板字段，diff复核发现后从本轮HEAD恢复原文、将替换限定为既有v057条目，并独立核对模板及其它发版历史逐字节不变；未提交错误版本。
+**第三阶段追加（2026-10-02 JST）**：Owner最新裁决取消dry-run，不使用两个ID，直接执行en apply。UTC16:31:33–16:31:49原CLI入队/EXIT=0，任务 `51e9d41e-afb3-4351-a085-63d2e865b184` 覆盖43,431本，与原G一致，比本次约42,595估计多836。首次成功34/失败0/跳过0、worker错误0；批次paused。无变化书重写及每本分类记录新增属于工具设计行为；只调用一次apply。启动后每30分钟只读记录，进度heartbeat v0-5-7现已停止；最终于05:16:10 JST completed，43,431 success/0failed/skipped；实际移除133、新增0、涉及133本、126本失去全部auto，独立差集PASS。after49,987对，SHA256 5ffa5ef55678fff07b7504803355fc10270b6bc1abffc610a9f104a576ae597f；前后快照与差集保留。全部43431本标题/简介指纹未变；公开auto0→0（15ko/30标签不变），worker全窗口错误0。DB +207,265,792bytes/197.664MiB，WAL累计 +2,599,846,279bytes/2479.407MiB、LSN +2512MiB；窗口含全库同期活动和43431分类记录。新增分类记录与only-en/automatic范围只读验证PASS。完成后health/五应用/postgres/21迁移/Next/开关/backup健康通过。此前请求冲突停止及两ID提案已被最新裁决解除，未创建dry-run任务。自写文档包装曾误匹配顶部模板字段，diff复核发现后从本轮HEAD恢复原文、将替换限定为既有v057条目，并独立核对模板及其它发版历史逐字节不变；未提交错误版本。
 
 ### 2026-10-01 11:32 - codex（GPT-6，发版执行；时间 +0800）
 
