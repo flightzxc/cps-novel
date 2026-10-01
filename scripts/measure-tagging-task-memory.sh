@@ -3,7 +3,7 @@
 #
 # 起一个一次性 postgres:16.14（tmpfs 数据目录，退出必清理），迁移 + 授权后按
 # 生产语种规模造数，再在**独立子进程**里分别用"修改前"（legacy，冻结在
-# tests/backend/tagging/_support）与"修改后"（current）建任务，输出各自的 RSS 峰值；
+# scripts/lib/tagging-legacy-task-creation.ts）与"修改后"（current）建任务，输出各自的 RSS 峰值；
 # 最后对拍两种实现落库的任务行/条目集合/审计行是否逐条一致。
 #
 # 用法：

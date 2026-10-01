@@ -1,4 +1,20 @@
 /**
+ * 【仅供 B-21 内存对照测量与等价性测试使用，不是生产代码】
+ *
+ * 位置说明：本文件原在 tests/backend/tagging/_support/legacy-task-creation.ts。
+ * v0.5.7 镜像构建修复时原样搬到这里，原因是 scripts/measure-tagging-task-creation-memory.ts
+ * 会被 `next build` 做类型检查（tsconfig 覆盖所有 .ts 文件），而 .dockerignore 排除了 tests/，
+ * 脚本里指向 tests/ 的 import 在容器里解析不到（TS2307）。
+ *
+ * 约束：
+ *  - 不得被 src/、worker/、scheduler/ 导入，也不得接进任何运行时入口；
+ *    唯一合法的使用方是 scripts/measure-tagging-task-creation-memory.ts 的 `--impl legacy`
+ *    与 `compare`（tests/integration/tagging/task-creation-postgres.test.ts 经由它间接使用）。
+ *  - 搬家后函数体与 import 一字未改（下面的原注释也保持原样）；"不要顺手优化"依然有效。
+ *  - 构建上下文守卫 tests/backend/runtime/docker-build-context-no-excluded-import.test.ts
+ *    会拒绝任何构建上下文内的源文件引用 tests/ 或其它被 .dockerignore 排除的路径。
+ */
+/**
  * B-21 等价性与内存测量的"修改前"参照实现（oracle）。
  *
  * 这是 `createTaggingAutoClassifyTask` 在 6bc6a11（v0.5.6 收官提交）时的函数体，

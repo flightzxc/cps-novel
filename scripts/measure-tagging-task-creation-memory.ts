@@ -20,8 +20,9 @@
  *
  *   measure  测一次建任务的 RSS 峰值，输出一行 JSON。
  *            --locale en --lifecycle reclassify_existing --request-id <id>
- *            [--impl current|legacy]   legacy = tests/backend/tagging/_support 里
- *            冻结的 6bc6a11 老实现（只在开发机上有 tests 目录时可用）。
+ *            [--impl current|legacy]   legacy = scripts/lib/tagging-legacy-task-creation.ts
+ *            里冻结的 6bc6a11 老实现（原在 tests/ 下；v0.5.7 起搬到 scripts/lib，
+ *            因为 tests/ 不进 Docker 构建上下文而本脚本会被 next build 类型检查）。
  *            每次测量前请先清空 generic_task（同一范围的活动任务有唯一索引）。
  *
  *   compare  在同一份数据上先跑 legacy、再跑 current，逐条比较任务行、条目集合
@@ -243,10 +244,10 @@ export function createInput(db: PrismaClient, locale: string, lifecycle: Lifecyc
 async function loadImpl(impl: Impl): Promise<(input: CreateTaggingAutoClassifyTaskInput) => Promise<TaggingTaskCreationResult>> {
   if (impl === "current") return createTaggingAutoClassifyTask;
   try {
-    const mod = await import("../tests/backend/tagging/_support/legacy-task-creation");
+    const mod = await import("./lib/tagging-legacy-task-creation");
     return mod.legacyCreateTaggingAutoClassifyTask;
   } catch (error) {
-    throw new Error(`--impl legacy needs tests/backend/tagging/_support/legacy-task-creation.ts (dev checkout only): ${String(error)}`);
+    throw new Error(`--impl legacy needs scripts/lib/tagging-legacy-task-creation.ts: ${String(error)}`);
   }
 }
 
