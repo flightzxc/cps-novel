@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-01 11:32 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式发布 `v0.5.6`（PATCH）；仅 `haiyue-vps`，Owner 授权第二阶段并通知后台站点地图刷新成功，E/F/G 全部通过后收官。
+
+**背景**：需求来自运营《小说站调整V2》。Owner 2026-09-30 决定与 v0.5.5 分开发版；代码经 Opus 复核集成。本轮没有功能开发。B-29 的 GHSA-vcvr-r3jv-pc5j 涉及 next/og ImageResponse RCE；主控核实海阅仅 icon.tsx / apple-icon.tsx 使用常量输入，评估不可利用。Owner 仍于 2026-10-01 决定把 Next 16.3.7 安全升级并入本版，旧 Final a98cd9c 作废且未推送，新基线重新跑全套门禁。
+
+**变更内容**：Final `8625021d064f17d37e610d6038023c3ffecd9408`，annotated tag `v0.5.6` 固定于 Final。后台站点设置新增 Yandex 验证码与 Metrica ID，只有公开站且填写有效值后输出；站点地图过滤空语种、categorypage 并入 mainpage（旧路径 308），免费公开可索引章节加入 novelpage。Metrica noscript 放 body 开头，偏离 head 放置的理由是 `<div>` 不能出现在 `<head>`。生产 en 目前无内容，因此不输出其站点地图。B-27 的 docker bash:5.2 写闸测试单独 60 秒超时已修。Next、@next/third-parties、eslint-config-next 固定 16.3.7。新增一条迁移，由 release.sh migrate-approved 执行并重放 grants，20 → 21；无新 env / Compose 改动。
+
+**影响范围**：仅带访问密码的预生产；正式域名切换后才对公网可见。Yandex 当前值仍 `''` / NULL，需运营后台填写后才输出。env 备份后仅改两个版本号，标签配置、写闸、白名单及其它字节不变；postgres 容器 ID 未变，批次保持 paused，由 Owner 恢复。未改 nginx、证书、DNS、NAS、业务开关，未保存 Yandex 或触发站点地图刷新，刷新由 Owner 操作。
+
+**验证方式**：第一阶段 tsc 0、lint 0 error / 19 warnings、489 files / 7,555 tests passed（440 skipped），0 failed / Unhandled；build、Prisma validate、静态/live 字典与双向 drift 0、27 运行器、nginx 矩阵、公网变异、品牌图及三套 Compose / identity PASS。x9 两场景 migrations=21，proxy Next 16.3.7 / 1,530 探针；audit critical=0，指定 GHSA 消失，5 high 与 Owner 核实 B-26 清单一致。归档与消费端身份通过。第二阶段 RELEASE=PASS / EXIT=0，health 0.5.6 / Final、五应用 healthy、backup ok、核验时错误日志 0，21 条迁移全部 finished / 未 rolled_back，新列定义、空值及 web_app UPDATE 正确；两个图标 200 image/png，公开首页/ko 小说/后台首页无 Yandex，设置输入框可见，categorypage 308。2026-10-01 12:29:42 JST G 通过：总索引仅 ko 两片，mainpage 7 条（首页＋6 分类，全部 /ko/category/），novelpage 60 条（15 小说＋45 章）；en 404；抽两个不同小说章节 200，HTML robots index, follow，无 noindex。预生产响应头 X-Robots-Tag 的 noindex 防护保留并如实登记；自写包装器误检查保护头已修正，未改仓库门禁。v0.5.5 分类 sitemap 遗留同时了结。
+
+**后续待办**：领取批次仅 Owner 恢复；正式域名切换、Yandex 填写另行操作。B-24 四条 KNOWN_FINDING、B-25 追踪警告、B-26 五项 high 保留；不执行 audit fix 或 Prisma 降级。Notion 依据本地正式文件同步并回读。回滚目标 v0.5.5 Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`，必须 Owner 在回滚时明确批准 SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，再从旧版不可变目录 rollback 并恢复本次 env 备份；不 down、不删列、不恢复数据。详见 [发布记录](releases/v0.5.6-preproduction.md)。
+
 ### 2026-09-30 23:22 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.5`（PATCH）；仅部署 `haiyue-vps`，Owner + 主控 Opus 浏览器验收 PASS 后收官（JST 2026-10-01 00:22:25 +0900）。
@@ -51,7 +65,7 @@
 
 **验证方式**：tsc 0、lint 0 error / 19 warnings，486 files / 7485 tests passed，0 failed / Unhandled；build、27 运行器、迁移和字典 drift 0、nginx 矩阵、变异、品牌图、三套 Compose / 身份通过。线上 20 条迁移与 Final 一致；在线备份、restore-list、归档身份、RELEASE=PASS、health 0.5.5 / Final、五应用服务健康、postgres ID 不变、backup health ok、写闸前后一致、核验时近五分钟错误日志 0、容器 Next 16.3.3。Owner Chrome 实测 404 品牌 / 韩语文案、小说和章节切换 English / 英文首页提示、菜单 한국어 + English、浏览页 title 与 15 本均通过；404 375px 新布局截图由 Owner 确认，Opus 核对，图片另附。此前 HTTP 未读到 404 页头站名属于读取方式问题，已纠正。B-24 四条 KNOWN_FINDING、B-25 Turbopack 追踪警告、B-26 npm audit 9 项按既有登记保留。第三阶段已验证 15 行仅 seo_template.metaTitle / updated_at 改变，version 均 1；再预演 changes=0，15 条 article 完整行指纹不变，env / 容器 ID 未变、服务 healthy。
 
-**后续待办**：分类 sitemap 按 Owner 裁决于 2026-10-02 04:35 JST 只读核对分片内 /ko/category/ 前缀并追加记录，不主动刷新；跨语种同书直达由单测覆盖，首次出现公开数据时补测。Owner 另附截图后归档。第三阶段已另行授权并完成：备份 `/opt/cps-novel/backups/v055-article-template-before-20260930T153857Z.json`，15 行、5039 字节、SHA256 `1d03cc22d0a8154e1c2ff4f9dfad65835552bb998afe7489e81b40e711ea1106`，apply / 再次预演 / 逐列回读 PASS；不执行已发布文章 TKD 回填。领取批次只由 Owner 恢复。回滚用 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c` 原目录及本次 env 备份，保留标签配置；模板恢复另行授权。详见 [发布记录](releases/v0.5.5-preproduction.md)。
+**后续待办**：分类 sitemap 遗留已于 2026-10-01 12:29:42 JST 在 v0.5.6 G 节只读验收了结：ko mainpage 的 6 个分类网址均带 /ko/category/，未主动刷新；跨语种同书直达由单测覆盖，首次出现公开数据时补测。Owner 另附截图后归档。第三阶段已另行授权并完成：备份 `/opt/cps-novel/backups/v055-article-template-before-20260930T153857Z.json`，15 行、5039 字节、SHA256 `1d03cc22d0a8154e1c2ff4f9dfad65835552bb998afe7489e81b40e711ea1106`，apply / 再次预演 / 逐列回读 PASS；不执行已发布文章 TKD 回填。领取批次只由 Owner 恢复。回滚用 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c` 原目录及本次 env 备份，保留标签配置；模板恢复另行授权。详见 [发布记录](releases/v0.5.5-preproduction.md)。
 
 ### 2026-09-29 18:20 - codex（GPT-6，发版执行；时间 +0800）
 

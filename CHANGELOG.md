@@ -3,7 +3,21 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-30 · 共 988 个 commit
+生成时间：2026-10-01 · 共 1004 个 commit
+- `ac9042c` 2026-10-01 文档(发版)：登记 v0.5.6 预生产部署及 E/F 验收  — _codex · GPT-6_
+- `3aa2ecd` 2026-10-01 文档(发版)：登记海阅 v0.5.6 重做门禁与不可变归档  — _codex · GPT-6_
+
+## v0.5.6
+
+- `8625021` 2026-10-01 发布：从安全修复基线重做海阅 v0.5.6 版本身份  — _codex · GPT-6_
+- `9274c4a` 2026-10-01 合并(v0.5.6)：Next.js 16.3.3→16.3.7，修复 GHSA-vcvr-r3jv-pc5j（next/og ImageResponse RCE；海阅不可利用，Owner 决定并进本版；fix/next-16.3.7-og-rce @ab591e9，源码零改动）  — _claude-code · Claude Opus 5.5_
+- `ab591e9` 2026-10-01 安全(依赖)：Next.js 16.3.3 -> 16.3.7，修复 GHSA-vcvr-r3jv-pc5j（next/og ImageResponse 远程代码执行）  — _claude-code · Claude Sonnet 5_
+- `303d01a` 2026-10-01 合并(v0.5.6)：B-27 写闸 docker bash5 用例单独 60s 超时（fix/b27-docker-test-timeout @10f74cb）  — _claude-code · Claude Opus 5.5_
+- `6961fe7` 2026-10-01 合并(v0.5.6)：运营第二轮——Yandex 站长验证与 Metrica、站点地图瘦身（空语种不出、categorypage 并入 mainpage、免费章节入 novelpage）（feat/ops-round2-yandex-sitemap @93ad3b6）  — _claude-code · Claude Opus 5.5_
+- `d38d7c3` 2026-10-01 文档(发版)：确认 v0.5.5 第三阶段 Notion 同步回读  — _codex · GPT-6_
+- `82774e0` 2026-10-01 文档(发版)：记录 v0.5.5 默认模板标题更新与零变化回读  — _codex · GPT-6_
+- `b260e95` 2026-10-01 文档(发版)：确认 v0.5.5 tag 身份与 Notion 正式收官回读  — _codex · GPT-6_
+- `e479e11` 2026-10-01 文档(发版)：按 Owner 与 Opus 浏览器验收收官海阅 v0.5.5  — _codex · GPT-6_
 - `0bf3fb8` 2026-09-30 文档(发版)：确认 v0.5.5 未收官状态的 Notion 同步回读  — _codex · GPT-6_
 - `bab52db` 2026-09-30 文档(发版)：登记 v0.5.5 部署结果与页面验收阻塞  — _codex · GPT-6_
 - `8d60d66` 2026-09-30 文档(发版)：登记海阅 v0.5.5 第一阶段门禁与归档身份  — _codex · GPT-6_
@@ -11,8 +25,13 @@
 ## v0.5.5
 
 - `b44b9e2` 2026-09-30 发布：准备海阅 v0.5.5 版本身份  — _codex · GPT-6_
+- `10f74cb` 2026-09-30 测试(B-27)：bash 5 docker 对照组单独放宽超时到 60s  — _claude-code · Claude Sonnet 5_
+- `93ad3b6` 2026-09-30 文档(运营V2)：port-registry 登记 categorypage 并入 mainpage（CPS COPY）与三项海阅独有需求  — _claude-code · Claude Sonnet 5_
+- `8394dee` 2026-09-30 测试(运行器)：x9 升级演练的迁移数量与旧库基线随迁移目录动态计算  — _claude-code · Claude Sonnet 5_
 - `5cda72a` 2026-09-30 合并(v0.5.5)：修复 TKD 回写续跑游标用例随机失败（仅测试；feat/tkd-cps-parity @9e18114）  — _claude-code · Claude Opus 5.5_
 - `9e18114` 2026-09-30 测试(TKD)：修续跑游标用例随机失败——跳批 id 取保证不等于上次终点的夹具  — _claude-code · claude-sonnet-5-5_
+- `9d1101e` 2026-09-30 功能(运营V2)：站点地图不为空语种生成文件、分类页并入 mainpage、免费章节页入站点地图  — _claude-code · Claude Sonnet 5_
+- `16ebd9f` 2026-09-30 功能(运营V2)：后台站点设置新增 Yandex 站长验证码与 Metrica 计数器 ID  — _claude-code · Claude Sonnet 5_
 - `1ed8fd0` 2026-09-30 合并(v0.5.5)：TKD 9 语种小说标题模板按第三方验收修订（feat/tkd-cps-parity @25a705f）  — _claude-code · Claude Opus 5.5_
 - `25a705f` 2026-09-30 文案(TKD)：按第三方验收把 9 语种小说详情标题模板压到 35 字符内  — _claude-code · claude-sonnet-5-5_
 - `4866e8b` 2026-09-30 合并(v0.5.5)：前台 TKD 对齐 CPS（feat/tkd-cps-parity @ff4e02a，已含集成@def891c 的冲突解决与 Next 16.3.3 适配）  — _claude-code · Claude Opus 5.5_
