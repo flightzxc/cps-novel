@@ -16,6 +16,17 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.7 —— 准备中（2026-10-01；第一阶段重做；尚未部署）
+
+- 唯一集成基线 `ab2d600c250d530aaa350378edfa7f9de4faa7b4`，基于 v0.5.6 收官 `6bc6a11`，代码已由 Opus 复核、集成；发布分支 `release/v0.5.7-2026-10-01-redo`。上一轮本地候选 Final `43fcfaa` 已作废、未推送，原工作树与证据保留。本轮新工作树、全新 npm ci、全部门禁和镜像构建从头重跑，仅同步六个版本身份文件，不做功能开发。
+- B-24：无法规范化的后台路径 fail-closed，公开主机由 proxy 返回空 body 404；严格探针应为 Next 16.3.7 / 1,646 条 / known_findings=0。B-21：定类建任务按块写入、读取分页，英文峰值由约 2.6 GiB 降至约 0.33 GiB，完整测量门禁上限 1,024 MiB。
+- B-23：分类器配置 `2026-10-01-b23-description-boilerplate-v1`，命中 15 条公版重印套话句式时简介不参与关键词匹配，标题照常匹配；冻结 OWNER_FINAL 不变。Alpha / chef 依 keyword-eligibility-v2 Owner Final（2026-08-17）不改，继续观察；主控于 2026-10-01 在 Owner 授权下裁决范围。套话清单按常见出版说明整理，以第二阶段生产样本核对为准。
+- 镜像构建修复已在基线完成：`fix/v057-docker-tests-import` @ `00e2bbd` 将 B-21 冻结旧实现原样移到 scripts/lib，新增 Docker 构建上下文不得引用 tests/ 或其它被排除路径的守卫；主控已实测 BRAND_IMAGE=PASS、TS2307 为 0。本轮不再修改该修复，独立重跑原镜像门禁。
+- 没有新迁移（仍为 21 条）、新环境变量、Compose 改动或依赖变化。部署后新书立即使用新配置，旧指纹在途条目会被 worker 判为 authority_changed，部署前必须确认 pending / processing 定类条目均为 0。
+- 第一阶段只做本地串行门禁、GitHub 推送、linux/amd64 归档与本地身份核验，交付后停止；第二阶段须 Owner 暂停批次并明确授权，仅限 haiyue-vps，部署并交付 15 语种只读影响报告、句式样本和受影响语种全部 source=auto 标签对前快照。第三阶段须 Owner 审阅报告后另行授权，逐语种重新定类，以前后快照差集核验增删数和变化书本数，不要求固定旧/新配置影响报告归零。
+- 尚未部署，第三阶段未执行；部署后仅带访问密码的预生产生效，正式域名切换后才对公网可见。不改 nginx、证书、DNS、NAS 入口或业务开关，不触发 sitemap 刷新。Final 与归档身份以本轮第一阶段交付为准。
+- 回滚代码目标 v0.5.6 Final `8625021d064f17d37e610d6038023c3ffecd9408`，无 schema 变化；回滚时 SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES 仍须 Owner 明确批准。第三阶段已改写的自动标签不因代码回滚恢复，数据恢复须单独授权。
+
 ### v0.5.6 —— 已部署预生产（2026-10-01 03:38:32 +0800；E/F/G PASS，已收官）
 
 - 新集成基线 `9274c4aadf7738914e1ddc1ab4167b33f636588e`，基于 v0.5.5 收官 `d38d7c3`，已由 Opus 复核、集成；发布分支 `release/v0.5.6-2026-10-01-redo`。上一轮本地 Final `a98cd9c` 因新增安全公告作废、未推送，工作树与证据保留；本轮全新 npm ci、重新运行全部门禁，不沿用旧结果。Final `8625021d064f17d37e610d6038023c3ffecd9408`，annotated tag `v0.5.6` 固定于 Final；镜像 `cps-novel:0.5.6-8625021`（linux/amd64，Next 16.3.7），归档 SHA256 `f5d0e127248ac3a70f12e4432047972ed07b2ce6daca7755dcac9028327ebf32`；后续文档提交不改变部署身份。
@@ -324,6 +335,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.7` | 2026-10-01 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 测试依赖边界修复；无新迁移 | `release/v0.5.7-2026-10-01-redo`；基线 `ab2d600` | 第一阶段重做；旧候选 43fcfaa 作废未推送；尚未部署，第二、第三阶段分别待 Owner 授权 |
 | `v0.5.6` | 2026-10-01 03:38:32 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | Final `8625021d064f17d37e610d6038023c3ffecd9408`；image `cps-novel:0.5.6-8625021`；发布分支 `release/v0.5.6-2026-10-01-redo` | 预生产已发布；E/F/G PASS；tag/CHANGELOG/正式日志/Notion 同步回读完成 |
 | `v0.5.5` | 2026-09-30 19:46:54 | PATCH | 语种切换/404/跨语种 SEO 与 TKD 对齐；Next 16.3.3；模板版本兜底及并发创建收敛；无新迁移 | tag `v0.5.5` → `b44b9e2008f66f180fde8b194f5538ebfaf32849`；image `cps-novel:0.5.5-b44b9e2` | 预生产已发布；Owner + Opus 验收 PASS；分类 sitemap 已在 v0.5.6 G 节只读验收了结；第三阶段 15 模板标题更新及零变化回读 PASS，approver admin / audit 516113 |
 | `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
