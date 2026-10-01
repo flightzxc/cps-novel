@@ -1,5 +1,6 @@
 import type { AutoTagCandidate } from "./contracts";
 import type { FrozenTagClassifierConfig } from "./classifier-config";
+import { detectDescriptionBoilerplate } from "./description-boilerplate";
 import type {
   ClassifierTagRule,
   KeywordRuleArtifact,
@@ -19,6 +20,13 @@ export interface TagClassifierResult {
   rawEligibleCount: number;
   selectedCount: number;
   truncatedCount: number;
+  /**
+   * B-23. Present only when the config carries a description boilerplate
+   * list, so a config without one produces exactly the result shape it always
+   * did. `matched` means the description was recognised as publisher/reprint
+   * front matter and took no part in keyword matching.
+   */
+  descriptionBoilerplate?: { matched: boolean; patternId: string | null };
 }
 
 interface KeywordMatch {
@@ -87,9 +95,16 @@ export function classifyNovelText(
 ): TagClassifierResult {
   const title = input.title ?? "";
   const description = input.description ?? "";
+  // B-23: front-matter descriptions are not synopses. The field hash in the
+  // evidence below still describes the real description; only the keyword
+  // matching input is emptied. Titles are never touched.
+  const boilerplate = config.descriptionBoilerplate
+    ? detectDescriptionBoilerplate(description, config.descriptionBoilerplate)
+    : null;
+  const descriptionForMatching = boilerplate ? "" : description;
   const eligible = artifact.tags.flatMap((tag) => {
     const titleMatches = fieldMatches(title, tag, "title");
-    const descriptionMatches = fieldMatches(description, tag, "description");
+    const descriptionMatches = fieldMatches(descriptionForMatching, tag, "description");
     const titleScore = titleMatches.length > 0 ? config.titleWeight : 0;
     const descriptionScore = descriptionMatches.length > 0 ? config.descriptionWeight : 0;
     const score = titleScore + descriptionScore;
@@ -129,5 +144,8 @@ export function classifyNovelText(
     rawEligibleCount: eligible.length,
     selectedCount: selected.length,
     truncatedCount: Math.max(0, eligible.length - selected.length),
+    ...(config.descriptionBoilerplate
+      ? { descriptionBoilerplate: { matched: boilerplate !== null, patternId: boilerplate?.patternId ?? null } }
+      : {}),
   };
 }

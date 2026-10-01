@@ -103,9 +103,11 @@ describe("P2-06.5 production deterministic classifier", () => {
   });
 
   it("loads the single frozen production config and validates fixture fingerprints", () => {
+    // B-23 (2026-10-01): production moved to the description-boilerplate config; the Owner Final
+    // 2026-08-17 config is kept as LEGACY_TAG_CLASSIFIER_CONFIG_V2 (see classifier-config-b23.test.ts).
     expect(loadTagClassifierConfig(PRODUCTION_TAG_CLASSIFIER_CONFIG)).toMatchObject({
       status: "FROZEN",
-      version: "2026-08-17-owner-final-c1-final",
+      version: "2026-10-01-b23-description-boilerplate-v1",
       titleWeight: 30,
       descriptionWeight: 30,
       threshold: 30,

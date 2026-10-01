@@ -1,0 +1,120 @@
+{
+  "version": "description-boilerplate-v1",
+  "schema_version": 1,
+  "status": "DECISION_2026-10-01",
+  "decision": "B-23 (主控裁决 2026-10-01): 公版老书的出版/重印说明不是故事简介，简介命中下列任一句式时整段简介不参与关键词匹配；标题照常匹配。只修这一类。",
+  "effect": "Classifier-only. A description that matches any pattern below contributes no description-field keyword hits for that novel. Titles are matched exactly as before. Upstream-mapped (source label) tags and manual tags are never touched by this list; it is read only by the deterministic text classifier.",
+  "matching": "Both the description and each phrase are normalised the same way before comparison: Unicode NFKC, lower-cased, typographic quotes and dashes folded to ASCII, runs of whitespace collapsed to one space, trimmed. position=anywhere: the phrase occurs anywhere in the description. position=start: the normalised description begins with the phrase.",
+  "verification": "UNVERIFIED_AGAINST_PRODUCTION_DATA. The phrases are well-known public-domain-reprint publisher blurbs recalled from public listings; they were not fetched or checked online in this session and have not yet been counted against production descriptions. The read-only impact report (tagging-backfill.ts --impact-report) prints a per-pattern hit count; review it before any apply and drop any pattern that matches real story blurbs.",
+  "excluded_by_decision": [
+    "Alpha used figuratively (German 'Alpha-Raubtier' style): not changed. keyword-eligibility-v2 Owner Final (2026-08-17) adds no rule for single-sample cases and blanket per-locale suppression falsely removed ~40% of correct tags.",
+    "French 'chef' (boss) vs English 'chef': not changed. keyword-eligibility-v2 states chef carries no rule at all."
+  ],
+  "patterns": [
+    {
+      "id": "bp-001",
+      "phrase": "this work has been selected by scholars as being culturally important",
+      "position": "anywhere",
+      "source": "Public-domain reprint blurb (Kessinger/BiblioLife/Dodo-style listings); named in the B-23 brief",
+      "reason": "Opening sentence of a standard reprint disclaimer; the 'description' is publisher front matter, not a synopsis."
+    },
+    {
+      "id": "bp-002",
+      "phrase": "is part of the knowledge base of civilization as we know it",
+      "position": "anywhere",
+      "source": "Same disclaimer as bp-001 (its second half)",
+      "reason": "Catches listings where only the tail of the disclaimer survives truncation."
+    },
+    {
+      "id": "bp-003",
+      "phrase": "this is a reproduction of a book published before 1923",
+      "position": "anywhere",
+      "source": "Nabu Press/BiblioLife-style on-demand reprint blurb; named in the B-23 brief",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-004",
+      "phrase": "this book was originally published prior to 1923",
+      "position": "anywhere",
+      "source": "Kessinger-style reprint blurb; named in the B-23 brief",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-005",
+      "phrase": "reprint of the original, first published in",
+      "position": "anywhere",
+      "source": "Hansebooks/Outlook-style reprint listings; named in the B-23 brief",
+      "reason": "Whole description is usually just this one line."
+    },
+    {
+      "id": "bp-006",
+      "phrase": "this scarce antiquarian book is a facsimile reprint",
+      "position": "anywhere",
+      "source": "Facsimile-reprint publisher blurb; named in the B-23 brief",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-007",
+      "phrase": "we have recreated this book from the original",
+      "position": "anywhere",
+      "source": "Digital-recreation reprint blurb; named in the B-23 brief",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-008",
+      "phrase": "excerpt from",
+      "position": "start",
+      "source": "Forgotten Books-style blurb ('Excerpt from <Title> ...'); named in the B-23 brief",
+      "reason": "Short phrase, so it only counts at the very start of the description; in the middle of a real synopsis 'excerpt from' is ordinary prose."
+    },
+    {
+      "id": "bp-009",
+      "phrase": "unlike some other reproductions of classic texts",
+      "position": "anywhere",
+      "source": "Quality-claim paragraph in classic-text reprint blurbs; named in the B-23 brief",
+      "reason": "Publisher marketing about the scan quality, not the story."
+    },
+    {
+      "id": "bp-010",
+      "phrase": "this is a pre-1923 historical reproduction that was curated for quality",
+      "position": "anywhere",
+      "source": "Wentworth Press/Creative Media Partners-style reprint blurb",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-011",
+      "phrase": "this book is a reproduction of an important historical work",
+      "position": "anywhere",
+      "source": "Forgotten Books-style 'About the Publisher' blurb",
+      "reason": "Describes the edition, not the story."
+    },
+    {
+      "id": "bp-012",
+      "phrase": "forgotten books publishes hundreds of thousands of rare and classic books",
+      "position": "anywhere",
+      "source": "Forgotten Books 'About the Publisher' paragraph",
+      "reason": "Publisher boilerplate appended to the excerpt."
+    },
+    {
+      "id": "bp-013",
+      "phrase": "may have occasional imperfections such as missing or blurred pages",
+      "position": "anywhere",
+      "source": "Nabu Press/BiblioLife scan-quality disclaimer",
+      "reason": "Describes scan quality, not the story."
+    },
+    {
+      "id": "bp-014",
+      "phrase": "as part of our continuing commitment to the preservation of printed works worldwide",
+      "position": "anywhere",
+      "source": "Nabu Press/BiblioLife/Wentworth reprint disclaimer",
+      "reason": "Publisher boilerplate, never part of a synopsis."
+    },
+    {
+      "id": "bp-015",
+      "phrase": "this work is in the public domain in the united states of america",
+      "position": "anywhere",
+      "source": "Same disclaimer family as bp-001",
+      "reason": "Copyright notice, not a synopsis."
+    }
+  ]
+}

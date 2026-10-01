@@ -197,14 +197,31 @@ export async function readNovelClassificationSnapshot(db: Db, novelId: string): 
   return classificationSnapshotFromRow(novel as NovelInputRow);
 }
 
-export async function readNovelClassificationSnapshots(
+export type NovelClassificationScope = { novelId?: string; novelIds?: readonly string[]; locale?: string; all?: true };
+
+/**
+ * Pages through the Novels selected by `scope`, yielding one bounded page of
+ * snapshots at a time in ascending-id order, so a caller can keep only the few
+ * fields it needs instead of holding every title/description at once (B-21).
+ *
+ * `pageSize` only applies to the locale / all scopes; an explicit
+ * novelId / novelIds selection is already capped at TAGGING_NOVEL_IDS_MAX and
+ * is always one page. Concatenating the yielded pages is exactly what
+ * readNovelClassificationSnapshots returns.
+ */
+export async function* iterateNovelClassificationSnapshotPages(
   db: Db,
-  scope: { novelId?: string; novelIds?: readonly string[]; locale?: string; all?: true },
-): Promise<NovelClassificationSnapshot[]> {
+  scope: NovelClassificationScope,
+  options: { pageSize?: number } = {},
+): AsyncGenerator<NovelClassificationSnapshot[], void, undefined> {
+  const pageSize = options.pageSize ?? TAGGING_NOVEL_IDS_MAX;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > TAGGING_NOVEL_IDS_MAX) {
+    throw new TaggingError("DATA_INVARIANT_VIOLATION", `pageSize must be between 1 and ${TAGGING_NOVEL_IDS_MAX}`);
+  }
   // Explicit empty selection is never an unbounded query. The total cap also
   // bounds each read to C-15's <=5,000 IDs; callers segment before this API.
   const ids = scope.novelIds === undefined ? undefined : normalizeTaggingNovelIds(scope.novelIds);
-  if (ids?.length === 0) return [];
+  if (ids?.length === 0) return;
 
   // A bound novelId/novelIds selection can never exceed TAGGING_NOVEL_IDS_MAX
   // (a single id, or a list normalizeTaggingNovelIds already capped at 5,000),
@@ -220,7 +237,8 @@ export async function readNovelClassificationSnapshots(
       select: NOVEL_CLASSIFICATION_SELECT,
     });
     if (scope.novelId && novels.length === 0) throw new TaggingError("NOVEL_NOT_FOUND");
-    return novels.map((novel) => classificationSnapshotFromRow(novel as NovelInputRow));
+    yield novels.map((novel) => classificationSnapshotFromRow(novel as NovelInputRow));
+    return;
   }
 
   // locale / all scopes have no upper bound on how many Novels can match --
@@ -233,8 +251,8 @@ export async function readNovelClassificationSnapshots(
   // `P2035 too many bind variables in prepared statement, expected maximum
   // of 32767, received 32768`, while a 7,918-novel locale succeeds in ~0.7s.
   // So we page this read by id (keyset pagination: `id > <last page's last
-  // id>`), capping every page at TAGGING_NOVEL_IDS_MAX (the same 5,000 the
-  // explicit-selection path is already bound to) and concatenating pages in
+  // id>`), capping every page at `pageSize` (<= the same 5,000 the
+  // explicit-selection path is already bound to) and yielding pages in
   // ascending-id order -- the exact order and where-clause the single query
   // above used to produce, which callers rely on (payloadFingerprint hashes
   // novelIds in this order for request-id idempotency).
@@ -242,20 +260,27 @@ export async function readNovelClassificationSnapshots(
     deletedAt: null,
     ...(scope.locale ? { locale: scope.locale } : {}),
   };
-  const snapshots: NovelClassificationSnapshot[] = [];
   let cursorId: string | undefined;
   for (;;) {
     const page = await db.novel.findMany({
       where: cursorId ? { ...where, id: { gt: cursorId } } : where,
       orderBy: { id: "asc" },
-      take: TAGGING_NOVEL_IDS_MAX,
+      take: pageSize,
       select: NOVEL_CLASSIFICATION_SELECT,
     });
-    if (page.length === 0) break;
-    for (const novel of page) snapshots.push(classificationSnapshotFromRow(novel as NovelInputRow));
+    if (page.length === 0) return;
+    yield page.map((novel) => classificationSnapshotFromRow(novel as NovelInputRow));
     cursorId = page[page.length - 1]!.id;
-    if (page.length < TAGGING_NOVEL_IDS_MAX) break;
+    if (page.length < pageSize) return;
   }
+}
+
+export async function readNovelClassificationSnapshots(
+  db: Db,
+  scope: NovelClassificationScope,
+): Promise<NovelClassificationSnapshot[]> {
+  const snapshots: NovelClassificationSnapshot[] = [];
+  for await (const page of iterateNovelClassificationSnapshotPages(db, scope)) snapshots.push(...page);
   return snapshots;
 }
 

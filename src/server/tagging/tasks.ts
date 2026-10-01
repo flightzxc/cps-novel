@@ -15,8 +15,8 @@ import {
   type TaggingTaskLifecycle,
 } from "@/lib/tagging/task-contract";
 import {
+  iterateNovelClassificationSnapshotPages,
   readNovelClassificationSnapshot,
-  readNovelClassificationSnapshots,
   resolveAutoClassificationAuthorities,
   type AutoClassificationDependencies,
 } from "./auto-classification";
@@ -53,6 +53,13 @@ export type TaggingTaskCreationResult =
   | { status: "no_eligible_novels"; eligibleCount: 0 }
   | { status: "skipped"; reason: "tagging_gates_closed"; eligibleCount: 0 };
 
+/** The only per-novel fields a task item payload needs (B-21: no title/description). */
+interface EligibleNovel {
+  novelId: string;
+  contentSha256: string;
+  entityFingerprint: string;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Prisma's interactive-transaction default timeout is 5,000ms. Measured
@@ -71,6 +78,22 @@ export const TAGGING_TASK_TRANSACTION_TIMEOUT_MS = 120_000;
 // rather than hold a request for the full timeout. 10,000ms is 5x Prisma's
 // 2,000ms default.
 export const TAGGING_TASK_TRANSACTION_MAX_WAIT_MS = 10_000;
+
+// B-21: creating a locale/all task must not hold the whole locale in memory.
+// Measured 2026-10-01 against 43,431 English novels (avg description ~900
+// chars, PG 16.14, Prisma 6.19 library engine, process RSS incl. native memory):
+//   - reading every snapshot into memory:            ~0.4 GiB
+//   - ONE nested createMany of all 43,431 items:     ~2.7 GiB peak  <- the hog
+// The JS heap stayed under 0.2 GiB throughout; the cost is the query engine
+// materialising a single 43k-row nested write. So the items are written in
+// bounded createMany chunks inside the SAME transaction (atomicity, the single
+// task row, request-id idempotency and the item set are all unchanged), and the
+// read keeps only the three per-novel fields the payload needs, never titles or
+// descriptions. Smaller pages/chunks measurably lowered the peak further
+// (RSS after a 43,431-row run: 5,000 -> ~0.55 GiB, 2,000 -> ~0.49 GiB,
+// 1,000 -> ~0.41 GiB), so both stay at 1,000, well under the 5,000 hard cap.
+export const TAGGING_TASK_READ_PAGE_SIZE = 1_000;
+export const TAGGING_TASK_ITEM_INSERT_CHUNK_SIZE = 1_000;
 
 function requireInput(input: CreateTaggingAutoClassifyTaskInput) {
   const mode = input.mode ?? "dry_run";
@@ -146,55 +169,74 @@ export async function createTaggingAutoClassifyTask(
     if (params.requestFingerprint !== requestFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
     return { status: "duplicate", taskId: duplicate.id, eligibleCount: duplicate.totalCount };
   }
-  const snapshots = await readNovelClassificationSnapshots(input.db, scopeForQuery(input.scope));
-  const eligible = snapshots.filter((snapshot) => (
-    snapshot.mode === "automatic"
-    && (input.lifecycle === "reclassify_existing" || snapshot.currentAutoRunId === null)
-  ));
+  // Keep only what the item payload needs. The full snapshot (title and
+  // description) of a page is dropped as soon as the page has been filtered.
+  const eligible: EligibleNovel[] = [];
+  for await (const page of iterateNovelClassificationSnapshotPages(
+    input.db,
+    scopeForQuery(input.scope),
+    { pageSize: TAGGING_TASK_READ_PAGE_SIZE },
+  )) {
+    for (const snapshot of page) {
+      if (
+        snapshot.mode === "automatic"
+        && (input.lifecycle === "reclassify_existing" || snapshot.currentAutoRunId === null)
+      ) {
+        eligible.push({
+          novelId: snapshot.novelId,
+          contentSha256: snapshot.contentSha256,
+          entityFingerprint: snapshot.entityFingerprint,
+        });
+      }
+    }
+  }
   if (eligible.length === 0) return { status: "no_eligible_novels", eligibleCount: 0 };
 
-  const itemRows = eligible.map((snapshot) => {
-    const itemId = randomUUID();
-    const payload: TaggingAutoClassifyTaskPayload = {
-      schemaVersion: 1,
-      lifecycle: input.lifecycle,
-      novelId: snapshot.novelId,
-      expectedContentSha256: snapshot.contentSha256,
-      expectedEntityFingerprint: snapshot.entityFingerprint,
-      taxonomyVersion: artifact.taxonomyVersion,
-      taxonomySha256: artifact.taxonomySha256,
-      keywordLexiconVersion: artifact.keywordLexiconVersion,
-      keywordFingerprint: artifact.keywordFingerprint,
-      classifierConfigVersion: config.version,
-      classifierConfigFingerprint: config.fingerprint,
-      classificationRequestId: fingerprint({ taskItemId: itemId, novelId: snapshot.novelId }),
-    };
-    return {
-      id: itemId,
-      targetType: "Novel",
-      targetId: snapshot.novelId,
-      payload: payload as unknown as Prisma.InputJsonObject,
-    };
-  });
+  const novelIds = eligible.map((novel) => novel.novelId);
   const payloadFingerprint = fingerprint({
     schemaVersion: 1,
     lifecycle: input.lifecycle,
     mode,
     scope: scopeSnapshot(input.scope),
     authority,
-    novelIds: eligible.map((snapshot) => snapshot.novelId),
+    novelIds,
   });
+  const operationScopeHash = fingerprint({ lifecycle: input.lifecycle, novelIds });
   const taskId = randomUUID();
+  const itemRowsFor = (novels: readonly EligibleNovel[]) => novels.map((novel) => {
+    const itemId = randomUUID();
+    const payload: TaggingAutoClassifyTaskPayload = {
+      schemaVersion: 1,
+      lifecycle: input.lifecycle,
+      novelId: novel.novelId,
+      expectedContentSha256: novel.contentSha256,
+      expectedEntityFingerprint: novel.entityFingerprint,
+      taxonomyVersion: artifact.taxonomyVersion,
+      taxonomySha256: artifact.taxonomySha256,
+      keywordLexiconVersion: artifact.keywordLexiconVersion,
+      keywordFingerprint: artifact.keywordFingerprint,
+      classifierConfigVersion: config.version,
+      classifierConfigFingerprint: config.fingerprint,
+      classificationRequestId: fingerprint({ taskItemId: itemId, novelId: novel.novelId }),
+    };
+    return {
+      id: itemId,
+      taskId,
+      targetType: "Novel",
+      targetId: novel.novelId,
+      payload: payload as unknown as Prisma.InputJsonObject,
+    };
+  });
   try {
     await input.db.$transaction(async (tx) => {
       await tx.genericTask.create({ data: {
         id: taskId,
         taskType: TAGGING_AUTO_CLASSIFY_TASK_TYPE,
-        operationScopeHash: fingerprint({ lifecycle: input.lifecycle, novelIds: eligible.map((snapshot) => snapshot.novelId) }),
+        operationScopeHash,
         mode,
         status: "pending",
         requestToken,
-        totalCount: itemRows.length,
+        totalCount: eligible.length,
         params: {
           schemaVersion: 1,
           lifecycle: input.lifecycle,
@@ -203,8 +245,15 @@ export async function createTaggingAutoClassifyTask(
           requestFingerprint,
           payloadFingerprint,
         },
-        items: { createMany: { data: itemRows } },
       } });
+      // The task row is inserted first, exactly like the old nested create, so
+      // a concurrent or replayed requestToken still fails here (P2002) before
+      // any item is written. Item rows are built one chunk at a time.
+      for (let offset = 0; offset < eligible.length; offset += TAGGING_TASK_ITEM_INSERT_CHUNK_SIZE) {
+        await tx.genericTaskItem.createMany({
+          data: itemRowsFor(eligible.slice(offset, offset + TAGGING_TASK_ITEM_INSERT_CHUNK_SIZE)),
+        });
+      }
       await tx.operationAudit.create({ data: {
         actorType: "operator",
         action: "tag.auto_classify.queued",
@@ -213,7 +262,7 @@ export async function createTaggingAutoClassifyTask(
         requestId: input.requestId,
         taskType: TAGGING_AUTO_CLASSIFY_TASK_TYPE,
         taskId,
-        afterSnapshot: { lifecycle: input.lifecycle, mode, scope: scopeSnapshot(input.scope), eligibleCount: itemRows.length, payloadFingerprint },
+        afterSnapshot: { lifecycle: input.lifecycle, mode, scope: scopeSnapshot(input.scope), eligibleCount: eligible.length, payloadFingerprint },
       } });
     }, { timeout: TAGGING_TASK_TRANSACTION_TIMEOUT_MS, maxWait: TAGGING_TASK_TRANSACTION_MAX_WAIT_MS });
   } catch (error) {
@@ -224,7 +273,7 @@ export async function createTaggingAutoClassifyTask(
     if (params.requestFingerprint !== requestFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
     return { status: "duplicate", taskId: prior.id, eligibleCount: prior.totalCount };
   }
-  return { status: "enqueued", taskId, taskStatus: "pending", eligibleCount: itemRows.length };
+  return { status: "enqueued", taskId, taskStatus: "pending", eligibleCount: eligible.length };
 }
 
 export interface InitializeNovelTagSnapshotDependencies extends AutoClassificationDependencies {
