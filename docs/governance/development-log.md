@@ -51,7 +51,7 @@
 
 **验证方式**：第一阶段 tsc 0、lint 0 error / 19 warnings、489 files / 7,555 tests passed（440 skipped），0 failed / Unhandled；build、Prisma validate、静态/live 字典与双向 drift 0、27 运行器、nginx 矩阵、公网变异、品牌图及三套 Compose / identity PASS。x9 两场景 migrations=21，proxy Next 16.3.7 / 1,530 探针；audit critical=0，指定 GHSA 消失，5 high 与 Owner 核实 B-26 清单一致。归档与消费端身份通过。第二阶段 RELEASE=PASS / EXIT=0，health 0.5.6 / Final、五应用 healthy、backup ok、核验时错误日志 0，21 条迁移全部 finished / 未 rolled_back，新列定义、空值及 web_app UPDATE 正确；两个图标 200 image/png，公开首页/ko 小说/后台首页无 Yandex，设置输入框可见，categorypage 308。2026-10-01 12:29:42 JST G 通过：总索引仅 ko 两片，mainpage 7 条（首页＋6 分类，全部 /ko/category/），novelpage 60 条（15 小说＋45 章）；en 404；抽两个不同小说章节 200，HTML robots index, follow，无 noindex。预生产响应头 X-Robots-Tag 的 noindex 防护保留并如实登记；自写包装器误检查保护头已修正，未改仓库门禁。v0.5.5 分类 sitemap 遗留同时了结。
 
-**后续待办**：领取批次仅 Owner 恢复；正式域名切换、Yandex 填写另行操作。B-24 四条 KNOWN_FINDING、B-25 追踪警告、B-26 五项 high 保留；不执行 audit fix 或 Prisma 降级。Notion 依据本地正式文件同步并回读。回滚目标 v0.5.5 Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`，必须 Owner 在回滚时明确批准 SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，再从旧版不可变目录 rollback 并恢复本次 env 备份；不 down、不删列、不恢复数据。详见 [发布记录](releases/v0.5.6-preproduction.md)。
+**后续待办**：领取批次仅 Owner 恢复；正式域名切换、Yandex 填写另行操作。B-24 四条 KNOWN_FINDING、B-25 追踪警告、B-26 五项 high 保留；不执行 audit fix 或 Prisma 降级。[Notion 手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)已依据本地正式文件同步并回读，Final、治理提交、E/F/G、Owner 决策及遗留一致，历史记录与模板保留。回滚目标 v0.5.5 Final `b44b9e2008f66f180fde8b194f5538ebfaf32849`，必须 Owner 在回滚时明确批准 SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，再从旧版不可变目录 rollback 并恢复本次 env 备份；不 down、不删列、不恢复数据。详见 [发布记录](releases/v0.5.6-preproduction.md)。
 
 ### 2026-09-30 23:22 - codex（GPT-6，发版执行；时间 +0800）
 
