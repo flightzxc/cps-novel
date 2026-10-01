@@ -103,14 +103,14 @@ describe("B-23 `--all --apply` needs the new fingerprint", () => {
   });
   const env = { NODE_ENV: "test" as const, FEATURE_P2_06_5_TAGGING: "true", FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES" };
 
-  function attempt(classifierConfigFingerprint: string) {
+  function attempt(classifierConfigFingerprint: string, config?: ReturnType<typeof createFrozenTagClassifierConfig>) {
     const findMany = vi.fn().mockResolvedValue([]);
     const findUnique = vi.fn().mockResolvedValue(null);
     const db = { novel: { findMany }, genericTask: { findUnique }, $transaction: vi.fn() } as unknown as PrismaClient;
     // No `dependencies.config`: the real production config decides, exactly as the CLI does.
     const result = createTaggingAutoClassifyTask({
       db, env, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "all" }, requestId: "all-apply",
-      dependencies: { artifact, enforceCanonicalV1: false },
+      dependencies: { artifact, enforceCanonicalV1: false, ...(config ? { config } : {}) },
       allApplyConfirmation: {
         literal: TAGGING_ALL_APPLY_CONFIRMATION,
         taxonomySha256: artifact.taxonomySha256,
@@ -126,6 +126,19 @@ describe("B-23 `--all --apply` needs the new fingerprint", () => {
     await expect(result).rejects.toThrow(/All-scope apply authority confirmation mismatch/);
     expect(findUnique).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects the previous fingerprint because of the LIST, not merely the new version label", async () => {
+    // Same version label as before, only the boilerplate list added: if the list were not part of the
+    // fingerprint this config would still carry 2236bd35... and the old confirmation would pass.
+    const sameLabel = createFrozenTagClassifierConfig({
+      version: LEGACY_VERSION, titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3,
+      descriptionBoilerplate: loadDescriptionBoilerplateAuthority(),
+    });
+    expect(sameLabel.fingerprint).not.toBe(LEGACY_FINGERPRINT);
+    const { result, findUnique } = attempt(LEGACY_FINGERPRINT, sameLabel);
+    await expect(result).rejects.toThrow(/All-scope apply authority confirmation mismatch/);
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it("accepts the new fingerprint", async () => {
