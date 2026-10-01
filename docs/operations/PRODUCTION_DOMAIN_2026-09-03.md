@@ -11,6 +11,10 @@ cps-novel 唯一生产主域名。** 与 CPS 短剧站域名无关联、无共�
 重现该缺陷。实现落在应用层 `src/proxy.ts`（`isAdminPath` 单一来源见
 `src/lib/site/admin-origin.ts`，从 `ADMIN_PAGE_ROOTS` 派生）与 X8 本地 nginx 的
 第二道防线（`infra/production-like/nginx/full.conf.template` 的双 `server_name` 块）。
+**无法规范化的路径一律不当作公开路径（B-24，2026-10-01）**：含反斜杠、`%2f`/`%5c`（任意大小写）、
+`.`/`..` 路径段、非法百分号编码的请求，proxy 按后台路径判定——公开主机、未识别主机、同源误配的
+生产环境全部 404；后台主机因为"只服务能确认是后台的路径"，同样 404。修复前这类路径
+（如 `/novels/<id>%2f`）在公开主机上会被当成公开路径放行，进入动态后台路由。
 
 ## 单一输入源
 

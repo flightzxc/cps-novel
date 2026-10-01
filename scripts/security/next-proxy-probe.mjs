@@ -110,6 +110,11 @@ export function pathVariants(p, buildId) {
     ["semicolon", { target: `${p};x=1`, headers: [] }],
     ["nul-byte", { target: `${p}%00`, headers: [] }],
     ["backslash", { target: `${p}%5c`, headers: [] }],
+    // B-24: every shape src/server/auth/registry.ts normalizePath() cannot normalise (upper-case encodings,
+    // malformed percent sequence) must be treated as "admin" by the proxy, never as a public path.
+    ["percent-encoded-slash-upper", { target: `${p}%2F`, headers: [] }],
+    ["backslash-upper", { target: `${p}%5C`, headers: [] }],
+    ["malformed-percent", { target: `${p}%E0%A4%A`, headers: [] }],
     // --- Matcher-exclusion abuse: the proxy matcher skips /_next/static, /_next/image, favicon, icon., apple-icon ---
     ["under-next-static", { target: `/_next/static/..${p}`, headers: [] }],
     ["under-favicon", { target: `/favicon.ico/..${p}`, headers: [] }],
@@ -126,6 +131,19 @@ export function pathVariants(p, buildId) {
   ];
   return variants.map(([name, v]) => ({ name, ...v }));
 }
+
+/**
+ * Variants whose request-target registry.ts normalizePath() cannot normalise (encoded slash/backslash in any case,
+ * malformed percent sequence). src/proxy.ts must answer all of them with its own bare 404 on the public host (they
+ * are never "public"), and — because the admin host serves only provable admin paths — on the admin host as well.
+ */
+export const UNNORMALIZABLE_VARIANTS = Object.freeze([
+  "percent-encoded-slash",
+  "percent-encoded-slash-upper",
+  "backslash",
+  "backslash-upper",
+  "malformed-percent",
+]);
 
 /** Host-header smuggling variants — request the admin path while *claiming* to be the admin host by other means. */
 export function hostSmugglingVariants(p, publicHost, adminHost) {
@@ -257,6 +275,20 @@ export function expectProxyDenialSignature(response) {
   return `expected the proxy's bare 404 denial, got ${classify(response)}`;
 }
 
+/**
+ * Public host + an ordinary public URL: the proxy's own bare 404 denial is never acceptable (the fail-closed path rule
+ * of B-24 must not swallow legitimate URLs: percent-encoded non-ASCII slugs, query strings, sitemap/icon/robots/health).
+ * Whatever Next answers (200, a rendered 404 page, a 503 "sitemap unavailable" in the disposable empty database) has a
+ * body; only the proxy's `new NextResponse(null, { status: 404 })` is empty. `requireNo5xx` additionally rejects 5xx
+ * for pages that must render even in an empty database.
+ */
+export function expectPublicPathNotDenied(response, { requireNo5xx = false } = {}) {
+  if (response.status === 404 && response.body.length === 0) return `public URL was denied by the proxy's bare 404: ${classify(response)}`;
+  if (response.status === 0) return `no response: ${classify(response)}`;
+  if (requireNo5xx && response.status >= 500) return `public URL failed: ${classify(response)}`;
+  return null;
+}
+
 /** For request shapes no browser produces (absolute-form targets): a 404 or a redirect is fine, served content or a 5xx is not. */
 export function expectNoContentServed(response) {
   if (response.status === 404 || REDIRECT_STATUSES.has(response.status)) return null;
@@ -382,16 +414,41 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
         hostRole: "public",
         target: variant.target,
         headers: variant.headers,
-        check: variant.name === "plain" ? expectProxyDenialSignature : expectPublicAdminPath404,
-        // Pre-existing repo behaviour, independent of the Next version: registry.ts normalizePath() rejects
-        // %2f / %5c, so isAdminPath() answers "not admin" and src/proxy.ts lets `/<admin-root>/<id>%2f`
-        // through on the public host, where a dynamic admin route (`/novels/[novelId]`, `/tasks/[id]`)
-        // still resolves. The page guard then redirects to /login and nginx's admin-root regex 404s it
-        // first in production. Listed here so the probe stays green for what the Next upgrade changes
-        // while never hiding it: every occurrence is printed as a KNOWN_FINDING line (`--strict` fails on it).
-        knownFinding: variant.name === "percent-encoded-slash" || variant.name === "backslash" ? "PROXY-NORMALIZE-FAILOPEN" : undefined,
+        // The plain path and every request-target the registry cannot normalise must be the *proxy's* own bare 404
+        // (B-24: isAdminPath() is fail-closed). Before that fix `/<admin-root>/<id>%2f` / `%5c` slipped through the
+        // public-host gate into the dynamic admin routes (`/novels/[novelId]`, `/tasks/[id]`), where only the page
+        // guard (and nginx's admin-root regex in production) stood in the way; that used to be listed here as the
+        // KNOWN_FINDING `PROXY-NORMALIZE-FAILOPEN`. The knownFinding mechanism itself stays for future categories.
+        check: variant.name === "plain" || UNNORMALIZABLE_VARIANTS.includes(variant.name)
+          ? expectProxyDenialSignature
+          : expectPublicAdminPath404,
       });
     }
+  }
+
+  // ---- Public host: ordinary public URLs must not be caught by the fail-closed path rule (B-24). ----
+  // Percent-encoded non-ASCII slugs (the real shape of ko/ja/ru/... novel URLs), query strings, and the
+  // non-page routes (sitemap, robots, icons) all normalise fine and must keep reaching Next.
+  for (const [name, target, requireNo5xx] of [
+    ["ko-percent-encoded-slug", "/ko/novel/%EC%84%9C%EC%9A%B8%EC%9D%98-%EB%B4%84-p1234abcd", true],
+    ["ja-percent-encoded-slug", "/ja/novel/%E6%9D%B1%E4%BA%AC%E3%81%AE%E7%A9%BA-p1234abcd", true],
+    ["ru-percent-encoded-slug", "/ru/novel/%D0%BB%D1%8E%D0%B1%D0%BE%D0%B2%D1%8C-p1234abcd", true],
+    ["percent-encoded-slug-with-query", "/ko/novel/%EC%84%9C%EC%9A%B8%EC%9D%98-%EB%B4%84-p1234abcd?utm_source=x&q=%E3%81%82", true],
+    ["browse-with-query", "/browse?page=2&q=%E3%81%82", true],
+    ["locale-browse", "/ko/browse", true],
+    ["sitemap-index", "/sitemap.xml", false],
+    ["sitemap-file", "/sitemap/site_mainpage_ko.xml", false],
+    ["robots", "/robots.txt", true],
+    ["icon", "/icon", true],
+    ["apple-icon", "/apple-icon", true],
+  ]) {
+    add({
+      id: `public-legit/${name}`,
+      group: "public-host-legit-path",
+      hostRole: "public",
+      target,
+      check: (r) => expectPublicPathNotDenied(r, { requireNo5xx }),
+    });
   }
 
   // ---- Public host: Host-header smuggling toward the admin host. ----
@@ -462,7 +519,9 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
         hostRole: "admin",
         target: variant.target,
         headers: variant.headers,
-        check: expectAdminPageUnauthenticated,
+        // An un-normalisable path is not provably an admin path, and the admin host serves nothing else (RC-9):
+        // it must be the proxy's bare 404 there too — neither served, nor bounced to /login by the page guard.
+        check: UNNORMALIZABLE_VARIANTS.includes(variant.name) ? expectProxyDenialSignature : expectAdminPageUnauthenticated,
       });
     }
   }
@@ -474,7 +533,7 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
         hostRole: "admin",
         target: variant.target,
         headers: variant.headers,
-        check: expectAdminApiUnauthenticated,
+        check: UNNORMALIZABLE_VARIANTS.includes(variant.name) ? expectProxyDenialSignature : expectAdminApiUnauthenticated,
       });
     }
   }

@@ -1,5 +1,11 @@
 import { getSiteUrl } from "@/lib/seo/site-url";
-import { ADMIN_API_NAMESPACE, ADMIN_PAGE_ROOTS, resolveAdminPage, type AdminRegistry } from "@/server/auth/registry";
+import {
+  ADMIN_API_NAMESPACE,
+  ADMIN_PAGE_ROOTS,
+  isNormalizableAdminPath,
+  resolveAdminPage,
+  type AdminRegistry,
+} from "@/server/auth/registry";
 
 /**
  * RC-9 admin-host isolation (2026-09-03, Owner): pure host/path
@@ -145,6 +151,16 @@ export function normalizeRequestHost(hostHeader: string | null | undefined): str
  * Reuses `resolveAdminPage`'s existing normalisation (percent-decoding,
  * backslash/`..`/double-slash rejection, case-insensitive segment matching)
  * instead of re-implementing path matching a second time.
+ *
+ * Fail-closed (B-24): `resolveAdminPage` answers `null` both for "normalised
+ * fine, matches no admin root" and for "could not be normalised at all"
+ * (a backslash, `%2f`/`%5c` in any case, a `.`/`..` segment, a malformed
+ * percent sequence). Reading the second `null` as "public" let
+ * `/novels/<id>%2f`, `/tasks/<id>%5c` and friends through the public-host
+ * gate, straight into the dynamic admin routes. A path the registry cannot
+ * classify is therefore treated as an admin path here: `isNormalizableAdminPath`
+ * tells the two `null`s apart, so `normalizePath`, `resolveAdminPage` and
+ * `resolveAdminRoute` (which authorisation still uses) are untouched.
  */
 const ADMIN_HOST_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: Object.freeze([...ADMIN_PAGE_ROOTS, "/login", "/two-factor", ADMIN_API_NAMESPACE]),
@@ -155,6 +171,7 @@ const ADMIN_HOST_REGISTRY: AdminRegistry = Object.freeze({
 export const ADMIN_HOST_PATH_ROOTS: readonly string[] = ADMIN_HOST_REGISTRY.pageRoots;
 
 export function isAdminPath(pathname: string): boolean {
+  if (!isNormalizableAdminPath(pathname)) return true;
   return resolveAdminPage(pathname, ADMIN_HOST_REGISTRY) !== null;
 }
 
@@ -201,6 +218,17 @@ export interface AdminHostAccessResult {
  *
  * Shared paths (`isSharedPath`) are decided before any host branching, so
  * they always pass regardless of which host the request came in on.
+ *
+ * A path the registry cannot normalise (see `isAdminPath`) counts as an admin
+ * path in every row above — so it 404s on the public host, on an unrecognised
+ * host and in the same-origin production misconfiguration — and is
+ * **additionally 404 on the admin host**: it is not provably an admin path,
+ * and the admin host must not serve anything that is not (RC-9 — "后台主机不服务
+ * 公开页面"). Treating it as admin on the admin host too would let
+ * `/ko/novel/<slug>%2f` reach the public route tree there, so the admin-host
+ * row requires `admin && normalisable`. This is exactly what the admin host did
+ * before B-24 (the old "not admin" reading was already a 404 there); only the
+ * public side changes.
  */
 export function evaluateAdminHostAccess(
   input: AdminHostAccessInput,
@@ -211,6 +239,7 @@ export function evaluateAdminHostAccess(
   }
 
   const admin = isAdminPath(input.pathname);
+  const normalizable = isNormalizableAdminPath(input.pathname);
   const { siteHost, adminHostResolution } = config;
   const adminHost = adminHostResolution.ok ? adminHostResolution.host : null;
 
@@ -227,7 +256,7 @@ export function evaluateAdminHostAccess(
   const requestHost = normalizeRequestHost(input.requestHostHeader);
 
   if (adminHost !== null && requestHost === adminHost) {
-    return { allow: admin, sameOriginProductionMisconfig: false };
+    return { allow: admin && normalizable, sameOriginProductionMisconfig: false };
   }
   if (siteHost !== null && requestHost === siteHost) {
     return { allow: !admin, sameOriginProductionMisconfig: false };
