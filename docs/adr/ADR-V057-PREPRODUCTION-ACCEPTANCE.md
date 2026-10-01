@@ -20,3 +20,9 @@
 Codex 按上述口径重新实测 F.1，两层实际响应与裁决一致。F.2 首页、sitemap、sitemap 内小说和章节、两个图标均 200；F.3 未登录页面包含 Next 流式 meta refresh 与 NEXT_REDIRECT，指向 /login?next=%2Fnovels；正常登录、2FA、后台小说页和退出通过。
 
 自写包装器原来只识别 HTTP Location，漏识别流式 HTML 跳转；检查实际 body 后修正并重跑通过，不改变“未登录跳转登录”的要求。既有 nginx 和部署 Final 均不变；原暂停记录保留，当前验收口径以本 ADR 为准。G 的实际结果及第三阶段状态见 [发布记录](../governance/releases/v0.5.7-preproduction.md)。
+
+## 2026-10-02：bp-008 范围与第三阶段授权
+
+Owner 已审阅 G 样本，明确保留 bp-008 “Excerpt from”：这类简介是书中任意片段（多为序言/致谢），不是故事简介；命中 20 本基本为非虚构老书，小说题材标签会造成误导。清单与三个 authority 不变；只授权 en，其它 14 个语种不跑，指定 apply request-id `b23-reclassify-20261002-en`。
+
+执行前线上只读核验全部通过，但原 CLI 的 dry-run 也创建持久化任务；mode 纳入 requestFingerprint，requestToken 只由 request-id 构成。因此原提示词要求同参数先 dry-run 再 apply，会在 apply 触发 IDEMPOTENCY_CONFLICT。按“提示词与脚本矛盾时停止”在建任务前停止；已向 Owner 提出 dry-run 用 `b23-reclassify-20261002-en-dry-run`、apply 保持原 ID 的方案，等待该参数差异裁决。没有创建任何第三阶段任务、没有改写标签；不能把授权记为已经执行。

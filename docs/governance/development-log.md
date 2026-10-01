@@ -53,6 +53,8 @@
 
 **后续待办**：第二阶段完成后停止，Owner 审阅 [汇总与 24 本样本](releases/v0.5.7-impact-report.md)，尤其 bp-008 正文摘录是否符合只修公版套话的范围；若改规则，重新验证配置、报告和前快照。第三阶段须单独授权，只对有变化的 en 逐语种 reclassify_existing，覆盖 43,431 本与变化 133 本分别展示，按 source=auto 前后差集验收。当前实际执行语种为无、定类 apply 0，实际增删未测量；不把预计移除 133 当作实际结果。Alpha/chef 继续观察。annotated v0.5.7 固定 Final 已推送，CHANGELOG 按生成器更新，本地治理完成；Notion 已同步并回读 PASS（2026-10-01T16:01:28.183Z），24 本样本/ID 逐段核对，旧历史与模板保留。领取批次只由 Owner 恢复。回滚目标 v0.5.6 Final 8625021d064f17d37e610d6038023c3ffecd9408，兼容标志必须 Owner 回滚时明确批准并恢复本次 env 备份；代码回滚不恢复第三阶段自动标签。详见 [发布记录](releases/v0.5.7-preproduction.md) 与 [F.1 裁决 ADR](../adr/ADR-V057-PREPRODUCTION-ACCEPTANCE.md)。
 
+**第三阶段追加（2026-10-02 JST）**：Owner 保留 bp-008，并授权只处理 en。执行前 paused/无在途、三个 authority/前快照校验通过；原 dry-run 会创建持久化任务，与 apply 共用指定 request-id 必定幂等冲突，按提示词在建任务前停止，待确认 dry-run 用后缀、apply 用原 ID 的方案。尚无第三阶段 task/dry-run/apply/after 快照，实际增删仍未测量；上述“待授权”为第二阶段交付时状态，不改变原 G 指标或 Final/tag。
+
 ### 2026-10-01 11:32 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.6`（PATCH）；仅 `haiyue-vps`，Owner 授权第二阶段并通知后台站点地图刷新成功，E/F/G 全部通过后收官。
