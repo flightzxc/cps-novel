@@ -59,6 +59,13 @@ describe("B-23 classifier config version and fingerprint", () => {
       version: NEW_VERSION, titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3, descriptionBoilerplate: changed,
     });
     expect(config.fingerprint).not.toBe(NEW_FINGERPRINT);
+    // same code path, same version label, only the list differs
+    const original = createFrozenTagClassifierConfig({
+      version: NEW_VERSION, titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3,
+      descriptionBoilerplate: loadDescriptionBoilerplateAuthority(),
+    });
+    expect(original.fingerprint).toBe(NEW_FINGERPRINT);
+    expect(config.fingerprint).not.toBe(original.fingerprint);
     expect(loadTagClassifierConfig(config)).toEqual(config);
     // dropping the list altogether returns to the previous fingerprint for the same version label
     const without = createFrozenTagClassifierConfig({ version: LEGACY_VERSION, titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3 });
