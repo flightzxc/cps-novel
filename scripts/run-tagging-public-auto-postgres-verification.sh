@@ -84,7 +84,7 @@ P2_06_5_OWNER_DATABASE_URL="$owner_url" \
 P2_06_5_WEB_DATABASE_URL="$web_url" \
 P2_06_5_WORKER_DATABASE_URL="$worker_url" \
 P2_06_5_SCHEDULER_DATABASE_URL="$scheduler_url" \
-npm exec vitest run -- --project node tests/integration/tagging/p2-06-5-postgres.test.ts tests/integration/tagging/public-auto-postgres.test.ts \
+npm exec vitest run -- --project node tests/integration/tagging/p2-06-5-postgres.test.ts tests/integration/tagging/public-auto-postgres.test.ts tests/integration/tagging/task-creation-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 node - "$secret_dir/integration-result.json" <<'NODE'
@@ -92,7 +92,7 @@ const fs = require("node:fs");
 const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const files = report.testResults ?? [];
 const skipped = report.numPendingTests ?? -1;
-if (files.length !== 2 || files.some(f => f.status !== "passed" || !f.assertionResults?.length)
+if (files.length !== 3 || files.some(f => f.status !== "passed" || !f.assertionResults?.length)
     || skipped !== 0 || report.numFailedTests !== 0 || report.numPassedTests < 20) {
   throw new Error(`WO7_INTEGRATION=FAIL passed=${report.numPassedTests} skipped=${skipped}`);
 }

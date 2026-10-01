@@ -85,10 +85,18 @@ describe("bounded novel ID scope", () => {
     const findMany = vi.fn().mockResolvedValue(novelIds.map(row));
     let capturedOptions: unknown;
     const genericTaskCreate = vi.fn().mockResolvedValue({});
+    // B-21: items are no longer a nested createMany inside genericTask.create;
+    // they go through genericTaskItem.createMany in bounded chunks (see
+    // task-creation-chunking.test.ts for the chunk-shape assertions).
+    const genericTaskItemCreateMany = vi.fn().mockResolvedValue({ count: 2 });
     const operationAuditCreate = vi.fn().mockResolvedValue({});
     const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<void>, options: unknown) => {
       capturedOptions = options;
-      await fn({ genericTask: { create: genericTaskCreate }, operationAudit: { create: operationAuditCreate } });
+      await fn({
+        genericTask: { create: genericTaskCreate },
+        genericTaskItem: { createMany: genericTaskItemCreateMany },
+        operationAudit: { create: operationAuditCreate },
+      });
     });
     const db = {
       novel: { findMany },
@@ -109,6 +117,7 @@ describe("bounded novel ID scope", () => {
     expect(result).toMatchObject({ status: "enqueued", eligibleCount: 2 });
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(genericTaskCreate).toHaveBeenCalledTimes(1);
+    expect(genericTaskItemCreateMany).toHaveBeenCalledTimes(1);
     expect(capturedOptions).toEqual({ timeout: TAGGING_TASK_TRANSACTION_TIMEOUT_MS, maxWait: TAGGING_TASK_TRANSACTION_MAX_WAIT_MS });
   });
 });
