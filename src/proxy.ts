@@ -40,6 +40,11 @@ import { pickSiteLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-l
  * `/api/health*` is exempt from the split entirely (both hosts must answer
  * it — UptimeRobot probes both origins).
  *
+ * A path that cannot be normalised (backslash, `%2f`/`%5c`, `.`/`..` segment,
+ * malformed percent sequence) is never treated as public: it counts as an
+ * admin path (404 on the public/unrecognised host) and is also 404 on the
+ * admin host. See `isAdminPath` / `evaluateAdminHostAccess` (B-24).
+ *
  * A denial is a bare 404 (`new NextResponse(null, { status: 404 })`), never
  * a redirect: redirecting would leak the admin hostname to a public-host
  * visitor, which is exactly the kind of information this proxy exists to

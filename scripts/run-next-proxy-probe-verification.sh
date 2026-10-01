@@ -20,6 +20,9 @@ set +x
 #                               the printed NEXT_PROXY_PROBE= line still says FAIL)
 #   NEXT_PROBE_SERVER=standalone  serve with `node .next/standalone/server.js` (the shape the Dockerfile ships)
 #                               instead of `next start` (default); both share Next's router, so both are worth a run
+#   NEXT_PROBE_STRICT=1         pass --strict to the probe: any KNOWN_FINDING counts as a failure. Since B-24 no probe
+#                               carries a knownFinding (known_findings=0), so strict and non-strict agree today;
+#                               the knob keeps that provable and guards any category added later.
 #
 # Acceptance: prints NEXT_PROXY_PROBE=PASS and NEXT_PROXY_PROBE_VERIFICATION=PASS.
 # On a vulnerable Next it is expected to print NEXT_PROXY_PROBE=FAIL (see the
@@ -195,12 +198,15 @@ printf 'PROBE_SERVER=READY mode=%s port=%s next=%s\n' "$server_mode" "$server_po
 
 probe_json="$out_dir/probe-${label}.json"
 probe_status=0
+probe_extra_args=()
+if [ "${NEXT_PROBE_STRICT:-0}" = "1" ]; then probe_extra_args+=(--strict); fi
 node scripts/security/next-proxy-probe.mjs \
   --port "$server_port" \
   --public-host "$public_host" \
   --admin-host "$admin_host" \
   --build-id-file .next/BUILD_ID \
   --next-version "$next_version" \
+  ${probe_extra_args[@]+"${probe_extra_args[@]}"} \
   --json-out "$probe_json" || probe_status=$?
 printf 'PROBE_EVIDENCE=%s\n' "$probe_json"
 

@@ -9,12 +9,14 @@ import {
   PROBE_ADMIN_API,
   PROBE_ADMIN_PAGES,
   PROBE_AUTH_PAGES,
+  UNNORMALIZABLE_VARIANTS,
   buildProbes,
   classify,
   expectAdminApiUnauthenticated,
   expectAdminPageUnauthenticated,
   expectNoContentServed,
   expectProxyDenialSignature,
+  expectPublicPathNotDenied,
   expectPublicAdminPath404,
   isGuardRedirect,
   parseRawResponse,
@@ -97,6 +99,60 @@ describe("next-proxy-probe matrix stays aligned with the real admin surface", ()
     expect(probes.some((probe: { id: string }) => probe.id.startsWith("bearer/admin-page/"))).toBe(true);
   });
 
+  it("B-24: has no PROXY-NORMALIZE-FAILOPEN known finding left — every un-normalisable variant is asserted as the proxy's bare 404 on both hosts", () => {
+    const probes = buildProbes({ buildId: "BUILD" });
+    expect(probes.filter((probe: { knownFinding?: string }) => probe.knownFinding === "PROXY-NORMALIZE-FAILOPEN")).toEqual([]);
+    expect([...UNNORMALIZABLE_VARIANTS].sort()).toEqual(
+      ["backslash", "backslash-upper", "malformed-percent", "percent-encoded-slash", "percent-encoded-slash-upper"],
+    );
+    const proxyDenied = response(404);
+    const nextNotFound = response(404, { body: "<html>not found</html>" });
+    const guardBounce = response(307, { headers: { location: "/login?next=%2Fnovels" } });
+    for (const variant of UNNORMALIZABLE_VARIANTS) {
+      for (const path of [...PROBE_ADMIN_PAGES, ...PROBE_AUTH_PAGES, ...PROBE_ADMIN_API]) {
+        const publicProbe = probes.find((probe: { id: string }) => probe.id === `public/${path}/${variant}`);
+        if (!publicProbe) throw new Error(`public probe missing: ${path} ${variant}`);
+        expect(publicProbe.check(proxyDenied, {}), `${publicProbe.id} accepts the proxy denial`).toBeNull();
+        expect(publicProbe.check(nextNotFound, {}), `${publicProbe.id} rejects Next's own 404`).toMatch(/bare 404/);
+        expect(publicProbe.check(guardBounce, {}), `${publicProbe.id} rejects the page guard bounce`).toMatch(/bare 404/);
+      }
+      for (const path of [...PROBE_ADMIN_PAGES, ...PROBE_ADMIN_API]) {
+        const adminProbe = probes.find((probe: { id: string }) => probe.id === `admin/${path}/${variant}`);
+        if (!adminProbe) throw new Error(`admin probe missing: ${path} ${variant}`);
+        expect(adminProbe.check(proxyDenied, { requestHeaders: [] }), `${adminProbe.id} accepts the proxy denial`).toBeNull();
+        expect(adminProbe.check(guardBounce, { requestHeaders: [] }), `${adminProbe.id} rejects a guard bounce`).toMatch(/bare 404/);
+      }
+    }
+  });
+
+  it("B-24: the un-normalisable probe targets really are classified as admin by isAdminPath once parsed like the proxy sees them", () => {
+    const probes = buildProbes({ buildId: "BUILD" });
+    const targets = probes
+      .filter((probe: { id: string; hostRole: string }) => probe.hostRole === "public" && /^public\/.+\/(?:percent-encoded-slash|percent-encoded-slash-upper|backslash|backslash-upper|malformed-percent)$/.test(probe.id))
+      .map((probe: { target: string }) => probe.target);
+    expect(targets.length).toBe(UNNORMALIZABLE_VARIANTS.length * (PROBE_ADMIN_PAGES.length + PROBE_AUTH_PAGES.length + PROBE_ADMIN_API.length));
+    for (const target of targets) {
+      expect(isAdminPath(new URL(target, "https://novel.test").pathname), target).toBe(true);
+    }
+  });
+
+  it("B-24: ordinary public URLs are probed too, and only the proxy's own bare 404 fails them", () => {
+    const probes = buildProbes({ buildId: "BUILD" });
+    const legit = probes.filter((probe: { group: string }) => probe.group === "public-host-legit-path");
+    expect(legit.length).toBeGreaterThanOrEqual(10);
+    const targets = legit.map((probe: { target: string }) => probe.target);
+    expect(targets.some((target: string) => /\/ko\/novel\/%EC%84%9C/.test(target))).toBe(true);
+    expect(targets.some((target: string) => target.includes("?"))).toBe(true);
+    for (const required of ["/sitemap.xml", "/icon", "/apple-icon", "/robots.txt"]) expect(targets).toContain(required);
+    for (const probe of legit as Array<{ hostRole: string; target: string; check: (r: unknown) => string | null }>) {
+      expect(probe.hostRole).toBe("public");
+      expect(isAdminPath(new URL(probe.target, "https://novel.test").pathname), probe.target).toBe(false);
+      expect(probe.check(response(404)), probe.target).toMatch(/denied by the proxy/);
+      expect(probe.check(response(200, { body: "<html>ok</html>" })), probe.target).toBeNull();
+      expect(probe.check(response(404, { body: "<html>not found</html>" })), probe.target).toBeNull();
+    }
+  });
+
   it("uses the requested build id for Pages-Router-style data URLs", () => {
     const probes = buildProbes({ buildId: "abc123" });
     expect(probes.some((probe: { target: string }) => probe.target.startsWith("/_next/data/abc123/"))).toBe(true);
@@ -147,6 +203,15 @@ describe("next-proxy-probe verdict functions", () => {
     expect(expectAdminApiUnauthenticated(response(403))).toBeNull();
     expect(expectAdminApiUnauthenticated(response(200, { body: '{"data":[1]}' }))).toMatch(/answered/);
     expect(expectAdminApiUnauthenticated(response(500))).toMatch(/answered/);
+  });
+
+  it("public URL not denied: only the proxy's bare 404 (or no response at all) fails; a 5xx fails only where a page must render", () => {
+    expect(expectPublicPathNotDenied(response(200, { body: "<html>ok</html>" }))).toBeNull();
+    expect(expectPublicPathNotDenied(response(404, { body: "<html>not found</html>" }))).toBeNull();
+    expect(expectPublicPathNotDenied(response(503, { body: "Static sitemap is unavailable" }))).toBeNull();
+    expect(expectPublicPathNotDenied(response(404))).toMatch(/denied by the proxy/);
+    expect(expectPublicPathNotDenied(response(0))).toMatch(/no response/);
+    expect(expectPublicPathNotDenied(response(500, { body: "boom" }), { requireNo5xx: true })).toMatch(/failed/);
   });
 
   it("malformed request shapes: 404 or a redirect is fine, served content is not", () => {
