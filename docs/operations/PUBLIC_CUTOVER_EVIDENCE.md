@@ -423,3 +423,18 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 | C.sh（仅共同目录初始化更新；继续等待 B） | `93fec1a3d913112c1c3d44cd167f781698ddddc401e9ce0c3385e83957e52cc1` |
 
 验证：三个脚本 `bash -n`、文档/脚本/远端哈希核对通过；本机同样复现符号链接 0 字节和真实目录 15,898 字节。新增门禁隔离验证：空候选在安装前退出 65，正常候选通过；18 项就绪场景重跑全部通过。测试不执行主机 sudo/nginx/reload。远端保存旧命令再替换，修正版 B 尚未执行。**最新状态：A PASS；B 第二次失败、独立回退复验 PASS，修正版待终端重跑；C、压测、矩阵和其他证据缺口仍未完成。**
+
+### 18:05：B 第三次配置正常，后台 realm 被包装误判；修正待重跑
+
+来源：Owner 回传第三次 B 输出；Codex 于 `2026-10-05T09:06:31Z`（东京时间 18:06:31）独立回退复验，随后读取本次保留的响应头。
+
+- 本次候选 15,898 字节，SHA-256=`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`；安装文件哈希一致。安装器备份 `/opt/cps-novel/shared/nginx-backups/install.crTXBOzn`，nginx 检查通过、443 监听保留。公开 health 第二轮已来自 rehearsal，匿名 401、认证 200、noindex 和身份/数据库就绪通过。空渲染缺陷已通过物理目录及候选门禁规避，底层 release 代码未修复。
+- 后台 health 匿名 401 被包装判断为 `unexpected_realm`。保留目录 `/opt/cps-novel/shared/cutover-stage2-20261005/run.ft3OgzdC` 的 `ready.headers` 实际为 `WWW-Authenticate: Basic realm="CPS Novel Administration"` 和 noindex，与运行 release 后台模板 `/api/health` 的规定完全一致。Codex 新增包装错误地要求后台与公开站同为 `CPS Novel Rehearsal`，导致正常保护响应被误判；**这是包装错误，不是认证保护失效。** 原 18 项 stub 场景沿用了同一错误预期，没有覆盖真实模板的后台 realm，测试盲区已纠正。
+- B 整体仍失败，尚未运行完整发布验证和后续缓存/gzip/参数验收。原 trap 使用 `install.crTXBOzn` 恢复，Owner 输出 `STAGE2_ROLLBACK=PASS block=B`；恢复操作安全备份 `install.dP0if4Qj`。Codex 独立读回三配置哈希与 A 后状态一致，nginx/timer active，匿名发布验证及两个认证 health 的身份/数据库通过；A marker 保留，B marker 不存在。日志 `B-third-failure-readback.log`。C 未执行。
+
+仅调整 B 包装：就绪函数显式接收预期 realm，公开 health 使用 `CPS Novel Rehearsal`，后台 health 使用 `CPS Novel Administration`；旧 `CPS Novel Preproduction` 仍仅作为重载期间可等待状态。候选也检查后台认证指令存在。noindex、认证 200、JSON/身份/数据库、5xx 立即失败、原完整验证、其他验收及回退均保持严格；未修改主机模板、认证配置或不可变 release。
+
+- 测试改用同版 renderer 生成的真实候选，分别从两个 server 的 `/api/health` location 提取 realm 后构造响应，而非将公开 realm 复制到后台；执行命令单中的真实两主机循环验证调用映射。共 **22** 项隔离场景通过，包括正确后台 realm、后台旧 realm 后就绪、两域名顺序通过，以及 realm 对调必须立即失败；原连接/超时/5xx/保护/身份失败场景继续通过。fixture 不执行真实网络/sudo/nginx/Docker。
+- B 其余断言已重新对照模板：公开后台路径/worker/backup 均拒绝，后台根路径拒绝，后台 worker/backup 受保护代理，公开静态缓存为 `max-age=31536000, immutable`。此项是源配置核对，**不冒充主机 rehearsal 实测**；gzip、完整验证及参数依然等待成功运行。
+- 修正版 B.sh SHA-256=`d12a20a821ad8a09a7759078dbe93f9eae7358125c288ea39d1e8dd021c82642`，本地/远端语法及哈希通过，保留原 B 后替换；A/C 哈希保持上一节不变。证据保留前三轮真实失败，不将包装修正或 fixture PASS 当作 B 完成。
+- **最新状态：A PASS；B 第三次失败并回退复验 PASS，realm 包装修正版待终端重跑；C、外部压测、本地矩阵及其他缺证项继续待办。**

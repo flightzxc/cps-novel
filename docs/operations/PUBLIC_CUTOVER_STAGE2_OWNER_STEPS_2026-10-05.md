@@ -1,6 +1,6 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 两次失败、回退已复核，已定位符号链接路径下空渲染，修正版待重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 第三次被包装的后台 realm 预期误判，回退已复核；已按两主机修正，待重跑。C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
@@ -173,9 +173,11 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 预期：两个 `RELEASE_VERIFY=PASS`、`CAPACITY=PASS`、旧域名匿名 401/认证 200 且 noindex、新域名普通路径 404；最终 `STAGE2_REHEARSAL=PASS`。任何失败使用 B 自己的安装器备份恢复到执行 B 前的状态；保留 A 的证书引导。
 
-14:21 首次 B 安装成功后，完整验证在认证 health 请求遭遇 curl 7，已使用该次安装器备份恢复到 A 后状态，B 未通过。此版在完整验证前，对两个旧域名分别执行最多 10 次、每次 curl 最多 3 秒、间隔 1 秒的就绪检查：匿名必须 401/noindex 且 realm 为 `CPS Novel Rehearsal`，认证必须 200/noindex，JSON 的 ok、运行 commit、数据库 passed 正确。只重试连接失败/空响应/超时，以及仍明确来自旧 preprod realm 的 401；任何 5xx、其他状态、保护缺失、错误 JSON 或身份立即失败。就绪通过后仍原样运行完整验证，验证失败不会重试绕过。
+14:21 首次 B 安装成功后，完整验证在认证 health 请求遭遇 curl 7，已使用该次安装器备份恢复到 A 后状态，B 未通过。此版在完整验证前，对两个旧域名分别执行最多 10 次、每次 curl 最多 3 秒、间隔 1 秒的就绪检查：匿名必须 401/noindex，公开域名 realm 为 `CPS Novel Rehearsal`，后台域名为模板规定的 `CPS Novel Administration`；认证必须 200/noindex，JSON 的 ok、运行 commit、数据库 passed 正确。只重试连接失败/空响应/超时，以及仍明确来自旧 preprod realm 的 401；任何 5xx、其他状态、保护缺失、错误 JSON 或身份立即失败。就绪通过后仍原样运行完整验证，验证失败不会重试绕过。
 
 17:45 第二次 B 十轮等待失败，诊断发现安装的站点配置为 0 字节，443 listener 消失；随后回退复验通过。已复现：逻辑 `current` 路径下 Node CLI 的入口判断不匹配真实模块路径，正常退出却不渲染；同版脚本在真实 release 目录渲染 15,898 字节。公共初始化改用 `cd -P`；B 在任何安装前先检查候选非空、两旧主机及 rehearsal 认证指令，安装后再比对实际文件哈希。诊断 `systemctl` 使用 `--no-pager`，避免停在分页器导致回退等待。A 已完成，无须重新签发；这里只更新三块共同的目录初始化，不修改不可变 release。
+
+18:05 第三次 B 已正确安装候选，公开 health 就绪通过；后台被包装错误地要求公开站 realm，触发 `unexpected_realm` 并回退。本版按两主机分别使用模板规定的 realm；健康身份、noindex、完整验证及回退门禁保持不变。
 
 ```bash
 [[ "$(cat "$stage2_root/certificate.pass")" == "$GIT_COMMIT" ]] || exit 65
@@ -199,6 +201,7 @@ scripts/preproduction/render-nginx.sh --mode rehearsal --output "$stage2_work/re
 grep -q 'server_name www.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
 grep -q 'server_name zbcwf.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
 grep -q 'auth_basic "CPS Novel Rehearsal";' "$stage2_work/rehearsal.candidate" || exit 65
+grep -q 'auth_basic "CPS Novel Administration";' "$stage2_work/rehearsal.candidate" || exit 65
 stage2_candidate_sha="$(sha256sum "$stage2_work/rehearsal.candidate" | cut -d' ' -f1)"
 printf 'REHEARSAL_CANDIDATE=PASS sha256=%s bytes=%s\n' "$stage2_candidate_sha" "$(stat -c %s "$stage2_work/rehearsal.candidate")"
 PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --mode rehearsal | tee "$stage2_work/install.log"
@@ -206,7 +209,7 @@ stage2_backup="$(sed -n 's/^NGINX_BACKUP=//p' "$stage2_work/install.log")"
 [[ -n "$stage2_backup" && "$stage2_backup" != *$'\n'* ]] || exit 65
 [[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d' ' -f1)" == "$stage2_candidate_sha" ]] || { echo 'STAGE2=FAIL installed_candidate_mismatch'; exit 65; }
 stage2_rehearsal_ready() {
-  local url="$1" attempt code curl_status
+  local url="$1" expected_realm="$2" attempt code curl_status
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
     curl_status=0
     code="$(curl -q --noproxy '*' --connect-timeout 2 --max-time 3 -sS -o "$stage2_work/ready.body" -D "$stage2_work/ready.headers" -w '%{http_code}' "$url" 2>"$stage2_work/ready.error")" || curl_status=$?
@@ -214,7 +217,7 @@ stage2_rehearsal_ready() {
     case "$curl_status:$code" in
       0:401)
         grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$stage2_work/ready.headers" || { echo 'REHEARSAL_READY=FAIL reason=missing_noindex'; return 65; }
-        if grep -qi '^WWW-Authenticate: Basic realm="CPS Novel Rehearsal"' "$stage2_work/ready.headers"; then
+        if grep -qi "^WWW-Authenticate: Basic realm=\"$expected_realm\"" "$stage2_work/ready.headers"; then
           curl_status=0
           code="$(curl -q --noproxy '*' --config "$PREPROD_CURL_CONFIG" --connect-timeout 2 --max-time 3 -sS -o "$stage2_work/ready.body" -D "$stage2_work/ready.headers" -w '%{http_code}' "$url" 2>"$stage2_work/ready.error")" || curl_status=$?
           printf 'REHEARSAL_READY_ATTEMPT=%s auth=1 url=%s http=%s curl_exit=%s\n' "$attempt" "$url" "$code" "$curl_status"
@@ -239,7 +242,9 @@ stage2_rehearsal_ready() {
   return 65
 }
 for url in "$SITE_URL/api/health" "$ADMIN_CANONICAL_ORIGIN/api/health"; do
-  if stage2_rehearsal_ready "$url"; then :; else
+  stage2_expected_realm='CPS Novel Rehearsal'
+  [[ "$url" != "$ADMIN_CANONICAL_ORIGIN/api/health" ]] || stage2_expected_realm='CPS Novel Administration'
+  if stage2_rehearsal_ready "$url" "$stage2_expected_realm"; then :; else
     stage2_ready_status=$?
     sha256sum /etc/nginx/nginx.conf /etc/nginx/conf.d/cps-novel-preprod.conf
     systemctl --no-pager show nginx -p ExecReload -p MainPID || true
