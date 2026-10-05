@@ -617,3 +617,75 @@ sys.stdout.buffer.write(r.stdout);sys.stderr.buffer.write(r.stderr)
 - 本段全部已知偏离：密码由 Owner 在自己终端输入并回传；独立 Git worktree fallback；A 就绪等待；B 物理 release 目录/非空候选门禁/无分页诊断/按主机 realm/Owner worker 采样与状态停止保留 rehearsal；C 主配置独立回退范围；本机矩阵临时 restart 就绪包装；外部压测未执行；恢复演练暂缓。历史记录保留各次实际失败、复验及原脚本缺口；底层空渲染、矩阵 reset 就绪及 worker 查询索引修复均未在此分支实施。
 
 **第二段尚未全部完成：剩余阻塞为外部 HTTPS 压测和上述待补证据。** 本段没有公共 API、类型、数据库结构、站点地址、模板限流数值或应用改动；Basic Auth/noindex 保留、IndexNow 关闭、批次未恢复、没有新提醒。只提交证据分支，不合并或进入切换当天。
+
+
+### Owner 最终补证与收尾：第二段准备结束，未对外开放
+
+本节为第二段最新结论，取代上节“尚未全部完成”的接续状态；前文保留为各时点历史证据，不追改未执行项为 PASS。Owner 于 2026-10-05 明确提供 NAS 日志、指定已提交的凭据校验任务，并决定 X8 排重豁免、外部压测延后、完整恢复继续暂缓，要求提交证据分支后收尾停止。决定见 [收尾 ADR](../adr/ADR-CUTOVER-STAGE2-CLOSE-WITH-DEFERRED-EXTERNAL-LOAD.md)。
+
+#### NAS：Owner 取得日志，Codex 与 VPS 只读比对通过
+
+来源：Owner 在 NAS `DXP4800PLUS-ED3` 上取得 `~/cps-novel-offsite/logs/offsite-pull.log` 尾部与目录 `/home/flightzxx/Online Document/VPS-novel` 列表，回传到本会话。Codex 未登录 NAS，未重新运行拉取或 NAS 散列计算。NAS 最近记录如下；时间取日志 UTC，不据目录的显示时间推定 NAS 时区：
+
+| 日志结束时间 UTC | 状态及来源 |
+|---|---|
+| 2026-10-04T18:15:24Z | `OFFSITE_PULL=PASS status=pulled`，exit=0；本段尾部没有该次 start 时间 |
+| 2026-10-04T22:00:18Z | start=22:00:01Z，`OFFSITE_PULL=PASS status=already_present`，exit=0 |
+| 2026-10-05T04:00:18Z | start=04:00:02Z，`OFFSITE_PULL=PASS status=already_present`，exit=0 |
+| 2026-10-05T10:00:18Z | start=10:00:01Z，`OFFSITE_PULL=PASS status=already_present`，exit=0 |
+
+后三次 start 相隔约六小时，支持 Owner 所述每六小时运行；18:15 的初次 pulled 不误记为与 22:00 相隔六小时。后三次同时含 `OFFSITE_PULL_TRANSPORT=gate`、`BACKUP_EXPORT_MANIFEST=PASS`；最新一次关键输出为：
+
+```text
+OFFSITE_PULL_REMOTE_LATEST=cps-novel-20261004T143811Z.dump
+OFFSITE_PULL=PASS file=cps-novel-20261004T143811Z.dump size=283215297 sha256=0ee4477b463796ab80cae4ae2b52d6512e2106571599f26a99d415bc08c58546 status=already_present manifest=/home/flightzxx/Online Document/VPS-novel/SHA256SUMS
+[2026-10-05T10:00:18Z] offsite-pull end exit=0
+```
+
+Owner 目录输出显示 10-04 dump/metadata/sha256 三件分别为 283,215,297 / 260 / 98 bytes，10-03 同样三件仍保留（dump 283,213,892 bytes），并有 948-byte SHA256SUMS。不将截取的目录列表当作全目录数量或全部历史文件的验证。
+
+Codex 于 `2026-10-05T12:27:45Z`（东京时间 21:27:45）从 deploy、真实 Final release 只读复核 VPS。使用已安装受限 offsite-readonly-gate 的 `list` 动作，从 dump stat 及其 `.sha256` 第一列取得元数据；安装入口与运行 release 脚本 SHA-256 均为 `83dea1bfd8a8d4b6447bb126dae50ff72ad9580d15708c715deadb27f9a1f6cb`。未读取 dump 正文、凭据或私钥，未修改 sudoers/备份权限，未 root 登录。
+
+```text
+name=cps-novel-20261004T143811Z.dump size=283215297 mtime=1791124749 sha256=0ee4477b463796ab80cae4ae2b52d6512e2106571599f26a99d415bc08c58546
+NAS_VPS_SIZE_SIDECAR_MATCH=PASS source=readonly_gate_list
+```
+
+VPS 同名三件 stat 大小仍为 283,215,297 / 260 / 98 bytes，0600 root。与 Owner 的 NAS 日志及目录大小、散列逐项一致，**NAS 拉取成功证据已取得；NAS/VPS 同名大小与 sidecar 散列比对 PASS**。最新 NAS 日志为 10:00:18Z，不能扩称此后尚未发生的拉取成功；VPS dump 实际散列和归档目录读取沿用 C 实测，本次只读比对不冒充重新完整恢复。
+
+#### 凭据：Owner 提交校验，worker 执行成功的记录已核对
+
+同一次 deploy 只读 SQL 会话 `BEGIN READ ONLY`、statement_timeout=15s、最终 ROLLBACK；只选择任务/审计元数据、允许的结果字段及指纹八位前缀，不输出完整 payload/result、密文或令牌。
+
+| 记录 | Codex 本次只读结果（东京时间 +0900） |
+|---|---|
+| 指定任务 | `9f1d906b-88a9-402d-81e1-e71577765e16`，credential.validate.v1，completed；total=1、success=1、failed=0；requested_at=2026-10-05 21:17:12.822，completed_at=21:17:13.450174 |
+| 执行条目 | `54a1d35b-bfd2-4db5-8a7c-10860f822383`，target=当前 credential `4410a759-8485-4fb8-954c-a497b8e6a229`，success，attempt=1；脱敏 result.status=active、code=null，result.lastValidatedAt=`2026-10-05T12:17:13.440Z` |
+| 排队审计 | operation_audit id=603000，credential.validate.queued，actor_type=admin，task_id 为上述任务，entity_id 为当前 credential；created_at=21:17:12.837 |
+| 完成审计 | operation_audit id=603001，credential.validate.completed，actor_type=admin，task_type=credential.validate.v1，task/entity 对应；created_at=21:17:13.466 |
+| 当前凭据 | active 恰为一条、指纹前缀 44fb1a40；expires_at=2026-10-12 12:38:58；last_validated_at=2026-10-05 21:17:13.440，与执行条目时间精确一致，早于完成审计 |
+| 变更日志 | credential_change_log id=6，action=validate，当前 credential，detail.status=active，created_at=21:17:13.459 |
+| 本机排重与任务边界 | 与当前到期时间相同的其他凭据数量 0；指定领取批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 仍 paused；tagging pending/processing 为 0 |
+
+任务成功、当前 active 及关联完成审计/更新时间的 SQL 断言通过，`STAGE2_CLOSURE_READONLY=PASS`，脱敏日志 `.tmp/cutover-stage2/stage2-owner-closure-readback.log`。**续期后当前凭据 worker 校验证据 PASS**，不再仅依赖同步 replace 时的 last_validated_at；前轮“validate log=0”是当时真实状态，现由 Owner 新提交任务补齐。actor_type=admin 是同版 handler 的审计约定，任务类型/执行条目和 task_id 链接确认 worker 执行；Codex 没有提交该任务、重试、续期或恢复领取批次。
+
+凭据三项历史条件分别记录：旧 superseded 令牌已到期的只读证据保留；当前新凭据 worker 校验已补齐，但上游独立签发来源未另行取证，不把来源验证写为实测 PASS；本机到期排重 PASS，X8 到期排重按 Owner 明确决定 **WAIVED**（每周过期，旧令牌自然失效），未访问 X8、未取得其排重实测。Owner 按本次列明的补证与收尾范围结束第二段，不继续扩展签发来源调查。
+
+#### 最终验收与停止边界
+
+| 本段事项 | 最终结论 |
+|---|---|
+| DNS、运行 Final 身份及安全门禁 | 预检与各块门禁 PASS；最新只读会话仍为同一完整 Final，IndexNow 闭闸、领取批次 paused、自动分类在途零 |
+| A 证书 | 三个指定 SAN、renew dry-run、timer PASS；备份和有效期见 A 记录 |
+| B rehearsal | 完整/匿名验证、隔离、noindex、缓存/gzip、七项容量及 Owner worker 采样 PASS |
+| C 连接数与本机备份 | 唯一 worker_connections=4096；独立 nginx 备份、本机 dump 三件/实际散列/归档目录读取 PASS |
+| 本地限流逻辑 | `NGINX_MATRIX_ALL=PASS`；按 Owner 作为本段逻辑验收依据，保留 restart 就绪包装与两次原运行器失败 |
+| NAS | Owner 日志的最近拉取成功已取得；Codex 同名大小和 sidecar 散列比对 PASS；完整恢复未验证 |
+| 当前凭据 worker 校验 | 指定任务 completed/success、完成审计、变更日志与 last_validated_at 关联核对 PASS |
+| X8 排重 | WAIVED（Owner）；不是实测 PASS |
+| 外部 HTTPS 压测 | DEFERRED（Owner），推迟到确定对外开放日期之前；本轮未执行、没有请求比例/吞吐/延迟分位或线上零 5xx 结论 |
+| 异地完整恢复演练 | DEFERRED（Owner）；恢复风险继续保留，异地副本可恢复性未经实测 |
+
+限流建议保持模板现值，本段不再以外部直连故障阻止收尾；外部性能数据待未来开放前取得，矩阵 PASS 不代替性能数据。前述底层 renderer 路径判断、矩阵 reset 就绪及 worker 冷读查询索引的后续修复事项仍不属于此次证据提交。
+
+**第二段准备按 Owner 最新决定收尾；提交并 push 本证据分支后停止。** 主机保持既有受保护 rehearsal，Basic Auth/noindex 保留，新域名普通路径拒绝，未正式切换；不安装 public 模式，不改变站点地址、模板、应用或数据库，不开 IndexNow，不操作 X8，不恢复批次，不新增提醒或自动后续任务。本次最终提交只包含文档/ADR；不合并。分支 HEAD 由最终交付回报给出，避免在提交内写入自身哈希。

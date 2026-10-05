@@ -1,14 +1,14 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A、B、C 已执行并复核通过。B 按 Owner 授权的 worker 预热/三次采样规则验收；C 已将连接数从 768 改为 4096，保留独立备份，并完成最新逻辑备份散列和目录读取验收。当前为受 Basic Auth/noindex 保护的 rehearsal。本文件是命令单，完成证据及剩余事项见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：第二段准备按 Owner 2026-10-05 最新决定收尾并停止。A/B/C、本地完整矩阵已通过；NAS 补证与 VPS 比对、指定凭据 worker 校验只读核对通过；X8 排重豁免，外部压测及异地完整恢复演练暂缓。当前为受 Basic Auth/noindex 保护的 rehearsal，连接数 4096，新域名拒绝业务内容。完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)，收尾边界见 [ADR](../adr/ADR-CUTOVER-STAGE2-CLOSE-WITH-DEFERRED-EXTERNAL-LOAD.md)。未对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
 下面四个代码块依次为公共初始化、A、B、C。Codex 将公共初始化分别拼到 A/B/C 前，生成并上传无秘密的 bash 文件至 `/opt/cps-novel/shared/cutover-stage2-20261005/commands/`；上传后核对 SHA-256。**一次只运行一个块，回传输出并由 Codex 核对通过后再运行下一块。**
 
-A/B/C 无需重跑，以下命令保留为执行记录。C 明确要求原值 768，已成功变为 4096 后再次执行会被门禁拒绝。后续仅继续已批准的外部压测及证据补齐；不进入切换当天。
+A/B/C 无需重跑，以下命令保留为执行记录。C 明确要求原值 768，已成功变为 4096 后再次执行会被门禁拒绝。本段结束后停止；外部压测留待确定对外开放日期之前，不由本命令单自动接续。
 
-接续：Docker 已恢复，本地完整矩阵在临时测试容器 restart 就绪包装下取得 `NGINX_MATRIX_ALL=PASS`；原脚本和模板未改，执行偏离见证据。外部旧站 HTTPS 直连仍被重置，压测暂停；NAS 及凭据缺证项待补。
+本地完整矩阵在临时测试容器 restart 就绪包装下取得 `NGINX_MATRIX_ALL=PASS`；原脚本和模板未改，执行偏离见证据。Owner 已提供 NAS 成功日志并提交凭据校验，Codex 只读核对通过；不将 X8 豁免、外部压测延后或完整恢复暂缓标记为实测 PASS。
 
 三块都在服务器真实 release 的 bash 会话内执行；每块开头 `sudo -v`，同块复用缓存。若中途退出或缓存失效，按 sudo 提示重新输入；不改 sudoers。
 
