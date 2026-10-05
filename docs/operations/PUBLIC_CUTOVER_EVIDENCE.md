@@ -438,3 +438,20 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 - B 其余断言已重新对照模板：公开后台路径/worker/backup 均拒绝，后台根路径拒绝，后台 worker/backup 受保护代理，公开静态缓存为 `max-age=31536000, immutable`。此项是源配置核对，**不冒充主机 rehearsal 实测**；gzip、完整验证及参数依然等待成功运行。
 - 修正版 B.sh SHA-256=`d12a20a821ad8a09a7759078dbe93f9eae7358125c288ea39d1e8dd021c82642`，本地/远端语法及哈希通过，保留原 B 后替换；A/C 哈希保持上一节不变。证据保留前三轮真实失败，不将包装修正或 fixture PASS 当作 B 完成。
 - **最新状态：A PASS；B 第三次失败并回退复验 PASS，realm 包装修正版待终端重跑；C、外部压测、本地矩阵及其他缺证项继续待办。**
+
+### 18:22：B 完整发布验证通过，worker 503 中止；当前健康复验通过，待整体重跑
+
+来源：Owner 回传第四次 B 输出；Codex 于 `2026-10-05T09:23:03Z` 起执行只读诊断。运行目录 `/opt/cps-novel/shared/cutover-stage2-20261005/run.v3BG3ovw`。
+
+- 本次候选/安装 SHA-256=`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`、15,898 字节；安装器备份 `/opt/cps-novel/shared/nginx-backups/install.8eDjjJzx`。两个域名就绪通过，**原完整 `RELEASE_VERIFY=PASS`、独立 `RELEASE_VERIFY=PASS mode=anonymous_only` 均已实测通过**。旧首页/后台登录匿名 401、认证 200/noindex，新域名六项普通路径 404、公开后台路径和 worker/backup 404、后台根路径 404 均通过。
+- 随后后台认证 `/api/health/worker` 返回 **503**，预期 200 的门禁失败，B 停止；backup、缓存/gzip、七项参数及 B 完成标记尚未验收。Owner 输出回退 PASS，恢复所用来源为 `install.8eDjjJzx`；回退操作安全备份为 `install.SLdVD5Hg`。Codex 复验主/站点/bootstrap 完整哈希与 A 后状态一致，nginx/timer active，六容器 healthy，匿名发布验证 PASS。`B-fourth-failure-readback.log` 保留失败响应头的 503/noindex；未保留当时正文，不能补造 workerStatus。
+- nginx admin access 日志可由 deploy 只读取得；仅筛选该 health 请求的时间、状态及耗时：`2026-10-05T18:22:32+09:00`，status=503，limit_req_status=`PASSED`，request_time=`1.512`，upstream_response_time=`1.512`。由此确认上游返回 503，非限流拒绝。源码 `src/server/health/worker-status.ts` 在过期处理锁非零时 degraded，在查询拒绝/超时后 failed，两者都为 503；共享探测预算 `HEALTH_DATABASE_TIMEOUT_MS=1500`。耗时符合查询超时表现，但**原 JSON 未保存，无法唯一确证 failed/degraded，也无法归因于某条 SQL或连接池**。
+- 回退后的五次独立 worker 请求均 200、workerStatus=`ok`、expiredLocks=0，耗时 91–150ms，lastHeartbeatAgeSeconds=null；源码将无历史心跳按 idle 处理，此字段不参与健康判定。backup 返回 200、backupStatus=`ok`、source=`status_file`，ageHours≈18.72。只读 SQL 过期处理锁零组，数据库连接为 active 1、idle 14；没有改任务、恢复批次或创建校验。日志 `worker-health-diagnostic.log`。
+- 直接应用端 worker/backup 分别 200/ok、173ms/7ms，维护 marker 不存在。只读 EXPLAIN ANALYZE 显示心跳查询采用并行全表扫描，过滤约 44.8 万条无心跳行，执行 90.466ms；这是当前查询计划/耗时证据，**不能证明失败瞬间的冷缓存或查询耗时**。没有新增索引、调探测预算或数据库参数。日志 `B-worker-upstream-diagnostic.log`。
+- 额外隔离原因检查：在恢复后的 preprod 只读复跑同版完整发布验证成功，紧接着 worker 返回 200/ok、90.357ms；没有复现“完整验证后必然 503”。日志 `B-worker-after-verifier-diagnostic.log`。该结果只说明当前状态，不将第四次 B 的 503 或整体失败改为 PASS。
+
+补充 B 包装的诊断及验收：安装前先检查现有 worker/backup；原 rehearsal 健康验收处再次检查。每次保留状态正文/响应头，并只打印 workerStatus、expiredLocks、心跳年龄、backupStatus、备份年龄/source、检查时间及 HTTP/耗时。须 **HTTP 200 + JSON 状态 ok + noindex**，worker 还须 expiredLocks=0；任何传输失败、非 200、非 ok、无 noindex 均立即失败。即使 JSON 为 ok 但 HTTP 503 也不能通过；backup 的 unconfigured/200 不冒充备份健康。**没有给 503 加重试、放宽状态码或增加预算；失败仍按原备份恢复。**
+
+- 10 项健康门禁隔离场景通过：worker/backup 正常，failed/degraded 的 503、503 配 ok 正文、200 配 failed 正文、backup unconfigured、坏 JSON、noindex 缺失及连接失败；额外 JSON 字段不会被打印。原 22 项就绪场景重跑全部通过；测试不执行真实 sudo/nginx/Docker/网络。新 helper 在当前 preprod 对两个端点实测通过，只用于验证诊断函数，不执行安装或冒充 rehearsal。
+- 当前 B.sh SHA-256=`c0c00f0e6ade8adacb503d26bc733c240bb05f38c746e79a1044ed2c22a18878`；文档/脚本/远端哈希、bash 语法一致，保存旧 B 再替换；A/C 不变。原完整验证、旧/新域名保护、缓存/gzip、容量和回退门禁保留。
+- **最新状态：A PASS；B 已取得完整及匿名发布验证 PASS，但第四次整体因真实 503 失败并回退；当前健康复验 PASS，新诊断版待整体重跑。** C 及后续压测/矩阵等仍未完成，尚未对外开放。

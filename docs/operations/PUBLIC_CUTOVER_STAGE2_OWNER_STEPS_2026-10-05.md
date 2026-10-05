@@ -1,6 +1,6 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 第三次被包装的后台 realm 预期误判，回退已复核；已按两主机修正，待重跑。C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 第四次完整发布验证通过，但 worker 接口 503，已回退；当前健康复验通过，补充正文及耗时记录后待重跑。C 待 B 整体通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
@@ -179,6 +179,8 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 18:05 第三次 B 已正确安装候选，公开 health 就绪通过；后台被包装错误地要求公开站 realm，触发 `unexpected_realm` 并回退。本版按两主机分别使用模板规定的 realm；健康身份、noindex、完整验证及回退门禁保持不变。
 
+18:22 第四次 B 的完整/匿名发布验证通过，但后台 worker 接口返回 503，已回退。nginx 记录为上游 503、耗时 1.512 秒、限流 PASSED；与应用 1.5 秒探测预算相符，但当时 JSON 未保存，不能唯一确证超时原因。回退后五次 worker=ok/过期锁 0，backup=ok。本版在安装前和原健康验收位置都保存并检查 worker/backup 状态、耗时及 noindex；任何传输失败、非 200 或非 ok 仍失败，不重试 503、不增加预算、不修改任务或主机模板。
+
 ```bash
 [[ "$(cat "$stage2_root/certificate.pass")" == "$GIT_COMMIT" ]] || exit 65
 stage2_backup=''
@@ -196,6 +198,17 @@ stage2_finish() {
 trap stage2_finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+stage2_service_health() {
+  local endpoint="$1" metrics code duration json_status=0
+  metrics="$(curl -q --noproxy '*' --config "$PREPROD_CURL_CONFIG" --connect-timeout 5 --max-time 20 -sS -o "$stage2_work/$endpoint-health.body" -D "$stage2_work/$endpoint-health.headers" -w '%{http_code} %{time_total}' "$ADMIN_CANONICAL_ORIGIN/api/health/$endpoint")" || { echo "SERVICE_HEALTH=FAIL endpoint=$endpoint reason=transport"; return 65; }
+  read -r code duration <<<"$metrics"
+  printf 'SERVICE_HEALTH endpoint=%s http=%s time_total=%s\n' "$endpoint" "$code" "$duration"
+  node -e 'try { const h=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); const worker=process.argv[2]==="worker"; console.log(JSON.stringify(worker ? {workerStatus:h.workerStatus,expiredLocks:h.expiredLocks,lastHeartbeatAgeSeconds:h.lastHeartbeatAgeSeconds,checkedAt:h.checkedAt} : {backupStatus:h.backupStatus,ageHours:h.ageHours,source:h.source,checkedAt:h.checkedAt})); if(worker ? h.workerStatus!=="ok" || h.expiredLocks!==0 : h.backupStatus!=="ok") process.exit(65); } catch { console.log("SERVICE_HEALTH=FAIL reason=invalid_json"); process.exit(65); }' "$stage2_work/$endpoint-health.body" "$endpoint" || json_status=$?
+  [[ "$code" == 200 && "$json_status" == 0 ]] || return 65
+  grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$stage2_work/$endpoint-health.headers" || return 65
+  printf 'SERVICE_HEALTH=PASS endpoint=%s\n' "$endpoint"
+}
+for endpoint in worker backup; do stage2_service_health "$endpoint"; done
 scripts/preproduction/render-nginx.sh --mode rehearsal --output "$stage2_work/rehearsal.candidate"
 [[ -s "$stage2_work/rehearsal.candidate" ]] || { echo 'STAGE2=REFUSED empty_rehearsal_candidate'; exit 65; }
 grep -q 'server_name www.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
@@ -260,7 +273,7 @@ stage2_probe https://www.bangbangji.cloud/dashboard 404
 stage2_probe https://www.bangbangji.cloud/api/health/worker 404
 stage2_probe https://www.bangbangji.cloud/api/health/backup 404
 stage2_probe https://zbcwf.bangbangji.cloud/ 404
-for endpoint in worker backup; do stage2_probe "https://zbcwf.bangbangji.cloud/api/health/$endpoint" 200 1; done
+for endpoint in worker backup; do stage2_service_health "$endpoint"; done
 static_path="$(curl --noproxy '*' --connect-timeout 5 --max-time 20 --fail -sS --config "$PREPROD_CURL_CONFIG" https://www.bangbangji.cloud/ | node -e 'let t="";process.stdin.on("data",d=>t+=d);process.stdin.on("end",()=>{const m=t.match(/\/_next\/static\/[^"<>\s]+\.(?:js|css)/);if(!m)process.exit(65);console.log(m[0]);});')"
 stage2_probe "https://www.bangbangji.cloud$static_path" 200 1
 grep -qi '^Cache-Control:.*max-age=31536000.*immutable' "$stage2_work/headers" || exit 65
