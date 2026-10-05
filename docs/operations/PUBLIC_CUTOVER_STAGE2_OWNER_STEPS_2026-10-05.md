@@ -1,6 +1,6 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 第四次完整发布验证通过，但 worker 接口 503，已回退；当前健康复验通过，补充正文及耗时记录后待重跑。C 待 B 整体通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 第四次完整发布验证通过后因 worker 503 回退。Owner 已授权 worker 预热/三次采样及保留 rehearsal 的新规则，命令已更新，B 待整体重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
@@ -171,7 +171,7 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 前提：A 输出已经回传并由 Codex 确认通过。做什么：只安装 rehearsal，运行完整发布验证及独立匿名复验、主机隔离和缓存/压缩检查，读回并断言七项数据库参数。
 
-预期：两个 `RELEASE_VERIFY=PASS`、`CAPACITY=PASS`、旧域名匿名 401/认证 200 且 noindex、新域名普通路径 404；最终 `STAGE2_REHEARSAL=PASS`。任何失败使用 B 自己的安装器备份恢复到执行 B 前的状态；保留 A 的证书引导。
+预期：两个 `RELEASE_VERIFY=PASS`、`CAPACITY=PASS`、旧域名匿名 401/认证 200 且 noindex、新域名普通路径 404；最终 `STAGE2_REHEARSAL=PASS`。站点验收失败使用 B 自己的安装器备份恢复到执行 B 前的状态；保留 A 的证书引导。Owner 新规则下的 worker 采样不通过仅停止并保留 rehearsal，不写 B 完成标记，不进入 C。
 
 14:21 首次 B 安装成功后，完整验证在认证 health 请求遭遇 curl 7，已使用该次安装器备份恢复到 A 后状态，B 未通过。此版在完整验证前，对两个旧域名分别执行最多 10 次、每次 curl 最多 3 秒、间隔 1 秒的就绪检查：匿名必须 401/noindex，公开域名 realm 为 `CPS Novel Rehearsal`，后台域名为模板规定的 `CPS Novel Administration`；认证必须 200/noindex，JSON 的 ok、运行 commit、数据库 passed 正确。只重试连接失败/空响应/超时，以及仍明确来自旧 preprod realm 的 401；任何 5xx、其他状态、保护缺失、错误 JSON 或身份立即失败。就绪通过后仍原样运行完整验证，验证失败不会重试绕过。
 
@@ -181,14 +181,20 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 18:22 第四次 B 的完整/匿名发布验证通过，但后台 worker 接口返回 503，已回退。nginx 记录为上游 503、耗时 1.512 秒、限流 PASSED；与应用 1.5 秒探测预算相符，但当时 JSON 未保存，不能唯一确证超时原因。回退后五次 worker=ok/过期锁 0，backup=ok。本版在安装前和原健康验收位置都保存并检查 worker/backup 状态、耗时及 noindex；任何传输失败、非 200 或非 ok 仍失败，不重试 503、不增加预算、不修改任务或主机模板。
 
+Owner 后续回传主控只读排查，确认第四次 503 为无索引健康查询的冷读超时误报，并授权替代上段单次 worker 门禁：预热一次，等待 10 秒，再取三次；三次中至少一次 HTTP 200、workerStatus=ok、expiredLocks=0，且预热及三次均无 expiredLocks>0 才通过。四次均保存完整合规 JSON、响应头、HTTP/耗时，三次采样写入证据；预热成功不计入三次通过条件。三次均 failed 或任一次过期锁非零则停止并保留 rehearsal，不自动回退 nginx。传输/认证/保护异常、非合规响应或其他站点验收失败仍按原站点回退门禁处理。安装前保留 backup 检查，worker 只在安装后的原验收位置执行这组采样。根治交主控 v0.5.8 开发单，本段不改应用、索引或探测预算，决定见 [ADR](../adr/ADR-CUTOVER-STAGE2-WORKER-HEALTH-SAMPLING.md)。
+
 ```bash
 [[ "$(cat "$stage2_root/certificate.pass")" == "$GIT_COMMIT" ]] || exit 65
+rm -f "$stage2_root/rehearsal.pass"
 stage2_backup=''
 stage2_ok=0
+stage2_worker_stop=0
 stage2_finish() {
   local status=$?
   trap - EXIT INT TERM
-  if [[ "$stage2_ok" != 1 && -n "$stage2_backup" ]]; then
+  if [[ "$stage2_ok" != 1 && "$stage2_worker_stop" == 1 ]]; then
+    printf 'STAGE2_STOPPED=worker_health rehearsal_retained=1 backup=%s logdir=%s\n' "$stage2_backup" "$stage2_work"
+  elif [[ "$stage2_ok" != 1 && -n "$stage2_backup" ]]; then
     if PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --restore-backup "$stage2_backup"; then
       echo 'STAGE2_ROLLBACK=PASS block=B'
     else status=71; echo 'STAGE2_ROLLBACK=FAIL block=B'; fi
@@ -208,7 +214,52 @@ stage2_service_health() {
   grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$stage2_work/$endpoint-health.headers" || return 65
   printf 'SERVICE_HEALTH=PASS endpoint=%s\n' "$endpoint"
 }
-for endpoint in worker backup; do stage2_service_health "$endpoint"; done
+stage2_worker_health_sample() {
+  local sample metrics curl_status
+  for sample in 0 1 2 3; do
+    curl_status=0
+    metrics="$(curl -q --noproxy '*' --config "$PREPROD_CURL_CONFIG" --connect-timeout 5 --max-time 20 -sS -o "$stage2_work/worker-sample-$sample.body" -D "$stage2_work/worker-sample-$sample.headers" -w '%{http_code} %{time_total}' "$ADMIN_CANONICAL_ORIGIN/api/health/worker" 2>"$stage2_work/worker-sample-$sample.error")" || curl_status=$?
+    printf '%s %s\n' "$metrics" "$curl_status" > "$stage2_work/worker-sample-$sample.metrics" || return 65
+    if [[ "$sample" == 0 ]]; then sleep 10 || return 65; fi
+  done
+  node - "$stage2_work" <<'JS'
+const fs = require('node:fs');
+const dir = process.argv[2];
+let healthy = 0, expired = false, invalid = false;
+const records = [];
+for (let sample = 0; sample <= 3; sample++) {
+  const prefix = `${dir}/worker-sample-${sample}`;
+  const [http, seconds, curlExit] = fs.readFileSync(`${prefix}.metrics`, 'utf8').trim().split(/\s+/);
+  const record = { sample, phase: sample === 0 ? 'warmup' : 'sample', http: Number(http), timeTotal: Number(seconds), curlExit: Number(curlExit) };
+  try {
+    const h = JSON.parse(fs.readFileSync(`${prefix}.body`, 'utf8'));
+    const keys = Object.keys(h).sort().join(',');
+    if (keys !== 'checkedAt,expiredLocks,lastHeartbeatAgeSeconds,workerStatus' ||
+        !['ok', 'failed', 'degraded'].includes(h.workerStatus) ||
+        !Number.isSafeInteger(h.expiredLocks) || h.expiredLocks < 0 ||
+        typeof h.checkedAt !== 'string' ||
+        !(h.lastHeartbeatAgeSeconds === null || (Number.isFinite(h.lastHeartbeatAgeSeconds) && h.lastHeartbeatAgeSeconds >= 0))) throw new Error('shape');
+    record.body = h;
+    expired ||= h.expiredLocks > 0;
+    const headers = fs.readFileSync(`${prefix}.headers`, 'utf8');
+    const valid = record.curlExit === 0 &&
+      /^X-Robots-Tag: noindex, nofollow, noarchive/im.test(headers) &&
+      ((record.http === 200 && h.workerStatus === 'ok' && h.expiredLocks === 0) ||
+       (record.http === 503 && (h.workerStatus === 'failed' || h.workerStatus === 'degraded')));
+    if (!valid) invalid = true;
+    if (sample > 0 && valid && record.http === 200 && h.workerStatus === 'ok' && h.expiredLocks === 0) healthy++;
+  } catch { record.error = 'invalid_or_missing_response'; invalid = true; }
+  records.push(record);
+  console.log('WORKER_HEALTH_RESPONSE=' + JSON.stringify(record));
+}
+fs.writeFileSync(`${dir}/worker-health-responses.json`, JSON.stringify(records, null, 2) + '\n', { mode: 0o600 });
+if (invalid) { console.log('WORKER_HEALTH=FAIL reason=response_or_protection'); process.exit(65); }
+if (expired) { console.log('WORKER_HEALTH=STOP reason=expired_locks'); process.exit(66); }
+if (healthy === 0) { console.log('WORKER_HEALTH=STOP reason=all_samples_failed'); process.exit(67); }
+console.log(`WORKER_HEALTH=PASS healthy_samples=${healthy}/3 warmup_excluded=1`);
+JS
+}
+stage2_service_health backup
 scripts/preproduction/render-nginx.sh --mode rehearsal --output "$stage2_work/rehearsal.candidate"
 [[ -s "$stage2_work/rehearsal.candidate" ]] || { echo 'STAGE2=REFUSED empty_rehearsal_candidate'; exit 65; }
 grep -q 'server_name www.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
@@ -273,7 +324,12 @@ stage2_probe https://www.bangbangji.cloud/dashboard 404
 stage2_probe https://www.bangbangji.cloud/api/health/worker 404
 stage2_probe https://www.bangbangji.cloud/api/health/backup 404
 stage2_probe https://zbcwf.bangbangji.cloud/ 404
-for endpoint in worker backup; do stage2_service_health "$endpoint"; done
+if stage2_worker_health_sample; then :; else
+  stage2_worker_exit=$?
+  case "$stage2_worker_exit" in 66|67) stage2_worker_stop=1;; esac
+  exit "$stage2_worker_exit"
+fi
+stage2_service_health backup
 static_path="$(curl --noproxy '*' --connect-timeout 5 --max-time 20 --fail -sS --config "$PREPROD_CURL_CONFIG" https://www.bangbangji.cloud/ | node -e 'let t="";process.stdin.on("data",d=>t+=d);process.stdin.on("end",()=>{const m=t.match(/\/_next\/static\/[^"<>\s]+\.(?:js|css)/);if(!m)process.exit(65);console.log(m[0]);});')"
 stage2_probe "https://www.bangbangji.cloud$static_path" 200 1
 grep -qi '^Cache-Control:.*max-age=31536000.*immutable' "$stage2_work/headers" || exit 65

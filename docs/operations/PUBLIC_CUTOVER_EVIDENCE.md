@@ -455,3 +455,25 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 - 10 项健康门禁隔离场景通过：worker/backup 正常，failed/degraded 的 503、503 配 ok 正文、200 配 failed 正文、backup unconfigured、坏 JSON、noindex 缺失及连接失败；额外 JSON 字段不会被打印。原 22 项就绪场景重跑全部通过；测试不执行真实 sudo/nginx/Docker/网络。新 helper 在当前 preprod 对两个端点实测通过，只用于验证诊断函数，不执行安装或冒充 rehearsal。
 - 当前 B.sh SHA-256=`c0c00f0e6ade8adacb503d26bc733c240bb05f38c746e79a1044ed2c22a18878`；文档/脚本/远端哈希、bash 语法一致，保存旧 B 再替换；A/C 不变。原完整验证、旧/新域名保护、缓存/gzip、容量和回退门禁保留。
 - **最新状态：A PASS；B 已取得完整及匿名发布验证 PASS，但第四次整体因真实 503 失败并回退；当前健康复验 PASS，新诊断版待整体重跑。** C 及后续压测/矩阵等仍未完成，尚未对外开放。
+
+### Owner 接续决定：worker 冷读误报采样规则，B 待重跑
+
+Owner 在本会话回传**主控只读排查证据及结论**：第四次 worker 503 是健康查询冷读超过 1500ms 预算而产生的 failed 误报，worker 本身正常；generic_task_item 约 36.8 万行、496MB，max(heartbeat_at) 和过期 processing 锁查询无可用索引，热缓存约 87ms，冷读超过预算。主控在 web 连续五次取到 200/ok、过期锁 0、约 180ms，容器持续 healthy 三天。体积、索引覆盖及冷读归因属于 Owner 提供的主控证据；Codex 已独立取得的同一 nginx 日志、热查询计划和健康复验见上节。此结论补充前轮调查，**不补造第四次缺失的 JSON 正文**。
+
+Owner 明确授权重新执行 B，worker 项替换为预热一次、等待 10 秒、采样三次：三次至少一次 200/ok/expiredLocks=0，且预热与采样均无 expiredLocks>0，才通过；预热成功不计入三次成功。合规的 failed/503 不再单次中断；后三次全 failed 或任一次过期锁非零则停止、保留 rehearsal，不自动恢复 nginx，不写 B 完成标记、不进入 C。传输/认证/noindex/响应契约及其他站点异常保留原回退门禁。页面压测的 5xx 停止规则不变。决定与风险见 [ADR](../adr/ADR-CUTOVER-STAGE2-WORKER-HEALTH-SAMPLING.md)。部分索引根治由主控另派 v0.5.8 开发单，本段没有应用、索引或预算变更。
+
+当前 B 包装实现：只在安装后原 worker 验收位置采样，不再由安装前的单次 worker 门禁阻断；backup 仍在安装前/后要求 200/ok/noindex。每次保存 `worker-sample-{0,1,2,3}.body/.headers/.metrics/.error`，输出完整合规 worker JSON及 HTTP/耗时，聚合为受控目录内 0600 的 `worker-health-responses.json`。新 B 开始清除旧 rehearsal.pass；仅整体成功重新写入。worker 状态停止输出 `STAGE2_STOPPED=worker_health rehearsal_retained=1` 并保留备份路径；无法取得合规安全响应仍走站点回退。
+
+验证：14 项隔离采样/EXIT handler 场景通过，覆盖全健康、预热 failed 后健康、仅一次健康、预热成功但后三次全 failed、全 failed、采样/预热出现过期锁、坏 JSON、缺 noindex、连接失败、其他 5xx、HTTP/正文不一致、未知字段不打印、原回退失败。每项均验证请求总数四、只等待一次 10 秒、三份采样齐全、聚合权限 0600、旧 marker 被清除；worker 状态停止没有调用恢复，保护异常调用原恢复，恢复失败仍返回 71。22 项原就绪场景全部重跑通过。测试不接触真实 sudo/nginx/Docker/网络。
+
+`2026-10-05T09:48:06Z` 起，仅在**当前恢复后的 preprod**运行新采样函数验证实现，没有安装 rehearsal：预热 200/ok，耗时 0.146302s；实际等待 10 秒，后三次均 200/ok、expiredLocks=0，`healthy_samples=3/3`。脱敏完整日志 `worker-owner-sampling-preprod.log`。以下保留三次完整响应，**只计作 preprod 函数实测，不标记 B rehearsal 通过**：
+
+```json
+[
+  {"sample":1,"http":200,"timeTotal":0.138302,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:48:17.189Z"}},
+  {"sample":2,"http":200,"timeTotal":0.12203,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:48:17.339Z"}},
+  {"sample":3,"http":200,"timeTotal":0.103784,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:48:17.468Z"}}
+]
+```
+
+新版 B.sh SHA-256=`bc6571ad11cbd16c29e7dbe0e37340295c7d838ab72ab26c22c56bf33cca3d28`；本地/远端语法和哈希通过，原 B 保存后原子替换。A/C 脚本不变；其余完整验证、隔离、缓存/gzip、七项容量基线按原步骤执行。**当前状态：A PASS，Owner 新 worker 验收规则已落实，B 仍待整体重跑；C 及外部压测/矩阵等继续待办。**
