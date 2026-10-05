@@ -34,19 +34,27 @@ const isPositive = (value: number | null | undefined): value is number => isCoun
  * 里，不参与加总。
  */
 function claimSummaryLines(summary: ClaimSummary): { readonly counts: readonly string[]; readonly notice: string | null } {
-  const submitted = `任务已提交：${formatCount(summary.submittedCount ?? 0)} 条`;
-  const ineligible = `不符合领取条件：${formatCount(summary.ineligibleCount ?? 0)} 条`;
   const isLifecycle = isCount(summary.alreadyHasPromoCodeCount)
     || isCount(summary.manualReviewPendingCount)
     || isCount(summary.inOtherUnfinishedBatchNoticeCount);
-  if (!isLifecycle) return { counts: [submitted, ineligible], notice: null };
+  // 老批次：两行文案与单位（"条"）逐字保持改前的样子，一个字都不改。
+  if (!isLifecycle) {
+    return {
+      counts: [
+        `任务已提交：${formatCount(summary.submittedCount ?? 0)} 条`,
+        `不符合领取条件：${formatCount(summary.ineligibleCount ?? 0)} 条`,
+      ],
+      notice: null,
+    };
+  }
+  // 新版：所有行统一用"本"，与"已选 N 本"、提示行、任务详情页一致。
   const counts: string[] = [];
   if (isCount(summary.selectedCount)) counts.push(`已选 ${formatCount(summary.selectedCount)} 本`);
-  counts.push(submitted);
-  if (isPositive(summary.alreadyHasPromoCodeCount)) counts.push(`已有推广码：${formatCount(summary.alreadyHasPromoCodeCount)} 条`);
-  if (isPositive(summary.manualReviewPendingCount)) counts.push(`待人工核对：${formatCount(summary.manualReviewPendingCount)} 条`);
-  counts.push(ineligible);
-  if (isPositive(summary.blockedCount)) counts.push(`其它未提交：${formatCount(summary.blockedCount)} 条`);
+  counts.push(`任务已提交：${formatCount(summary.submittedCount ?? 0)} 本`);
+  if (isPositive(summary.alreadyHasPromoCodeCount)) counts.push(`已有推广码：${formatCount(summary.alreadyHasPromoCodeCount)} 本`);
+  if (isPositive(summary.manualReviewPendingCount)) counts.push(`待人工核对：${formatCount(summary.manualReviewPendingCount)} 本`);
+  counts.push(`不符合领取条件：${formatCount(summary.ineligibleCount ?? 0)} 本`);
+  if (isPositive(summary.blockedCount)) counts.push(`其它未提交：${formatCount(summary.blockedCount)} 本`);
   const notice = isPositive(summary.inOtherUnfinishedBatchNoticeCount)
     ? `其中 ${formatCount(summary.inOtherUnfinishedBatchNoticeCount)} 本同时在其它未完成的批次里，跑到时会自动跳过`
     : null;

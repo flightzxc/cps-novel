@@ -189,11 +189,11 @@ describe("PromoLinkClaimDialog · 统计完成后的计数展示（已有推广�
     // 恒等式：20 = 10 + 2 + 4 + 3 + 1；提示数 5 不参与加总（已计在"已提交"里）。
     expect(Array.from(status.querySelectorAll("span.block")).map((el) => el.textContent)).toEqual([
       "已选 20 本",
-      "任务已提交：10 条",
-      "已有推广码：4 条",
-      "待人工核对：3 条",
-      "不符合领取条件：2 条",
-      "其它未提交：1 条",
+      "任务已提交：10 本",
+      "已有推广码：4 本",
+      "待人工核对：3 本",
+      "不符合领取条件：2 本",
+      "其它未提交：1 本",
       "其中 5 本同时在其它未完成的批次里，跑到时会自动跳过",
     ]);
     expect(screen.getByTestId("promo-claim-summary-overlap-notice").textContent)
@@ -207,8 +207,8 @@ describe("PromoLinkClaimDialog · 统计完成后的计数展示（已有推广�
     });
     expect(Array.from(status.querySelectorAll("span.block")).map((el) => el.textContent)).toEqual([
       "已选 7 本",
-      "任务已提交：6 条",
-      "不符合领取条件：1 条",
+      "任务已提交：6 本",
+      "不符合领取条件：1 本",
     ]);
     expect(screen.queryByTestId("promo-claim-summary-overlap-notice")).toBeNull();
     expect(status.textContent).not.toContain("已有推广码");
