@@ -384,3 +384,20 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 | A 完成标记 | Owner 输出 `STAGE2_CERTIFICATE=PASS`，运行目录 `/opt/cps-novel/shared/cutover-stage2-20261005/run.aNHX3Jn4`；Codex 读取 `certificate.pass` 等于完整运行提交 `bbb06253828d9fd338f0ece1749c2020d8ec4679`，`A_READBACK=PASS`，本机脱敏复核日志 `A-pass-readback.log` |
 
 **当前结论：A 证书准备 PASS；B rehearsal、C 连接数及备份校验尚未执行，外部压测和本地矩阵仍受阻。** 仅新增 ACME bootstrap，站点继续 preprod、Basic Auth/noindex 保留；未安装主机 public 模式，未进入切换当天。下一块为 B，远端 B.sh 的 SHA-256 复核仍为 `8a1ea4cd8b066815cbb0dbec9146afc453bb8407a90694f6bbfbdeb270766233`。凭据 worker/X8 和 NAS 证据缺口保持原结论，未因 A 成功而关闭。
+
+### 14:21：B 首次验证失败并回退；补充 rehearsal 就绪检查，待重跑
+
+来源：Owner 回传 B 输出；Codex 于 `2026-10-05T05:22:12Z`（东京时间 14:22:12）及 `05:23:11Z` 独立只读复核。
+
+- B 初始化的 manifest、四应用镜像及只读 SQL 门禁通过；rehearsal 安装器语法检查/reload 返回成功，备份 `/opt/cps-novel/shared/nginx-backups/install.ujb5aZjI`。随后原完整 `verify-release.sh` 在公开域名的认证 `/api/health` 请求得到 curl 7 / connection refused，输出 `RELEASE_VERIFY=FAIL reason=health_unreachable`。**完整发布验证未通过，后续匿名复验、隔离/缓存/gzip、七项参数验收均未执行，B 未完成。**
+- B trap 使用 `install.ujb5aZjI` 恢复至执行 B 前的 A 后状态，`STAGE2_ROLLBACK=PASS block=B`。恢复操作另外生成的安全备份为 `install.Nx5WwXpU`，不混同为此次恢复所选来源。两份目录均存在，root 0700；未读取备份秘密内容。
+- 回退独立复验 PASS：主配置、站点和 bootstrap 的完整 SHA-256 分别仍为上一节的 `48c6a4ec…aa2`、`063698e0…eb71`、`c405586a…7975`。nginx、certbot timer active；80/443 在 `0.0.0.0` 监听，应用仅 `127.0.0.1:3000`；`certificate.pass` 等于完整 Final，`rehearsal.pass` 不存在。匿名发布验证 PASS；旧公开首页/后台登录认证 200 且 noindex，新域名普通路径 HTTP/HTTPS 六项均 404。原始脱敏日志 `B-failure-readback.log`。
+- 后续两个旧域名均解析到 `2.24.209.236`；六容器 healthy，两个 health 匿名 401 且 realm=`CPS Novel Preproduction`/noindex，认证 health 的 ok、Final commit、database/metadataConsistency 均通过。日志 `B-health-followup.log`。首次补充诊断遗漏 manifest 的镜像/提交变量，compose 因插值缺失而拒绝，未执行预期后续命令；补齐同版初始化后独立重跑取得以上结果，不将第一次当作通过。
+
+**连接拒绝根因尚未唯一确证。** 安装器和 `systemctl ExecReload` 采用 `nginx -s reload`，返回不等于所有后续请求已稳定来自新 worker；nginx 的配置重载和 worker 交接行为见 [官方控制文档](https://nginx.org/en/docs/control.html)。当前没有失败瞬间的 listener 或系统日志证据，不能将 curl 7 简单定性为模板错误或仅 reload 竞态。
+
+仅修正 B 命令包装：完整验证前，对公开和后台两个 health 分别进行最多十轮的严格就绪检查。匿名须 401/noindex，并通过 `CPS Novel Rehearsal` realm 区分新旧配置；认证须 200/noindex，JSON 中 ok、完整 Final commit 和数据库 passed 正确。只等待 curl 7/52/28，及仍明确来自旧 preprod 的 401；5xx、错误状态/realm、保护缺失、错误 JSON 或身份立即失败。等待失败记录主/站点配置哈希、ExecReload 和 listener，再由原 trap 恢复。**原完整发布验证和所有后续验收不变，不重试失败的完整验证。**
+
+- 修正版 B.sh SHA-256=`61751a98506e6e6e846437c5a49ca92a41c9dc4987b56484ee90a36d7480fe78`；本地/远端 `bash -n` 和哈希核对通过，远端保留旧 B 后原子替换。A/C 脚本及其哈希未变，未执行修正版 B，未修改不可变 release、安装器或模板。
+- 18 个本地隔离就绪场景通过，覆盖匿名连接失败后成功、旧 realm 后成功、认证连接失败后成功、两主机依次通过；匿名/认证 502、匿名开放、两类 noindex 缺失、未知 realm、错误 JSON/commit/数据库、认证拒绝、TLS 错误均立即失败；持续超时/空响应/旧 realm 十轮耗尽失败。curl/sleep 使用隔离 stub，仅 JSON 使用本机 node；不执行 sudo、nginx、Docker 或真实网络。此前 B 回退 handler 未改变，首次真实回退已独立复验。
+- **最新状态：A PASS；B 首次失败且回退实测 PASS，修正版待 Owner 在终端重跑；C 不执行。** 外部压测、本地矩阵、备份散列及凭据/NAS 证据仍未完成，不进入切换当天。

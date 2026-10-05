@@ -1,6 +1,6 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B/C 待执行。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 首次失败且回退已复核，修正版待重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
@@ -172,6 +172,8 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 预期：两个 `RELEASE_VERIFY=PASS`、`CAPACITY=PASS`、旧域名匿名 401/认证 200 且 noindex、新域名普通路径 404；最终 `STAGE2_REHEARSAL=PASS`。任何失败使用 B 自己的安装器备份恢复到执行 B 前的状态；保留 A 的证书引导。
 
+14:21 首次 B 安装成功后，完整验证在认证 health 请求遭遇 curl 7，已使用该次安装器备份恢复到 A 后状态，B 未通过。此版在完整验证前，对两个旧域名分别执行最多 10 次、每次 curl 最多 3 秒、间隔 1 秒的就绪检查：匿名必须 401/noindex 且 realm 为 `CPS Novel Rehearsal`，认证必须 200/noindex，JSON 的 ok、运行 commit、数据库 passed 正确。只重试连接失败/空响应/超时，以及仍明确来自旧 preprod realm 的 401；任何 5xx、其他状态、保护缺失、错误 JSON 或身份立即失败。就绪通过后仍原样运行完整验证，验证失败不会重试绕过。
+
 ```bash
 [[ "$(cat "$stage2_root/certificate.pass")" == "$GIT_COMMIT" ]] || exit 65
 stage2_backup=''
@@ -192,6 +194,48 @@ trap 'exit 143' TERM
 PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --mode rehearsal | tee "$stage2_work/install.log"
 stage2_backup="$(sed -n 's/^NGINX_BACKUP=//p' "$stage2_work/install.log")"
 [[ -n "$stage2_backup" && "$stage2_backup" != *$'\n'* ]] || exit 65
+stage2_rehearsal_ready() {
+  local url="$1" attempt code curl_status
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    curl_status=0
+    code="$(curl -q --noproxy '*' --connect-timeout 2 --max-time 3 -sS -o "$stage2_work/ready.body" -D "$stage2_work/ready.headers" -w '%{http_code}' "$url" 2>"$stage2_work/ready.error")" || curl_status=$?
+    printf 'REHEARSAL_READY_ATTEMPT=%s auth=0 url=%s http=%s curl_exit=%s\n' "$attempt" "$url" "$code" "$curl_status"
+    case "$curl_status:$code" in
+      0:401)
+        grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$stage2_work/ready.headers" || { echo 'REHEARSAL_READY=FAIL reason=missing_noindex'; return 65; }
+        if grep -qi '^WWW-Authenticate: Basic realm="CPS Novel Rehearsal"' "$stage2_work/ready.headers"; then
+          curl_status=0
+          code="$(curl -q --noproxy '*' --config "$PREPROD_CURL_CONFIG" --connect-timeout 2 --max-time 3 -sS -o "$stage2_work/ready.body" -D "$stage2_work/ready.headers" -w '%{http_code}' "$url" 2>"$stage2_work/ready.error")" || curl_status=$?
+          printf 'REHEARSAL_READY_ATTEMPT=%s auth=1 url=%s http=%s curl_exit=%s\n' "$attempt" "$url" "$code" "$curl_status"
+          case "$curl_status:$code" in
+            0:200)
+              grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$stage2_work/ready.headers" || { echo 'REHEARSAL_READY=FAIL reason=missing_noindex'; return 65; }
+              node -e 'try { const h=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(!h.ok || h.build?.commit!==process.argv[2] || h.database?.status!=="passed") process.exit(65); } catch { process.exit(65); }' "$stage2_work/ready.body" "$GIT_COMMIT" || { echo 'REHEARSAL_READY=FAIL reason=identity_db_json'; return 65; }
+              printf 'REHEARSAL_READY=PASS url=%s\n' "$url"
+              return 0 ;;
+            7:000|52:000|28:000) ;;
+            *) echo 'REHEARSAL_READY=FAIL reason=unexpected_authenticated_response'; return 65 ;;
+          esac
+        elif ! grep -qi '^WWW-Authenticate: Basic realm="CPS Novel Preproduction"' "$stage2_work/ready.headers"; then
+          echo 'REHEARSAL_READY=FAIL reason=unexpected_realm'; return 65
+        fi ;;
+      7:000|52:000|28:000) ;;
+      *) echo 'REHEARSAL_READY=FAIL reason=unexpected_anonymous_response'; return 65 ;;
+    esac
+    if [[ "$attempt" != 10 ]]; then sleep 1; fi
+  done
+  echo 'REHEARSAL_READY=FAIL reason=readiness_timeout'
+  return 65
+}
+for url in "$SITE_URL/api/health" "$ADMIN_CANONICAL_ORIGIN/api/health"; do
+  if stage2_rehearsal_ready "$url"; then :; else
+    stage2_ready_status=$?
+    sha256sum /etc/nginx/nginx.conf /etc/nginx/conf.d/cps-novel-preprod.conf
+    systemctl show nginx -p ExecReload -p MainPID || true
+    ss -ltn | awk 'NR==1 || /:(80|443)[[:space:]]/' || true
+    exit "$stage2_ready_status"
+  fi
+done
 scripts/preproduction/verify-release.sh </dev/null
 scripts/preproduction/verify-release.sh --anonymous-only --expect-live </dev/null
 stage2_old_protected
