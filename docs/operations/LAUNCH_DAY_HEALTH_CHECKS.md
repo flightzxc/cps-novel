@@ -42,6 +42,15 @@ Any result means a lease is eligible for normal Worker recovery. Do not update
 the item manually; verify that recovery is advancing and that terminal
 recoveries create `task_item.failed / stale_processing` audit facts.
 
+The same statement is what `GET /api/health/worker` runs (verbatim, checked by
+`tests/backend/health/rc7b-worker-status.test.ts`). It is served by the partial
+indexes `generic_task_item_expired_lease_idx` and
+`channel_sync_task_item_expired_lease_idx`
+(`(locked_until, id) WHERE status = 'processing' AND locked_until IS NOT NULL`),
+so it must keep the `status = 'processing' AND locked_until < ...` predicates
+exactly as written; a rewrite that drops them turns it into a full scan of the
+item tables.
+
 ```sql
 WITH expired AS (
   SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until

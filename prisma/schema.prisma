@@ -779,6 +779,11 @@ model ChannelSyncTask {
   @@map("channel_sync_task")
 }
 
+/// Worker 健康检查（`src/server/health/worker-status.ts`）的"最近心跳"查询用的部分索引只存在于
+/// 迁移 SQL（`prisma/migrations/20261005100000_worker_health_partial_indexes/migration.sql`），
+/// Prisma 6.19 的 `@@index` 不支持 where 子句，沿用本 schema 既有约定
+/// （`channel_account_hold_active_uidx`、`*_expired_lease_idx`、`generic_task_catalog_scan_*`）：
+///   `channel_sync_task_item_heartbeat_idx` (heartbeat_at) WHERE heartbeat_at IS NOT NULL
 model ChannelSyncTaskItem {
   id                String    @id @default(uuid()) @db.Uuid
   taskId            String    @map("task_id") @db.Uuid
@@ -846,6 +851,11 @@ model GenericTask {
   @@map("generic_task")
 }
 
+/// Worker 健康检查（`src/server/health/worker-status.ts`）的"最近心跳"查询用的部分索引只存在于
+/// 迁移 SQL（`prisma/migrations/20261005100000_worker_health_partial_indexes/migration.sql`），
+/// Prisma 6.19 的 `@@index` 不支持 where 子句，沿用本 schema 既有约定
+/// （`channel_account_hold_active_uidx`、`*_expired_lease_idx`、`generic_task_catalog_scan_*`）：
+///   `generic_task_item_heartbeat_idx` (heartbeat_at) WHERE heartbeat_at IS NOT NULL
 model GenericTaskItem {
   id             String    @id @default(uuid()) @db.Uuid
   taskId         String    @map("task_id") @db.Uuid
