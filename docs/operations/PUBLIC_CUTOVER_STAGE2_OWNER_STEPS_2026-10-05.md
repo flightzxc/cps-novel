@@ -1,16 +1,16 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 已按 Owner 授权的 worker 预热/三次采样规则整体通过，并独立读回完成标记、生效配置和完整响应。当前为受 Basic Auth/noindex 保护的 rehearsal，连接数仍为 768；下一块 C 待执行。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A、B、C 已执行并复核通过。B 按 Owner 授权的 worker 预热/三次采样规则验收；C 已将连接数从 768 改为 4096，保留独立备份，并完成最新逻辑备份散列和目录读取验收。当前为受 Basic Auth/noindex 保护的 rehearsal。本文件是命令单，完成证据及剩余事项见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
 下面四个代码块依次为公共初始化、A、B、C。Codex 将公共初始化分别拼到 A/B/C 前，生成并上传无秘密的 bash 文件至 `/opt/cps-novel/shared/cutover-stage2-20261005/commands/`；上传后核对 SHA-256。**一次只运行一个块，回传输出并由 Codex 核对通过后再运行下一块。**
 
-当前本机终端下一块入口（A、B 已通过）：
+A/B/C 无需重跑，以下命令保留为执行记录。C 明确要求原值 768，已成功变为 4096 后再次执行会被门禁拒绝。后续仅继续已批准的外部压测及证据补齐；不进入切换当天。
 
-`ssh -t haiyue-vps 'bash /opt/cps-novel/shared/cutover-stage2-20261005/commands/C.sh'`
+接续：Docker 已恢复，本地完整矩阵在临时测试容器 restart 就绪包装下取得 `NGINX_MATRIX_ALL=PASS`；原脚本和模板未改，执行偏离见证据。外部旧站 HTTPS 直连仍被重置，压测暂停；NAS 及凭据缺证项待补。
 
-本次只执行 C 并回传输出核对；A 无需重跑，B 保留已验收的 rehearsal。三块都在服务器真实 release 的 bash 会话内执行；每块开头 `sudo -v`，同块复用缓存。若中途退出或缓存失效，按 sudo 提示重新输入；不改 sudoers。
+三块都在服务器真实 release 的 bash 会话内执行；每块开头 `sudo -v`，同块复用缓存。若中途退出或缓存失效，按 sudo 提示重新输入；不改 sudoers。
 
 ## 公共初始化（自动包含在每个块中）
 
