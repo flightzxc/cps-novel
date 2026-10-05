@@ -29,7 +29,8 @@ import {
  *   3. 用 `EXPLAIN (ANALYZE, BUFFERS)` 证明发布的两条查询对两张表都走部分索引、不再有
  *      Seq Scan，且缓冲区读取量是个位数的页，与表的历史规模无关；
  *   4. 新旧查询在同一份数据上结果逐值相等（语义不变）；
- *   5. `evaluateWorkerStatus` 在真实 web_app 角色下的 ok / degraded 端到端输出。
+ *   5. `evaluateWorkerStatus` 在真实 web_app 角色下的 degraded / ok / 空闲端到端输出（真实 Prisma
+ *      读回过期锁查询：其 interval 列在外层转成 text，否则 Prisma 反序列化会抛错、degraded 走不到）。
  *
  * 判据用的是执行计划与缓冲区页数，不是墙钟时间——时间受机器负载影响，计划和页数不会。
  * 墙钟时间只打印（`WORKER_HEALTH_PLAN`/`WORKER_HEALTH_INDEX_BUILD` 行）供人看。
@@ -519,9 +520,29 @@ describe.skipIf(!enabled).sequential("worker health partial indexes on disposabl
       ) AS newest
     `;
     expect(current.last_heartbeat_at!.getTime()).toBe(truth.newest!.getTime());
+
+    // 过期锁查询：种子里 generic 有 5 条、channel_sync 有 2 条租约已过期。Prisma 的 $queryRaw
+    // 不能反序列化 interval，所以查询的外层把 maximum_overdue 转成 text——这里用真实 Prisma
+    // 读回来，既证明结果正确，也证明读得出来（没有这个转换，只要有一行就会抛错）。
+    const rows = await web.$queryRaw<Array<{ family: string; task_type: string; expired_count: bigint; maximum_overdue: string }>>(
+      EXPIRED_LOCKS_QUERY,
+    );
+    expect(Object.fromEntries(rows.map((row) => [row.family, Number(row.expired_count)]))).toEqual({
+      generic: 5,
+      channel_sync: 2,
+    });
+    expect(rows.every((row) => typeof row.maximum_overdue === "string" && row.maximum_overdue.length > 0)).toBe(true);
   }, 120_000);
 
-  it("evaluateWorkerStatus 在 web_app 角色下：无过期锁 → ok 且带心跳年龄；全部完成 → ok 且心跳为 null", async () => {
+  it("evaluateWorkerStatus 在 web_app 角色下：过期锁 → degraded；无过期锁 → ok 且带心跳年龄；全部完成 → ok 且心跳为 null", async () => {
+    const degraded = await evaluateWorkerStatus(web, { timeoutMs: 20_000 });
+    expect(degraded.workerStatus).toBe("degraded");
+    expect(degraded.expiredLocks).toBe(7);
+    // 最新心跳是 generic 的约 1 秒前（g=1）。
+    expect(degraded.lastHeartbeatAgeSeconds).not.toBeNull();
+    expect(degraded.lastHeartbeatAgeSeconds!).toBeGreaterThanOrEqual(0);
+    expect(degraded.lastHeartbeatAgeSeconds!).toBeLessThan(120);
+
     // 租约续到未来：没有过期锁，仍有在途心跳 → ok，心跳年龄是最新一次心跳（g=1，约 1 秒前）。
     await owner.$executeRawUnsafe(
       `UPDATE generic_task_item SET locked_until = now() + interval '5 minutes' WHERE status = 'processing' AND locked_until < now()`,

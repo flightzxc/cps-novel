@@ -151,7 +151,7 @@ describe("worker health queries stay paired with the partial indexes", () => {
     expect(sql).toContain("count(*) AS expired_count");
   });
 
-  it("expired-locks query is byte-for-byte the launch-day runbook §2 block, the alert script and the X8 health SQL", () => {
+  it("expired-locks query embeds the launch-day runbook §2 block, the alert script and the X8 health SQL verbatim as its inner query", () => {
     const runbook = readRepoFile("docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md");
     const section = runbook.split("## 2. Expired processing locks")[1].split("## 3.")[0];
     const runbookSql = section.match(/```sql\n([\s\S]*?)```/)![1];
@@ -161,10 +161,24 @@ describe("worker health queries stay paired with the partial indexes", () => {
       .split("X8_HEALTH_SQL_GROUP_2_EXPIRED_LOCKS")[1]
       .split("\\echo")[0];
 
-    const expected = squash(EXPIRED_LOCKS_QUERY.sql);
-    expect(squash(runbookSql)).toBe(expected);
-    expect(squash(alertSql)).toBe(expected);
-    expect(squash(x8Sql.replace(/^'\n/, "").replace(/--[^\n]*\n/g, ""))).toBe(expected);
+    const shipped = squash(EXPIRED_LOCKS_QUERY.sql);
+    expect(shipped).toContain(squash(runbookSql));
+    expect(shipped).toContain(squash(alertSql));
+    expect(shipped).toContain(squash(x8Sql.replace(/^'\n/, "").replace(/--[^\n]*\n/g, "")));
+  });
+
+  it("expired-locks query never hands an interval column to Prisma: the outer select casts maximum_overdue to text", () => {
+    // Prisma $queryRaw cannot deserialize `interval` ("Failed to deserialize column of type
+    // 'interval'", reproduced on real PostgreSQL 16). Without the cast, any row at all makes
+    // the query throw, evaluateWorkerStatus catches it as "failed", and `degraded` is unreachable.
+    const sql = squash(EXPIRED_LOCKS_QUERY.sql);
+
+    expect(
+      sql.startsWith(
+        "SELECT family, task_type, expired_count, oldest_expiry, maximum_overdue::text AS maximum_overdue FROM (",
+      ),
+    ).toBe(true);
+    expect(sql.endsWith(") AS expired_groups")).toBe(true);
   });
 
   it("evaluateWorkerStatus issues exactly the two exported queries", async () => {

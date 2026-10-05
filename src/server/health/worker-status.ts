@@ -38,7 +38,7 @@ import { HEALTH_DATABASE_TIMEOUT_MS, type HealthDatabaseClient } from "./service
  * 一个只含在途行的部分索引 `(heartbeat_at) WHERE heartbeat_at IS NOT NULL`，心跳查询改成
  * 每表 `ORDER BY heartbeat_at DESC LIMIT 1`。过期锁查询由初始迁移早已存在的
  * `*_expired_lease_idx`（`(locked_until, id) WHERE status = 'processing' AND locked_until
- * IS NOT NULL`）服务，文本未改、也不需要新索引。两条查询与各自的索引是成对的：改查询的
+ * IS NOT NULL`）服务，内层文本未改、也不需要新索引。两条查询与各自的索引是成对的：改查询的
  * WHERE/ORDER BY 或删索引，都会让它退回整表扫描，
  * `tests/integration/health/worker-health-indexes-postgres.test.ts` 在真实 PostgreSQL 上
  * 用 EXPLAIN 断言这一点。
@@ -63,33 +63,41 @@ interface ExpiredLockRow {
   task_type: string;
   expired_count: bigint | number;
   oldest_expiry: Date;
-  maximum_overdue: unknown;
+  /** interval 的 text 形式（见 EXPIRED_LOCKS_QUERY 的注释），判定不用它。 */
+  maximum_overdue: string | null;
 }
 
 interface HeartbeatRow {
   last_heartbeat_at: Date | null;
 }
 
-// 逐字取自 docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md §2「Expired processing
+// 内层逐字取自 docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md §2「Expired processing
 // locks」——只读证据查询，不带任何调用方参数，用 Prisma.sql 标签而非字符串拼接。
+// 外层只做一件事：把 interval 列 `maximum_overdue` 转成 text。Prisma 的 `$queryRaw` 无法
+// 反序列化 interval（"Failed to deserialize column of type 'interval'"，2026-10-05 在真实
+// PostgreSQL 16 上复现），而这个列一旦有过期锁行就会被读到——不转的话"存在过期锁"会被
+// catch 成 failed、expiredLocks 恒为 0，degraded 永远走不到。该列本身判定逻辑不用，只为不炸。
 export const EXPIRED_LOCKS_QUERY = Prisma.sql`
-  WITH expired AS (
-    SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
-    FROM channel_sync_task_item i
-    JOIN channel_sync_task t ON t.id = i.task_id
-    WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-    UNION ALL
-    SELECT 'generic', t.task_type, i.locked_until
-    FROM generic_task_item i
-    JOIN generic_task t ON t.id = i.task_id
-    WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-  )
-  SELECT family, task_type, count(*) AS expired_count,
-         min(locked_until) AS oldest_expiry,
-         max(transaction_timestamp() - locked_until) AS maximum_overdue
-  FROM expired
-  GROUP BY family, task_type
-  ORDER BY maximum_overdue DESC, family, task_type
+  SELECT family, task_type, expired_count, oldest_expiry, maximum_overdue::text AS maximum_overdue
+  FROM (
+    WITH expired AS (
+      SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
+      FROM channel_sync_task_item i
+      JOIN channel_sync_task t ON t.id = i.task_id
+      WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
+      UNION ALL
+      SELECT 'generic', t.task_type, i.locked_until
+      FROM generic_task_item i
+      JOIN generic_task t ON t.id = i.task_id
+      WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
+    )
+    SELECT family, task_type, count(*) AS expired_count,
+           min(locked_until) AS oldest_expiry,
+           max(transaction_timestamp() - locked_until) AS maximum_overdue
+    FROM expired
+    GROUP BY family, task_type
+    ORDER BY maximum_overdue DESC, family, task_type
+  ) AS expired_groups
 `;
 
 // 心跳年龄不在运维文档里，字段/表名取自 src/lib/tasks/store.ts 与
