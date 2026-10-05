@@ -3,7 +3,18 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-01 · 共 1025 个 commit
+生成时间：2026-10-05 · 共 1033 个 commit
+- `cdf4228` 2026-10-05 文档：归档海阅 v0.5.8 第一阶段门禁与发布身份  — _codex · GPT-6_
+
+## v0.5.8
+
+- `0329b11` 2026-10-05 发布：准备海阅 v0.5.8 版本身份  — _codex · GPT-6_
+- `6504e8c` 2026-10-05 合并(v0.5.8)：worker 健康检查心跳查询加部分索引、改每表倒序取一行，修复冷缓存超时误报 503；过期锁查询 interval 反序列化修复（fix/worker-health-indexes @ffc9b7f）  — _claude-code · Claude Opus 5.5_
+- `d400167` 2026-10-05 合并(v0.5.8)：NAS 异地拉取脚本 stat 跨平台修复（GNU/BSD 方言探测、保留排序 LC_ALL=C；fix/offsite-pull-stat-portability @0d355eb）  — _claude-code · Claude Opus 5.5_
+- `ffc9b7f` 2026-10-05 修复(健康检查)：过期锁查询的 interval 列让 Prisma 反序列化抛错，degraded 永远走不到  — _claude-code · Claude Sonnet 5_
+- `41b5ca3` 2026-10-05 修复(健康检查)：worker 心跳查询加部分索引，冷缓存不再误报 503  — _claude-code · Claude Sonnet 5_
+- `0278e73` 2026-10-02 治理：完成 v0.5.7 英文重新定类差集验收  — _codex · GPT-6_
+- `0d355eb` 2026-10-02 修复(异地拉取)：保留策略取 mtime 的 stat 写法跨 GNU/BSD 可移植  — _claude-code · Claude Sonnet 5_
 - `9dd4210` 2026-10-02 治理：记录 v0.5.7 英文重新定类启动及只读跟进  — _codex · GPT-6_
 - `e44a6d1` 2026-10-02 文档：记录 v0.5.7 英文重定类授权与原脚本幂等键冲突  — _codex · GPT-6_
 - `ae56bf3` 2026-10-02 文档：核对 G 样本原始字符并整理交接稿末尾  — _codex · GPT-6_

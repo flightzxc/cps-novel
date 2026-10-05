@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-05 21:33 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式部署 `v0.5.8`（PATCH），仅 haiyue-vps；原 RELEASE=PASS / EXIT=0，E/F/G PASS，部署完成 2026-10-05 21:27:39 +0800 / 2026-10-05 22:27:39 JST。
+
+**背景**：Owner 明确授权第二阶段，领取批次保持暂停、仅由 Owner 恢复。2026-10-05 上线第二段的 worker health 曾因心跳整表查询在冷缓存超过 1.5 秒探测预算而误报 503。本版代码经 Opus 复核集成，发版执行者没有新增功能或修依赖。
+
+**变更内容**：Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25` / tree `1f897777caeb6e9d667baf794fa1322e5070bba6` / image `cps-novel:0.5.8-0329b11`。generic_task_item、channel_sync_task_item 各加 heartbeat_at IS NOT NULL 部分索引，最近心跳改成每表倒序 LIMIT 1；过期锁 interval 转 text，修复 Prisma 反序列化使 degraded 无法返回的老缺陷。唯一新迁移由原 release.sh migrate-approved 在维护模式执行，21→22，数据库登记耗时 135.395 ms，随后原 grants 重放 PASS。NAS offsite-pull.sh 探测 GNU/BSD stat、mtime 非整数即失败且不删除，三个 sort 加 LC_ALL=C；NAS 已使用修复版本是原交接说明，本轮未连接 NAS。无新 env、依赖或 Compose 变化。
+
+**影响范围**：只在密码保护预生产生效，正式域名未对外开放。本版 nginx rehearsal 不改，配置文件前后 hashes 完全一致；旧站无密码 401、带密码 200、noindex，公开 worker health 404，新域名 404。env 备份后只改 APP_VERSION / NEXT_PUBLIC_BUILD_VERSION 两行，其它字节与标签开关、写闸、白名单不变；postgres ID 不变。没有改证书、DNS、NAS、业务开关、刷新 sitemap 或另写业务数据。领取批次 paused，领取/定类在途条目 0；本版没有第三阶段。
+
+**验证方式**：第一阶段全部 40 项通过：498 files / 7674 tests passed、453 tests skipped、0 failed / Unhandled、lint 19 warnings / 0 errors，28 验证器、22 迁移 / drift 0、strict proxy 1646 / known_findings=0、B21、build/brand/nginx/变异/Compose/归档 PASS；audit 0 critical / 指定五项 high（原 EXIT=1）。第二阶段备份及目标机归档载入身份通过；health 0.5.8 / Final、五应用及 postgres healthy、各服务近五分钟错误日志 0、backup ok / BACKUP_TIMER=RUNNING、Next 16.3.7。部署代码原心跳 SQL 的 EXPLAIN 两表均 Index Only Scan Backward / 无 Seq Scan，Planning 1.556 ms / Execution 0.126 ms；实际无非空心跳条目，不声称冷缓存压测。后台 worker health 预热 0.053367s，间隔10秒采三次 0.033381 / 0.041052 / 0.035007s，全部 200 / ok / expiredLocks=0。ko首页/sitemap/从sitemap取的ko小说均200/noindex。自写包装器 previous 替换在执行前纠正；汇总提前读尚未生成退出文件的错误等待传输后重跑通过，原门禁无失败。
+
+**后续待办**：annotated v0.5.8 固定 Final，CHANGELOG 由原生成器更新，台账/发布记录与完整 Notion 第二阶段交接稿已写；Notion 同步与回读状态按最终补记。Owner 2026-10-05 决定：开放延至书籍同步、内容充实后，保留 Basic Auth/noindex；完整异地恢复演练暂缓，故障优先 VPS 本机备份回滚；B-30 凭据到期提醒撤销。上线第二段证书/rehearsal/worker_connections4096 已完成；外部压测因本机网络无法直连推迟到确定开放日期前，证据 ops/cutover-stage2-2026-10 @b4afb67。上述决策详见 ADR-V058-RELEASE-OPERATIONS-BOUNDARY。领取批次仅 Owner 恢复；回滚到 v0.5.7 bbb0625 的兼容批准必须由 Owner 在回滚时另行给出，不 down、不删索引、不改 rehearsal。
+
 ### 2026-10-01 22:41 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式部署 `v0.5.7`（PATCH），仅 haiyue-vps；部署完成、E/F/G PASS；2026-10-02（JST）在同一条发版记录补记验收完成。第三阶段仅en已完成，按最新裁决取消dry-run，实际差集133/0/133/126 PASS。
