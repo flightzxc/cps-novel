@@ -166,6 +166,13 @@ export async function readCatalogBatchSummary(db: PrismaClient, taskId: string, 
   const submittedCount = typeof result.submittedCount === "number" ? result.submittedCount : null;
   const ineligibleCount = typeof result.ineligibleCount === "number" ? result.ineligibleCount : null;
   const alreadyLinkedCount = typeof result.alreadyLinkedCount === "number" ? result.alreadyLinkedCount : null;
+  // 2026-10-06 追加：结果 JSON 里没有这些键（老批次、旧路径、纳入书目批次）时
+  // 一律返回 null，由弹窗据此决定是否展示新计数——不要在这里补 0。
+  const selectedCount = typeof result.selectedCount === "number" ? result.selectedCount : null;
+  const alreadyHasPromoCodeCount = typeof result.alreadyHasPromoCodeCount === "number" ? result.alreadyHasPromoCodeCount : null;
+  const manualReviewPendingCount = typeof result.manualReviewPendingCount === "number" ? result.manualReviewPendingCount : null;
+  const inOtherUnfinishedBatchNoticeCount = typeof result.inOtherUnfinishedBatchNoticeCount === "number"
+    ? result.inOtherUnfinishedBatchNoticeCount : null;
   const enumeration = result.enumerationStatus;
   const blockedFromReasons = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
     ? Object.values(result.blockedReasonCounts as Record<string, unknown>).reduce<number>((sum, value) => sum + (typeof value === "number" && value > 0 ? value : 0), 0)
@@ -173,5 +180,8 @@ export async function readCatalogBatchSummary(db: PrismaClient, taskId: string, 
   const blockedCount = typeof result.blockedCount === "number" ? result.blockedCount : blockedFromReasons;
   const phase = deriveCatalogBatchPhase({ parentStatus: parent.status, enumerationStatus: enumeration,
     childStatuses: parent.childTasks.map((task) => task.status), blockedCount });
-  return { taskId, phase, submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount };
+  return {
+    taskId, phase, selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount,
+    alreadyHasPromoCodeCount, manualReviewPendingCount, inOtherUnfinishedBatchNoticeCount, blockedCount,
+  };
 }

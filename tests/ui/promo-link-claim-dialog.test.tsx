@@ -161,3 +161,73 @@ describe("PromoLinkClaimDialog · 阶段2 第4步：生命周期开关开启时�
     await waitFor(() => expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1));
   });
 });
+
+/**
+ * 2026-10-06 追加（第五件）：提交后统计完成的弹窗要把"已有推广码 / 待人工核对 /
+ * 其它未提交"补齐，否则运营会看到「已选 ≠ 已提交 + 不符合」。老批次（结果里没有
+ * 三个生命周期计数键，读接口返回 `null`）的展示逐字不变。
+ */
+describe("PromoLinkClaimDialog · 统计完成后的计数展示（已有推广码 / 待人工核对 / 提示数）", () => {
+  const base = { taskId: "p6", phase: "completed", alreadyLinkedCount: 0 };
+
+  async function submitAndReadStatus(data: Record<string, unknown>): Promise<HTMLElement> {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue({ ok: true, data: { taskId: "p6", phase: "queued" } });
+    actions.readCatalogBatchSummaryAction.mockResolvedValue({ ok: true, data: { ...base, ...data } });
+    renderDialog();
+    await waitFor(() => expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1));
+    const status = await screen.findByRole("status");
+    // 先出现的是"任务已提交，正在统计…"占位文案，等统计结果落定。
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("不符合领取条件"));
+    return status;
+  }
+
+  it("有新计数：展示已选、已提交、已有推广码、待人工核对、不符合领取条件、其它未提交，提示数单独一行", async () => {
+    const status = await submitAndReadStatus({
+      selectedCount: 20, submittedCount: 10, ineligibleCount: 2,
+      alreadyHasPromoCodeCount: 4, manualReviewPendingCount: 3, inOtherUnfinishedBatchNoticeCount: 5, blockedCount: 1,
+    });
+    // 恒等式：20 = 10 + 2 + 4 + 3 + 1；提示数 5 不参与加总（已计在"已提交"里）。
+    expect(Array.from(status.querySelectorAll("span.block")).map((el) => el.textContent)).toEqual([
+      "已选 20 本",
+      "任务已提交：10 条",
+      "已有推广码：4 条",
+      "待人工核对：3 条",
+      "不符合领取条件：2 条",
+      "其它未提交：1 条",
+      "其中 5 本同时在其它未完成的批次里，跑到时会自动跳过",
+    ]);
+    expect(screen.getByTestId("promo-claim-summary-overlap-notice").textContent)
+      .toBe("其中 5 本同时在其它未完成的批次里，跑到时会自动跳过");
+  });
+
+  it("新类别为 0 时不显示，提示数为 0 时不显示提示行", async () => {
+    const status = await submitAndReadStatus({
+      selectedCount: 7, submittedCount: 6, ineligibleCount: 1,
+      alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0, inOtherUnfinishedBatchNoticeCount: 0, blockedCount: 0,
+    });
+    expect(Array.from(status.querySelectorAll("span.block")).map((el) => el.textContent)).toEqual([
+      "已选 7 本",
+      "任务已提交：6 条",
+      "不符合领取条件：1 条",
+    ]);
+    expect(screen.queryByTestId("promo-claim-summary-overlap-notice")).toBeNull();
+    expect(status.textContent).not.toContain("已有推广码");
+    expect(status.textContent).not.toContain("待人工核对");
+    expect(status.textContent).not.toContain("其它未提交");
+  });
+
+  it("老批次无新键（读接口返回 null）：只显示已提交与不符合领取条件两行，与改前一致", async () => {
+    const status = await submitAndReadStatus({
+      // 老批次的结果里往往已经有 selectedCount，但三个生命周期计数键是缺失的——
+      // 此时不能因为 selectedCount 有值就换成新版展示。
+      selectedCount: 5, submittedCount: 4, ineligibleCount: 1,
+      alreadyHasPromoCodeCount: null, manualReviewPendingCount: null, inOtherUnfinishedBatchNoticeCount: null, blockedCount: 0,
+    });
+    expect(Array.from(status.querySelectorAll("span.block")).map((el) => el.textContent)).toEqual([
+      "任务已提交：4 条",
+      "不符合领取条件：1 条",
+    ]);
+    expect(screen.queryByTestId("promo-claim-summary-overlap-notice")).toBeNull();
+    expect(status.textContent).not.toContain("已选");
+  });
+});

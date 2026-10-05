@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import type { CatalogBatchContext, CatalogSelection, PromoClaimShardEstimate } from "@/domain/catalog-batch";
+import type { CatalogBatchContext, CatalogBatchSummary, CatalogSelection, PromoClaimShardEstimate } from "@/domain/catalog-batch";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import {
@@ -15,6 +15,43 @@ import {
 } from "../_actions";
 
 type Stage = "loading" | "form" | "submitting" | "counting" | "error";
+// 弹窗只关心摘要里的计数字段；新键（selectedCount 与三个生命周期计数）在老批次
+// 里是 `null`，老测试夹具里甚至整个缺失（`undefined`），两种都按"没有"处理。
+type ClaimSummary = Pick<CatalogBatchSummary, "submittedCount" | "ineligibleCount"> & Partial<Pick<CatalogBatchSummary,
+  "selectedCount" | "alreadyHasPromoCodeCount" | "manualReviewPendingCount" | "inOtherUnfinishedBatchNoticeCount" | "blockedCount">>;
+const formatCount = (value: number) => value.toLocaleString("zh-CN");
+const isCount = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
+const isPositive = (value: number | null | undefined): value is number => isCount(value) && value > 0;
+
+/**
+ * 统计完成后的计数展示（2026-10-06 追加）。
+ *
+ * 老批次（旧路径、提交时开关关闭，结果里没有三个生命周期计数键）一律保持原样：
+ * 只显示"任务已提交 / 不符合领取条件"两行。生命周期批次则按
+ * 「已选 = 已提交 + 已有推广码 + 待人工核对 + 不符合领取条件 + 其它未提交」展示，
+ * 让运营看到"已选 ≠ 已提交 + 不符合"的差额去了哪里；值为 0 的新类别不显示，
+ * 提示数（同时在其它未完成批次里的书）单独一行——那些书已经计在"任务已提交"
+ * 里，不参与加总。
+ */
+function claimSummaryLines(summary: ClaimSummary): { readonly counts: readonly string[]; readonly notice: string | null } {
+  const submitted = `任务已提交：${formatCount(summary.submittedCount ?? 0)} 条`;
+  const ineligible = `不符合领取条件：${formatCount(summary.ineligibleCount ?? 0)} 条`;
+  const isLifecycle = isCount(summary.alreadyHasPromoCodeCount)
+    || isCount(summary.manualReviewPendingCount)
+    || isCount(summary.inOtherUnfinishedBatchNoticeCount);
+  if (!isLifecycle) return { counts: [submitted, ineligible], notice: null };
+  const counts: string[] = [];
+  if (isCount(summary.selectedCount)) counts.push(`已选 ${formatCount(summary.selectedCount)} 本`);
+  counts.push(submitted);
+  if (isPositive(summary.alreadyHasPromoCodeCount)) counts.push(`已有推广码：${formatCount(summary.alreadyHasPromoCodeCount)} 条`);
+  if (isPositive(summary.manualReviewPendingCount)) counts.push(`待人工核对：${formatCount(summary.manualReviewPendingCount)} 条`);
+  counts.push(ineligible);
+  if (isPositive(summary.blockedCount)) counts.push(`其它未提交：${formatCount(summary.blockedCount)} 条`);
+  const notice = isPositive(summary.inOtherUnfinishedBatchNoticeCount)
+    ? `其中 ${formatCount(summary.inOtherUnfinishedBatchNoticeCount)} 本同时在其它未完成的批次里，跑到时会自动跳过`
+    : null;
+  return { counts, notice };
+}
 type Group = CatalogBatchContext["channelGroups"][number] & {
   active?: boolean;
   claimCapabilityEnabled?: boolean;
@@ -46,7 +83,7 @@ export function PromoLinkClaimDialog({
   const [stage, setStage] = useState<Stage>("loading");
   const [message, setMessage] = useState("");
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ submittedCount: number | null; ineligibleCount: number | null } | null>(null);
+  const [summary, setSummary] = useState<ClaimSummary | null>(null);
   const [isFrozen, setIsFrozen] = useState(false);
   // 阶段2 第4步（施工任务 3.6，设计 §5.9）："预计分 N 片、预计耗时 X 小时"——
   // 只在开关开启时才有意义；开关关闭时 `context.lifecycleEnabled` 缺失
@@ -200,6 +237,8 @@ export function PromoLinkClaimDialog({
     return () => { cancelled = true; };
   }, [accounts, allAccountsChosen, context, lifecycleEnabled, stage]);
 
+  const summaryLines = summary ? claimSummaryLines(summary) : null;
+
   const canSubmit = Boolean(context)
     && promoClaimGranted
     && !invalidGroup
@@ -263,9 +302,11 @@ export function PromoLinkClaimDialog({
         {taskId && <Link href={`/tasks/${taskId}`} className="text-sm text-blue-700 underline">查看任务</Link>}
         {stage === "counting" && (
           <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-            {summary ? <>
-              任务已提交：{(summary.submittedCount ?? 0).toLocaleString("zh-CN")} 条<br />
-              不符合领取条件：{(summary.ineligibleCount ?? 0).toLocaleString("zh-CN")} 条
+            {summaryLines ? <>
+              {summaryLines.counts.map((line) => <span key={line} className="block">{line}</span>)}
+              {summaryLines.notice && (
+                <span className="mt-1 block" data-testid="promo-claim-summary-overlap-notice">{summaryLines.notice}</span>
+              )}
             </> : "任务已提交，正在统计…"}
           </p>
         )}

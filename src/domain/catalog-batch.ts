@@ -203,12 +203,32 @@ export type PromoClaimShardEstimate = Readonly<{
   groups: readonly PromoClaimShardEstimateGroup[];
 }>;
 
+/**
+ * 批次结果摘要（目录同步页提交后弹窗用）。
+ *
+ * 后四个计数字段（2026-10-06 追加：`selectedCount` 与三个生命周期计数）只有
+ * 对应键写进了批次结果 JSON 才有值，读接口在结果里缺键时一律返回 `null`——
+ * 老批次（含旧路径、纳入书目批次）的返回形状除了多出这几个 `null` 之外不变，
+ * 各弹窗按"键是否为 null"决定是否展示新计数：
+ * - `selectedCount`：运营选中的总本数；
+ * - `alreadyHasPromoCodeCount` / `manualReviewPendingCount`：建批次时就被排除
+ *   （未入队）的两类书；
+ * - `inOtherUnfinishedBatchNoticeCount`：入队了、但同时在其它未完成批次里的
+ *   书本数（只是提示，跑到时由 worker 执行时的检查自动跳过）。
+ * 恒等式（生命周期批次）：selectedCount = submittedCount + ineligibleCount +
+ * alreadyLinkedCount + alreadyHasPromoCodeCount + manualReviewPendingCount +
+ * blockedCount；提示数不在恒等式里（那些书已经计在 submittedCount 内）。
+ */
 export type CatalogBatchSummary = Readonly<{
   taskId: string;
   phase: CatalogBatchPhase;
+  selectedCount: number | null;
   submittedCount: number | null;
   ineligibleCount: number | null;
   alreadyLinkedCount: number | null;
+  alreadyHasPromoCodeCount: number | null;
+  manualReviewPendingCount: number | null;
+  inOtherUnfinishedBatchNoticeCount: number | null;
   blockedCount: number | null;
 }>;
 

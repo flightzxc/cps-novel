@@ -792,6 +792,11 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
       const summary = await readCatalogBatchSummary(owner, batchB.batchId, foundation.actorId);
       expect(summary).toMatchObject({ blockedCount: 0 });
       expect(summary?.phase).not.toBe("completed_with_errors");
+      // 2026-10-06（弹窗补齐计数）：摘要读接口把批次结果里的新计数原样带给目录同步页弹窗。
+      expect(summary).toMatchObject({
+        selectedCount: 3, submittedCount: 3,
+        alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0, inOtherUnfinishedBatchNoticeCount: 2,
+      });
     });
 
     it("场景 A（进行中）：批次 A 的分片已放行、正在进行（pending）时，批次 B 的重叠书同样不被 active_item_conflict 挡住，只记提示数", async () => {
@@ -908,6 +913,12 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
 
       const summary = await readCatalogBatchSummary(owner, batch.batchId, foundation.actorId);
       expect(summary).toMatchObject({ phase: "completed", blockedCount: 0 });
+      // 2026-10-06（弹窗补齐计数）：被排除的两类书在摘要读接口里有各自的计数，
+      // 弹窗据此显示「已选 2 = 已提交 0 + 已有推广码 1 + 待人工核对 1」。
+      expect(summary).toMatchObject({
+        selectedCount: 2, submittedCount: 0, ineligibleCount: 0,
+        alreadyHasPromoCodeCount: 1, manualReviewPendingCount: 1, inOtherUnfinishedBatchNoticeCount: 0,
+      });
       const detail = await getAdminTaskDetail(owner, await readContext(), { family: "generic", taskId: batch.batchId });
       expect(detail.status).not.toBe("completed_with_errors");
       expect(detail.catalogBatch).toMatchObject({
