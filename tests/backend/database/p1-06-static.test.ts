@@ -171,8 +171,12 @@ describe("P1-06 database operations static contracts", () => {
     // 运营 V2 (20260930100000_site_setting_yandex) adds two site_setting field
     // records (yandex_verification, yandex_metrica_id) -- no new physical
     // constraint/index -- 1238 + 2 = 1240.
-    expect(records).toHaveLength(1240);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1240);
+    // Worker 健康检查部分索引 (20261005100000_worker_health_partial_indexes)
+    // adds two migration_sql `partial_index` constraint records
+    // (generic_task_item_heartbeat_idx, channel_sync_task_item_heartbeat_idx)
+    // -- no new table/field -- 1240 + 2 = 1242.
+    expect(records).toHaveLength(1242);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1242);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

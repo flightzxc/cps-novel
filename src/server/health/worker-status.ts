@@ -23,12 +23,25 @@ import { HEALTH_DATABASE_TIMEOUT_MS, type HealthDatabaseClient } from "./service
  *     一个探测预算常量，见 `./service.ts`）→ failed（503）。
  *   - 存在过期处理锁（expiredLocks > 0）→ degraded（503）。
  *   - 否则 → ok（200）。
- * `lastHeartbeatAgeSeconds` 只是诊断信息，不参与判定——三张表里从未有过
- * `heartbeat_at`（从未有 item 被租用过）时为 `null`，按 idle 处理，视为 ok，
- * 不是 failed/degraded 的触发条件。
+ * `lastHeartbeatAgeSeconds` 只是诊断信息，不参与判定。`heartbeat_at` 在领取/心跳时
+ * 写入、在完成/重排/过期恢复时置回 `NULL`（`src/lib/tasks/store.ts`），所以它表示
+ * "当前在途 item 里最新的一次心跳"；没有在途 item（worker 空闲）时为 `null`，
+ * 按 idle 处理，视为 ok，不是 failed/degraded 的触发条件。
  *
  * 响应体不含 SQL、表名、连接串或错误堆栈：只输出
  * `{ workerStatus, expiredLocks, lastHeartbeatAgeSeconds, checkedAt }`。
+ *
+ * 性能（2026-10-05 生产只读实证）：心跳查询原先在 `generic_task_item`（约 36.8 万行 /
+ * 496 MB）和 `channel_sync_task_item`（约 8 万行）上没有任何索引覆盖 `heartbeat_at`，每次
+ * 请求整表顺序扫描——缓存热 87 ms，缓存冷 1.5 s，越过上面的探测预算，把正常的 worker
+ * 误报成 failed / 503。迁移 `20261005100000_worker_health_partial_indexes` 给两张表各加了
+ * 一个只含在途行的部分索引 `(heartbeat_at) WHERE heartbeat_at IS NOT NULL`，心跳查询改成
+ * 每表 `ORDER BY heartbeat_at DESC LIMIT 1`。过期锁查询由初始迁移早已存在的
+ * `*_expired_lease_idx`（`(locked_until, id) WHERE status = 'processing' AND locked_until
+ * IS NOT NULL`）服务，内层文本未改、也不需要新索引。两条查询与各自的索引是成对的：改查询的
+ * WHERE/ORDER BY 或删索引，都会让它退回整表扫描，
+ * `tests/integration/health/worker-health-indexes-postgres.test.ts` 在真实 PostgreSQL 上
+ * 用 EXPLAIN 断言这一点。
  */
 
 export type WorkerStatusValue = "ok" | "degraded" | "failed";
@@ -50,43 +63,55 @@ interface ExpiredLockRow {
   task_type: string;
   expired_count: bigint | number;
   oldest_expiry: Date;
-  maximum_overdue: unknown;
+  /** interval 的 text 形式（见 EXPIRED_LOCKS_QUERY 的注释），判定不用它。 */
+  maximum_overdue: string | null;
 }
 
 interface HeartbeatRow {
   last_heartbeat_at: Date | null;
 }
 
-// 逐字取自 docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md §2「Expired processing
+// 内层逐字取自 docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md §2「Expired processing
 // locks」——只读证据查询，不带任何调用方参数，用 Prisma.sql 标签而非字符串拼接。
-const EXPIRED_LOCKS_QUERY = Prisma.sql`
-  WITH expired AS (
-    SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
-    FROM channel_sync_task_item i
-    JOIN channel_sync_task t ON t.id = i.task_id
-    WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-    UNION ALL
-    SELECT 'generic', t.task_type, i.locked_until
-    FROM generic_task_item i
-    JOIN generic_task t ON t.id = i.task_id
-    WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-  )
-  SELECT family, task_type, count(*) AS expired_count,
-         min(locked_until) AS oldest_expiry,
-         max(transaction_timestamp() - locked_until) AS maximum_overdue
-  FROM expired
-  GROUP BY family, task_type
-  ORDER BY maximum_overdue DESC, family, task_type
+// 外层只做一件事：把 interval 列 `maximum_overdue` 转成 text。Prisma 的 `$queryRaw` 无法
+// 反序列化 interval（"Failed to deserialize column of type 'interval'"，2026-10-05 在真实
+// PostgreSQL 16 上复现），而这个列一旦有过期锁行就会被读到——不转的话"存在过期锁"会被
+// catch 成 failed、expiredLocks 恒为 0，degraded 永远走不到。该列本身判定逻辑不用，只为不炸。
+export const EXPIRED_LOCKS_QUERY = Prisma.sql`
+  SELECT family, task_type, expired_count, oldest_expiry, maximum_overdue::text AS maximum_overdue
+  FROM (
+    WITH expired AS (
+      SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
+      FROM channel_sync_task_item i
+      JOIN channel_sync_task t ON t.id = i.task_id
+      WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
+      UNION ALL
+      SELECT 'generic', t.task_type, i.locked_until
+      FROM generic_task_item i
+      JOIN generic_task t ON t.id = i.task_id
+      WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
+    )
+    SELECT family, task_type, count(*) AS expired_count,
+           min(locked_until) AS oldest_expiry,
+           max(transaction_timestamp() - locked_until) AS maximum_overdue
+    FROM expired
+    GROUP BY family, task_type
+    ORDER BY maximum_overdue DESC, family, task_type
+  ) AS expired_groups
 `;
 
 // 心跳年龄不在运维文档里，字段/表名取自 src/lib/tasks/store.ts 与
 // prisma/schema.prisma（见上方头注释）。Phase C 起两表 UNION 取全局最新一次心跳。
-const LAST_HEARTBEAT_QUERY = Prisma.sql`
+// 每表先 `ORDER BY heartbeat_at DESC LIMIT 1`（走部分索引 `*_heartbeat_idx` 的末端，
+// 读一个索引页），再取两者较大值；输出仍是单行单列 `last_heartbeat_at`，无在途行时为 NULL。
+export const LAST_HEARTBEAT_QUERY = Prisma.sql`
   SELECT max(heartbeat_at) AS last_heartbeat_at
   FROM (
-    SELECT heartbeat_at FROM channel_sync_task_item WHERE heartbeat_at IS NOT NULL
+    (SELECT heartbeat_at FROM channel_sync_task_item
+      WHERE heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1)
     UNION ALL
-    SELECT heartbeat_at FROM generic_task_item WHERE heartbeat_at IS NOT NULL
+    (SELECT heartbeat_at FROM generic_task_item
+      WHERE heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1)
   ) AS heartbeats
 `;
 

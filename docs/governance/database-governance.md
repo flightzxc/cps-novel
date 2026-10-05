@@ -105,8 +105,8 @@ Migration 演进，当前 Credential 状态增量为
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
 | --- | --- | --- | --- | --- |
 | ~~`catalog_scan_task` / `_item`~~ | **已 DROP（Phase C step C-4）**：并入 `generic_task`，见下方 `generic_task` 行 | ~~页区间目录扫描及租约~~ | ~~account+app+project_type 单 active；item fencing~~ | 已执行：`prisma/migrations/20260907091500_p3_drop_catalog_scan_task` |
-| `channel_sync_task` / `_item` | CPS_PARITY_ADAPTED | 已有 SourceItem 的定向作业 | 规范化 scope 单 active；item 指向 SourceItem | item 指向 Novel |
-| `generic_task` / `_item` | CPS_PARITY_ADAPTED；Phase C 起承载 `task_type='catalog_scan'` 行（`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`），11 个原 CatalogScan 专属字段落 `params`/`result`/item `payload` JSON，item 用 `target_type='catalog_page'`、`target_id=页码字符串` | 规范化 scope 单 active（`operation_scope_hash` 对 catalog_scan 行折入 `project_type`）；target 二元唯一；C-1 新增两条 `WHERE task_type='catalog_scan'` partial index（`generic_task_catalog_scan_status_created_idx`、`generic_task_catalog_scan_scope_idx`），等价旧 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx` | `drama_id` 非空固定目标 |
+| `channel_sync_task` / `_item` | CPS_PARITY_ADAPTED | 已有 SourceItem 的定向作业 | 规范化 scope 单 active；item 指向 SourceItem；`channel_sync_task_item_heartbeat_idx`（部分索引，Worker 健康检查用，见 §5 第 23 条） | item 指向 Novel |
+| `generic_task` / `_item` | CPS_PARITY_ADAPTED；Phase C 起承载 `task_type='catalog_scan'` 行（`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`），11 个原 CatalogScan 专属字段落 `params`/`result`/item `payload` JSON，item 用 `target_type='catalog_page'`、`target_id=页码字符串` | 规范化 scope 单 active（`operation_scope_hash` 对 catalog_scan 行折入 `project_type`）；target 二元唯一；C-1 新增两条 `WHERE task_type='catalog_scan'` partial index（`generic_task_catalog_scan_status_created_idx`、`generic_task_catalog_scan_scope_idx`），等价旧 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx`；`generic_task_item_heartbeat_idx`（部分索引，Worker 健康检查用，见 §5 第 23 条） | `drama_id` 非空固定目标 |
 | `side_effect_intent` | ORIGINAL_REQUIRED | 外部调用前永久 effect key 和独立已提交意图 | `effect_key` 永久唯一；operation+idempotency 唯一 | 与业务写同一未提交事务 |
 | `operation_audit` | ORIGINAL_REQUIRED | 本地业务变更审计 | append-only；与业务写同事务 | 业务提交后补写 |
 | `schedule_run` | ORIGINAL_REQUIRED | 确定 scheduled instant、revision、DST/misfire 语义 | schedule+scheduled_for 唯一；manual trigger 独立唯一 | `globalThis` 去重 |
@@ -424,6 +424,31 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
       `article_promo_link_novel_fkey`（§5 第 12 条）约束，且这两列的 JSONL 字典记录已在 C-24/
       P1-05B 落地，本迁移不重复登记。
 
+23. `20261005100000_worker_health_partial_indexes`（Worker 健康检查冷缓存超时误报 503 的修复，2026-10-05）
+    新增两个部分索引，只加索引，不改列/CHECK/FK/数据，不改 grants：
+    - `db:public:generic_task_item:generic_task_item_heartbeat_idx` =
+      `INDEX (heartbeat_at) WHERE heartbeat_at IS NOT NULL`；
+    - `db:public:channel_sync_task_item:channel_sync_task_item_heartbeat_idx` =
+      `INDEX (heartbeat_at) WHERE heartbeat_at IS NOT NULL`。
+
+    动机：`GET /api/health/worker` 的"最近心跳"查询（`max(heartbeat_at)`）原先在 `generic_task_item`
+    （生产约 36.8 万行 / 496 MB）和 `channel_sync_task_item`（约 8 万行 / 83 MB）上没有任何索引覆盖
+    `heartbeat_at`，每次请求整表顺序扫描，缓存冷时约 1.5 s，越过 `HEALTH_DATABASE_TIMEOUT_MS = 1500`，
+    按设计返回 failed / 503，而 worker 本身正常。`heartbeat_at` 由 `src/lib/tasks/store.ts` 在领取与
+    心跳时写入、在完成/重排/过期恢复时置回 `NULL`，因此非空行 = 当前在途 item，索引永远只有几十行
+    （16 kB），与表的历史规模无关；查询同步改成每表 `ORDER BY heartbeat_at DESC LIMIT 1`（每表读一个
+    索引页，O(1)）。同一次健康检查里的"过期租约"查询**不需要新索引**：本节第 8 条的
+    `*_expired_lease_idx`（初始迁移已建，`(locked_until, id) WHERE status = 'processing' AND
+    locked_until IS NOT NULL`）本来就覆盖它，真实库 EXPLAIN 证实迁移前后都走该索引，故不再叠一对重复的
+    `(locked_until) WHERE status = 'processing'` 索引。
+
+    Prisma 6.19 的 `@@index` 不支持 `where`，两个索引只存在于迁移 SQL（`schema.prisma` 在两个模型上方
+    写了注释），字典记为 `partial_index` / `managed_by=migration_sql`，与本节其它部分索引同一约定。
+    迁移在 Prisma 事务里执行，不能用 `CREATE INDEX CONCURRENTLY`；`release.sh` 的 `migrate-approved`
+    在维护模式（应用已停）下执行，普通 `CREATE INDEX` 持 SHARE 锁（阻塞写、不阻塞读），窗口 = 对两张表
+    各一次顺序扫描。真实库证据：`bash scripts/run-worker-health-index-postgres-verification.sh`
+    （EXPLAIN 断言两条健康查询都走索引、不再 Seq Scan，改回旧写法 / 删索引即变红）。
+
 ### P1-05B Migration 注意事项
 
 - Article 进入 `published` 前必须在同一原子写入中设置 `published_at`；draft 及其他非 published 状态允许 `published_at IS NULL`。
@@ -575,6 +600,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-09-26 | 工单 1：发布后按账号/应用排试读（`ADR-PUBLICATION-PREVIEW-ENQUEUE.md`，待独立复核） | 零 schema/migration/grants 变更。发布和发布审计提交后，以实际 Article→PromoLink→NovelSourceItem 关系规划试读；每组 task/item/operation_audit 独立事务。既有 web_app 的列级元数据读取及 task/item 写授权足够，未扩展凭据密文权限。任务工厂增加按 `(mode, novelId)` 排序的 transaction advisory lock，检查 pending/processing 条目及 pending/processing/paused/disabled 父任务，跨组/跨来源别名去重；新增跳过原因 `preview_in_flight` 存在原有 JSON 结果中。字典无物理或权限变更，记录数保持 1,235。 | Codex / GPT-6 Sol | 专用一次性 PostgreSQL 16.14 真 web_app/worker_app 验收；密文 SELECT 拒绝、入队 SQL 故障不回滚发布、并发交叠去重、hold、两档 worker 模拟；live dictionary drift=0，详见 `WO1-PUBLICATION-PREVIEW-VERIFICATION.md`。未操作线上库或积压。 |
 | 2026-09-27 | 容量参数与异地备份（Owner 2026-09-27 定基线：haiyue-vps=4 vCPU/16 GiB/无 swap/SSD，即预生产亦即上线目标机） | 零 schema/migration/grants 变更。`infra/postgres/pitr/postgresql.conf.example` 新增内存/规划器调参：`shared_buffers=4GB`、`effective_cache_size=10GB`、`work_mem=16MB`、`maintenance_work_mem=512MB`、`random_page_cost=1.1`、`effective_io_concurrency=200`、`max_parallel_workers_per_gather=2`、`max_worker_processes=8`、`max_parallel_workers=4`；`max_connections=100` 维持不变（连接预算算式见该文件同处注释：web_app 9 + worker_app 18(worker+worker-light 各 9，同一角色) + scheduler_app 9 + backup/migration/运维余量 ≈50，上限 100 留足冗余）。`infra/preproduction/docker-compose.yml` 的 `postgres` 服务新增 `shm_size: 1gb`（Docker 默认 64MiB 对并行查询过小）；`web`/`worker`/`worker-light`/`scheduler` 新增 `mem_limit`（2g/2g/1g/512m）与 `NODE_OPTIONS=--max-old-space-size`（约为 mem_limit 的 75%）——无 swap 环境下防止单进程泄漏拖垮整机的唯一兜底。**这些设置只在 postgres 容器被重建时生效**：`scripts/preproduction/release.sh` 的 `deploy`/`rollback` 从不碰 postgres 服务，只读 ssh 实测 2026-09-27 确认现网 `cps-novel-postgres-1` 容器自 2026-09-22 创建后从未重建，仍是全部出厂默认值（`shared_buffers=128MB` 等）。为此新增 `scripts/preproduction/recreate-postgres.sh`：仅重建 postgres 容器本身（不动 `cps_novel_postgres_data` 卷、不触发 migration、不重放 grants.sql），前置检查两张租约式任务表（`generic_task_item`/`channel_sync_task_item`）`processing` 行数为零、重建前在线逻辑备份、重建后逐项 `SHOW` 回读全部调参与 `shm_size` 并核对，及重建前后逐表精确行数指纹（`query_to_xml`/`xpath` 一次性 COUNT(*) 全表哈希）严格相等。异地备份新增 `scripts/preproduction/offsite-pull.sh`（在 Owner Mac/NAS 上运行，仅发起只读 ssh + rsync 拉取，VPS 不存放任何外部凭据；按 `.metadata` 文件 mtime——而非文件名——判定"最近一份已完成"备份，已在 haiyue-vps 上实测发现文件名不可靠排序的真实反例）与 `infra/preproduction/offsite-pull.plist.example`（launchd 模板，未安装）；拉回目录复用既有 `scripts/preproduction/export-backup-manifest.sh` 生成 `SHA256SUMS`，可直接喂给既有 `scripts/preproduction/restore-offhost-rehearsal.sh`，未另造清单格式。 | Claude Sonnet 5（施工） | 本地隔离演练（独立 Compose 栈，未触碰运行中的 `cps-novel-x8-local-*` 或 haiyue-vps）：用真实预构建镜像 `cps-novel:0.5.0-807aad3` 先以本分支之前（旧）配置跑 `database.sh fresh-init`（54 张表、20 条已应用 migration），核对 `SHOW` 确为出厂默认值（`shared_buffers=128MB`/`ShmSize=67108864`），再换上本分支新配置真跑 `recreate-postgres.sh`：precheck、在线备份、postgres 容器停止/移除/重建、十项 `SHOW` 全部 PASS、`shm_size` PASS（1073741824 字节）、重建前后逐表行数指纹相等（md5 一致）、web/worker/worker-light/scheduler 依次重新起健康、`database.sh persistent-check` PASS，`RECREATE_POSTGRES_DOWNTIME_SECONDS=15`（本次真实测得，非估算；`docker volume inspect` 独立确认卷 `CreatedAt` 重建前后逐字节相同，容器 `Created` 时间晚于卷，证明卷未被重建）。异地拉取脚本对真实 pg_dump 产物（同一次演练 postgres 产出）端到端验证：一次性 sshd 容器（非 haiyue-vps）上拉取、校验、生成 `SHA256SUMS`、`OFFHOST_COPY_CONFIRMED=YES restore-offhost-rehearsal.sh` 真实执行 PASS；另以本地伪造三文件对拍验证"文件名字典序陷阱"（真实复现 haiyue-vps 上 `cps-novel-v050-...` 命名会让字典序判定选错，mtime 判定选对）、写入中识别、校验失败拒绝且不落盘、幂等重跑、保留策略清理，均通过。🔴 已知未解决阻塞：haiyue-vps 上 `/opt/cps-novel/shared/backups/logical` 归属 `root:root 0600`，`deploy` 用户无免密 sudo（`sudo -n -l` 实测拒绝），`offsite-pull.sh` 对真实主机的 rsync 当前会被拒绝，需 Owner 批准一项 VPS 侧写操作（三个方案见 `PREPRODUCTION_DEPLOYMENT_RUNBOOK.md`"Offsite backup pull"节）方可用于真实生产；容量参数上线同样需 Owner 批准维护窗口后手动执行 `recreate-postgres.sh`。全部演练资源（容器/网络/卷/临时 sshd 镜像）已清理；`postgresql.conf.example` 被 `infra/production-like/docker-compose.yml`（本地 X8 演练）共享挂载，本轮内存调参因此也会影响那条路径，已在该文件与 README 中明确记录、shm_size 未同步。 |
 | 2026-09-30 | 运营第二轮：Yandex 站长验证与统计（运营《小说站调整V2.docx》，Owner 转交；分支 `feat/ops-round2-yandex-sitemap`，基线 `integration/v0.5.5-2026-09-30@4866e8b`） | 一条新迁移 `20260930100000_site_setting_yandex`：`site_setting` 追加 `yandex_verification VARCHAR(255) NOT NULL DEFAULT ''` 与 `yandex_metrica_id VARCHAR(32)`（可空）两列，不改任何已有迁移。`infra/postgres/grants.sql`：`web_app` 的列级 UPDATE 清单补上两列（`web_app`/`worker_app` 表级 SELECT 自动覆盖新列，`scheduler_app` 列级 SELECT 仍只有 `id, carousel_config_json`，未扩大）。字典新增两条 `site_setting` 字段记录（recordCount 1238 → 1240，activeCount 1168 → 1170，53 张表不变）；`SITE_SETTING_WRITABLE_FIELDS` 同步两个字段，x6 授权契约由该清单派生，随之自动更新。 |
+| 2026-10-05 | Worker 健康检查冷缓存超时误报 503（`GET /api/health/worker`；分支 `fix/worker-health-indexes`，基线 `release/v0.5.7-2026-10-01-redo@0278e73`） | 一条新迁移 `20261005100000_worker_health_partial_indexes`：`generic_task_item`/`channel_sync_task_item` 各新增部分索引 `(heartbeat_at) WHERE heartbeat_at IS NOT NULL`（`generic_task_item_heartbeat_idx`、`channel_sync_task_item_heartbeat_idx`），不改列/CHECK/FK/数据，不改任何已有迁移，`grants.sql` 无需变更（`web_app`/`analyst_ro` 已有四张任务表的表级 SELECT，索引随表由 `migration_owner` 持有）。`src/server/health/worker-status.ts` 的心跳查询改为每表 `ORDER BY heartbeat_at DESC LIMIT 1` 后取较大值（输出仍是单行 `last_heartbeat_at`，判定规则与响应字段不变）；过期租约查询文本未改，它由初始迁移已有的 `*_expired_lease_idx` 覆盖，故未新增 `locked_until` 索引。字典新增两条 `migration_sql` `partial_index` 记录并更新 `heartbeat_at` 字段与两张表记录的 `indexes`（recordCount 1240 → 1242，53 张表不变）。真实库证据：新增运行器 `scripts/run-worker-health-index-postgres-verification.sh`。 | Claude / Sonnet | 已实现，待发布 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
@@ -596,3 +622,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 ### 2026-09-30 运营第二轮：Yandex 两个站点设置项
 
 增量迁移 `20260930100000_site_setting_yandex` 为 `site_setting` 追加 `yandex_verification`（`VARCHAR(255) NOT NULL DEFAULT ''`）与 `yandex_metrica_id`（`VARCHAR(32)`，可空）。写路径与 GA4 字段相同；`web_app` 列级 UPDATE 授权补上两列，`web_app`/`worker_app` 表级 SELECT 自动覆盖，`scheduler_app` 不读这两列、授权不变。字典新增两条字段记录，recordCount=1240、activeCount=1170，53 张表不变。本改动已实现，待发布。
+
+### 2026-10-05 Worker 健康检查心跳索引
+
+增量迁移 `20261005100000_worker_health_partial_indexes` 为 `generic_task_item` 与 `channel_sync_task_item` 各新增一个部分索引 `(heartbeat_at) WHERE heartbeat_at IS NOT NULL`，服务 `GET /api/health/worker` 的"最近心跳"查询（旧写法整表顺序扫描，缓存冷时越过 1500 ms 探测预算而误报 503）。过期租约查询由初始迁移已有的 `*_expired_lease_idx` 覆盖，未新增索引。只加索引：不改列、CHECK、FK、数据，`grants.sql` 与 Prisma 模型字段均无变化。字典新增两条 `migration_sql` `partial_index` 记录，recordCount=1242、activeCount=1172、indexCount=226，53 张表不变。本改动已实现，待发布。

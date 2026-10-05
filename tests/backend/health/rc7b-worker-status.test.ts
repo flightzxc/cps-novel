@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { HealthDatabaseClient } from "@/server/health/service";
-import { evaluateWorkerStatus } from "@/server/health/worker-status";
+import {
+  EXPIRED_LOCKS_QUERY,
+  LAST_HEARTBEAT_QUERY,
+  evaluateWorkerStatus,
+} from "@/server/health/worker-status";
 
 /**
  * RC-7b — `evaluateWorkerStatus` semantics. Not a CPS port (CPS `v8.3.6` has
@@ -105,5 +112,93 @@ describe("RC-7b evaluateWorkerStatus", () => {
       "lastHeartbeatAgeSeconds",
       "workerStatus",
     ]);
+  });
+});
+
+/**
+ * 2026-10-05：冷缓存下两条查询整表扫描、越过 1500 ms 探测预算而误报 503。修法是迁移
+ * `20261005100000_worker_health_partial_indexes` 的四个部分索引 + 下面的查询形状。
+ * 真实库上"确实走索引"的证据在
+ * `tests/integration/health/worker-health-indexes-postgres.test.ts`（EXPLAIN 断言）；
+ * 这里是不需要 Docker 的静态一半：查询文本与索引谓词必须成对，改任一边都在这里先红。
+ */
+function squash(sql: string): string {
+  return sql.replace(/\s+/g, " ").replace(/;\s*$/, "").trim();
+}
+
+function readRepoFile(relative: string): string {
+  return readFileSync(path.resolve(process.cwd(), relative), "utf8");
+}
+
+describe("worker health queries stay paired with the partial indexes", () => {
+  it("heartbeat query probes each table through ORDER BY heartbeat_at DESC LIMIT 1 under heartbeat_at IS NOT NULL", () => {
+    const sql = squash(LAST_HEARTBEAT_QUERY.sql);
+
+    for (const table of ["channel_sync_task_item", "generic_task_item"]) {
+      expect(sql).toContain(
+        `(SELECT heartbeat_at FROM ${table} WHERE heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1)`,
+      );
+    }
+    expect(sql.startsWith("SELECT max(heartbeat_at) AS last_heartbeat_at FROM (")).toBe(true);
+    // 输出契约不变：单行单列 last_heartbeat_at。
+    expect(sql).toContain("AS last_heartbeat_at");
+  });
+
+  it("expired-locks query keeps the status = 'processing' predicate verbatim on both item tables", () => {
+    const sql = squash(EXPIRED_LOCKS_QUERY.sql);
+
+    expect(sql.split("WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()")).toHaveLength(3);
+    expect(sql).toContain("count(*) AS expired_count");
+  });
+
+  it("expired-locks query embeds the launch-day runbook §2 block, the alert script and the X8 health SQL verbatim as its inner query", () => {
+    const runbook = readRepoFile("docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md");
+    const section = runbook.split("## 2. Expired processing locks")[1].split("## 3.")[0];
+    const runbookSql = section.match(/```sql\n([\s\S]*?)```/)![1];
+    const alertScript = readRepoFile("infra/production-like/alerts/check-worker-locks.sh");
+    const alertSql = alertScript.match(/<<'SQL' \|\| true\n([\s\S]*?)\nSQL\n/)![1];
+    const x8Sql = readRepoFile("infra/production-like/launch-day-health-checks.sql")
+      .split("X8_HEALTH_SQL_GROUP_2_EXPIRED_LOCKS")[1]
+      .split("\\echo")[0];
+
+    const shipped = squash(EXPIRED_LOCKS_QUERY.sql);
+    expect(shipped).toContain(squash(runbookSql));
+    expect(shipped).toContain(squash(alertSql));
+    expect(shipped).toContain(squash(x8Sql.replace(/^'\n/, "").replace(/--[^\n]*\n/g, "")));
+  });
+
+  it("expired-locks query never hands an interval column to Prisma: the outer select casts maximum_overdue to text", () => {
+    // Prisma $queryRaw cannot deserialize `interval` ("Failed to deserialize column of type
+    // 'interval'", reproduced on real PostgreSQL 16). Without the cast, any row at all makes
+    // the query throw, evaluateWorkerStatus catches it as "failed", and `degraded` is unreachable.
+    const sql = squash(EXPIRED_LOCKS_QUERY.sql);
+
+    expect(
+      sql.startsWith(
+        "SELECT family, task_type, expired_count, oldest_expiry, maximum_overdue::text AS maximum_overdue FROM (",
+      ),
+    ).toBe(true);
+    expect(sql.endsWith(") AS expired_groups")).toBe(true);
+  });
+
+  it("evaluateWorkerStatus issues exactly the two exported queries", async () => {
+    const database = fakeDatabase({ expiredRows: [], heartbeatRows: [{ last_heartbeat_at: null }] });
+
+    await evaluateWorkerStatus(database, { now: () => NOW });
+
+    const calls = (database.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.map(([query]) => query)).toEqual([EXPIRED_LOCKS_QUERY, LAST_HEARTBEAT_QUERY]);
+  });
+
+  it("reads the freshest heartbeat from the single last_heartbeat_at column and clamps negative ages to 0", async () => {
+    const database = fakeDatabase({
+      expiredRows: [],
+      heartbeatRows: [{ last_heartbeat_at: new Date(NOW + 5_000) }],
+    });
+
+    const result = await evaluateWorkerStatus(database, { now: () => NOW });
+
+    expect(result.workerStatus).toBe("ok");
+    expect(result.lastHeartbeatAgeSeconds).toBe(0);
   });
 });
