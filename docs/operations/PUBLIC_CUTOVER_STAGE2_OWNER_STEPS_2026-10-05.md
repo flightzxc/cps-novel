@@ -1,6 +1,6 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 首次失败且回退已复核，修正版待重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 两次失败、回退已复核，已定位符号链接路径下空渲染，修正版待重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
@@ -19,7 +19,8 @@ B 通过后才将入口的 `B.sh` 换成 `C.sh`。三块都在服务器真实 re
 set -euo pipefail
 set +x
 [[ "$(id -un)" == deploy ]] || { echo 'STAGE2=REFUSED user'; exit 65; }
-cd /opt/cps-novel/current
+# 必须使用真实目录：Node ESM 入口判断在 current 符号链接路径下会跳过 CLI 渲染。
+cd -P /opt/cps-novel/current
 source scripts/preproduction/lib.sh
 export PREPROD_ENV_FILE=/opt/cps-novel/shared/env/preprod.env
 stage2_manifest=/opt/cps-novel/shared/artifacts/staging/bbb06253828d9fd338f0ece1749c2020d8ec4679.json
@@ -174,6 +175,8 @@ printf 'STAGE2_CERTIFICATE=PASS backup=%s logdir=%s\n' "$stage2_backup" "$stage2
 
 14:21 首次 B 安装成功后，完整验证在认证 health 请求遭遇 curl 7，已使用该次安装器备份恢复到 A 后状态，B 未通过。此版在完整验证前，对两个旧域名分别执行最多 10 次、每次 curl 最多 3 秒、间隔 1 秒的就绪检查：匿名必须 401/noindex 且 realm 为 `CPS Novel Rehearsal`，认证必须 200/noindex，JSON 的 ok、运行 commit、数据库 passed 正确。只重试连接失败/空响应/超时，以及仍明确来自旧 preprod realm 的 401；任何 5xx、其他状态、保护缺失、错误 JSON 或身份立即失败。就绪通过后仍原样运行完整验证，验证失败不会重试绕过。
 
+17:45 第二次 B 十轮等待失败，诊断发现安装的站点配置为 0 字节，443 listener 消失；随后回退复验通过。已复现：逻辑 `current` 路径下 Node CLI 的入口判断不匹配真实模块路径，正常退出却不渲染；同版脚本在真实 release 目录渲染 15,898 字节。公共初始化改用 `cd -P`；B 在任何安装前先检查候选非空、两旧主机及 rehearsal 认证指令，安装后再比对实际文件哈希。诊断 `systemctl` 使用 `--no-pager`，避免停在分页器导致回退等待。A 已完成，无须重新签发；这里只更新三块共同的目录初始化，不修改不可变 release。
+
 ```bash
 [[ "$(cat "$stage2_root/certificate.pass")" == "$GIT_COMMIT" ]] || exit 65
 stage2_backup=''
@@ -191,9 +194,17 @@ stage2_finish() {
 trap stage2_finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+scripts/preproduction/render-nginx.sh --mode rehearsal --output "$stage2_work/rehearsal.candidate"
+[[ -s "$stage2_work/rehearsal.candidate" ]] || { echo 'STAGE2=REFUSED empty_rehearsal_candidate'; exit 65; }
+grep -q 'server_name www.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
+grep -q 'server_name zbcwf.bangbangji.cloud;' "$stage2_work/rehearsal.candidate" || exit 65
+grep -q 'auth_basic "CPS Novel Rehearsal";' "$stage2_work/rehearsal.candidate" || exit 65
+stage2_candidate_sha="$(sha256sum "$stage2_work/rehearsal.candidate" | cut -d' ' -f1)"
+printf 'REHEARSAL_CANDIDATE=PASS sha256=%s bytes=%s\n' "$stage2_candidate_sha" "$(stat -c %s "$stage2_work/rehearsal.candidate")"
 PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --mode rehearsal | tee "$stage2_work/install.log"
 stage2_backup="$(sed -n 's/^NGINX_BACKUP=//p' "$stage2_work/install.log")"
 [[ -n "$stage2_backup" && "$stage2_backup" != *$'\n'* ]] || exit 65
+[[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d' ' -f1)" == "$stage2_candidate_sha" ]] || { echo 'STAGE2=FAIL installed_candidate_mismatch'; exit 65; }
 stage2_rehearsal_ready() {
   local url="$1" attempt code curl_status
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -231,7 +242,7 @@ for url in "$SITE_URL/api/health" "$ADMIN_CANONICAL_ORIGIN/api/health"; do
   if stage2_rehearsal_ready "$url"; then :; else
     stage2_ready_status=$?
     sha256sum /etc/nginx/nginx.conf /etc/nginx/conf.d/cps-novel-preprod.conf
-    systemctl show nginx -p ExecReload -p MainPID || true
+    systemctl --no-pager show nginx -p ExecReload -p MainPID || true
     ss -ltn | awk 'NR==1 || /:(80|443)[[:space:]]/' || true
     exit "$stage2_ready_status"
   fi

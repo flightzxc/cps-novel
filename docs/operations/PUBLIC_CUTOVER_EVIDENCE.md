@@ -401,3 +401,25 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 - 修正版 B.sh SHA-256=`61751a98506e6e6e846437c5a49ca92a41c9dc4987b56484ee90a36d7480fe78`；本地/远端 `bash -n` 和哈希核对通过，远端保留旧 B 后原子替换。A/C 脚本及其哈希未变，未执行修正版 B，未修改不可变 release、安装器或模板。
 - 18 个本地隔离就绪场景通过，覆盖匿名连接失败后成功、旧 realm 后成功、认证连接失败后成功、两主机依次通过；匿名/认证 502、匿名开放、两类 noindex 缺失、未知 realm、错误 JSON/commit/数据库、认证拒绝、TLS 错误均立即失败；持续超时/空响应/旧 realm 十轮耗尽失败。curl/sleep 使用隔离 stub，仅 JSON 使用本机 node；不执行 sudo、nginx、Docker 或真实网络。此前 B 回退 handler 未改变，首次真实回退已独立复验。
 - **最新状态：A PASS；B 首次失败且回退实测 PASS，修正版待 Owner 在终端重跑；C 不执行。** 外部压测、本地矩阵、备份散列及凭据/NAS 证据仍未完成，不进入切换当天。
+
+### 17:45：B 第二次失败，定位空渲染；17:50 回退，真实目录修正待重跑
+
+来源：Owner 回传第二次 B 输出；Codex 于 `2026-10-05T08:49:53Z` 起只读诊断，`08:51:40Z` 独立复验回退。安装时间由服务器文件 mtime / ExecReload 锚定为东京时间 17:45:42，回退 reload 为 17:50:11。
+
+- 本次安装器备份 `/opt/cps-novel/shared/nginx-backups/install.YUx95Ksh`，语法检查和安装输出 PASS。就绪首轮匿名 401 后未通过 rehearsal realm 判断；随后九轮均 curl 7/http 000，最终 `readiness_timeout`。站点文件 SHA-256=`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`，stat **0 字节**；443 listener 不存在，只有 80 bootstrap 及 127.0.0.1:3000 应用监听。**B 未通过，不进入 C。**
+- 诊断命令 `systemctl show` 在 Owner 的交互终端进入分页器，父 B 仍存活、未执行 EXIT 回退。Codex 告知 Owner 按 `q`；后续保护性检查只在父/子命令及 deploy 身份精确匹配时才结束只读诊断子进程，检查时该进程已消失，因此未发送信号。原 B 随后完成恢复。新版诊断改 `systemctl --no-pager show`，不再阻塞回退。
+- 回退读回：主配置/站点/bootstrap 的完整 SHA-256 与 A 完成时一致；站点恢复为 10,085 字节，80/443 listener 恢复；nginx/timer active，匿名发布验证 PASS，两个认证 health 均 ok/完整 Final commit/数据库 passed。`certificate.pass` 保留、`rehearsal.pass` 不存在，B 及分页子进程已退出。原始脱敏复验日志 `B-second-failure-readback.log`。Owner 尚未回传分页退出后的尾部输出，因此此处记录的是**独立回退复验 PASS**，不补造 `STAGE2_ROLLBACK` stdout 或新备份路径。
+
+**空渲染根因已复现。** release 的 `render-public-nginx.mjs` 用 `process.argv[1] === fileURLToPath(import.meta.url)` 判断 CLI 入口；`render-nginx.sh` 的 root 使用逻辑 pwd。在 `cd /opt/cps-novel/current` 下，Node 入口参数为符号链接路径，而模块定位到真实 release，入口判断为 false，进程正常退出但不写正文。渲染 shell 没有非空断言，安装器随后安装空文件，nginx 对空站点文件的语法检查仍通过；reload 后不再有 443 server。模块文件定位的符号链接解析行为见 [Node 官方 ESM 文档](https://nodejs.org/download/release/v22.18.0/docs/api/esm.html#importmetafilename)。
+
+服务器同版脚本的只读渲染对照：逻辑路径返回 `NGINX_RENDER=PASS`、文件 0 字节；`cd -P /opt/cps-novel/current` 后，PWD 为真实 Final release，输出 15,898 字节，SHA-256=`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`。测试只在 shared 临时目录生成候选，结束清理，不执行主机安装。此前“仅缺 reload 就绪等待”的修正不足，Codex 未先检查渲染产物非空，已在本轮纠正；A 首次 ACME 空响应仍不与该 Node 路径缺陷混同。
+
+本轮修正范围仅命令单及 staged 命令：共同初始化使用物理 release 目录；B 安装前候选必须非空且包含两旧主机/rehearsal 认证指令，安装后哈希必须与候选一致，否则由原备份回退。原安装器、renderer、模板、完整发布验证及回退 handler 不改。底层 CLI 的路径比较和安装器缺少空候选门禁记为后续开发修复项，不能将本轮包装规避记作 release 已修复。
+
+| 当前 staged 文件 | SHA-256 |
+|---|---|
+| A.sh（仅共同目录初始化更新；无需重跑 A） | `f30fff640ba37c0224144af9e724357b1883b800c027f7a812f620512d882bf8` |
+| B.sh（真实目录、候选检查、无分页诊断） | `dc5476ebf16ee5966aabcb36b9ebd76cbb680c1f073b38f25e59793561ea2b43` |
+| C.sh（仅共同目录初始化更新；继续等待 B） | `93fec1a3d913112c1c3d44cd167f781698ddddc401e9ce0c3385e83957e52cc1` |
+
+验证：三个脚本 `bash -n`、文档/脚本/远端哈希核对通过；本机同样复现符号链接 0 字节和真实目录 15,898 字节。新增门禁隔离验证：空候选在安装前退出 65，正常候选通过；18 项就绪场景重跑全部通过。测试不执行主机 sudo/nginx/reload。远端保存旧命令再替换，修正版 B 尚未执行。**最新状态：A PASS；B 第二次失败、独立回退复验 PASS，修正版待终端重跑；C、压测、矩阵和其他证据缺口仍未完成。**
