@@ -133,6 +133,37 @@ else
   sha256_of() { shasum -a 256 "$1" | awk '{print $1}'; }
 fi
 
+# 🔴 stat dialect (fix, 2026-10-02): reading a file's mtime is spelled
+# differently on the two families this script runs on -- GNU coreutils/BusyBox
+# (the UGREEN NAS, any Linux) take `stat -c '%Y' FILE`, BSD (macOS) takes
+# `stat -f '%m' FILE`. The old one-liner `stat -f '%m' F || stat -c '%Y' F` was
+# only ever exercised on a Mac and is WRONG on GNU: there `-f` means
+# "filesystem status", so `stat -f '%m' F` treats '%m' as a second FILE
+# operand, prints F's multi-line filesystem report to STDOUT, then exits 1 --
+# and the `||` fallback prints the real timestamp as well. The retention
+# list below then held a handful of garbage "backup names" per real backup
+# (each got an `rm -f`, and stderr filled with bogus RETENTION_DELETED lines);
+# the real delete set only came out right by accident, because the
+# non-numeric garbage keys happen to sort before every real mtime.
+# Probe once, up front (before any transfer), then use exactly one dialect
+# for the whole run, so the two dialects can never contaminate each other's
+# stdout. Both probes require a pure integer, not merely exit status 0.
+is_epoch_seconds() {
+  case "$1" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  return 0
+}
+stat_style=""
+probe_mtime="$(stat -c '%Y' / 2>/dev/null)" || probe_mtime=""
+if is_epoch_seconds "$probe_mtime"; then
+  stat_style="gnu"
+else
+  probe_mtime="$(stat -f '%m' / 2>/dev/null)" || probe_mtime=""
+  if is_epoch_seconds "$probe_mtime"; then stat_style="bsd"; fi
+fi
+if ! [[ -n "$stat_style" ]]; then fail tool_missing stat_gnu_or_bsd_mtime; fi
+
 umask 077
 mkdir -p "$local_dir"
 # A prior run killed hard (power loss, kill -9) before its own EXIT trap ran
@@ -253,7 +284,7 @@ else
   fi
 fi
 
-latest_complete="$(printf '%s\n' "$remote_listing" | awk '$1=="COMPLETE"{print $2, $3}' | sort -k1,1n | tail -1 | awk '{print $2}')"
+latest_complete="$(printf '%s\n' "$remote_listing" | awk '$1=="COMPLETE"{print $2, $3}' | LC_ALL=C sort -k1,1n | tail -1 | awk '{print $2}')"
 if ! [[ -n "$latest_complete" ]]; then fail no_complete_backup_found; fi
 
 echo "OFFSITE_PULL_REMOTE_LATEST=$latest_complete" >&2
@@ -351,19 +382,45 @@ fi
 # 🔴 Sorted by each backup's own .metadata mtime, NOT by filename -- same
 # reason as the remote listing above: filenames are not a reliable
 # chronological order (a manually named backup can sort anywhere lexically).
+#
+# 🔴 Fail closed (fix, 2026-10-02): prints exactly ONE integer line on stdout,
+# or prints nothing, explains on stderr and returns 1 -- never an empty or
+# multi-line value. The stat dialect was probed once at the top of this script
+# (stat_style); see the comment there for why the old `stat -f ... || stat -c
+# ...` chain corrupted this very sort on GNU systems.
 local_stat_mtime() {
-  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null
+  local mtime_out=""
+  case "$stat_style" in
+    gnu) mtime_out="$(stat -c '%Y' "$1" 2>/dev/null)" || mtime_out="" ;;
+    bsd) mtime_out="$(stat -f '%m' "$1" 2>/dev/null)" || mtime_out="" ;;
+  esac
+  if ! is_epoch_seconds "$mtime_out"; then
+    echo "OFFSITE_PULL_STAT_ERROR=no integer mtime for $1 (stat_style=$stat_style)" >&2
+    return 1
+  fi
+  printf '%s\n' "$mtime_out"
 }
+# Collected in the MAIN shell (plain for loop, no pipeline, no process
+# substitution): a failing local_stat_mtime must reach `fail` and stop the
+# script BEFORE anything is deleted -- inside `< <(...)` or a pipeline stage its
+# non-zero status would be swallowed and the sort would run on missing keys.
+# Paths are absolute (no `cd`): BASH_SOURCE below may be a relative path.
+retention_rows=""
+for dump_path in "$local_dir"/cps-novel-*.dump; do
+  if ! [[ -f "$dump_path" && -f "${dump_path}.metadata" ]]; then continue; fi
+  dump_name="${dump_path##*/}"
+  dump_mtime="$(local_stat_mtime "${dump_path}.metadata")" || fail local_mtime_unavailable "${dump_name}.metadata"
+  retention_rows="${retention_rows}${dump_mtime} ${dump_name}"$'\n'
+done
+# LC_ALL=C: sort's last-resort tie-break (equal mtime) compares whole lines
+# with the locale's collation, which differs between a Mac and a NAS; pin it so
+# both order ties identically.
+sorted_names="$(printf '%s' "$retention_rows" | LC_ALL=C sort -k1,1n | awk '{print $2}')"
 all_local_dumps=()
 while IFS= read -r name; do
   if ! [[ -n "$name" ]]; then continue; fi
   all_local_dumps+=("$name")
-done < <(
-  cd "$local_dir" && for f in cps-novel-*.dump; do
-    if ! [[ -f "$f" && -f "${f}.metadata" ]]; then continue; fi
-    printf '%s %s\n' "$(local_stat_mtime "${f}.metadata")" "$f"
-  done 2>/dev/null | sort -k1,1n | awk '{print $2}'
-)
+done <<<"$sorted_names"
 total="${#all_local_dumps[@]}"
 if (( total > keep )); then
   to_delete=$(( total - keep ))
