@@ -30,7 +30,7 @@ FROZEN_DECISIONS    = D1–D9（本文第 2 节逐条对应）
 5. **准入**：同一渠道账号同时最多一个领取分片处于待处理 / 处理中（D6）。
 6. **职责划分**：scheduler 只负责准入、凭据判断、放行 / 暂停分片；领取的真实执行全部由 worker 完成（D7）。放行只修改任务表，不修改条目表；scheduler 只能读凭据表的非秘密列。
 7. **过期不等于失败**：worker 领取条目的查询下推"分片截止时间已过则不可领取"，被挡住的条目零写入；handler 对分片条目以任务级截止时间加宽限作为第二道防线。
-8. **错过截止时间**：只有从未尝试、没有任何 getcode 副作用的待处理条目，才允许随分片自动重新放行。已调用过 getcode、已有意图记录、结果不明、人工核对中、进入过任何可能写上游的执行阶段的条目，永远禁止自动重新领取，只能走回读或人工核对。同一分片连续两次错过截止时间，进入系统暂停，等待人工处理（D4）。
+8. **错过截止时间**：只有从未尝试、没有任何 getcode 副作用的待处理条目，才允许随分片自动重新放行。已调用过 getcode、已有意图记录、结果不明、人工核对中、进入过任何可能写上游的执行阶段的条目，永远禁止自动重新领取，只能走回读或人工核对。同一分片连续两次错过截止时间，进入系统暂停，等待人工处理（D4）。（2026-10-06：判据中的"条目"指"这一条"而不是"这本书在任何批次"，见第 8 节。）
 9. **凭据时钟**：放行前要求凭据状态可用、校验成功（`last_validated_at` 不为空且不早于凭据创建时刻）、剩余有效期 ≥ 90 分钟 + 安全余量；否则批次系统暂停，条件满足后自动恢复。"新凭据已录入"本身不是恢复条件（D5）。
 10. **回退开关**：`PROMO_CLAIM_LIFECYCLE_V1_ENABLED`，代码默认 false。开关只决定新批次用哪种生命周期；关闭后，已创建的生命周期批次停止放行新分片，进入 `lifecycle_disabled`，不改写任何条目。先在预生产显式开启，完整 UAT 和 8 万级模拟 / 真实验收通过后，再决定目标环境配置（D8）。
 11. **单本领取**：暂时保留旧路径（提交后 6 小时），明确列为过渡项，最终统一到放行 / 执行生命周期（D9）。
@@ -68,10 +68,55 @@ FROZEN_DECISIONS    = D1–D9（本文第 2 节逐条对应）
 1. **scheduler_app 获得 `operation_audit` 表级 SELECT，不只是 INSERT**。设计 §7 原文只写"`operation_audit`：INSERT"。施工时按此实现后，在一次性 Postgres 容器上用真实 `scheduler_app` 角色跑放行事务，第一次调用 `auditSystemAction`（`tx.operationAudit.create()`）就整体回滚，报 `permission denied for table operation_audit`。根因和 2026-09-11 "worker_app RETURNING 权限缺口全仓审计"那一次一样：Prisma 的 `.create()` 在没有显式 `select` 时，一律编译成带 `RETURNING <全部标量列>` 的 SQL，PostgreSQL 对 RETURNING 里的每一列都按 SELECT 权限校验，只给 INSERT 挡不住这一刀。`operation_audit` 对 `web_app`/`worker_app` 一直是表级 SELECT（这张表没有对任何角色隐藏的敏感列），所以给 `scheduler_app` 同样是表级 SELECT + INSERT，不再收窄到某几列，与既有两个角色的授权形状一致（`infra/postgres/grants.sql` 该处注释、`docs/governance/database-governance.md` 2026-09-23 那条变更日志已记录）。
 2. **D4 不安全时复用 `deadline_missed_twice` 这一个终态桶，不新增第六个原因码**。设计 §5.7 第 3 条只说"发现一条不满足就不自动重新放行，转人工"，没有规定具体落在哪个 `system_hold.reasonCode` 上。`PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES`（第 1 步）已经把五个原因码定成常量数组，设计 §5.8 的暂停/恢复一览表也只列了五种；施工决定不为"D4 前置检查发现不安全条目"单独开第六个原因码，而是复用 `deadline_missed_twice`（同样是"连续/确定性地不能自动恢复、只能人工处理"的语义），用 `TaskControlMarker.reason`（自由文本字段，不是 `reasonCode`）写 `unsafe_to_auto_retry` 来区分"因为发现不安全条目被卡住"与"单纯连续两次超时"——两者在恢复方式上完全一样（都只能人工处理），只是审计/排查时能分辨触发原因（`src/lib/tasks/promo-claim-release.ts` 的 `hasUnsafePendingItems` 判定 + 上述 `holdShardSystemHold` 调用点）。
 3. **D4 前置检查的触发条件从"只在 `deadline_missed_retry` 时检查"扩为"只要 `releaseCount > 0` 就检查"**。设计 §5.7 第 2 条描述的是"错过截止时间重新放行前"这一个场景，字面上容易理解成只在 `eligibility === "deadline_missed_retry"` 时才需要跑这条安全检查。但批次级暂停 → 恢复（3.1）会把一个已经放行过、其中某个条目可能已经调用过 getcode 的分片，交还成 `disabled` + `awaiting_release`（与"第一次放行、结构上不可能有任何副作用"的分片标记完全相同），如果放行判定只认标记不认历史，这条分片会被当成"第一次放行"直接免检，绕开 D4 的安全网。施工把前置检查的触发条件改成"只要 `shard.params.releaseCount > 0`（不论当前标记是 `awaiting_release` 还是 `system_hold:deadline_missed`）就必须重新跑一遍"，`releaseCount === 0` 的真正首次放行才完全跳过（`src/lib/tasks/promo-claim-release.ts` 第 736–767 行附近，标注为"施工任务 3.2 收口"）。
-4. **枚举时新增阻断码 `queued_in_other_batch`**。设计 §5.2/§5.3 没有提到跨批次重复排队的检测；施工任务 3.4 收口时补上：worker 枚举一个生命周期批次时，如果发现某本书已经挂在另一个批次仍在排队（`disabled`/`paused`）的生命周期分片下，计入 `result.blockedReasonCounts.queued_in_other_batch`，不再把它也切进当前批次的分片——避免同一本书被两个尚未放行的批次同时排队、将来被两条独立的 scheduler 放行路径先后领取。这条检测只覆盖生命周期批次之间；旧路径双闸关闭时创建的 `disabled` 子任务不在检测范围内，是旧路径本身既有的盲区，本阶段不改旧路径判定。
+4. **（已于 2026-10-06 被第 8 节撤销）枚举时新增阻断码 `queued_in_other_batch`**。设计 §5.2/§5.3 没有提到跨批次重复排队的检测；施工任务 3.4 收口时补上：worker 枚举一个生命周期批次时，如果发现某本书已经挂在另一个批次仍在排队（`disabled`/`paused`）的生命周期分片下，计入 `result.blockedReasonCounts.queued_in_other_batch`，不再把它也切进当前批次的分片——避免同一本书被两个尚未放行的批次同时排队、将来被两条独立的 scheduler 放行路径先后领取。这条检测只覆盖生命周期批次之间；旧路径双闸关闭时创建的 `disabled` 子任务不在检测范围内，是旧路径本身既有的盲区，本阶段不改旧路径判定。
 5. **批次六类计数口径**：批次详情页把每个分片名下的条目按六类互斥桶计数（`已领取`/`已有推广码`/`人工核对`/`失败`/`跳过`/`剩余`），口径落在 `classifyPromoClaimItemOutcome`（`src/domain/catalog-batch.ts`）：`claimed` = `result.decision` 为 `claimed` 或 `readback_recovered`（真正新领到码，含租约丢失后回读确认成功）；`withCode`（已有推广码）= `already_available` 或 `already_fetched`（本来就有码，不消耗一次真实 getcode）；`manualReview`（人工核对）= `manual_review_required` 及任何未识别的 `decision`（CASE 表达式穷举到 `ELSE`，保证不会有条目被静默漏计到某个桶之外）；`failed`（失败）= 条目状态本身是 `failed`，或 `decision` 为 `capability_disabled`（执行时领取能力被关闭，没有调用 getcode、没有创建 `side_effect_intent`，因此归入失败而非人工核对——2026-09-24 收口，不是设计原文的默认选择，是复核期间明确讨论后定下的口径：`capability_disabled` 是确定性的配置状态，不需要人工去核对上游到底发生了什么）；`skipped`（跳过）= 状态 `skipped` 且不属于 `already_fetched`；`remaining`（剩余）= 状态 `pending`/`processing`。六类互斥、加总恒等于分片条目总数。
 6. **单任务暂停/恢复对生命周期分片一律拒绝（409），单任务中止仍然允许**。设计 §5.9 只说"批次级操作：暂停/恢复/中止，作用于整个批次"，没有明确规定"能不能对批次下的单个分片直接用旧的单任务暂停/恢复按钮"。施工/复核期间发现：如果不挡住，运营在分片自己的任务详情页上用旧版通用暂停/恢复按钮，可以绕开 scheduler 的 D1/D4/D5 三道前置检查，直接把一个分片的状态改来改去——尤其是"直接恢复"，会把一个可能已经有 getcode 副作用的分片直接改回 `pending`，跳过 D4 安全网。因此：`pauseTask`/`resumeTask`（`src/server/task-admin/service.ts`）对 `task_type = 'promo_link.claim.v1'` 且 `isLifecycleShardParams(parent.params)` 为真的任务一律返回 409（`task_admin_state_conflict`），只能走批次级暂停/恢复（`pausePromoClaimBatchTx`/`resumePromoClaimBatchTx`）。单任务"中止"（`abortTask`）不受此限——放弃这一片、批次继续，是合理的人工处置，不产生"孤儿状态"那类语义混乱（中止是终态，不像暂停/恢复那样需要与批次级流程重新对齐）。
 7. **系统暂停中的批次不能再手动暂停**。`pausePromoClaimBatchTx`（`src/lib/tasks/promo-claim-batch-control.ts`）与 `runPromoClaimReleaseTick`（`src/lib/tasks/promo-claim-release.ts`）共用同一份"批次正常与否"判据 `HELD_BATCH_STATUSES = ["paused", "cancelled", "disabled"]`——批次处于 `disabled`（即处于任一 `system_hold` 原因码下）时，`pausePromoClaimBatchTx` 直接返回 `state_conflict`，不允许再叠加一次人工暂停。这条不是设计条款,是为了避免"系统暂停"和"人工暂停"两种语义在同一个 `disabled` 状态上互相覆盖标记、恢复时无法判断该走哪条恢复路径的实现细节。
 8. **批次级操作复用 `task:manage`（2FA）**，不是新开一个权限点。批次级暂停/恢复/中止/重新批准全部经 `requireFreshAdminServiceMutation(authorization, "task:manage", ...)`（`src/server/auth/guards.ts`），与既有单任务暂停/恢复/中止同一个 capability、同一条"新鲜会话 + 2FA"（`requireAdminTwoFactor`）要求，没有为生命周期批次单独发明一个更松或更严的权限点。
 9. **批次详情页的预计完成时间（ETA）是保守的串行估算，不是按历史吞吐外推**。`estimatePromoClaimBatchEtaMinutes`（`src/domain/catalog-batch.ts`）= 当前处于 `pending`/`processing` 的分片剩余到 `deadlineAt` 的时间，加上其余排队分片各自按**整个放行窗口** `windowMinutes` 计（不是按实测平均放行→完成时长），这与 D6"同一账号同时最多一个分片在跑"的准入规则一致——排队分片确实只能一个接一个串行放行，这个 ETA 因此是一个偏保守（略高估）但结构上不会算少的估计，不依赖对"这一批到底能跑多快"的乐观假设。
 10. **`deadline_missed_twice` 的分片只能走批次级中止，没有单独的"分片级重新放行"操作**。这不是遗漏，是设计 §5.8 暂停/恢复一览表本身的选择："连续两次错过截止时间"这一行的恢复方式写的就是"人工处理"，没有配套一个"重新放行这一片"的按钮——运营能做的人工处置就是批次级中止（放弃这一片和批次里其它未完成分片）或者不处理（保持系统暂停，问题排查清楚后再决定），不提供绕开 D4 安全网、直接把一个已经两次错过截止时间的分片重新放行的入口。
+
+## 8. 修订：去掉跨批次占用，防重复回到执行时（2026-10-06，Owner 确认）
+
+```text
+REVISION_DATE       = 2026-10-06（北京时间）
+CONFIRMED_BY        = Owner（改法与 D4 口径澄清均于 2026-10-06 明确同意）
+REVISES             = 第 7 节第 4 条（枚举时新增阻断码 queued_in_other_batch）——撤销
+CLARIFIES           = 第 2 节第 8 条 / D4（分片重新放行前的安全检查）——口径澄清，不是放松
+BASELINE            = integration/v0.5.8-2026-10-05 @ 6504e8c
+```
+
+### 8.1 为什么撤销第 7 节第 4 条
+
+2026-10-05 23:19，运营对"已建立书目 + 未领取"建了一个领推广批次，选中 65,132 本，最后只提交了 18 本。原因是 9 月 25 日那个正式领取批次一直处于暂停状态，它名下约 6.5 万本还没跑；第 7 节第 4 条的规则是"一本书只要还挂在别的没跑完的批次里（哪怕那个批次是暂停的），新批次就跳过它"，记为 `queued_in_other_batch`。新批次几乎什么都没提交，漏进来的 18 本恰好是旧批次里已经失败的 18 本，再跑一次照样失败。
+
+防重复要防的是"一本书已经领到推广码后又被领一次"（上游领取接口非幂等，见第 1 节），不是"同一本书同时在两个没跑完的批次里排队"。这条阻断没有增加任何安全性，因为 worker 执行每一本书、在调用领取接口之前，一直有三道检查（都已在生产跑了数万本，本次一行未改）：
+
+1. 本地已经有这本书的推广码 → 直接记「已有推广码」，一次上游都不调；
+2. 这本书以前发过领取请求（意图记录，包括结果不明、转人工核对的）→ 只回读或转人工，绝不再领；
+3. 先向上游预读一次，上游已经有码 → 取回入库，不调领取接口。
+
+再加上 worker 一次只处理一条、同一账号同一时刻只放行一个分片（D6），两个批次不可能同时处理同一本书；谁后跑到这本书，谁就在第 1 道检查里跳过。CPS 短剧（v8.7.0）也是这样：真正防重复的是执行时的预读和"领过就不再自动领"的记录，建批次时没有按剧跨批次跳过的规则。海阅的"跨批次占用"是 2026-09-23 阶段 2 复核时为了"少一次多余排队"自己加的，不是从 CPS 抄来的，却让一个暂停的批次扣住了它名下所有的书。
+
+### 8.2 决定
+
+1. **去掉建批次时的跨批次占用阻断（只针对生命周期批次）**。不再因为"书挂在别的排队中/暂停中批次的分片里"（`queued_in_other_batch`）或"书挂在别的进行中的领取任务里"（`active_item_conflict`）而跳过。改为照常入队，同时在批次结果里记提示数 `inOtherUnfinishedBatchNoticeCount`（"其中 N 本同时在其它未完成的批次里，跑到时会自动跳过"）。旧路径（`PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 关闭时的非生命周期领取任务）的判定逐字不动，`active_item_conflict` 在旧路径下仍然阻断。
+2. **建批次时，不论用什么方式选书，一律排除"已有推广码"和"待人工核对"的书（只针对生命周期批次）**。口径逐字复用目录同步页"推广链接状态"筛选（`classifyPromoLinkRowStatuses`，`src/lib/tasks/promo-link-status-filter.ts`：已领取优先于人工核对中），且只按当前这一页（≤ 50 本）的 id 查询，不把全量 id 搬进 SQL 参数列表。这两类是正常跳过，不是错误：分别计入 `alreadyHasPromoCodeCount` / `manualReviewPendingCount`，**不计入** `blockedCount`/`blockedReasonCounts`，不会让批次变成"完成（有异常）"。选了"未领取"筛选时这两类本来就被筛掉，新计数为 0，结果与改前一致。
+3. **D4 口径澄清（Owner 2026-10-06 确认）：恢复/重放分片前的安全检查只看"这一条"，不看"这本书在别处"**。D4 的原意是"只重放从未尝试且无领取副作用的条目"。原实现把"条目"理解成"这本书在任何批次里"：只要这本书在本账号下存在任意状态的意图记录，整片就转 `deadline_missed_twice`（`reason=unsafe_to_auto_retry`），唯一出路是中止整个批次。去掉跨批次占用以后，下面这个场景会直接卡死：批次 A 在第 5 片中途暂停 → 运营新建批次 B，包含 A 第 5 片里还没跑的书 → B 把这些书领完 → 运营恢复 A → A 的第 5 片因为"这些书在 B 里有领取记录"被整片卡住；而这些书交给第 5 片去跑其实是安全的，执行时第 1、2 道检查会让它们直接跳过或只回读。新判据（`src/lib/tasks/promo-claim-release.ts` 的 `hasUnsafePendingItems`）：
+   - 这一条本身被 worker 领过（`attempt_count <> 0`）→ 仍判不安全（不变）；
+   - 这本书在**本账号**下有结果仍未落定的领取记录（意图状态 `prepared` 或 `claim_retry_blocked`）→ 仍判不安全（保守保留）；
+   - 这本书在别处的领取记录已经落定（`confirmed` 或 `manual_review_required`）→ **不再**判不安全。
+   这一条自己的领取记录一定伴随 `attempt_count <> 0`（worker 先拿租约、再写意图记录），所以第一条已经覆盖"本条目尝试过"，口径没有变松，只是把"条目"从"这本书在任何批次"收窄回"这一条"。调用点（`releaseCount > 0` 才检查）与 D1/D5/D6 逻辑不动。
+4. **后台文案**：批次详情与任务列表展示"已有推广码 N 本""待人工核对 N 本"和重叠提示数（只展示大于 0 的项）；`queued_in_other_batch`、`active_item_conflict` 的中文说明保留，并且读接口的原因码白名单把 `active_item_conflict` 补进去（此前白名单只有 `queued_in_other_batch`，历史批次里的 `active_item_conflict` 在后台读接口里被过滤掉），保证 2026-10-06 之前落库的老批次在后台照常显示出未提交原因。新批次不再产生这两个原因码。
+
+### 8.3 权限同步（第 2 节第 13 条要求）
+
+D4 新判据需要读 `side_effect_intent.status`。此前 `scheduler_app` 只有 `operation_type`/`channel_account_id`/`request_summary` 三列的列级 SELECT；本次在 `infra/postgres/grants.sql` 追加 `status` 这**一列**（`web_app`/`worker_app`/`analyst_ro` 本来就能读，非敏感），其余列（`target_id`/`response_shape`/`promo_link_id` 等）仍然拒绝。数据字典 `docs/governance/database-schema-dictionary.jsonl` 里 `side_effect_intent.status` 的 `read_roles` 同步追加 `scheduler_app`；`tests/integration/tasks/promo-claim-release-postgres.test.ts` 的真实 `scheduler_app` 角色权限用例同步改为"`status` 可读、其余列仍被拒"。**部署顺序**：`grants.sql` 必须在新版 scheduler 代码生效前（或同一发布窗口内）重放；否则轮到 `releaseCount > 0` 的分片时，D4 检查会因为 `permission denied for column status` 失败：该账号的放行事务整体回滚（只记日志，不影响其它渠道账号），而且每一轮都会先选中同一个分片再失败，同账号下排在它后面的分片也放不出去，直到 grants 重放。首次放行（`releaseCount = 0`）的分片本身不读这一列。本次无 migration，但 `migrate-approved`/X8 `prepare_database()` 的 grants 重放步骤必须照常执行。worker 侧（`worker_app`）读的是 `promo_link`/`side_effect_intent` 的既有表级授权，无需新增。
+
+### 8.4 不变的红线
+
+执行时三道检查（`worker/handlers/promo-link-claim.ts`）一行未改：预读保留、意图记录、`maxAttempts=1`、结果不明只回读、原子确认。不加并发，不改限速，不改"同一账号同一时刻只放行一个分片"（D6）与分片放行顺序；不改纳入书目批次（`novel_materialize`）的枚举；不回写、不重算任何历史批次的结果；不新增环境变量。
+
+### 8.5 验收与变异证明
+
+真实 PostgreSQL 验收（用例见 `tests/integration/tasks/promo-claim-batch-control-postgres.test.ts` 的"修订 2026-10-06"一组与 `promo-claim-release-postgres.test.ts` 的"场景 D"一组；执行类用例用真实 handler + 可计数的上游假适配器，断言调用次数而不是只断言最终状态）：A 重叠书全部入队不出现 `queued_in_other_batch`；B 恢复后 A 的已放行分片能重新放行，跑到重叠书时领取接口与预读接口调用次数都为 0；C 选"全部"时只有未领书入队；D 安全检查四种情况；E 计数恒等式 `selectedCount = submittedCount + ineligibleCount + alreadyLinkedCount + alreadyHasPromoCodeCount + manualReviewPendingCount + blockedCount` 且 `blockedCount = blockedReasonCounts 之和`；F 历史批次原因照常显示；G 8 万本分片枚举耗时与改前同量级；H 旧路径逐字不变。变异三条（去掉"已有推广码"排除 → C 变红；把安全检查恢复成"本书任何意图都算" → B 变红；把提示改回阻断 → A 变红）均已验证并复原。
