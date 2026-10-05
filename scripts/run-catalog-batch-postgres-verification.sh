@@ -5,7 +5,10 @@ set +x
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 run_id="$(date +%Y%m%d%H%M%S)-$$"
 container_name="cps-novel-catalog-batch-pg16-${run_id}"
-database_name="cps_novel_catalog_batch_${run_id//-/_}"
+# 库名必须同时满足两个守卫：catalog-batch 三个文件要求 `cps_novel_catalog_batch_` 前缀，
+# B-31 新接入的 tasks/promo-claim-lifecycle-shard-deadline-postgres.test.ts 要求库名含 `lifecycletest`
+# （其 beforeAll 用 /lifecycletest/i 校验）。
+database_name="cps_novel_catalog_batch_lifecycletest_${run_id//-/_}"
 secret_dir="$(mktemp -d "${TMPDIR:-/tmp}/cps-novel-catalog-batch-secrets.XXXXXX")"
 cleanup_complete="no"
 
@@ -83,6 +86,12 @@ docker exec \
 # 也不在常规回归里跑 8 万级（8 万级只在专项验收时手工设置）。
 # 三个文件在 beforeEach 里都会 TRUNCATE 整库，所以必须串行（--no-file-parallelism），
 # 否则互相清表；它们共用同一个一次性库（库名守卫 cps_novel_catalog_batch_ 前缀天然满足）。
+#
+# B-31（待办登记 2026-10-06）：同一条领推广生命周期线上还有第 4 个从未被任何运行器打开过的文件，
+# 它在 tests/integration/tasks/ 下，不在上面那个目录里：
+#   - tasks/promo-claim-lifecycle-shard-deadline-postgres.test.ts   PROMO_CLAIM_LIFECYCLE_DATABASE_TEST（6 用例）
+# 同样用无参 `new PrismaClient()`（读 DATABASE_URL = owner）、beforeEach TRUNCATE 整库，
+# 所以并入同一次串行运行；库名已按上面的说明含 `lifecycletest`。
 CATALOG_BATCH_DATABASE_TEST=1 \
 CATALOG_BATCH_OWNER_DATABASE_URL="$owner_url" \
 CATALOG_BATCH_WEB_DATABASE_URL="$web_url" \
@@ -91,23 +100,28 @@ PROMO_CLAIM_SHARD_ENUM_DATABASE_TEST=1 \
 PROMO_CLAIM_SHARD_ENUM_SCALE_COUNT=20000 \
 PROMO_CLAIM_CATALOG_POSITION_SORT_DATABASE_TEST=1 \
 PROMO_CLAIM_CATALOG_POSITION_SORT_SCALE_COUNT=5000 \
+PROMO_CLAIM_LIFECYCLE_DATABASE_TEST=1 \
 DATABASE_URL="$owner_url" \
 npm exec vitest run -- --project node tests/integration/catalog-batch \
+  tests/integration/tasks/promo-claim-lifecycle-shard-deadline-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 # 硬断言：不允许任何测试文件被整文件跳过。vitest 在整文件全跳过时仍退出 0，
 # CLI 退出码不足以证明一次性库被真正演练过。这里解析 JSON 报告：
 #   1. 目录里每个 *.test.ts 都必须出现在报告里，且必须是 passed 状态；
 #   2. 每个文件至少有 1 个用例，且全部 passed（零 skipped / pending / todo / failed，
-#      没有单用例白名单——本运行器的三个文件当前都是零跳过）；
-#   3. 三个必需文件各自的通过数不得低于下限（防止有人删用例/删文件后仍然"全绿"）。
+#      没有单用例白名单——本运行器的四个文件当前都是零跳过）；
+#   3. 四个必需文件（含 B-31 并入的 tasks/ 下那个）各自的通过数不得低于下限
+#      （防止有人删用例/删文件后仍然"全绿"）。
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
-if ! node - "$secret_dir/integration-result.json" "$project_root/tests/integration/catalog-batch" <<'NODE'
+if ! node - "$secret_dir/integration-result.json" "$project_root/tests/integration/catalog-batch" \
+  "$project_root/tests/integration/tasks/promo-claim-lifecycle-shard-deadline-postgres.test.ts" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 const reportPath = process.argv[2];
 const testDir = fs.realpathSync(process.argv[3]);
+const extraFile = fs.realpathSync(process.argv[4]); // B-31：目录之外并入的文件
 const fail = (reason, detail) => {
   console.error(`CATALOG_BATCH_INTEGRATION=FAIL reason=${reason}`);
   for (const line of detail) console.error(`  ${line}`);
@@ -119,12 +133,13 @@ const required = new Map([
   ["postgres.test.ts", 24],
   ["promo-claim-lifecycle-shard-enumeration-postgres.test.ts", 4],
   ["promo-claim-catalog-position-sort-postgres.test.ts", 1],
+  [path.basename(extraFile), 6],
 ]);
 const byName = new Map();
 for (const file of report.testResults ?? []) {
   let resolved = path.resolve(file.name ?? "");
   try { resolved = fs.realpathSync(resolved); } catch { /* keep resolved path */ }
-  if (path.dirname(resolved) === testDir) byName.set(path.basename(resolved), file);
+  if (path.dirname(resolved) === testDir || resolved === extraFile) byName.set(path.basename(resolved), file);
 }
 const onDisk = fs.readdirSync(testDir).filter((name) => name.endsWith(".test.ts")).sort();
 const missing = [...new Set([...onDisk, ...required.keys()])].filter((name) => !byName.has(name));
