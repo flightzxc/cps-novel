@@ -367,3 +367,20 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 - 更新后 A.sh SHA-256：`105709e48ab2b7d0283d202b189eee8cc3dc947bfaf45bf66965aac931db292d`；旧 A 保留副本，更新包按哈希断言并原子替换。B/C 内容及哈希不变。
 - 三个代码块 bash 语法通过；六个本地隔离 fixture 通过：curl 52→正确 200、404→正确 200 均第二次成功；200 错正文和 403 均首次失败；持续超时/52 均十次后失败，未绕过验收。fixture 不执行真实 sudo/nginx/网络。首轮 fixture 的中文路径引用错误已改用 shell quoting 修正，重新全部通过。
 - **最新状态：A 首次失败、回退实测 PASS；修正版已准备，等待 Owner 在可输入密码的界面终端重跑。证书、续期及 A 整体均未 PASS；不进入 B。**
+
+### 14:12：A 重跑通过，证书准备完成，未对外开放
+
+来源：Owner 回传 A 重跑输出；Codex 于 `2026-10-05T05:17:51Z`（东京时间 14:17:51）独立只读复核。此次执行使用修正版 A.sh，SHA-256=`105709e48ab2b7d0283d202b189eee8cc3dc947bfaf45bf66965aac931db292d`。
+
+| 项目 | 本轮结果及来源 |
+|---|---|
+| DNS 与 bootstrap | Owner 输出中四个 DNS 源均正确，`NGINX_INSTALL=PASS mode=preprod bootstrap_public=1`；安装器备份 `/opt/cps-novel/shared/nginx-backups/install.sMb3Pll6` |
+| ACME 探针 | 主域首次 curl 52/http 000，第二次 200；www、zbcwf 首次均 200。三个名字各 `ACME_PROBE=PASS`，随后才进入签发。结果支持短暂就绪竞态的判断，仍不构成对空响应根因的唯一确证 |
+| 签发与 SAN | certbot 签发成功，cert-name=`pulsenovels.com`；SAN 恰为 `pulsenovels.com`、`www.pulsenovels.com`、`zbcwf.pulsenovels.com`，`CERT_SAN=PASS`。公有链路径 `/etc/letsencrypt/live/pulsenovels.com/fullchain.pem`；未读取私钥 |
+| 有效期 | Owner 输出：notBefore=`2026-10-05 04:14:21 UTC`；notAfter=`2027-01-03 04:14:20 UTC`（东京时间 `2027-01-03 13:14:20 +0900`） |
+| 续期 | Owner 输出中 `renew --dry-run` 模拟续期成功；脚本 timer 断言通过，Codex 独立 `systemctl is-active certbot.timer` 返回 `active` |
+| 旧站与新域名 | Owner 两轮检查均为旧公开首页/后台登录匿名 401、认证 200，新域名 HTTP/HTTPS 普通路径均 404。Codex 独立匿名发布复验 PASS，认证旧页面均 200 且 noindex，新域名六项拒绝检查 PASS。新域名 HTTPS 默认拒绝探针使用 `-k`，未将其作为新证书在线 TLS 验证；旧站认证请求不用 `-k` |
+| 配置及清理 | Codex 复核主配置 SHA-256=`48c6a4ec1e1fd28ccf968490f07e34a1d7f755793b2108a3ed8670b1ee2a0aa2`、站点配置=`063698e072bc56ddac4286f5113d565753f7251ad3c0186833a438ae6eaeeb71`，均与预检一致；bootstrap=`c405586a742f1962fde3e2885d0f00b2e05b3da6894e183c41d7ea4659ce7975`，与运行 release 模板逐字节一致；ACME 探针已清理 |
+| A 完成标记 | Owner 输出 `STAGE2_CERTIFICATE=PASS`，运行目录 `/opt/cps-novel/shared/cutover-stage2-20261005/run.aNHX3Jn4`；Codex 读取 `certificate.pass` 等于完整运行提交 `bbb06253828d9fd338f0ece1749c2020d8ec4679`，`A_READBACK=PASS`，本机脱敏复核日志 `A-pass-readback.log` |
+
+**当前结论：A 证书准备 PASS；B rehearsal、C 连接数及备份校验尚未执行，外部压测和本地矩阵仍受阻。** 仅新增 ACME bootstrap，站点继续 preprod、Basic Auth/noindex 保留；未安装主机 public 模式，未进入切换当天。下一块为 B，远端 B.sh 的 SHA-256 复核仍为 `8a1ea4cd8b066815cbb0dbec9146afc453bb8407a90694f6bbfbdeb270766233`。凭据 worker/X8 和 NAS 证据缺口保持原结论，未因 A 成功而关闭。
