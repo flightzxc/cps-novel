@@ -21,8 +21,10 @@ import {
   PROMO_LINK_CLAIM_TASK_TYPE,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import {
+  classifyPromoLinkRowStatuses,
   promoLinkStatusIdConstraint,
   resolvePromoLinkStatusContext,
+  type PromoLinkRowClassification,
   type PromoLinkStatusContext,
 } from "../../src/lib/tasks/promo-link-status-filter";
 import {
@@ -392,19 +394,32 @@ export function createCatalogBatchHandler(
         let submittedCount = 0;
         let ineligibleCount = 0;
         let alreadyLinkedCount = 0;
+        // 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8，Owner 已确认）：
+        // 下面三个计数只对生命周期批次产生（旧路径批次的结果 JSON 逐字不变）。
+        // 前两个是"正常跳过"——不是错误，**不进** `blockedReasonCounts`/
+        // `blockedCount`，不会让批次变成"完成（有异常）"；第三个只是提示，这些
+        // 书照常入队。
+        let alreadyHasPromoCodeCount = 0;
+        let manualReviewPendingCount = 0;
+        let inOtherUnfinishedBatchNoticeCount = 0;
+        // 按分组键（channelAppId + 渠道账号）累计"同时在其它未完成批次里"的书
+        // 数：整组因渠道绑定/能力不可用被阻断时这一组不入队，提示数也不能算。
+        const overlapNoticeByGroup = new Map<string, number>();
         const blockedReasonCounts: Record<string, number> = {};
         await streamSelection(tx, payload.selection, async (rows) => {
           if (payload.selection.scope === "all_filtered") selectedCount += rows.length;
           observedCount += rows.length;
+          // 旧路径（非生命周期）：`activePromo` 仍是阻断（`active_item_conflict`），
+          // 逐字不变。生命周期批次：只作提示，不阻断（见下方 `overlapNoticeByGroup`）。
           let activePromo = new Set<string>();
-          // 阶段2 第4步（施工任务 3.4）：`activePromo` 只挡 status IN
-          // ('pending','processing') 的领取任务，挡不住挂在另一个批次"仍在
-          // 排队"（disabled/paused）的生命周期分片下的书——见本函数上面
-          // "也不查旧的 active_scope_conflict" 那段既有说明对这个盲区的解释。
-          // 生命周期分片会排队数小时（甚至更久，如果卡在某个 system_hold），
-          // 这个盲区被放大：同一本书完全可能同时挂在两个批次各自的排队分片
-          // 下。只对"这次正在枚举的批次自己是生命周期批次"生效——非生命周期
-          // 路径（开关关闭、或旧路径 novel_materialize）的判定逐字不变。
+          // 修订（2026-10-06）：阶段2 第4步（施工任务 3.4）曾经把"书挂在另一个
+          // 批次仍在排队（disabled/paused）的生命周期分片下"计入
+          // `queued_in_other_batch` 阻断——这条阻断没有增加任何安全性（防重复
+          // 领取靠的是 worker 执行时的三道检查，见 `worker/handlers/
+          // promo-link-claim.ts`），却会让一个暂停的批次扣住它名下所有的书
+          // （2026-10-05 一次 65,132 本只提交了 18 本）。现在只统计、不阻断，
+          // 统计结果进 `inOtherUnfinishedBatchNoticeCount`。只对生命周期批次
+          // 生效，新批次不再产生 `queued_in_other_batch`/`active_item_conflict`。
           let queuedElsewhere = new Set<string>();
           if (payload.operation === "promo_claim" && rows.length) {
             const ids = rows.map((r) => r.id);
@@ -430,13 +445,23 @@ export function createCatalogBatchHandler(
               queuedElsewhere = new Set(queued.map((row) => row.target_id));
             }
           }
+          // 修订（2026-10-06）第二件：生命周期领推广批次不论用什么方式选书，
+          // 一律排除"已有推广码"和"待人工核对"的书。口径逐字复用目录同步页
+          // "推广链接状态"筛选的 `classifyPromoLinkRowStatuses`
+          // （`src/lib/tasks/promo-link-status-filter.ts`：已领取优先于人工核对中），
+          // 且只按"当前这一页"的 id 查询（≤ CATALOG_BATCH_CHUNK_SIZE），从不把全量
+          // id 搬进 SQL 参数列表（该模块头记录过 8 万规模的绑定变量事故）。只查
+          // 通过资格判定（已纳入书目）的行——其余行本来就记为"状态不符合"。
+          let promoLinkStatusById: ReadonlyMap<string, PromoLinkRowClassification> = new Map();
+          if (isLifecycleBatch && rows.length) {
+            promoLinkStatusById = await classifyPromoLinkRowStatuses(
+              tx,
+              rows.filter((row) => row.status === "linked" && row.novelId !== null).map((row) => row.id),
+            );
+          }
           for (const row of rows) {
-            if (payload.operation === "promo_claim" && activePromo.has(row.id)) {
+            if (payload.operation === "promo_claim" && !isLifecycleBatch && activePromo.has(row.id)) {
               blockedReasonCounts.active_item_conflict = (blockedReasonCounts.active_item_conflict ?? 0) + 1;
-              continue;
-            }
-            if (payload.operation === "promo_claim" && queuedElsewhere.has(row.id)) {
-              blockedReasonCounts.queued_in_other_batch = (blockedReasonCounts.queued_in_other_batch ?? 0) + 1;
               continue;
             }
             if (payload.operation === "novel_materialize" && row.status === "linked" && row.novelId !== null) {
@@ -457,6 +482,11 @@ export function createCatalogBatchHandler(
                 continue;
               }
             }
+            if (isLifecycleBatch) {
+              const promoLinkStatus = promoLinkStatusById.get(row.id);
+              if (promoLinkStatus === "claimed") { alreadyHasPromoCodeCount += 1; continue; }
+              if (promoLinkStatus === "manual_review") { manualReviewPendingCount += 1; continue; }
+            }
             const accountId = payload.operation === "promo_claim" ? payload.channelAccounts?.[row.channelAppId] : undefined;
             if (payload.operation === "promo_claim" && !accountId) {
               blockedReasonCounts.channel_account_required = (blockedReasonCounts.channel_account_required ?? 0) + 1;
@@ -465,6 +495,9 @@ export function createCatalogBatchHandler(
             const key = payload.operation === "promo_claim" ? `${row.channelAppId}\n${accountId}` : row.channelAppId;
             const bucket = groups.get(key) ?? [];
             bucket.push(row); groups.set(key, bucket); submittedCount += 1;
+            if (isLifecycleBatch && (activePromo.has(row.id) || queuedElsewhere.has(row.id))) {
+              overlapNoticeByGroup.set(key, (overlapNoticeByGroup.get(key) ?? 0) + 1);
+            }
           }
         });
         if (payload.selection.scope === "explicit_ids") ineligibleCount += selectedCount - observedCount;
@@ -512,20 +545,20 @@ export function createCatalogBatchHandler(
             // 由这一片自己的书目集合算出，天然与其它分片、其它批次不同，
             // 结构上不会撞见活跃范围唯一约束）。
             //
-            // 阶段2 第4步（施工任务 3.4）收口：上面新增的 `queuedElsewhere`
-            // 查询已经把"挂在另一个批次仍在排队（disabled/paused）的生命周期
-            // 分片下的书"计入 `queued_in_other_batch` 阻断，不再是盲区——但只
-            // 覆盖生命周期批次（`isLifecycleBatch` 为真）这一侧；旧路径双闸
-            // 关闭时创建的 `disabled` 子任务（`promoFeatureEnabled`/
-            // `promoWriteAllowed` 任一为 false 时，本函数下方"非生命周期"
-            // 分支会把整组子任务直接建成 `disabled`）仍然不在 `activePromo`/
-            // `queuedElsewhere` 任一查询的覆盖范围内——这是旧路径本身既有的
-            // 盲区，本步不改旧路径判定，留作已知限制。真正防止对同一本书
-            // 重复调用非幂等 getcode 的是 handler 里完全未改动的红线：
-            // `SideEffectIntent` 唯一性、`PromoLink.idempotencyKey` upsert、
-            // 以及 `existingPromoLink?.status === "fetched"` 的提前短路——这
-            // 三层在条目真正执行时生效，与它挂在哪个任务/分片下无关，是这里
-            // 两道枚举时预检查之外的最后一道防线。
+            // 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）：阶段2
+            // 第4步（施工任务 3.4）曾在这里把"挂在另一个批次仍在排队
+            // （disabled/paused）的生命周期分片下的书"阻断为
+            // `queued_in_other_batch`——该阻断已撤销，改为入队 + 只记提示数
+            // （`inOtherUnfinishedBatchNoticeCount`）。真正防止对同一本书重复
+            // 调用非幂等 getcode 的，一直是 handler 里完全未改动的执行时三道
+            // 检查：本地已有 fetched 推广码则提前短路（`existingPromoLink?.
+            // status === "fetched"`）、`SideEffectIntent` 先写后调（以前发过
+            // 领取请求只回读/转人工）、先向上游预读（上游已有码则取回入库，
+            // 不调领取接口）；再加上 worker 一次只处理一条、同一账号同一时刻
+            // 只放行一个分片（D6），两个批次不可能同时处理同一本书——谁后跑到
+            // 这本书，谁在第一道检查里跳过。旧路径双闸关闭时创建的 `disabled`
+            // 子任务仍不在 `activePromo`（只看 pending/processing）的覆盖范围
+            // 内，是旧路径本身既有的盲区，本次不改旧路径判定。
             const { shardSize, sizingBasis } = await resolveLifecycleShardSize(tx, channelAccountId!, lifecycleConfig);
             // 5-A（设计 §6.2 第 2/3 条）：先按页坐标排序，再切片——同一分片内
             // 相邻的书就落在同一页或相邻页，无登记的书聚在分组尾部走逐本路径
@@ -604,6 +637,7 @@ export function createCatalogBatchHandler(
               channelAppId, channelAccountId: channelAccountId!, memberCount: members.length,
               shardSize, shardCount: shardBuckets.length, sizingBasis,
             });
+            inOtherUnfinishedBatchNoticeCount += overlapNoticeByGroup.get(groupKey) ?? 0;
             continue;
           }
 
@@ -663,8 +697,15 @@ export function createCatalogBatchHandler(
         // 设计 §5.2：批次结果写入 shardPlan（构造逻辑见 `buildLifecycleShardPlan`
         // 的文档注释——多个渠道账号分组时没有单一的 shardSize/sizingBasis）。
         const shardPlan = isLifecycleBatch ? buildLifecycleShardPlan(shardGroupPlans, lifecycleConfig) : undefined;
+        // 只有生命周期批次才有这三个键（旧路径批次的结果 JSON 逐字不变）。恒等式：
+        // selectedCount = submittedCount + ineligibleCount + alreadyLinkedCount
+        //   + alreadyHasPromoCodeCount + manualReviewPendingCount + blockedCount。
+        const promoClaimLifecycleCounts = isLifecycleBatch
+          ? { alreadyHasPromoCodeCount, manualReviewPendingCount, inOtherUnfinishedBatchNoticeCount }
+          : {};
         await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: {
           enumerationStatus: "completed", selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount,
+          ...promoClaimLifecycleCounts,
           blockedCount, failedCount: 0,
           childTaskCount, blockedReasonCounts, expiresAt: payload.expiresAt, enumEligibilityPolicyVersion,
           ...(shardPlan ? { shardPlan } : {}),
@@ -675,12 +716,14 @@ export function createCatalogBatchHandler(
           taskType: CATALOG_BATCH_TASK_TYPE, taskId: lease.taskId,
           afterSnapshot: {
             selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount, blockedReasonCounts,
+            ...promoClaimLifecycleCounts,
             expiresAt: payload.expiresAt, enumEligibilityPolicyVersion,
             ...(shardPlan ? { shardPlan } : {}),
           },
         } });
         return { status: "success", result: {
           enumerationStatus: "completed", submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount,
+          ...promoClaimLifecycleCounts,
           enumEligibilityPolicyVersion,
           ...(shardPlan ? { shardPlan } : {}),
         } };

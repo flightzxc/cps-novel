@@ -109,15 +109,43 @@ const CATALOG_BATCH_PHASE_LABELS: Readonly<Record<string, string>> = Object.free
 const CATALOG_BATCH_BLOCKED_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   channel_account_required: "缺少可用渠道账户",
   channel_binding_or_capability_unavailable: "渠道绑定或领取能力不可用",
+  // 历史原因码，中文说明必须保留（2026-10-06 修订 ADR-PROMO-CLAIM-BATCH-
+  // LIFECYCLE §8）：新生命周期批次不再产生 `queued_in_other_batch`/
+  // `active_item_conflict`（建批次时改为只提示、不阻断），但此前已落库的
+  // 老批次结果里仍然带着它们——去掉说明，老批次在后台就显示不出未提交原因。
+  // `active_item_conflict` 在旧路径（生命周期开关关闭）下仍会产生。
   active_item_conflict: "条目已有进行中的任务",
   active_scope_conflict: "当前范围已有进行中的任务",
   missing_locale: "来源语言缺失",
   unsupported_locale: "来源语言暂不受产品支持",
-  // 阶段2 第4步（施工任务 3.4）：书已挂在另一个批次仍在排队（尚未放行/已
-  // 暂停）的生命周期分片下——见 `worker/handlers/catalog-batch.ts` 的
-  // `queuedElsewhere` 查询。
+  // 阶段2 第4步（施工任务 3.4）曾引入：书已挂在另一个批次仍在排队（尚未
+  // 放行/已暂停）的生命周期分片下。已于 2026-10-06 撤销该阻断，仅历史批次可见。
   queued_in_other_batch: "已在其它排队中的批次里",
 });
+
+/**
+ * 生命周期领推广批次建批次时的三个"非错误"计数（2026-10-06 修订，ADR-PROMO-
+ * CLAIM-BATCH-LIFECYCLE §8）。前两个是正常跳过的书（已领到推广码 / 正在人工
+ * 核对，不入队、不计入"未提交原因"，不会让批次变成"完成（有异常）"）；第三个
+ * 只是提示（这些书照常入队，跑到时由 worker 执行时的检查自动跳过）。只展示
+ * 大于 0 的项，所以选了"未领取"筛选时与改前的页面逐字相同。
+ */
+export function catalogBatchPromoClaimCountLabels(batch: {
+  readonly alreadyHasPromoCodeCount?: number | null;
+  readonly manualReviewPendingCount?: number | null;
+  readonly inOtherUnfinishedBatchNoticeCount?: number | null;
+} | undefined): readonly string[] {
+  if (!batch) return [];
+  const positive = (value: number | null | undefined): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0;
+  const labels: string[] = [];
+  if (positive(batch.alreadyHasPromoCodeCount)) labels.push(`已有推广码 ${batch.alreadyHasPromoCodeCount.toLocaleString("zh-CN")} 本（未入队）`);
+  if (positive(batch.manualReviewPendingCount)) labels.push(`待人工核对 ${batch.manualReviewPendingCount.toLocaleString("zh-CN")} 本（未入队）`);
+  if (positive(batch.inOtherUnfinishedBatchNoticeCount)) {
+    labels.push(`其中 ${batch.inOtherUnfinishedBatchNoticeCount.toLocaleString("zh-CN")} 本同时在其它未完成的批次里，跑到时会自动跳过`);
+  }
+  return labels;
+}
 
 export function catalogBatchPhaseLabel(phase: string): string {
   return CATALOG_BATCH_PHASE_LABELS[phase] ?? "处理中";

@@ -215,6 +215,36 @@ async function buildLifecycleShards(
   return { batchId: enqueued.taskId, shardIds: sorted.map((s) => s.id) };
 }
 
+/** 模拟"批次级暂停→恢复"之后的最终数据形状：分片 `disabled` + `awaiting_release`，`releaseCount` 原样保留。 */
+async function simulatePausedThenResumedShard(shardId: string, now: Date): Promise<void> {
+  const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardId } });
+  const marker = { kind: "awaiting_release", source: "manual", at: now.toISOString() };
+  await owner.genericTask.update({
+    where: { id: shardId },
+    data: { status: "disabled", result: { ...(shard.result as Record<string, unknown>), taskControl: marker } },
+  });
+}
+
+/**
+ * 直接写一条领取意图记录（原始 SQL，状态由调用者指定）。D4 只看意图的状态和
+ * 所属账号，不关心它是哪个批次、哪个条目产生的——这正是"这本书在别处"的含义。
+ */
+async function seedClaimIntent(
+  db: PrismaClient,
+  input: { bookId: string; accountId: string; status: "prepared" | "claim_retry_blocked" | "confirmed" | "manual_review_required" },
+): Promise<void> {
+  await db.$executeRaw(Prisma.sql`
+    INSERT INTO side_effect_intent (
+      id, effect_key, operation_type, idempotency_key, target_type, target_id,
+      channel_account_id, status, request_summary
+    ) VALUES (
+      ${randomUUID()}::uuid, ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link.claim_promo',
+      ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link', ${randomUUID()},
+      ${input.accountId}::uuid, ${input.status}, ${JSON.stringify({ novelSourceItemId: input.bookId, offerType: "read" })}::jsonb
+    )
+  `);
+}
+
 async function markCredential(
   db: PrismaClient,
   credentialId: string,
@@ -481,7 +511,7 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
       expect(shardReleasedAgain.params).toMatchObject({ releaseCount: 2, missedDeadlineCount: 1 });
     });
 
-    it("D4 前置检查：pending 条目已存在意图记录时拒绝自动重新放行，转 deadline_missed_twice（reason=unsafe_to_auto_retry）", async () => {
+    it("D4 前置检查：pending 条目的书已存在未落定（prepared）的意图记录时拒绝自动重新放行，转 deadline_missed_twice（reason=unsafe_to_auto_retry）", async () => {
       const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-missed-unsafe");
       const items = await owner.genericTaskItem.findMany({ where: { taskId: shardIds[0] } });
       const bookId = items[0]!.targetId;
@@ -489,18 +519,11 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
       const releasedAt = new Date("2026-09-23T09:00:00.000Z");
       await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
 
-      // 模拟"曾经准备过 getcode 调用"：写一条 side_effect_intent，
-      // request_summary.novelSourceItemId 指回这本书。
-      await owner.$executeRaw(Prisma.sql`
-        INSERT INTO side_effect_intent (
-          id, effect_key, operation_type, idempotency_key, target_type, target_id,
-          channel_account_id, status, request_summary
-        ) VALUES (
-          ${randomUUID()}::uuid, ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link.claim_promo',
-          ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link', ${randomUUID()},
-          ${foundation.accountId}::uuid, 'confirmed', ${JSON.stringify({ novelSourceItemId: bookId, offerType: "existing_promo" })}::jsonb
-        )
-      `);
+      // 模拟"曾经准备过 getcode 调用、结果还没有落定"：写一条 status=prepared 的
+      // side_effect_intent，request_summary.novelSourceItemId 指回这本书。
+      // （2026-10-06 修订：D4 只把结果未落定的意图——prepared/claim_retry_blocked——
+      // 当作不安全；已落定的 confirmed/manual_review_required 见下方"场景 D"。）
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "prepared" });
 
       const pastDeadline = new Date(releasedAt.getTime() + 91 * 60_000);
       await runPromoClaimReleaseTick(scheduler, { now: pastDeadline, env: LIFECYCLE_ON_ENV, logger: () => {} }); // 第 1 次错过 -> deadline_missed
@@ -588,16 +611,7 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
    * 一侧的放行判定，不重复验证级联恢复本身的正确性。
    */
   describe("阶段2 第4步：批次级暂停→恢复后再放行必须重新过 D4（不论标记是 awaiting_release 还是 deadline_missed）", () => {
-    async function simulatePausedThenResumedShard(shardId: string, now: Date): Promise<void> {
-      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardId } });
-      const marker = { kind: "awaiting_release", source: "manual", at: now.toISOString() };
-      await owner.genericTask.update({
-        where: { id: shardId },
-        data: { status: "disabled", result: { ...(shard.result as Record<string, unknown>), taskControl: marker } },
-      });
-    }
-
-    it("恢复后的 awaiting_release 分片，其 pending 条目已有意图记录时，scheduler 拒绝重新放行并转人工", async () => {
+    it("恢复后的 awaiting_release 分片，其 pending 条目的书已有未落定（prepared）的意图记录时，scheduler 拒绝重新放行并转人工", async () => {
       const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-resumed-unsafe");
       const items = await owner.genericTaskItem.findMany({ where: { taskId: shardIds[0] } });
       const bookId = items[0]!.targetId;
@@ -607,18 +621,9 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
       expect(first[0]).toMatchObject({ action: "released" });
       expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).params).toMatchObject({ releaseCount: 1 });
 
-      // 模拟"曾经准备过 getcode 调用"：这本书已经有一条意图记录（同 D4 既有
-      // 用例的做法）。
-      await owner.$executeRaw(Prisma.sql`
-        INSERT INTO side_effect_intent (
-          id, effect_key, operation_type, idempotency_key, target_type, target_id,
-          channel_account_id, status, request_summary
-        ) VALUES (
-          ${randomUUID()}::uuid, ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link.claim_promo',
-          ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link', ${randomUUID()},
-          ${foundation.accountId}::uuid, 'confirmed', ${JSON.stringify({ novelSourceItemId: bookId, offerType: "existing_promo" })}::jsonb
-        )
-      `);
+      // 模拟"曾经准备过 getcode 调用、结果还没有落定"：这本书已经有一条
+      // status=prepared 的意图记录（同 D4 既有用例的做法）。
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "prepared" });
 
       // 批次级暂停→恢复：分片交还成 disabled + awaiting_release，releaseCount
       // 原样保留为 1（不是 0，也不经过 deadline_missed）。
@@ -661,6 +666,86 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
     });
   });
 
+  /**
+   * 场景 D（修订 2026-10-06，Owner 确认；ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）：
+   * D4 前置检查收窄为只看"这一条"——本条自己被 worker 领过（attempt_count<>0）
+   * 或这本书在本账号下有结果仍未落定的意图（prepared/claim_retry_blocked）才
+   * 判不安全；这本书在别处的意图已经落定（confirmed/manual_review_required）
+   * 不再判不安全。四种情况都经过真实 scheduler_app 角色走完整放行事务。
+   */
+  describe("场景 D：恢复时的安全检查只看「这一条」", () => {
+    async function resumedShardWithItem(prefix: string) {
+      const { shardIds } = await buildLifecycleShards(owner, foundation, 1, prefix);
+      const bookId = (await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: shardIds[0] } })).targetId;
+      const releasedAt = new Date("2026-09-23T09:00:00.000Z");
+      expect((await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} }))[0]).toMatchObject({ action: "released" });
+      const resumedAt = new Date(releasedAt.getTime() + 10 * 60_000);
+      await simulatePausedThenResumedShard(shardIds[0]!, resumedAt);
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).params).toMatchObject({ releaseCount: 1 });
+      return { shardId: shardIds[0]!, bookId, resumedAt };
+    }
+
+    async function expectHeld(shardId: string, resumedAt: Date) {
+      const outcome = await runPromoClaimReleaseTick(scheduler, { now: resumedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(outcome[0]).toMatchObject({ action: "deadline_missed_twice", shardId, detail: { reason: "unsafe_to_auto_retry" } });
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardId } });
+      expect(shard.status).toBe("disabled");
+      expect(readTaskControlMarker(shard.result)).toMatchObject({ reasonCode: "deadline_missed_twice" });
+    }
+
+    async function expectReleased(shardId: string, resumedAt: Date) {
+      const outcome = await runPromoClaimReleaseTick(scheduler, { now: resumedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(outcome[0]).toMatchObject({ action: "released", shardId });
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardId } });
+      expect(shard.status).toBe("pending");
+      expect(shard.params).toMatchObject({ releaseCount: 2 });
+    }
+
+    it("D-1 本条 attempt_count>0（曾被 worker 拿到租约，且没有任何意图记录）→ 仍然卡住", async () => {
+      const { shardId, resumedAt } = await resumedShardWithItem("release-d1");
+      await owner.genericTaskItem.updateMany({ where: { taskId: shardId }, data: { attemptCount: 1 } });
+      expect(await owner.sideEffectIntent.count()).toBe(0);
+      await expectHeld(shardId, resumedAt);
+    });
+
+    it("D-2 这本书在别处（本账号）有 prepared 意图 → 仍然卡住", async () => {
+      const { shardId, bookId, resumedAt } = await resumedShardWithItem("release-d2");
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "prepared" });
+      await expectHeld(shardId, resumedAt);
+    });
+
+    it("D-2b 这本书在别处（本账号）有 claim_retry_blocked 意图（结果不明，尚未转人工）→ 仍然卡住", async () => {
+      const { shardId, bookId, resumedAt } = await resumedShardWithItem("release-d2b");
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "claim_retry_blocked" });
+      await expectHeld(shardId, resumedAt);
+    });
+
+    it("D-3 这本书在别处有 confirmed 意图（已落定）→ 放行，releaseCount + 1", async () => {
+      const { shardId, bookId, resumedAt } = await resumedShardWithItem("release-d3");
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "confirmed" });
+      await expectReleased(shardId, resumedAt);
+      // 放行只改任务表：条目本身仍然 pending、零写入。
+      const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: shardId } });
+      expect(item).toMatchObject({ status: "pending", attemptCount: 0 });
+    });
+
+    it("D-4 这本书在别处有 manual_review_required 意图（已落定，转人工）→ 放行，releaseCount + 1", async () => {
+      const { shardId, bookId, resumedAt } = await resumedShardWithItem("release-d4");
+      await seedClaimIntent(owner, { bookId, accountId: foundation.accountId, status: "manual_review_required" });
+      await expectReleased(shardId, resumedAt);
+    });
+
+    it("D-5 另一个渠道账号名下的 prepared 意图与本账号无关（判据按本账号）→ 放行", async () => {
+      const { shardId, bookId, resumedAt } = await resumedShardWithItem("release-d5");
+      const otherAccountId = randomUUID();
+      await owner.channelAccount.create({
+        data: { id: otherAccountId, channelId: foundation.channelId, businessId: `pcr-other-${otherAccountId}`, accountName: "Other account" },
+      });
+      await seedClaimIntent(owner, { bookId, accountId: otherAccountId, status: "prepared" });
+      await expectReleased(shardId, resumedAt);
+    });
+  });
+
   describe("批次批准时刻先后：多批次时先放行更早批准的那个", () => {
     it("两个批次各一个分片，先提交的批次先被选中放行", async () => {
       const first = await buildLifecycleShards(owner, foundation, 1, "release-order-a");
@@ -694,8 +779,15 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
       expect(readableCredentialColumns).toHaveLength(1);
 
       await expectDenied(() => scheduler.$queryRawUnsafe("SELECT target_id FROM side_effect_intent LIMIT 1"));
-      await expectDenied(() => scheduler.$queryRawUnsafe("SELECT status FROM side_effect_intent LIMIT 1"));
+      await expectDenied(() => scheduler.$queryRawUnsafe("SELECT response_shape FROM side_effect_intent LIMIT 1"));
+      await expectDenied(() => scheduler.$queryRawUnsafe("SELECT promo_link_id FROM side_effect_intent LIMIT 1"));
       await expectDenied(() => scheduler.$queryRawUnsafe("SELECT * FROM side_effect_intent LIMIT 1"));
+      // 2026-10-06 修订：D4 收窄后需要读 `status`（只判"结果是否已落定"），这一列
+      // 的列级 SELECT 是本次新增的唯一一列；其余列仍然拒绝。
+      const readableIntentColumns = await scheduler.$queryRawUnsafe<unknown[]>(
+        "SELECT operation_type, channel_account_id, status, request_summary FROM side_effect_intent LIMIT 1",
+      );
+      expect(Array.isArray(readableIntentColumns)).toBe(true);
 
       await expectDenied(() => scheduler.$executeRawUnsafe("UPDATE channel_account_credential SET status = 'invalid'"));
       await expectDenied(() => scheduler.$executeRawUnsafe("DELETE FROM operation_audit"));

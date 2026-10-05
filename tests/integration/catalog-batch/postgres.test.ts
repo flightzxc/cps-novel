@@ -409,6 +409,12 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       submittedCount: 1,
       ineligibleCount: 2,
       blockedCount: 2,
+      // 2026-10-06（弹窗补齐计数）：这是非生命周期批次——结果 JSON 里有 selectedCount、
+      // 没有三个生命周期计数键，读接口对缺失的键返回 null（不是 0），弹窗据此保持老样子。
+      selectedCount: 6,
+      alreadyHasPromoCodeCount: null,
+      manualReviewPendingCount: null,
+      inOtherUnfinishedBatchNoticeCount: null,
     });
     await owner.genericTaskItem.updateMany({ where: { taskId: children[0]!.id }, data: { status: "success" } });
     await recomputeParentTask(owner, "generic", children[0]!.id);

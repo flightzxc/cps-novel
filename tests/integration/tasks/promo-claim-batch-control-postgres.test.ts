@@ -1,7 +1,9 @@
 /**
  * 领推广链接生命周期正式修复第 2 阶段第 4 步：批次级暂停 / 恢复 / 中止
  * （施工任务 3.1）、重新批准（3.3）、以及"同一本书挂在另一个批次排队分片下"
- * 的枚举时阻断（3.4）的真实 PostgreSQL 验收。
+ * 的枚举时处理（3.4，2026-10-06 已修订：阻断撤销，改为入队 + 只记提示数，
+ * 防重复回到执行时；建批次时一律排除已有推广码/待人工核对的书）的真实
+ * PostgreSQL 验收。
  *
  * 为什么不能只用假 tx 做单测：级联判定的正确性依赖真实的父子行锁顺序
  * （`FOR UPDATE` 逐个批次/分片）、`recomputeParentTask` 的真实 SQL 聚合、
@@ -19,11 +21,16 @@
  * 验证"恢复后的分片能被真实 scheduler 角色重新放行"这条端到端链路）四个
  * 连接串跑本文件，最后删除容器。
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import type { PromoLinkClaimAdapter } from "@/lib/adapters/promo-link-claim";
 import { normalizeCatalogSelection } from "@/domain/catalog-batch";
+import { createPublicRedirectCode } from "@/lib/redirect";
 import {
   CATALOG_BATCH_TASK_TYPE,
   claimPendingItem,
@@ -32,21 +39,28 @@ import {
   readTaskControlMarker,
   runPromoClaimReleaseTick,
 } from "@/lib/tasks";
+import { buildPromoLinkIdempotencyKey, UPSTREAM_EXISTING_PROMO_OFFER_TYPE } from "@/lib/tasks/promo-link-claim";
+import { PROMO_CLAIM_INTENT_OPERATION_TYPE } from "@/lib/tasks/promo-claim-release";
 import {
   PROMO_LINK_CLAIM_CAPABILITY_KEY,
   PROMO_LINK_CLAIM_TASK_TYPE,
 } from "@/lib/tasks/promo-link-claim-limits";
+import { prepareSideEffectIntent, transitionSideEffectIntent } from "@/lib/tasks/side-effect-intent";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import { readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import {
   abortPromoClaimBatch,
   getAdminTaskDetail,
+  listAdminTasks,
   pausePromoClaimBatch,
   reapprovePromoClaimBatch,
   resumePromoClaimBatch,
   TaskAdminError,
 } from "@/server/task-admin";
+import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
+import { createPromoLinkClaimHandler } from "../../../worker/handlers/promo-link-claim";
 import {
   issueTaskAuthorization,
   newStores,
@@ -139,6 +153,7 @@ async function seedFoundation(db: PrismaClient): Promise<Foundation> {
 }
 
 /** 同 `promo-claim-release-postgres.test.ts` 的 `seedBooks`——一次性把新建的 `novel_source_item` 全部链到各自新建的 `Novel` 行。 */
+// raw_payload 里的 agencyId/seriesId/language 是真实领取 handler（buildClaimPromoRequest）必需的三个上游定位字段。
 async function seedBooks(db: PrismaClient, channelAppId: string, count: number, prefix: string): Promise<string[]> {
   const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     INSERT INTO novel_source_item (
@@ -147,7 +162,8 @@ async function seedBooks(db: PrismaClient, channelAppId: string, count: number, 
     )
     SELECT gen_random_uuid(), ${channelAppId}::uuid, ${prefix} || '-' || n::text, 'en', 'en',
            ${prefix} || ' title ' || n::text, 'promo claim batch control fixture', 'pending',
-           jsonb_build_object('fixture', ${prefix}), transaction_timestamp()
+           jsonb_build_object('fixture', ${prefix}, 'agencyId', 'agency-1', 'seriesId', ${prefix} || '-series-' || n::text, 'language', 'en'),
+           transaction_timestamp()
     FROM generate_series(1, ${count}) AS n
     RETURNING id
   `);
@@ -216,6 +232,226 @@ async function readContext() {
     { pathname: "/api/admin/tasks/detail", method: "GET", sessionToken: admin.token },
     { identities: stores, sessions: stores, registry: P2_04_ADMIN_REGISTRY, now: NOW },
   )).context;
+}
+
+// ---------------------------------------------------------------------
+// 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）验收辅助：去掉跨批次
+// 占用、建批次时排除已有推广码/待人工核对、D4 收窄为"只看这一条"。
+// ---------------------------------------------------------------------
+
+type CatalogSelectionInput = Parameters<typeof normalizeCatalogSelection>[0];
+
+interface EnumeratedBatchResult {
+  enumerationStatus: string;
+  selectedCount: number;
+  submittedCount: number;
+  ineligibleCount: number;
+  alreadyLinkedCount: number;
+  alreadyHasPromoCodeCount?: number;
+  manualReviewPendingCount?: number;
+  inOtherUnfinishedBatchNoticeCount?: number;
+  blockedCount: number;
+  blockedReasonCounts: Record<string, number>;
+}
+
+interface EnumeratedBatch {
+  batchId: string;
+  result: EnumeratedBatchResult;
+  /** 按 shardIndex 排好序；`bookIds` 是该分片名下条目的书（env 里 shardSize=1，所以每片一本）。 */
+  shards: Array<{ id: string; bookIds: string[] }>;
+}
+
+/** 提交一个生命周期批次并用真实 worker_app 跑完枚举。 */
+async function enumerateLifecycleBatch(
+  foundation: Foundation,
+  selection: CatalogSelectionInput,
+  env: NodeJS.ProcessEnv = LIFECYCLE_ON_ENV,
+): Promise<EnumeratedBatch> {
+  const enqueued = await enqueueCatalogBatch(owner, {
+    operation: "promo_claim",
+    selection: normalizeCatalogSelection(selection),
+    actorId: foundation.actorId,
+    requestId: randomUUID(),
+    channelAccounts: { [foundation.channelAppId]: foundation.accountId },
+  }, new Date(), true, undefined, env);
+  const lease = await claimPendingItem(worker, {
+    family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: `pcbc-enum-${randomUUID()}`, leaseMs: 60_000,
+  });
+  expect(lease?.taskId).toBe(enqueued.taskId);
+  const outcome = await createCatalogBatchHandler(worker, { env })(handlerContext(lease!));
+  await finalizeTaskItem(worker, lease!, outcome);
+  const batch = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+  const shards = await owner.genericTask.findMany({
+    where: { parentTaskId: enqueued.taskId },
+    include: { items: { orderBy: { targetId: "asc" } } },
+  });
+  const sorted = [...shards].sort((a, b) => (a.params as { shardIndex: number }).shardIndex - (b.params as { shardIndex: number }).shardIndex);
+  return {
+    batchId: enqueued.taskId,
+    result: batch.result as unknown as EnumeratedBatchResult,
+    shards: sorted.map((shard) => ({ id: shard.id, bookIds: shard.items.map((item) => item.targetId) })),
+  };
+}
+
+/** 场景 E 的计数恒等式：selectedCount = 各桶之和，且 blockedCount = blockedReasonCounts 之和。 */
+function expectCountIdentity(result: EnumeratedBatchResult): void {
+  expect(typeof result.alreadyHasPromoCodeCount).toBe("number");
+  expect(typeof result.manualReviewPendingCount).toBe("number");
+  expect(typeof result.inOtherUnfinishedBatchNoticeCount).toBe("number");
+  const blockedSum = Object.values(result.blockedReasonCounts).reduce((sum, count) => sum + count, 0);
+  expect(result.blockedCount).toBe(blockedSum);
+  expect(result.selectedCount).toBe(
+    result.submittedCount + result.ineligibleCount + result.alreadyLinkedCount
+    + result.alreadyHasPromoCodeCount! + result.manualReviewPendingCount! + result.blockedCount,
+  );
+}
+
+/** 给一本书造一条"已领取"的推广链接（status=fetched）——目录页"推广链接状态=已领取"的口径。 */
+async function seedFetchedPromoLinkFor(foundation: Foundation, bookId: string): Promise<void> {
+  const book = await owner.novelSourceItem.findUniqueOrThrow({ where: { id: bookId }, select: { novelId: true } });
+  await owner.promoLink.create({ data: {
+    id: randomUUID(),
+    novelId: book.novelId!,
+    novelSourceItemId: bookId,
+    channelAppId: foundation.channelAppId,
+    channelAccountId: foundation.accountId,
+    offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    publicRedirectCode: createPublicRedirectCode(),
+    idempotencyKey: buildPromoLinkIdempotencyKey({
+      channelAppId: foundation.channelAppId, novelSourceItemId: bookId,
+      channelAccountId: foundation.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    }),
+    status: "fetched",
+  } });
+}
+
+/** 给一本书造一条"人工核对中"的意图记录——走与 worker 相同的两步迁移，不直接写终态。 */
+async function seedManualReviewIntentFor(foundation: Foundation, bookId: string): Promise<void> {
+  const effectKey = createHash("sha256").update(randomUUID()).digest("hex");
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: foundation.channelAppId, novelSourceItemId: bookId,
+    channelAccountId: foundation.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+  });
+  await prepareSideEffectIntent(owner, {
+    effectKey,
+    operationType: PROMO_CLAIM_INTENT_OPERATION_TYPE,
+    idempotencyKey: effectKey,
+    targetType: "promo_link",
+    targetId: idempotencyKey,
+    channelAppId: foundation.channelAppId,
+    channelAccountId: foundation.accountId,
+    requestSummary: { offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, novelSourceItemId: bookId },
+  });
+  await transitionSideEffectIntent(owner, { effectKey, status: "claim_retry_blocked" });
+  await transitionSideEffectIntent(owner, { effectKey, status: "manual_review_required" });
+}
+
+/** 造一个"进行中"（pending）的旧式领取子任务，名下带这一本书——旧路径 `active_item_conflict` 的判据。 */
+async function seedPendingClaimTaskFor(foundation: Foundation, bookId: string): Promise<void> {
+  await owner.genericTask.create({ data: {
+    taskType: PROMO_LINK_CLAIM_TASK_TYPE,
+    channelAppId: foundation.channelAppId,
+    channelAccountId: foundation.accountId,
+    operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+    requestToken: randomUUID(),
+    status: "pending",
+    totalCount: 1,
+    items: { create: { targetType: "novel_source_item", targetId: bookId, status: "pending", payload: {} } },
+  } });
+}
+
+/**
+ * 可计数的上游假适配器：`claimPromo`/`readPromoAfterClaim` 各自记调用次数，
+ * 并像真实上游一样"领过的书再读就能读到码"。验收场景 B 要断言的是调用次数，
+ * 不是最终状态。
+ */
+function createCountingUpstream(): { adapter: PromoLinkClaimAdapter; calls: { claimPromo: number; readPromoAfterClaim: number } } {
+  const codes = new Map<string, string>();
+  const calls = { claimPromo: 0, readPromoAfterClaim: 0 };
+  const promoFor = (code: string) => ({ upstreamCode: code, webUrl: `https://upstream.test/promo/${code}`, appUrl: null });
+  const adapter: PromoLinkClaimAdapter = {
+    async claimPromo(request) {
+      calls.claimPromo += 1;
+      const code = `UP-${request.name.replaceAll(" ", "-")}`;
+      codes.set(request.name, code);
+      return promoFor(code);
+    },
+    async readPromoAfterClaim(request) {
+      calls.readPromoAfterClaim += 1;
+      const code = codes.get(request.name);
+      return code ? { status: "found", promo: promoFor(code) } : { status: "missing" };
+    },
+  };
+  return { adapter, calls };
+}
+
+/**
+ * 真实 handler 要解密凭据并本地校验 JWT（`worker/credentials/claim-readiness.ts`
+ * 读的是 `process.env` 里的密钥文件），所以执行类用例需要一把真实的测试密钥环
+ * 和一条用它加密的、未过期的 JWT 凭据。密钥只存在于一次性临时目录，用完删除。
+ */
+const credentialKeyDirectory = mkdtempSync(path.join(tmpdir(), "pcbc-credential-keys-"));
+const credentialEnvBackup: Record<string, string | undefined> = {};
+const CREDENTIAL_ENV_NAMES = [
+  "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION",
+  "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE",
+  "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE",
+] as const;
+
+function installTestCredentialKeyring(): void {
+  for (const name of CREDENTIAL_ENV_NAMES) credentialEnvBackup[name] = process.env[name];
+  const v1 = path.join(credentialKeyDirectory, "v1");
+  const fingerprint = path.join(credentialKeyDirectory, "fingerprint");
+  writeFileSync(v1, randomBytes(32).toString("base64"), { mode: 0o600 });
+  writeFileSync(fingerprint, randomBytes(32).toString("base64"), { mode: 0o600 });
+  process.env.CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION = "1";
+  process.env.CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE = v1;
+  process.env.CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE = fingerprint;
+}
+
+function uninstallTestCredentialKeyring(): void {
+  for (const name of CREDENTIAL_ENV_NAMES) {
+    const previous = credentialEnvBackup[name];
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  }
+  rmSync(credentialKeyDirectory, { recursive: true, force: true });
+}
+
+async function makeAccountCredentialClaimable(foundation: Foundation): Promise<void> {
+  const credential = await owner.channelAccountCredential.findFirstOrThrow({
+    where: { channelAccountId: foundation.accountId, status: "active" },
+  });
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ sub: "pcbc", exp: Math.floor(Date.now() / 1000) + 30 * 24 * 3600 })).toString("base64url");
+  const jwt = `${header}.${payload}.${Buffer.from("pcbc-signature").toString("base64url")}`;
+  await owner.channelAccountCredential.update({
+    where: { id: credential.id },
+    data: {
+      encryptedSecret: new Uint8Array(encryptCredentialSecretForWorker(jwt, foundation.accountId, credential.id, 1)),
+      // 放行判定（D5）按真实当前时刻算，凭据有效期必须跟着真实时钟走，不能写死某个日期。
+      lastValidatedAt: new Date(Date.now() - 60_000),
+      expiresAt: new Date(Date.now() + 30 * 24 * 3600_000),
+    },
+  });
+}
+
+/** 真实 scheduler_app 放行一轮（用真实当前时刻——`selectPending` 比较的是数据库真实时钟）。 */
+async function releaseTick() {
+  const outcomes = await runPromoClaimReleaseTick(scheduler, { now: new Date(), env: LIFECYCLE_ON_ENV, logger: () => {} });
+  return outcomes[0];
+}
+
+/** 用真实 handler + 可计数上游假适配器，把当前已放行分片名下 `count` 个条目跑完。 */
+async function runReleasedItems(adapter: PromoLinkClaimAdapter, count: number): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    const lease = await claimPendingItem(worker, {
+      family: "generic", taskTypes: [PROMO_LINK_CLAIM_TASK_TYPE], workerId: "pcbc-exec", leaseMs: 120_000,
+    });
+    expect(lease).not.toBeNull();
+    const outcome = await createPromoLinkClaimHandler(worker, { env: LIFECYCLE_ON_ENV, adapter })(handlerContext(lease!));
+    await finalizeTaskItem(worker, lease!, outcome);
+  }
 }
 
 describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批次级操作 (real Postgres)", () => {
@@ -494,105 +730,318 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
     });
   });
 
-  describe("3.4 枚举盲区：同一本书挂在另一个批次排队分片下", () => {
-    it("批次 A 枚举出排队分片；批次 B 选中重叠书被 queued_in_other_batch 挡住，不重叠部分正常入片；中止 A 后重叠书可以入片", async () => {
-      const overlapping = await seedBooks(owner, foundation.channelAppId, 1, "overlap");
-      const uniqueToB = await seedBooks(owner, foundation.channelAppId, 1, "unique-b");
-
-      const enqueuedA = await enqueueCatalogBatch(owner, {
-        operation: "promo_claim",
-        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
-        actorId: foundation.actorId,
-        requestId: randomUUID(),
-        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
-      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
-      const leaseA = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-a", leaseMs: 60_000 });
-      const outcomeA = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseA!));
-      await finalizeTaskItem(worker, leaseA!, outcomeA);
-      const shardsA = await owner.genericTask.findMany({ where: { parentTaskId: enqueuedA.taskId } });
-      expect(shardsA).toHaveLength(1);
-      expect(shardsA[0]!.status).toBe("disabled"); // 仍在排队，从未放行过。
-
-      const enqueuedB = await enqueueCatalogBatch(owner, {
-        operation: "promo_claim",
-        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: [...overlapping, ...uniqueToB] }),
-        actorId: foundation.actorId,
-        requestId: randomUUID(),
-        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
-      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
-      const leaseB = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-b", leaseMs: 60_000 });
-      const outcomeB = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseB!));
-      await finalizeTaskItem(worker, leaseB!, outcomeB);
-
-      const batchB = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueuedB.taskId } });
-      expect(batchB.result).toMatchObject({ blockedReasonCounts: { queued_in_other_batch: 1 }, submittedCount: 1 });
-      const shardsB = await owner.genericTask.findMany({ where: { parentTaskId: enqueuedB.taskId } });
-      expect(shardsB).toHaveLength(1); // 只有不重叠的那本书入片。
-      const shardBItems = await owner.genericTaskItem.findMany({ where: { taskId: shardsB[0]!.id } });
-      expect(shardBItems.map((item) => item.targetId)).toEqual(uniqueToB);
-
-      // 中止 A 后，重叠书不再"排队中"，同一本书可以进入新批次。
-      const { authorization, requestId, dependencies } = await batchControlTicket("/api/admin/tasks/promo-claim-batch/abort");
-      await abortPromoClaimBatch({ authorization, requestId, taskId: enqueuedA.taskId }, dependencies);
-
-      const enqueuedC = await enqueueCatalogBatch(owner, {
-        operation: "promo_claim",
-        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
-        actorId: foundation.actorId,
-        requestId: randomUUID(),
-        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
-      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
-      const leaseC = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-c", leaseMs: 60_000 });
-      const outcomeC = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseC!));
-      await finalizeTaskItem(worker, leaseC!, outcomeC);
-      const batchC = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueuedC.taskId } });
-      expect(batchC.result).toMatchObject({ submittedCount: 1 });
-      expect((batchC.result as { blockedReasonCounts?: Record<string, number> }).blockedReasonCounts?.queued_in_other_batch ?? 0).toBe(0);
-    });
+  /**
+   * 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8，Owner 已确认）：
+   * 去掉建批次时的"跨批次占用"阻断（`queued_in_other_batch`/
+   * `active_item_conflict`），防重复回到 worker 执行时的三道检查；建批次时
+   * 一律排除"已有推广码"和"待人工核对"的书；分片重新放行前的 D4 检查收窄
+   * 为只看"这一条"。验收场景 A–H 对应本 describe 里的各条用例（场景 D 在
+   * `promo-claim-release-postgres.test.ts`，G 是 80,000 本规模枚举，见该
+   * 目录下 `promo-claim-lifecycle-shard-enumeration-postgres.test.ts`）。
+   */
+  describe("修订 2026-10-06：去掉跨批次占用，防重复回到执行时", () => {
+    beforeAll(() => installTestCredentialKeyring());
+    afterAll(() => uninstallTestCredentialKeyring());
 
     /**
-     * Opus 复核（2026-09-24 F4）测试缺口：把 worker/handlers/catalog-batch.ts
-     * 里 `queuedElsewhere` 查询的 `t.status IN ('disabled', 'paused')` 改成
-     * 只剩 `'disabled'`，此前的 15 例集成测试全部仍然通过——说明缺一个"分片
-     * 因为批次级暂停而处于 paused（不是从未放行过的 disabled）时，同一本书
-     * 仍然会被 queued_in_other_batch 挡住"的场景。
+     * 共用夹具：批次 A（4 本，每片 1 本）放行第 0 片后批次级暂停——A 里有一个
+     * 已放行过的分片（releaseCount=1，条目从未被领到）+ 三个排队分片；批次 B
+     * 选中与 A 重叠的两本（一本在已放行的分片、一本在排队分片）+ 一本只属于 B
+     * 的书。
      */
-    it("批次 A 的分片因批次级暂停而处于 paused 时，批次 B 的重叠书同样被 queued_in_other_batch 挡住", async () => {
-      const overlapping = await seedBooks(owner, foundation.channelAppId, 1, "overlap-paused");
-      const enqueuedA = await enqueueCatalogBatch(owner, {
-        operation: "promo_claim",
-        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
-        actorId: foundation.actorId,
-        requestId: randomUUID(),
-        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
-      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
-      const leaseA = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-paused-a", leaseMs: 60_000 });
-      const outcomeA = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseA!));
-      await finalizeTaskItem(worker, leaseA!, outcomeA);
-      // 放行后再批次级暂停：分片从 disabled(awaiting_release) 变成 pending，
-      // 再变成 paused——不是"从未放行过的排队 disabled"这条既有覆盖路径。
-      await runPromoClaimReleaseTick(scheduler, { now: NOW, env: LIFECYCLE_ON_ENV, logger: () => {} });
-      const shardA = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueuedA.taskId } });
-      expect(shardA.status).toBe("pending");
+    async function buildPausedBatchAWithOverlappingBatchB() {
+      const bookIds = await seedBooks(owner, foundation.channelAppId, 4, "overlap");
+      const batchA = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: bookIds });
+      expect(batchA.shards).toHaveLength(4);
+      const released = await releaseTick();
+      expect(released).toMatchObject({ action: "released", shardId: batchA.shards[0]!.id });
       const pauseTicket = await batchControlTicket("/api/admin/tasks/promo-claim-batch/pause");
-      await pausePromoClaimBatch({ authorization: pauseTicket.authorization, requestId: pauseTicket.requestId, taskId: enqueuedA.taskId }, pauseTicket.dependencies);
-      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardA.id } })).status).toBe("paused");
+      await pausePromoClaimBatch(
+        { authorization: pauseTicket.authorization, requestId: pauseTicket.requestId, taskId: batchA.batchId },
+        pauseTicket.dependencies,
+      );
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: batchA.shards[0]!.id } })).status).toBe("paused");
+      const releasedBook = batchA.shards[0]!.bookIds[0]!;
+      const queuedBook = batchA.shards[1]!.bookIds[0]!;
+      const [uniqueToB] = await seedBooks(owner, foundation.channelAppId, 1, "unique-b");
+      const batchB = await enumerateLifecycleBatch(foundation, {
+        scope: "explicit_ids", ids: [releasedBook, queuedBook, uniqueToB!],
+      });
+      return { batchA, batchB, releasedBook, queuedBook, uniqueToB: uniqueToB!, aOnlyBooks: [batchA.shards[2]!.bookIds[0]!, batchA.shards[3]!.bookIds[0]!] };
+    }
 
-      const enqueuedB = await enqueueCatalogBatch(owner, {
+    it("场景 A：批次 A 暂停（含已放行过的分片 + 排队分片），批次 B 选中重叠书——全部入队，不出现 queued_in_other_batch，只记重叠提示数，且不是「完成（有异常）」", async () => {
+      const { batchB, releasedBook, queuedBook, uniqueToB } = await buildPausedBatchAWithOverlappingBatchB();
+
+      expect(batchB.result).toMatchObject({
+        enumerationStatus: "completed",
+        selectedCount: 3,
+        submittedCount: 3, // 重叠的两本一并入队，旧代码只会提交 1 本。
+        alreadyHasPromoCodeCount: 0,
+        manualReviewPendingCount: 0,
+        inOtherUnfinishedBatchNoticeCount: 2, // 重叠本数：一本在 A 的暂停分片、一本在 A 的排队分片。
+        blockedCount: 0,
+      });
+      expect(batchB.result.blockedReasonCounts).toEqual({});
+      expect(batchB.result.blockedReasonCounts).not.toHaveProperty("queued_in_other_batch");
+      expect(batchB.result.blockedReasonCounts).not.toHaveProperty("active_item_conflict");
+      expectCountIdentity(batchB.result);
+      expect(batchB.shards.flatMap((shard) => shard.bookIds).sort()).toEqual([releasedBook, queuedBook, uniqueToB].sort());
+
+      // 不是「完成（有异常）」：没有任何阻断。批次整体状态读取走真实读接口。
+      const summary = await readCatalogBatchSummary(owner, batchB.batchId, foundation.actorId);
+      expect(summary).toMatchObject({ blockedCount: 0 });
+      expect(summary?.phase).not.toBe("completed_with_errors");
+      // 2026-10-06（弹窗补齐计数）：摘要读接口把批次结果里的新计数原样带给目录同步页弹窗。
+      expect(summary).toMatchObject({
+        selectedCount: 3, submittedCount: 3,
+        alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0, inOtherUnfinishedBatchNoticeCount: 2,
+      });
+    });
+
+    it("场景 A（进行中）：批次 A 的分片已放行、正在进行（pending）时，批次 B 的重叠书同样不被 active_item_conflict 挡住，只记提示数", async () => {
+      const bookIds = await seedBooks(owner, foundation.channelAppId, 2, "overlap-active");
+      const batchA = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: bookIds });
+      expect(await releaseTick()).toMatchObject({ action: "released", shardId: batchA.shards[0]!.id });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: batchA.shards[0]!.id } })).status).toBe("pending");
+
+      const batchB = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: bookIds });
+      expect(batchB.result).toMatchObject({
+        submittedCount: 2, blockedCount: 0, inOtherUnfinishedBatchNoticeCount: 2,
+      });
+      expect(batchB.result.blockedReasonCounts).toEqual({});
+      expectCountIdentity(batchB.result);
+    });
+
+    it("场景 B：接场景 A——B 把重叠书领完后恢复批次 A，A 那个已放行过的分片能被重新放行（旧代码会卡成「需要人工处理」）；跑到重叠书时记「已有推广码」，领取接口与预读接口调用次数都为 0", async () => {
+      await makeAccountCredentialClaimable(foundation);
+      const { batchA, batchB, releasedBook, queuedBook, aOnlyBooks } = await buildPausedBatchAWithOverlappingBatchB();
+      const upstream = createCountingUpstream();
+
+      // 1) B 的三片依次放行并执行（批次 A 暂停中，被调度器跳过）：每本书走完整真实路径
+      //    ——预读（缺失）→ 领取 → 回读确认，意图记录落成 confirmed、推广链接落成 fetched。
+      for (const shard of batchB.shards) {
+        expect(await releaseTick()).toMatchObject({ action: "released", batchId: batchB.batchId, shardId: shard.id });
+        await runReleasedItems(upstream.adapter, 1);
+      }
+      expect(upstream.calls.claimPromo).toBe(3); // B 的三本书各领一次。
+      expect(await owner.promoLink.count({ where: { status: "fetched" } })).toBe(3);
+      expect(await owner.sideEffectIntent.count({ where: { status: "confirmed" } })).toBe(3);
+
+      // 2) 恢复批次 A：已放行过的第 0 片（releaseCount=1，其条目 attempt_count=0 从未被领到）
+      //    交还成 disabled + awaiting_release。
+      const resumeTicket = await batchControlTicket("/api/admin/tasks/promo-claim-batch/resume");
+      await resumePromoClaimBatch(
+        { authorization: resumeTicket.authorization, requestId: resumeTicket.requestId, taskId: batchA.batchId },
+        resumeTicket.dependencies,
+      );
+      const resumedShard = await owner.genericTask.findUniqueOrThrow({ where: { id: batchA.shards[0]!.id } });
+      expect(resumedShard.status).toBe("disabled");
+      expect(resumedShard.params).toMatchObject({ releaseCount: 1 });
+      const resumedItem = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: batchA.shards[0]!.id } });
+      expect(resumedItem).toMatchObject({ targetId: releasedBook, status: "pending", attemptCount: 0 });
+
+      // 3) 关键断言：D4 只看"这一条"——这本书在别处（批次 B）的意图记录已落定（confirmed），
+      //    不再把整片卡成 deadline_missed_twice。
+      const rerelease = await releaseTick();
+      expect(rerelease).toMatchObject({ action: "released", batchId: batchA.batchId, shardId: batchA.shards[0]!.id });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: batchA.shards[0]!.id } })).params).toMatchObject({ releaseCount: 2 });
+
+      // 4) 跑 A 的重叠书：本地已有 fetched 推广码 → 记「已有推广码」，上游调用次数都不增加。
+      const callsBefore = { ...upstream.calls };
+      await runReleasedItems(upstream.adapter, 1);
+      expect(upstream.calls).toEqual(callsBefore); // 领取接口 0 次、预读接口 0 次。
+      const overlapItem = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: batchA.shards[0]!.id } });
+      expect(overlapItem).toMatchObject({ targetId: releasedBook, status: "success", result: { decision: "already_fetched" } });
+
+      // 5) 排队的重叠书（A 的第 1 片）同样：首次放行 → 已有推广码 → 零上游调用。
+      expect(await releaseTick()).toMatchObject({ action: "released", shardId: batchA.shards[1]!.id });
+      await runReleasedItems(upstream.adapter, 1);
+      expect(upstream.calls).toEqual(callsBefore);
+      expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: batchA.shards[1]!.id } }))
+        .toMatchObject({ targetId: queuedBook, status: "success", result: { decision: "already_fetched" } });
+
+      // 6) 对照：只属于 A 的书照常领取（证明上面的"零调用"不是假适配器本来就不被调用）。
+      expect(await releaseTick()).toMatchObject({ action: "released", shardId: batchA.shards[2]!.id });
+      await runReleasedItems(upstream.adapter, 1);
+      expect(upstream.calls.claimPromo).toBe(callsBefore.claimPromo + 1);
+      expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: batchA.shards[2]!.id } }))
+        .toMatchObject({ targetId: aOnlyBooks[0], status: "success", result: { decision: "claimed" } });
+
+      // 批次详情六类计数里，两本重叠书落在「已有推广码」。
+      const detail = await getAdminTaskDetail(owner, await readContext(), { family: "generic", taskId: batchA.batchId });
+      expect(detail.catalogBatch?.promoClaimLifecycle?.counts).toMatchObject({ withCode: 2, claimed: 1 });
+    }, 120_000);
+
+    it("场景 C：建批次选「全部」（不带未领取筛选）且含已领书 X、人工核对书 Y、未领书 Z——只有 Z 入队，X 计「已有推广码」、Y 计「待人工核对」，不进 blockedCount", async () => {
+      const [x, y, z, w] = await seedBooks(owner, foundation.channelAppId, 4, "cls");
+      await seedFetchedPromoLinkFor(foundation, x!);
+      await seedManualReviewIntentFor(foundation, y!);
+      // W 既有已领取的推广链接又有人工核对记录（先转人工、后来拿到码）：已领取优先，只计「已有推广码」。
+      await seedFetchedPromoLinkFor(foundation, w!);
+      await seedManualReviewIntentFor(foundation, w!);
+
+      // 三种选书方式结果必须一致：全部（all_filtered，无推广链接状态筛选）、勾选（explicit_ids）。
+      const all = await enumerateLifecycleBatch(foundation, { scope: "all_filtered", filter: { status: "linked" } });
+      const ticked = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: [x!, y!, z!, w!] });
+      for (const batch of [all, ticked]) {
+        expect(batch.result).toMatchObject({
+          selectedCount: 4,
+          submittedCount: 1,
+          alreadyHasPromoCodeCount: 2, // X、W
+          manualReviewPendingCount: 1, // Y
+          ineligibleCount: 0,
+          blockedCount: 0,
+        });
+        expect(batch.result.blockedReasonCounts).toEqual({});
+        expectCountIdentity(batch.result);
+        expect(batch.shards.flatMap((shard) => shard.bookIds)).toEqual([z]); // 只有 Z 入队。
+      }
+    });
+
+    it("场景 C（全部被排除）：候选全是已领书/人工核对书时批次不建任何分片，且不是「完成（有异常）」（读接口与后台详情都核对）", async () => {
+      const [x, y] = await seedBooks(owner, foundation.channelAppId, 2, "cls-all-skipped");
+      await seedFetchedPromoLinkFor(foundation, x!);
+      await seedManualReviewIntentFor(foundation, y!);
+
+      const batch = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: [x!, y!] });
+      expect(batch.shards).toHaveLength(0);
+      expect(batch.result).toMatchObject({
+        selectedCount: 2, submittedCount: 0, alreadyHasPromoCodeCount: 1, manualReviewPendingCount: 1, blockedCount: 0,
+      });
+      expectCountIdentity(batch.result);
+
+      const summary = await readCatalogBatchSummary(owner, batch.batchId, foundation.actorId);
+      expect(summary).toMatchObject({ phase: "completed", blockedCount: 0 });
+      // 2026-10-06（弹窗补齐计数）：被排除的两类书在摘要读接口里有各自的计数，
+      // 弹窗据此显示「已选 2 = 已提交 0 + 已有推广码 1 + 待人工核对 1」。
+      expect(summary).toMatchObject({
+        selectedCount: 2, submittedCount: 0, ineligibleCount: 0,
+        alreadyHasPromoCodeCount: 1, manualReviewPendingCount: 1, inOtherUnfinishedBatchNoticeCount: 0,
+      });
+      const detail = await getAdminTaskDetail(owner, await readContext(), { family: "generic", taskId: batch.batchId });
+      expect(detail.status).not.toBe("completed_with_errors");
+      expect(detail.catalogBatch).toMatchObject({
+        phase: "completed", alreadyHasPromoCodeCount: 1, manualReviewPendingCount: 1, blockedCount: 0,
+      });
+    });
+
+    it("场景 C（人工核对已被取走）：人工核对书后来拿到推广码后，只算「已有推广码」；选「未领取」筛选时两类本来就被筛掉，新计数为 0，结果与改前一致", async () => {
+      const [x, y, z] = await seedBooks(owner, foundation.channelAppId, 3, "cls-filter");
+      await seedFetchedPromoLinkFor(foundation, x!);
+      await seedManualReviewIntentFor(foundation, y!);
+
+      const notClaimed = await enumerateLifecycleBatch(foundation, {
+        scope: "all_filtered", filter: { status: "linked", promoLinkStatus: "not_claimed" },
+      });
+      expect(notClaimed.result).toMatchObject({
+        selectedCount: 1, submittedCount: 1, alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0, blockedCount: 0,
+      });
+      expect(notClaimed.shards.flatMap((shard) => shard.bookIds)).toEqual([z]);
+      expectCountIdentity(notClaimed.result);
+
+      await seedFetchedPromoLinkFor(foundation, y!);
+      const afterFetch = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: [x!, y!, z!] });
+      expect(afterFetch.result).toMatchObject({ alreadyHasPromoCodeCount: 2, manualReviewPendingCount: 0, submittedCount: 1 });
+      expectCountIdentity(afterFetch.result);
+    });
+
+    it("场景 E：计数恒等式——混合不合格书/不存在的 id/已领/人工核对/正常/与其它批次重叠，selectedCount 恒等于各桶之和；整组被渠道绑定阻断时重叠提示数不计", async () => {
+      const [unlinked, claimed, manual, normal, overlapped] = await seedBooks(owner, foundation.channelAppId, 5, "ident");
+      await owner.$executeRaw(Prisma.sql`UPDATE novel_source_item SET status = 'pending', novel_id = NULL WHERE id = ${unlinked!}::uuid`);
+      await seedFetchedPromoLinkFor(foundation, claimed!);
+      await seedManualReviewIntentFor(foundation, manual!);
+      const ghost = randomUUID(); // 不存在的书：记「状态不符合／未找到」。
+      const ids = [unlinked!, claimed!, manual!, normal!, overlapped!, ghost];
+
+      // 让 `overlapped` 同时挂在另一个未完成批次里。
+      await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: [overlapped!] });
+      const batch = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids });
+      expect(batch.result).toMatchObject({
+        selectedCount: 6,
+        submittedCount: 2, // normal、overlapped
+        ineligibleCount: 2, // unlinked、ghost
+        alreadyHasPromoCodeCount: 1,
+        manualReviewPendingCount: 1,
+        inOtherUnfinishedBatchNoticeCount: 1,
+        blockedCount: 0,
+      });
+      expectCountIdentity(batch.result);
+
+      // 渠道账号被禁用：整组因 channel_binding_or_capability_unavailable 被阻断（blockedCount>0），
+      // 这一组没有入队，所以重叠提示数必须是 0，恒等式依然成立。
+      await owner.channelAccount.update({ where: { id: foundation.accountId }, data: { status: "disabled" } });
+      const blocked = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids });
+      expect(blocked.result).toMatchObject({
+        selectedCount: 6, submittedCount: 0, ineligibleCount: 2, alreadyHasPromoCodeCount: 1, manualReviewPendingCount: 1,
+        inOtherUnfinishedBatchNoticeCount: 0, blockedCount: 2,
+        blockedReasonCounts: { channel_binding_or_capability_unavailable: 2 },
+      });
+      expectCountIdentity(blocked.result);
+    });
+
+    it("场景 F：历史批次（结果里已有 queued_in_other_batch / active_item_conflict）在后台详情与列表里照常显示未提交原因，结果原样不被改写", async () => {
+      const [book] = await seedBooks(owner, foundation.channelAppId, 1, "hist");
+      const batch = await enumerateLifecycleBatch(foundation, { scope: "explicit_ids", ids: [book!] });
+      // 2026-10-05 之前落库的历史结果形状（没有新三个计数键）。
+      const historical = {
+        enumerationStatus: "completed", selectedCount: 6, submittedCount: 1, ineligibleCount: 0, alreadyLinkedCount: 0,
+        blockedCount: 5, failedCount: 0, childTaskCount: 1,
+        blockedReasonCounts: { queued_in_other_batch: 3, active_item_conflict: 2 },
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(), enumEligibilityPolicyVersion: 1,
+      };
+      await owner.genericTask.update({ where: { id: batch.batchId }, data: { result: historical } });
+
+      const context = await readContext();
+      const expectedCatalogBatch = {
+        blockedCount: 5,
+        blockedReasonCounts: { queued_in_other_batch: 3, active_item_conflict: 2 },
+      };
+      const detail = await getAdminTaskDetail(owner, context, { family: "generic", taskId: batch.batchId });
+      expect(detail.catalogBatch).toMatchObject(expectedCatalogBatch);
+      const listed = await listAdminTasks(owner, context, { family: "generic", limit: 100 }, {} as NodeJS.ProcessEnv);
+      const listedBatch = listed.items.find((item) => item.taskId === batch.batchId)?.catalogBatch;
+      expect(listedBatch).toMatchObject(expectedCatalogBatch);
+      // 历史批次的 DTO 里没有新三个计数键（不是 null）。
+      for (const dto of [detail.catalogBatch, listedBatch]) {
+        for (const key of ["alreadyHasPromoCodeCount", "manualReviewPendingCount", "inOtherUnfinishedBatchNoticeCount"]) {
+          expect(dto).not.toHaveProperty(key);
+        }
+      }
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: batch.batchId } })).result).toEqual(historical);
+    });
+
+    it("场景 H：开关关闭（旧路径）时判定逐字不变——进行中的领取任务仍计 active_item_conflict 阻断，不排除已领书，结果里没有新的三个计数键", async () => {
+      const offEnv: NodeJS.ProcessEnv = { ...LIFECYCLE_ON_ENV, PROMO_CLAIM_LIFECYCLE_V1_ENABLED: "false" };
+      const [busy, claimed, plain] = await seedBooks(owner, foundation.channelAppId, 3, "legacy");
+      await seedPendingClaimTaskFor(foundation, busy!);
+      await seedFetchedPromoLinkFor(foundation, claimed!);
+
+      const enqueued = await enqueueCatalogBatch(owner, {
         operation: "promo_claim",
-        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
+        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: [busy!, claimed!, plain!] }),
         actorId: foundation.actorId,
         requestId: randomUUID(),
         channelAccounts: { [foundation.channelAppId]: foundation.accountId },
-      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
-      const leaseB = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-paused-b", leaseMs: 60_000 });
-      const outcomeB = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseB!));
-      await finalizeTaskItem(worker, leaseB!, outcomeB);
+      }, new Date(), true, undefined, offEnv);
+      const lease = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-legacy-h", leaseMs: 60_000 });
+      const outcome = await createCatalogBatchHandler(worker, { env: offEnv })(handlerContext(lease!));
+      await finalizeTaskItem(worker, lease!, outcome);
 
-      const batchB = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueuedB.taskId } });
-      expect(batchB.result).toMatchObject({ blockedReasonCounts: { queued_in_other_batch: 1 }, submittedCount: 0 });
-      const shardsB = await owner.genericTask.findMany({ where: { parentTaskId: enqueuedB.taskId } });
-      expect(shardsB).toHaveLength(0); // 唯一一本书被挡住，批次 B 一片都没建。
+      const batch = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(batch.result).toMatchObject({
+        selectedCount: 3,
+        submittedCount: 2, // 已领书在旧路径下仍然入队（本次修订不动旧路径）；进行中的那本被阻断。
+        blockedCount: 1,
+        blockedReasonCounts: { active_item_conflict: 1 },
+      });
+      for (const key of ["alreadyHasPromoCodeCount", "manualReviewPendingCount", "inOtherUnfinishedBatchNoticeCount"]) {
+        expect(batch.result).not.toHaveProperty(key);
+      }
+      expect((batch.result as { blockedReasonCounts: Record<string, number> }).blockedReasonCounts).not.toHaveProperty("queued_in_other_batch");
+      // 旧路径子任务里恰好是 claimed + plain 两本。
+      const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+      expect(child.items.map((item) => item.targetId).sort()).toEqual([claimed!, plain!].sort());
     });
 
     it("开关关闭（旧路径）时不查 queuedElsewhere，判定逐字不变", async () => {

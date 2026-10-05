@@ -302,6 +302,59 @@ describe("/tasks/[id] · 页面区块", () => {
     expect(link.getAttribute("href")).toContain("family=generic");
   });
 
+  /** 验收场景 F：历史批次详情页照常显示 queued_in_other_batch / active_item_conflict 的中文原因。 */
+  it("历史批次详情页仍显示 queued_in_other_batch / active_item_conflict 的中文未提交原因", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "completed_with_errors",
+      catalogBatch: {
+        phase: "completed_with_errors",
+        submittedCount: 18,
+        ineligibleCount: 0,
+        blockedCount: 65114,
+        blockedReasonCounts: { queued_in_other_batch: 65112, active_item_conflict: 2 },
+        childTasks: [],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    const explanation = screen.getByTestId("catalog-batch-blocked-explanation");
+    expect(explanation.textContent).toContain("已在其它排队中的批次里：65112 条");
+    expect(explanation.textContent).toContain("条目已有进行中的任务：2 条");
+    expect(explanation.textContent).not.toContain("queued_in_other_batch");
+    expect(explanation.textContent).not.toContain("active_item_conflict");
+    expect(screen.queryByTestId("catalog-batch-promo-claim-notices")).toBeNull();
+  });
+
+  it("生命周期领推广批次详情页展示已有推广码/待人工核对计数与重叠提示，不当成未提交原因", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "completed",
+      catalogBatch: {
+        phase: "completed",
+        submittedCount: 100,
+        ineligibleCount: 0,
+        alreadyHasPromoCodeCount: 12,
+        manualReviewPendingCount: 3,
+        inOtherUnfinishedBatchNoticeCount: 5,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    const notices = screen.getByTestId("catalog-batch-promo-claim-notices");
+    expect(notices.textContent).toContain("已有推广码 12 本（未入队）");
+    expect(notices.textContent).toContain("待人工核对 3 本（未入队）");
+    expect(notices.textContent).toContain("其中 5 本同时在其它未完成的批次里，跑到时会自动跳过");
+    expect(screen.queryByTestId("catalog-batch-blocked-explanation")).toBeNull();
+  });
+
   it("小说纳入父任务显示两类 locale 阻断中文文案，未知 reason key 仍不泄露", async () => {
     getAdminTaskDetail.mockResolvedValue(detail({
       taskType: "batch.materialize.v1",
