@@ -267,7 +267,7 @@ Owner sudo 范围：ACME webroot/探针、三名 SAN certbot 签发及续期验�
 
 ## 2026-10-05：第二段准备，未对外开放
 
-状态：**只读预检及 sudo 命令准备完成；主机变更、外部压测和本地矩阵待执行，第二段未完成。** 本节不继承上文历史测试的 PASS 作为本轮结果。操作以运行 Final `bbb06253828d9fd338f0ece1749c2020d8ec4679` 为准，证据分支 `ops/cutover-stage2-2026-10` 基于收官提交 `0278e7324f4b544ae0a70bd914e7c5a61a0c7ee7`，只 push，不合并。
+首次准备提交时状态：**只读预检及 sudo 命令准备完成；主机变更、外部压测和本地矩阵待执行，第二段未完成。** 后续 A 执行与修正见本节末尾，下面首次上传版本的哈希及待执行状态保留为历史快照。本节不继承上文历史测试的 PASS 作为本轮结果。操作以运行 Final `bbb06253828d9fd338f0ece1749c2020d8ec4679` 为准，证据分支 `ops/cutover-stage2-2026-10` 基于收官提交 `0278e7324f4b544ae0a70bd914e7c5a61a0c7ee7`，只 push，不合并。
 
 Owner 在本会话批准第二段准备计划：保持旧域名 Basic Auth/noindex；不改站点地址、不安装 VPS public 模式、不开放公网、不启用 IndexNow、不恢复领取批次、不操作 X8、不调模板数值。恢复演练暂缓，决定及剩余风险见 [ADR](../adr/ADR-CUTOVER-STAGE2-DEFER-OFFSITE-RESTORE.md)。
 
@@ -349,3 +349,21 @@ NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近�
 - 一次远端 bash stdin 包装中的完整验证成功后，compose one-off 消耗了后续输入，独立匿名命令未执行；已单独重跑匿名复验取得 PASS，提供的 B 命令对两次验证均显式使用 `</dev/null`。属于包装修正，未绕过仓库门禁。
 - CPS 旧基线只读检查 HEAD=`d77c3b968285698529cf97c7f0f97b286d7a2a9c`、status 零行；X 系列参考已有未提交状态，仅比较本轮前后 HEAD/status 字节，不清理、不使用它构建或测试。
 - 接续顺序：Owner 在终端执行 A 并回传脱敏输出 → Codex 核对 → B → 核对 → C → 核对；外部直连和 Docker 就绪后补测并追加证据。凭据及 NAS 证据另补。**到此仍不进入切换当天。**
+
+### 13:39：首次 A 失败并回退；修正就绪等待，待重跑
+
+来源：Owner 在 Codex 界面终端执行 A，并回传输出；Codex 于 `2026-10-05T04:40:09Z` 起执行只读复核。
+
+- manifest、四应用镜像身份和只读 SQL 门禁通过；四个 DNS 查询源的三个名字正确。
+- bootstrap 安装通过：`NGINX_BACKUP=/opt/cps-novel/shared/nginx-backups/install.RxgQkIWr`，`NGINX_INSTALL=PASS mode=preprod bootstrap_public=1`。首次 ACME HTTP 探针得到 curl 52 / Empty reply，脚本非零停止，**尚未进入 certbot，未签发新证书**。
+- trap 使用上述原备份恢复；恢复操作自己的安全备份为 `install.iiBR0ktN`，最终 `STAGE2_ROLLBACK=PASS block=A`。后者不是恢复到初始状态所选用的备份。
+- 独立复核：bootstrap 文件不存在；站点配置哈希仍为 `063698e0…eb71`，主配置仍为 `48c6a4ec…aa2`，两者与首次预检完全一致。公开首页及后台登录均为匿名 401、认证 200，响应含 noindex；nginx 新 worker 在 13:39:31 启动。B/C 未运行。
+- `protocol options redefined` 为本次 nginx 输出中的 warning，语法检查仍成功；bootstrap 模板仅新增 HTTP listener。本轮没有为去掉 warning 修改旧模板或 TLS 配置。
+
+**原因尚未唯一确证。** 原 A 在 `systemctl reload nginx` 返回后立即请求探针。只读 `systemctl show` 确认 ExecReload 使用 `nginx -s reload`；nginx 主进程接收 HUP 后才切换新 worker，旧 worker 会继续服务已有连接（[官方控制文档](https://nginx.org/en/docs/control.html)）。因此缺少就绪等待是明确的包装缺口，reload 与首个请求竞态是当前最可能解释，但不能据此排除其他原因。系统解析全部正确、ACME 目录各级 0755；deploy 无权读取 nginx 系统日志，本轮没有补造 reload 成功日志。
+
+只修正 [A 命令单](PUBLIC_CUTOVER_STAGE2_OWNER_STEPS_2026-10-05.md)，不改安装器、模板或生产 release：ACME 探针最多 10 次，每次超时 3 秒，间隔 1 秒；只重试空连接/连接失败/超时/404，仍须三个名字各 HTTP 200 且正文精确匹配才能进入 certbot。非预期状态、错误正文立即失败，耗尽后记录配置哈希、主机匹配及路径权限，然后按原备份回退。
+
+- 更新后 A.sh SHA-256：`105709e48ab2b7d0283d202b189eee8cc3dc947bfaf45bf66965aac931db292d`；旧 A 保留副本，更新包按哈希断言并原子替换。B/C 内容及哈希不变。
+- 三个代码块 bash 语法通过；六个本地隔离 fixture 通过：curl 52→正确 200、404→正确 200 均第二次成功；200 错正文和 403 均首次失败；持续超时/52 均十次后失败，未绕过验收。fixture 不执行真实 sudo/nginx/网络。首轮 fixture 的中文路径引用错误已改用 shell quoting 修正，重新全部通过。
+- **最新状态：A 首次失败、回退实测 PASS；修正版已准备，等待 Owner 在可输入密码的界面终端重跑。证书、续期及 A 整体均未 PASS；不进入 B。**

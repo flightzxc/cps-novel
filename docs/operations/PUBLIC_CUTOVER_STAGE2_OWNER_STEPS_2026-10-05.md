@@ -91,6 +91,8 @@ sudo -v
 
 失败：非零退出、错误状态码、SAN 不符或续期失败均停止。安装器处理自身失败；安装成功后的验收失败由下面的 trap 使用该次 `NGINX_BACKUP` 恢复 nginx，并清理探针。已经签发的证书可以保留，不撤销证书、不改私钥。
 
+13:39 首次 A 安装成功后，立即请求 ACME 得到 curl 52，已成功回退，未进入 certbot。服务器 reload 使用 `nginx -s reload`；可能存在检查先于新 worker 就绪的竞态，尚非唯一确证原因。本版最多等待 10 次，每次请求最多 3 秒、间隔 1 秒。只接受 HTTP 200 且探针正文逐字相同；只对空连接、连接失败/超时及 404 重试，其他状态或错误正文立即失败。耗尽后记录配置哈希、主机匹配和权限诊断，再由原 trap 回退。
+
 ```bash
 stage2_backup=''
 stage2_ok=0
@@ -122,11 +124,31 @@ PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --bootstr
 stage2_backup="$(sed -n 's/^NGINX_BACKUP=//p' "$stage2_work/install.log")"
 [[ -n "$stage2_backup" && "$stage2_backup" != *$'\n'* ]] || exit 65
 printf 'haiyue-stage2-acme-probe\n' | sudo tee /var/lib/letsencrypt/.well-known/acme-challenge/cutover-stage2-probe >/dev/null
-for name in pulsenovels.com www.pulsenovels.com zbcwf.pulsenovels.com; do
-  body="$(curl --noproxy '*' --connect-timeout 5 --max-time 20 --fail -sS "http://$name/.well-known/acme-challenge/cutover-stage2-probe")"
-  [[ "$body" == haiyue-stage2-acme-probe ]] || exit 65
-  printf 'ACME_PROBE=%s PASS\n' "$name"
-done
+stage2_acme_probe() {
+  local name="$1" attempt code curl_status body
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    curl_status=0
+    code="$(curl -q --noproxy '*' --connect-timeout 2 --max-time 3 -sS -o "$stage2_work/acme.body" -D "$stage2_work/acme.headers" -w '%{http_code}' "http://$name/.well-known/acme-challenge/cutover-stage2-probe" 2>"$stage2_work/acme.error")" || curl_status=$?
+    printf 'ACME_ATTEMPT=%s host=%s http=%s curl_exit=%s\n' "$attempt" "$name" "$code" "$curl_status"
+    if [[ "$curl_status" == 0 && "$code" == 200 ]]; then
+      body="$(cat "$stage2_work/acme.body")"
+      [[ "$body" == haiyue-stage2-acme-probe ]] || { echo 'ACME_PROBE=FAIL reason=unexpected_body'; return 65; }
+      printf 'ACME_PROBE=%s PASS\n' "$name"
+      return 0
+    fi
+    case "$curl_status:$code" in
+      0:404|52:000|7:000|28:000) ;;
+      *) echo 'ACME_PROBE=FAIL reason=unexpected_response'; return 65 ;;
+    esac
+    if [[ "$attempt" != 10 ]]; then sleep 1; fi
+  done
+  echo 'ACME_PROBE=FAIL reason=readiness_timeout'
+  sudo sha256sum /etc/nginx/conf.d/cps-novel-public-bootstrap.conf
+  sudo namei -l /var/lib/letsencrypt/.well-known/acme-challenge/cutover-stage2-probe
+  sudo nginx -T 2>"$stage2_work/nginx-check.error" | awk '/^# configuration file/ || /^[[:space:]]*(listen|server_name)[[:space:]]/ || /^[[:space:]]*location.*acme-challenge/ {print}'
+  return 65
+}
+for name in pulsenovels.com www.pulsenovels.com zbcwf.pulsenovels.com; do stage2_acme_probe "$name"; done
 stage2_new_rejected
 stage2_old_protected
 sudo certbot certonly --webroot -w /var/lib/letsencrypt --cert-name pulsenovels.com -d pulsenovels.com -d www.pulsenovels.com -d zbcwf.pulsenovels.com
