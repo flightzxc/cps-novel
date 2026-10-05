@@ -51,7 +51,7 @@
 
 **验证方式**：第一阶段全部 40 项通过：498 files / 7674 tests passed、453 tests skipped、0 failed / Unhandled、lint 19 warnings / 0 errors，28 验证器、22 迁移 / drift 0、strict proxy 1646 / known_findings=0、B21、build/brand/nginx/变异/Compose/归档 PASS；audit 0 critical / 指定五项 high（原 EXIT=1）。第二阶段备份及目标机归档载入身份通过；health 0.5.8 / Final、五应用及 postgres healthy、各服务近五分钟错误日志 0、backup ok / BACKUP_TIMER=RUNNING、Next 16.3.7。部署代码原心跳 SQL 的 EXPLAIN 两表均 Index Only Scan Backward / 无 Seq Scan，Planning 1.556 ms / Execution 0.126 ms；实际无非空心跳条目，不声称冷缓存压测。后台 worker health 预热 0.053367s，间隔10秒采三次 0.033381 / 0.041052 / 0.035007s，全部 200 / ok / expiredLocks=0。ko首页/sitemap/从sitemap取的ko小说均200/noindex。自写包装器 previous 替换在执行前纠正；汇总提前读尚未生成退出文件的错误等待传输后重跑通过，原门禁无失败。
 
-**后续待办**：annotated v0.5.8 固定 Final，CHANGELOG 由原生成器更新，台账/发布记录与完整 Notion 第二阶段交接稿已写；Notion 同步与回读状态按最终补记。Owner 2026-10-05 决定：开放延至书籍同步、内容充实后，保留 Basic Auth/noindex；完整异地恢复演练暂缓，故障优先 VPS 本机备份回滚；B-30 凭据到期提醒撤销。上线第二段证书/rehearsal/worker_connections4096 已完成；外部压测因本机网络无法直连推迟到确定开放日期前，证据 ops/cutover-stage2-2026-10 @b4afb67。上述决策详见 ADR-V058-RELEASE-OPERATIONS-BOUNDARY。领取批次仅 Owner 恢复；回滚到 v0.5.7 bbb0625 的兼容批准必须由 Owner 在回滚时另行给出，不 down、不删索引、不改 rehearsal。
+**后续待办**：annotated v0.5.8 固定 Final，CHANGELOG 由原生成器更新，台账/发布记录与完整 Notion 第二阶段交接稿已写；Notion 已同步并回读 PASS（2026-10-05T22:36:40.438000+09:00），原历史与模板保留。Owner 2026-10-05 决定：开放延至书籍同步、内容充实后，保留 Basic Auth/noindex；完整异地恢复演练暂缓，故障优先 VPS 本机备份回滚；B-30 凭据到期提醒撤销。上线第二段证书/rehearsal/worker_connections4096 已完成；外部压测因本机网络无法直连推迟到确定开放日期前，证据 ops/cutover-stage2-2026-10 @b4afb67。上述决策详见 ADR-V058-RELEASE-OPERATIONS-BOUNDARY。领取批次仅 Owner 恢复；回滚到 v0.5.7 bbb0625 的兼容批准必须由 Owner 在回滚时另行给出，不 down、不删索引、不改 rehearsal。
 
 ### 2026-10-01 22:41 - codex（GPT-6，发版执行；时间 +0800）
 
