@@ -1,6 +1,6 @@
 {
   "name": "cps-novel",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "private": true,
   "packageManager": "npm@11.6.2",
   "engines": {
