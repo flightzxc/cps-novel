@@ -492,12 +492,14 @@ GRANT SELECT (id, novel_id, status, deleted_at, web_url, app_url) ON promo_link 
 --     `tests/backend/auth/credential-contracts.test.ts` 的文本守卫同时锁住
 --     这一点。
 --   - `side_effect_intent`：只授权 `operation_type`/`channel_account_id`/
---     `request_summary` 三列的列级 SELECT——设计 §5.7 第 2 条"错过截止时间
---     重新放行前"的前置检查只需要判定"这个渠道账号是否已经为某个
+--     `status`/`request_summary` 四列的列级 SELECT——设计 §5.7 第 2 条"错过
+--     截止时间重新放行前"的前置检查只需要判定"这个渠道账号是否已经为某个
 --     `novelSourceItemId`（`request_summary ->> 'novelSourceItemId'`）准备过
---     一次 `promo_link.claim_promo` 意图"，不需要 `target_id`/`status`/
---     `response_shape`/`promo_link_id` 等 `web_app`/`analyst_ro` 能看到的
---     其它列。
+--     一次**结果仍未落定**（`status IN ('prepared','claim_retry_blocked')`）的
+--     `promo_link.claim_promo` 意图"，不需要 `target_id`/`response_shape`/
+--     `promo_link_id` 等 `web_app`/`analyst_ro` 能看到的其它列。
+--     （`status` 是 2026-10-06 ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8 追加的：D4
+--     判据从"这本书任意意图"收窄为"这一条 + 本账号下未落定的意图"。）
 --   - `operation_audit`：INSERT-only，与 `web_app` 在本文件上面的既有授权
 --     同一形状（append-only 审计表，从不 UPDATE/DELETE）；写入所需的
 --     `id` 自增列由下面已有的
@@ -511,7 +513,7 @@ GRANT SELECT (
   id, channel_account_id, status, last_validated_at, expires_at, created_at
 ) ON channel_account_credential TO scheduler_app;
 GRANT SELECT (
-  operation_type, channel_account_id, request_summary
+  operation_type, channel_account_id, status, request_summary
 ) ON side_effect_intent TO scheduler_app;
 -- RETURNING fix (同一仓库已两次撞过的坑，见 2026-09-11 "worker_app RETURNING
 -- 权限缺口全仓审计" 那一行，以及 feedback_scheduler_worker_db_reads_need_

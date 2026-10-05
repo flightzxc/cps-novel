@@ -238,14 +238,31 @@ async function shardItemCounts(
 
 /**
  * 设计 §5.7 第 2 条的前置检查：分片重新放行前，它的每一个 `pending` 条目都
- * 必须满足"从未尝试过、且没有任何 getcode 副作用"，否则整条分片转人工。
- * `attempt_count <> 0` 挡住"曾经被 worker 拿到过租约"的条目（哪怕最终因为
- * 过期回退成了 `pending`）；`side_effect_intent` 存在性挡住"曾经真正准备过
- * getcode 调用"的条目——`prepareSideEffectIntent`
- * （`worker/handlers/promo-link-claim.ts`）在真正调用 `claimPromo` 之前就会
- * 写这条记录，所以它的存在本身就证明流程已经越过了"从未尝试"这条线，即使
- * 那次调用最终因为其它原因（例如租约在写意图记录之后、调用 getcode 之前丢失）
- * 没有真正打到上游。
+ * 必须满足"从未尝试过、且没有任何尚未落定的 getcode 副作用"，否则整条分片转
+ * 人工。判据只看**这一条**，不看"这本书在别处"：
+ *
+ *   - `attempt_count <> 0`：这一条曾经被 worker 拿到过租约（哪怕最终因为过期
+ *     回退成了 `pending`）——不安全。worker 先拿租约、再写意图记录，所以这一条
+ *     自己的领取记录一定伴随 `attempt_count <> 0`，这条已经覆盖"本条目尝试
+ *     过"，口径不会因为下面收窄而变松。
+ *   - 这本书在**本账号**下有结果仍未落定的领取记录（意图状态为 `prepared` 或
+ *     `claim_retry_blocked`）——不安全（保守保留）。`prepareSideEffectIntent`
+ *     （`worker/handlers/promo-link-claim.ts`）在真正调用 `claimPromo` 之前就会
+ *     写这条记录，`prepared`/`claim_retry_blocked` 意味着那次调用可能打到了
+ *     上游、结果还没有被确认或转入人工，此时再放行会让执行时的检查面对一个
+ *     悬而未决的写入，宁可多一次转人工。
+ *   - 这本书在别处的领取记录已经**落定**（`confirmed` 或
+ *     `manual_review_required`）——**不再**判不安全。落定的记录在执行时由
+ *     `worker/handlers/promo-link-claim.ts` 的三道检查兜住：本地已有 fetched
+ *     推广码则直接记"已有推广码"、`confirmed`/`manual_review_required` 的意图
+ *     只回读或转人工，都不会再调领取接口。
+ *
+ * 修订（2026-10-06，Owner 确认；ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）：此前
+ * 判据是"这本书在本账号下存在任意状态的意图记录"，去掉建批次时的跨批次占用
+ * 之后，会出现"批次 A 在第 5 片中途暂停 → 批次 B 把这些书领完 → 恢复 A，A 的
+ * 第 5 片因为这些书在 B 里有（已落定的）领取记录而被整片卡住"。D4 的原意是
+ * "只重放从未尝试且无领取副作用的条目"，本次把"条目"从"这本书在任何批次"
+ * 收窄回"这一条"，不是放松。
  *
  * 按 `request_summary ->> 'novelSourceItemId'` 关联，而不是
  * `side_effect_intent.target_id`——`worker/handlers/promo-link-claim.ts`
@@ -254,6 +271,9 @@ async function shardItemCounts(
  * （`generic_task_item.target_id`）本身就是 `novelSourceItemId`
  * （`worker/handlers/catalog-batch.ts` 枚举时 `targetId: member.id`），两者
  * 通过这个 JSON 字段对齐，而不是通过 `target_id` 直接相等。
+ *
+ * 权限：`status` 列需要 `scheduler_app` 的列级 SELECT（`infra/postgres/
+ * grants.sql`，本次新增），其余三列沿用第 3 步已有授权。
  *
  * 查不到结果（理论上不会发生，`EXISTS` 恒有一行）时按"不安全"处理
  * （fail-closed）——宁可多一次转人工，也不能悄悄放行一个可能重复调用
@@ -275,6 +295,7 @@ async function hasUnsafePendingItems(
             SELECT 1 FROM side_effect_intent se
             WHERE se.operation_type = ${PROMO_CLAIM_INTENT_OPERATION_TYPE}
               AND se.channel_account_id = ${channelAccountId}::uuid
+              AND se.status IN ('prepared', 'claim_retry_blocked')
               AND se.request_summary ->> 'novelSourceItemId' = i.target_id
           )
         )
