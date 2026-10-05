@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   catalogBatchBlockedReasons,
+  catalogBatchPromoClaimCountLabels,
   isRetryableTaskStatus,
   itemStatusOptionsFor,
   LIST_LIMIT_NOTE,
@@ -30,10 +31,40 @@ describe("task-copy · batch blocked reason labels", () => {
     expect(labels.join(" ")).not.toContain("internal_reason");
   });
 
-  /** 阶段2 第4步（施工任务 3.4）：跨批次排队冲突的中文说明。 */
-  it("labels the cross-batch queued conflict in Chinese", () => {
-    const labels = catalogBatchBlockedReasons({ queued_in_other_batch: 5 });
-    expect(labels).toEqual(["已在其它排队中的批次里：5 条"]);
+  /**
+   * 阶段2 第4步（施工任务 3.4）曾引入的跨批次排队冲突说明。2026-10-06 修订
+   * 之后新批次不再产生这两个原因码，但历史批次的结果里仍然带着它们——中文
+   * 说明必须保留，老批次在后台才显示得出原因（验收场景 F）。
+   */
+  it("keeps the Chinese labels of the historical cross-batch reasons (old batches still show them)", () => {
+    expect(catalogBatchBlockedReasons({ queued_in_other_batch: 5 })).toEqual(["已在其它排队中的批次里：5 条"]);
+    expect(catalogBatchBlockedReasons({ active_item_conflict: 2 })).toEqual(["条目已有进行中的任务：2 条"]);
+    expect(catalogBatchBlockedReasons({ queued_in_other_batch: 5, active_item_conflict: 2 })).toEqual([
+      "已在其它排队中的批次里：5 条",
+      "条目已有进行中的任务：2 条",
+    ]);
+  });
+});
+
+describe("task-copy · lifecycle promo-claim batch counts", () => {
+  it("labels 已有推广码 / 待人工核对 / 重叠提示 in Chinese, only when positive", () => {
+    expect(catalogBatchPromoClaimCountLabels({
+      alreadyHasPromoCodeCount: 12,
+      manualReviewPendingCount: 3,
+      inOtherUnfinishedBatchNoticeCount: 5,
+    })).toEqual([
+      "已有推广码 12 本（未入队）",
+      "待人工核对 3 本（未入队）",
+      "其中 5 本同时在其它未完成的批次里，跑到时会自动跳过",
+    ]);
+  });
+
+  it("shows nothing for zero/absent counts, so a 未领取-filtered batch and every historical batch render exactly as before", () => {
+    expect(catalogBatchPromoClaimCountLabels(undefined)).toEqual([]);
+    expect(catalogBatchPromoClaimCountLabels({})).toEqual([]);
+    expect(catalogBatchPromoClaimCountLabels({
+      alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0, inOtherUnfinishedBatchNoticeCount: null,
+    })).toEqual([]);
   });
 });
 

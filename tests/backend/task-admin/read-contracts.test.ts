@@ -162,6 +162,88 @@ describe("X9 read DTO allowlists", () => {
     expect(allKeys(result)).not.toContain("internal_reason");
   });
 
+  /**
+   * 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）场景 F：新批次不再产生
+   * `queued_in_other_batch`/`active_item_conflict`，但此前落库的历史批次仍带着
+   * 它们——读接口白名单必须继续透出，否则老批次在后台显示不出未提交原因。
+   */
+  it("keeps exposing the historical queued_in_other_batch/active_item_conflict reasons for old batches", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "batch.materialize.v1",
+      status: "completed_with_errors",
+      total_count: 1,
+      success_count: 1,
+      failed_count: 0,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      result: {
+        enumerationStatus: "completed",
+        submittedCount: 1,
+        ineligibleCount: 0,
+        alreadyLinkedCount: 0,
+        blockedReasonCounts: { queued_in_other_batch: 3, active_item_conflict: 2, internal_reason: 99 },
+      },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+
+    const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
+
+    expect(result.items[0]?.catalogBatch).toEqual({
+      phase: "completed_with_errors",
+      submittedCount: 1,
+      ineligibleCount: 0,
+      alreadyLinkedCount: 0,
+      blockedCount: 5,
+      blockedReasonCounts: { queued_in_other_batch: 3, active_item_conflict: 2 },
+    });
+    expect(allKeys(result)).not.toContain("internal_reason");
+  });
+
+  it("projects the lifecycle promo-claim batch counts (已有推广码/待人工核对/重叠提示) without folding them into blockedCount", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "batch.materialize.v1",
+      status: "completed",
+      total_count: 0,
+      success_count: 0,
+      failed_count: 0,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      result: {
+        enumerationStatus: "completed",
+        submittedCount: 3,
+        ineligibleCount: 0,
+        alreadyLinkedCount: 0,
+        alreadyHasPromoCodeCount: 7,
+        manualReviewPendingCount: 2,
+        inOtherUnfinishedBatchNoticeCount: 3,
+        blockedReasonCounts: {},
+      },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+
+    const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
+
+    expect(result.items[0]?.catalogBatch).toEqual({
+      phase: "completed",
+      submittedCount: 3,
+      ineligibleCount: 0,
+      alreadyLinkedCount: 0,
+      alreadyHasPromoCodeCount: 7,
+      manualReviewPendingCount: 2,
+      inOtherUnfinishedBatchNoticeCount: 3,
+      blockedCount: 0, // 正常跳过不是错误，不进 blockedCount。
+      blockedReasonCounts: {},
+    });
+  });
+
   it.each(["channel_sync", "generic"] as const)(
     "returns a uniform lease-only item DTO for %s without item targets or raw worker state",
     async (family) => {

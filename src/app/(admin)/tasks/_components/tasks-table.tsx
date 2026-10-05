@@ -10,6 +10,7 @@ import {
   articleAdmissionBlockedReasons,
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
+  catalogBatchPromoClaimCountLabels,
   safeTaskFailureDisplay,
   taskControlSummaryLine,
   taskFamilyLabel,
@@ -64,6 +65,10 @@ export type TaskSummaryRow = {
     readonly submittedCount: number | null;
     readonly ineligibleCount: number | null;
     readonly alreadyLinkedCount?: number | null;
+    /** 生命周期领推广批次才有（2026-10-06 修订）：已有推广码 / 待人工核对（正常跳过）与"同时在其它未完成批次里"的提示数。 */
+    readonly alreadyHasPromoCodeCount?: number | null;
+    readonly manualReviewPendingCount?: number | null;
+    readonly inOtherUnfinishedBatchNoticeCount?: number | null;
     readonly blockedCount?: number;
     readonly blockedReasonCounts?: Readonly<Record<string, number>>;
   };
@@ -210,6 +215,11 @@ export function TasksTable({
                     {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
                     {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
                     {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
+                    {catalogBatchPromoClaimCountLabels(task.catalogBatch).length > 0 && (
+                      <span className="block" data-testid={`catalog-batch-promo-claim-notices-${task.taskId}`}>
+                        {catalogBatchPromoClaimCountLabels(task.catalogBatch).join(" · ")}
+                      </span>
+                    )}
                     {(task.catalogBatch.blockedCount ?? 0) > 0 && (
                       <span className="block text-amber-700" data-testid={`catalog-batch-blocked-${task.taskId}`}>
                         部分条目未提交（{task.catalogBatch.blockedCount} 条）

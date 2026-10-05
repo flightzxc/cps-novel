@@ -152,6 +152,16 @@ export type TaskSummaryDto = Readonly<{
     submittedCount: number | null;
     ineligibleCount: number | null;
     alreadyLinkedCount?: number | null;
+    /**
+     * 修订（2026-10-06，ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）：只有生命周期
+     * 领推广批次的结果里才有这三个键；历史批次、旧路径、纳入书目、Article
+     * 生成的 DTO 里这三个键整个缺席（不是 `null`）。前两个是建批次时"正常
+     * 跳过"的书（不是错误，不计入 `blockedCount`）；第三个只是提示，这些书
+     * 照常入队。
+     */
+    alreadyHasPromoCodeCount?: number | null;
+    manualReviewPendingCount?: number | null;
+    inOtherUnfinishedBatchNoticeCount?: number | null;
     blockedCount?: number;
     blockedReasonCounts?: Readonly<Record<string, number>>;
     childTasks?: readonly Readonly<{ taskId: string; taskType: string; status: string }>[];
@@ -889,9 +899,12 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     "active_scope_conflict",
     "missing_locale",
     "unsupported_locale",
-    // 阶段2 第4步（施工任务 3.4）：书已挂在另一个批次仍在排队的生命周期
-    // 分片下——见 `worker/handlers/catalog-batch.ts` 的 `queuedElsewhere`
-    // 查询、`task-copy.ts` 的 `queued_in_other_batch` 中文说明。
+    // 历史原因码，保留透出（2026-10-06 修订 ADR-PROMO-CLAIM-BATCH-LIFECYCLE §8）：
+    // 新生命周期批次不再产生这两个码（`worker/handlers/catalog-batch.ts` 改为
+    // 只提示、不阻断），但此前已落库的老批次结果里仍然带着它们，白名单一旦
+    // 去掉，老批次在后台就显示不出未提交原因——`task-copy.ts` 保留中文说明。
+    // `active_item_conflict` 旧路径（生命周期开关关闭）仍会产生。
+    "active_item_conflict",
     "queued_in_other_batch",
   ]);
   const blockedReasonCounts = resultObject?.blockedReasonCounts && typeof resultObject.blockedReasonCounts === "object" && !Array.isArray(resultObject.blockedReasonCounts)
@@ -941,6 +954,14 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     alreadyLinkedCount: isCatalogMaterialize && typeof resultObject?.alreadyLinkedCount === "number"
       ? resultObject.alreadyLinkedCount
       : null,
+    // 只有结果里确有这三个键（生命周期领推广批次，2026-10-06 之后建的批次）时才
+    // 带出；历史批次与旧路径批次的 DTO 形状逐字不变。
+    ...(isCatalogMaterialize && typeof resultObject?.alreadyHasPromoCodeCount === "number"
+      ? { alreadyHasPromoCodeCount: resultObject.alreadyHasPromoCodeCount } : {}),
+    ...(isCatalogMaterialize && typeof resultObject?.manualReviewPendingCount === "number"
+      ? { manualReviewPendingCount: resultObject.manualReviewPendingCount } : {}),
+    ...(isCatalogMaterialize && typeof resultObject?.inOtherUnfinishedBatchNoticeCount === "number"
+      ? { inOtherUnfinishedBatchNoticeCount: resultObject.inOtherUnfinishedBatchNoticeCount } : {}),
     blockedCount: isCatalogMaterialize
       ? Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0)
       : 0,

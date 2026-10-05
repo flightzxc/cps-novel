@@ -31,6 +31,7 @@ import {
   articleAdmissionBlockedReasons,
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
+  catalogBatchPromoClaimCountLabels,
   shouldDropSkippedFilterForTaskType,
   systemHoldReasonCodeLabel,
   systemHoldRecoveryHint,
@@ -328,6 +329,13 @@ export default async function TaskDetailPage({
                 状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
               </>}
             </p>
+            {catalogBatchPromoClaimCountLabels(detail.catalogBatch).length > 0 && (
+              <ul className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900" data-testid="catalog-batch-promo-claim-notices">
+                {catalogBatchPromoClaimCountLabels(detail.catalogBatch).map((label) => (
+                  <li key={label}>{label}</li>
+                ))}
+              </ul>
+            )}
             {(detail.catalogBatch.blockedCount ?? 0) > 0 && (
               <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900" data-testid="catalog-batch-blocked-explanation">
                 部分条目未提交（{detail.catalogBatch.blockedCount} 条）。

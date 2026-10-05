@@ -237,6 +237,57 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(cell.textContent).not.toContain("channel_account_required");
   });
 
+  /** 验收场景 F：历史批次（结果里已有 queued_in_other_batch / active_item_conflict）在列表里照常显示中文原因。 */
+  it("历史批次的 queued_in_other_batch / active_item_conflict 在列表里仍显示中文原因", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "batch.materialize.v1",
+      catalogBatch: {
+        phase: "completed_with_errors",
+        submittedCount: 18,
+        ineligibleCount: 0,
+        blockedCount: 65114,
+        blockedReasonCounts: { queued_in_other_batch: 65112, active_item_conflict: 2 },
+      },
+    })]} />);
+    const cell = screen.getByTestId(`catalog-batch-blocked-${task().taskId}`);
+    expect(cell.textContent).toContain("已在其它排队中的批次里：65112 条");
+    expect(cell.textContent).toContain("条目已有进行中的任务：2 条");
+    expect(cell.textContent).not.toContain("queued_in_other_batch");
+    expect(cell.textContent).not.toContain("active_item_conflict");
+  });
+
+  it("生命周期领推广批次：列表展示已有推广码/待人工核对计数与重叠提示，且它们不是未提交原因", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "batch.materialize.v1",
+      catalogBatch: {
+        phase: "disabled",
+        submittedCount: 100,
+        ineligibleCount: 0,
+        alreadyHasPromoCodeCount: 12,
+        manualReviewPendingCount: 3,
+        inOtherUnfinishedBatchNoticeCount: 5,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+      },
+    })]} />);
+    const notices = screen.getByTestId(`catalog-batch-promo-claim-notices-${task().taskId}`);
+    expect(notices.textContent).toContain("已有推广码 12 本（未入队）");
+    expect(notices.textContent).toContain("待人工核对 3 本（未入队）");
+    expect(notices.textContent).toContain("其中 5 本同时在其它未完成的批次里，跑到时会自动跳过");
+    expect(screen.queryByTestId(`catalog-batch-blocked-${task().taskId}`)).toBeNull(); // 没有"部分条目未提交"。
+  });
+
+  it("没有新计数（历史批次 / 选了未领取筛选）时不渲染这一行", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "batch.materialize.v1",
+      catalogBatch: {
+        phase: "completed", submittedCount: 4, ineligibleCount: 0, alreadyHasPromoCodeCount: 0, manualReviewPendingCount: 0,
+        blockedCount: 0, blockedReasonCounts: {},
+      },
+    })]} />);
+    expect(screen.queryByTestId(`catalog-batch-promo-claim-notices-${task().taskId}`)).toBeNull();
+  });
+
   it("小说纳入父任务区分状态不符合和 locale 阻断，且不显示未知 reason key", () => {
     render(<TasksTable tasks={[task({
       taskType: "batch.materialize.v1",
