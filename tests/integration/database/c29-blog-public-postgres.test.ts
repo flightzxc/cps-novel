@@ -48,7 +48,8 @@ const READ_ENABLED_ENV = {
 } as unknown as NodeJS.ProcessEnv;
 
 async function createAndPublish(seoVisibility: "public" | "seo_only" | "hidden") {
-  const slug = `c29-${seoVisibility}-${randomUUID().slice(0, 8)}`;
+  // slug 只允许小写字母数字用单个连字符连接（SLUG_FORMAT_RE），seoVisibility 的 "seo_only" 含下划线，必须先换成连字符。
+  const slug = `c29-${seoVisibility.replaceAll("_", "-")}-${randomUUID().slice(0, 8)}`;
   const created = await createBlogArticle(
     prisma,
     {

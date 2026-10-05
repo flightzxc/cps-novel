@@ -106,7 +106,7 @@ describe.skipIf(!enabled).sequential("C-28: real PostgreSQL — create blog → 
       }>
     >(`
       SELECT novel_id, template_id, promo_link_id, article_type, content_mode, status, seo_metadata
-      FROM article WHERE id = $1
+      FROM article WHERE id = $1::uuid
     `, created.articleId);
     expect(draftRow.novel_id).toBeNull();
     expect(draftRow.template_id).toBeNull();
@@ -137,7 +137,7 @@ describe.skipIf(!enabled).sequential("C-28: real PostgreSQL — create blog → 
 
     const [publishedRow] = await prisma.$queryRawUnsafe<
       Array<{ status: string; published_at: Date | null; novel_id: string | null }>
-    >(`SELECT status, published_at, novel_id FROM article WHERE id = $1`, created.articleId);
+    >(`SELECT status, published_at, novel_id FROM article WHERE id = $1::uuid`, created.articleId);
     // Confirms both C-27 CHECKs stayed satisfied through the transition:
     // article_novel_id_by_type_check (novel_id still NULL for this
     // article_type) and article_published_promo_link_check (status is now
