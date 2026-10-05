@@ -1,16 +1,16 @@
 # 第二段准备：Owner 终端命令单（2026-10-05）
 
-状态：A 已执行并复核通过；B 第四次完整发布验证通过后因 worker 503 回退。Owner 已授权 worker 预热/三次采样及保留 rehearsal 的新规则，命令已更新，B 待整体重跑；C 待 B 通过。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
+状态：A 已执行并复核通过；B 已按 Owner 授权的 worker 预热/三次采样规则整体通过，并独立读回完成标记、生效配置和完整响应。当前为受 Basic Auth/noindex 保护的 rehearsal，连接数仍为 768；下一块 C 待执行。本文件是命令单，完成证据见 [PUBLIC_CUTOVER_EVIDENCE.md](PUBLIC_CUTOVER_EVIDENCE.md)。仅准备和演练，不对外开放。
 
 Codex 已完成无需 sudo 的预检。deploy 无 sudo 缓存，工具执行会话没有可供 Owner 直接输入密码的共享输入界面，因此采用已批准的命令单方式。密码只在你自己的终端 sudo 提示中输入，不发到聊天、不保存。
 
 下面四个代码块依次为公共初始化、A、B、C。Codex 将公共初始化分别拼到 A/B/C 前，生成并上传无秘密的 bash 文件至 `/opt/cps-novel/shared/cutover-stage2-20261005/commands/`；上传后核对 SHA-256。**一次只运行一个块，回传输出并由 Codex 核对通过后再运行下一块。**
 
-当前本机终端下一块入口（A 已通过）：
+当前本机终端下一块入口（A、B 已通过）：
 
-`ssh -t haiyue-vps 'bash /opt/cps-novel/shared/cutover-stage2-20261005/commands/B.sh'`
+`ssh -t haiyue-vps 'bash /opt/cps-novel/shared/cutover-stage2-20261005/commands/C.sh'`
 
-B 通过后才将入口的 `B.sh` 换成 `C.sh`。三块都在服务器真实 release 的 bash 会话内执行；每块开头 `sudo -v`，同块复用缓存。若中途退出或缓存失效，按 sudo 提示重新输入；不改 sudoers。
+本次只执行 C 并回传输出核对；A 无需重跑，B 保留已验收的 rehearsal。三块都在服务器真实 release 的 bash 会话内执行；每块开头 `sudo -v`，同块复用缓存。若中途退出或缓存失效，按 sudo 提示重新输入；不改 sudoers。
 
 ## 公共初始化（自动包含在每个块中）
 

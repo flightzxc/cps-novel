@@ -477,3 +477,32 @@ Owner 明确授权重新执行 B，worker 项替换为预热一次、等待 10 �
 ```
 
 新版 B.sh SHA-256=`bc6571ad11cbd16c29e7dbe0e37340295c7d838ab72ab26c22c56bf33cca3d28`；本地/远端语法和哈希通过，原 B 保存后原子替换。A/C 脚本不变；其余完整验证、隔离、缓存/gzip、七项容量基线按原步骤执行。**当前状态：A PASS，Owner 新 worker 验收规则已落实，B 仍待整体重跑；C 及外部压测/矩阵等继续待办。**
+
+### 18:51–18:52：B 整体通过，rehearsal 保持保护，未对外开放
+
+来源：Owner 回传上述新版 B 执行输出；Codex 于 `2026-10-05T09:52:52Z`（东京时间 18:52:52）独立只读复核。运行目录 `/opt/cps-novel/shared/cutover-stage2-20261005/run.HeIBdDKV`，安装器备份 `/opt/cps-novel/shared/nginx-backups/install.2dnxpThc`。本轮没有回退，最终 `STAGE2_REHEARSAL=PASS`。
+
+| 验收项 | 结果及证据来源 |
+|---|---|
+| 初始化门禁 | Owner 输出四应用镜像身份 PASS；只读 SQL 门禁执行完成并 ROLLBACK，未恢复批次或创建任务 |
+| rehearsal 安装及身份 | 候选非空 15,898 字节，安装器语法检查通过；公开及后台 health 就绪 PASS；原完整 `RELEASE_VERIFY=PASS`、独立匿名复验 PASS。Codex 再次匿名复验 PASS |
+| 生效配置与标记 | Codex 读回 `rehearsal.pass` 等于完整 Final 提交 `bbb06253828d9fd338f0ece1749c2020d8ec4679`；站点 SHA-256=`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`，与候选一致；主配置仍为 `48c6a4ec1e1fd28ccf968490f07e34a1d7f755793b2108a3ed8670b1ee2a0aa2`、worker_connections=768；bootstrap 仍为 `c405586a742f1962fde3e2885d0f00b2e05b3da6894e183c41d7ea4659ce7975`。nginx、certbot.timer active |
+| 保护及域名隔离 | Owner 验收及 Codex 复验：旧公开首页/后台登录匿名 401、认证 200 且 noindex；新三个名字 HTTP/HTTPS 普通路径六项均 404。Owner 验收公开 dashboard/worker/backup 404、后台根路径 404。旧站 HTTPS 不使用 `-k`；新域名默认拒绝探针的 `-k` 不代表新证书在线 TLS 验收 |
+| worker | 预热一次 200/ok、0.135224s，等待 10 秒后三次均 200/ok、expiredLocks=0，`WORKER_HEALTH=PASS healthy_samples=3/3 warmup_excluded=1`；完整三次响应见下方。Codex 从服务器聚合文件读回四份记录一致，文件权限 0600、属主 deploy |
+| backup 健康 | 安装前后均 200/ok、source=status_file；后验耗时 0.031246s、ageHours=19.186027222222222、checkedAt=`2026-10-05T09:52:02.698Z`。此项是状态文件健康，不替代 C 的 dump 散列和目录验收 |
+| 缓存及压缩 | 真实静态文件 `/_next/static/chunks/0h6sxbg558p3r.css` 认证 200；脚本断言通过。Codex 读回保留响应头 `cache-control: public, max-age=31536000, immutable` 和 `content-encoding: gzip` |
+| PostgreSQL 容量 | Owner 输出七项参数和 `CAPACITY=PASS`：shared_buffers=524288×8kB（4GB）、effective_cache_size=1310720×8kB（10GB）、work_mem=16384kB（16MB）、maintenance_work_mem=524288kB（512MB）、max_connections=100、effective_io_concurrency=200、random_page_cost=1.1；事务 ROLLBACK，没有修改参数 |
+
+三次完整采样响应（预热不计入成功数）：
+
+```json
+[
+  {"sample":1,"phase":"sample","http":200,"timeTotal":0.145746,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:52:02.077Z"}},
+  {"sample":2,"phase":"sample","http":200,"timeTotal":0.139058,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:52:02.243Z"}},
+  {"sample":3,"phase":"sample","http":200,"timeTotal":0.119676,"curlExit":0,"body":{"workerStatus":"ok","expiredLocks":0,"lastHeartbeatAgeSeconds":null,"checkedAt":"2026-10-05T09:52:02.388Z"}}
+]
+```
+
+独立复核脱敏日志 `B-pass-readback.log` 最终 `B_READBACK=PASS`。B 按已批准的采样规则整体通过；历史四轮失败及回退保留，冷读超时风险仍由 v0.5.8 索引开发单处理，不能将预热后的通过作为冷读性能已修复。
+
+**当前状态：A PASS、B PASS；C 尚未执行，连接数仍为 768，最新 dump 散列/目录校验未 PASS。** 下一块 C 的远端 `bash -n` 通过，SHA-256=`93fec1a3d913112c1c3d44cd167f781698ddddc401e9ce0c3385e83957e52cc1`，与已审命令包一致。外部直连压测、本地 Docker 矩阵、新凭据 worker 校验/独立签发与 X8 排重、NAS 最近成功证据仍未完成；异地恢复演练按 ADR 暂缓。此轮只读复核没有重新尝试本机网络或 Docker，因此这些前轮阻塞不视为已解除。未安装主机 public 模式，未改变站点地址、认证/noindex、IndexNow、模板或应用/数据库结构。
