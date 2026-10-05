@@ -264,3 +264,88 @@ tests/backend/runtime/site-mode-fixture.ts
 Owner sudo 范围：ACME webroot/探针、三名 SAN certbot 签发及续期验证；nginx 安装器及持久备份恢复；主配置 worker_connections 768→4096、语法检查和 reload（带恢复命令）；读取 root 备份证据。应用发布沿用 deploy/Docker 权限。
 
 手册还包含 DNS/GSC、暂停批次及清零在途、在线逻辑备份、env/nginx/镜像/数据库身份记录、异地恢复与凭据关闭条件、SEO/缓存/压缩/限流验收、后台配置分享图与 IndexNow 但保持闸门关闭、light 刷新 sitemap、恢复批次、三档回退、回退后的监控与外部提交状态、一周 HSTS 提级和 30 天旧域名下线。
+
+## 2026-10-05：第二段准备，未对外开放
+
+状态：**只读预检及 sudo 命令准备完成；主机变更、外部压测和本地矩阵待执行，第二段未完成。** 本节不继承上文历史测试的 PASS 作为本轮结果。操作以运行 Final `bbb06253828d9fd338f0ece1749c2020d8ec4679` 为准，证据分支 `ops/cutover-stage2-2026-10` 基于收官提交 `0278e7324f4b544ae0a70bd914e7c5a61a0c7ee7`，只 push，不合并。
+
+Owner 在本会话批准第二段准备计划：保持旧域名 Basic Auth/noindex；不改站点地址、不安装 VPS public 模式、不开放公网、不启用 IndexNow、不恢复领取批次、不操作 X8、不调模板数值。恢复演练暂缓，决定及剩余风险见 [ADR](../adr/ADR-CUTOVER-STAGE2-DEFER-OFFSITE-RESTORE.md)。
+
+### 只读预检（本轮实测）
+
+时间锚点：首轮预检 `2026-10-05T04:14:22Z`（东京时间 13:14:22）。本机原始脱敏日志在本 worktree `.tmp/cutover-stage2/`，不提交密码、env、密文或私钥。
+
+| 项目 | 本轮结果 |
+|---|---|
+| DNS | 向 8.8.8.8、1.1.1.1、lunar/solar.dns-parking.com 查询三个名字的 A/CNAME/AAAA；主域和后台 A=`2.24.209.236`，www CNAME 到主域并解析到同一 IPv4，没有 AAAA。权威 TTL=300；递归缓存 TTL 可以低于 300。最终 36 次查询无超时，原始日志 `dns.log` |
+| 发布目录 | `/opt/cps-novel/current` → `/opt/cps-novel/releases/bbb06253828d9fd338f0ece1749c2020d8ec4679`，目录 Git HEAD 一致 |
+| manifest | `/opt/cps-novel/shared/artifacts/staging/bbb06253828d9fd338f0ece1749c2020d8ec4679.json`；原 `preprod_read_release_manifest` 及 `preprod_assert_local_image` 成功，镜像锚点 descriptor |
+| 运行镜像 | web、worker、worker-light、scheduler 均通过原 `preprod_assert_container_image`，锚点 manifest_descriptor；镜像引用 `cps-novel:0.5.7-bbb0625`。四应用、postgres、backup-timer healthy |
+| health | 旧公开域名带现有受控 curl config 查询：version=0.5.7、commit=完整 Final、healthy，metadataConsistency/database 均 passed |
+| 当前发布验证 | `verify-release.sh` 完整验证 `RELEASE_VERIFY=PASS`；独立复验 `--anonymous-only --expect-live` 得到 `RELEASE_VERIFY=PASS mode=anonymous_only`。仅证明现有 preprod，**不代表 rehearsal 已通过** |
+| nginx 模式 | 当前配置 SHA-256 与本地以 Final 同版脚本渲染的 preprod 完全一致：`063698e072bc56ddac4286f5113d565753f7251ad3c0186833a438ae6eaeeb71`；四份生效旧 snippet 与 release 源码逐项哈希一致 |
+| 主配置 | `/etc/nginx/nginx.conf` SHA-256=`48c6a4ec1e1fd28ccf968490f07e34a1d7f755793b2108a3ed8670b1ee2a0aa2`，当前 `worker_connections 768;`，**未修改** |
+| 保护与拒绝 | 服务器端旧公开首页匿名 401、带密码 200 且 `X-Robots-Tag: noindex, nofollow, noarchive`；后台登录由完整验证通过。新域名当前 HTTP 空响应、HTTPS 默认拒绝 404，未提供业务内容。默认拒绝探针仅此处使用 `-k`，旧站认证请求不用 `-k` |
+| curl config / IndexNow | 现有服务器 curl config 权限 600，未读取或输出内容；`preprod_site_mode=preprod`，`preprod_assert_indexnow_gates preprod 0 0` PASS |
+| 批次与在途 | `eba8f359-a569-43d7-bb55-b71fecc02f6e`，`batch.materialize.v1`，paused；`tagging.auto_classify` pending/processing 条目各零，领取 pending/processing 任务零 |
+| 数据库参数 | shared_buffers=4GB；effective_cache_size=10GB；work_mem=16MB；maintenance_work_mem=512MB；max_connections=100；effective_io_concurrency=200；random_page_cost=1.1。来自只读 `pg_settings`，符合容量基线 |
+
+SQL 明确运行在 `BEGIN READ ONLY` 中，限制 statement_timeout，最终 ROLLBACK；没有创建、校验、续期或修改凭据，没有入队、恢复批次或改变业务开关。
+
+### 凭据现状与三项关闭证据
+
+当前 active **一条**，ID `4410a759-8485-4fb8-954c-a497b8e6a229`，只展示指纹前缀 `44fb1a40`；到期 **2026-10-12 12:38:58 +0900**；`last_validated_at=2026-10-05 12:40:54.989 +0900`。当天 12:40:55 的 change log 为 `replace`，审计为 `credential.replace.completed`。
+
+**`last_validated_at` 不等于续期后 worker 校验成功。** 同版 `src/server/credentials/service.ts` 的同步 add/replace 会先做本地 JWT 校验，并在入库时填写该字段；本轮只读查询新 credential 的 `validate` change log 数为 **0**，没有 `credential.validate.completed` 审计，最近两项校验任务分别是 09-24、09-22。因此不能复用旧凭据的 worker PASS。
+
+| 关闭条件 | 已有证据 | 缺口 / 结论 |
+|---|---|---|
+| ① 旧令牌已过期 | 两条历史 superseded 行 expires_at 为 `2026-09-24 14:54:51 +0900`、`2026-10-01 03:08:20 +0900`，都早于本次查询 | 历史令牌到期条件有只读证据 |
+| ② 本机独立签发新令牌且 worker 校验成功 | 新 active 行、replace 审计及同步本地校验时间 | **待补**：独立签发来源证据、当前新凭据的 worker 成功校验记录。本轮不主动触发验证 |
+| ③ 到期时间不与 X8/本机其他凭据重复 | 当前 active 到期时间与本机其他 `channel_account_credential` 行精确相同的数量 **0** | **部分完成**：本机排重通过；X8 既有只读证据待 Owner 提供，不访问其栈 |
+
+三项尚未齐备，未关闭凭据 blocker。每周到期只记录现状，没有新增提醒或自动续期。
+
+### sudo 三块与本轮执行状态
+
+deploy 的 `sudo -n -v` 未取得缓存；无共享的 Owner 密码输入通道。采用已批准的 fallback：准备 [三块终端命令单](PUBLIC_CUTOVER_STAGE2_OWNER_STEPS_2026-10-05.md)，分别初始化同版 manifest/env 并先 `sudo -v`，Owner 只在自己终端输入密码。回传 A 核对通过才执行 B，B 通过才执行 C。
+
+命令单的公共初始化分别拼接 A/B/C，已上传为 deploy 0600 文件，位于 `/opt/cps-novel/shared/cutover-stage2-20261005/commands/`；本地和远端 SHA-256 一致，远端仅做 `bash -n`，**未执行文件**。
+
+| 块 | 内容 | SHA-256 / 本轮结论 |
+|---|---|---|
+| A.sh | DNS 复核、bootstrap-public、ACME 探针、三名 SAN 签发、renew dry-run、timer、旧站保护/新站拒绝；验收失败使用 A 安装器备份恢复 | `7fde043887d476736c45cc4672744529f3213a80fea369747279ab3d1e211096`；**待 Owner 执行**，当前 timer active 不能代替新证书续期验收 |
+| B.sh | rehearsal、完整/匿名发布验证、主机隔离、真实静态文件缓存与 gzip、七项参数断言；失败使用 B 安装器备份恢复 | `8a1ea4cd8b066815cbb0dbec9146afc453bb8407a90694f6bbfbdeb270766233`；**待 A 输出核对后执行** |
+| C.sh | 原值 768 才修改为 4096、独立备份、语法及 reload、最近备份三件/散列/目录读取；任何后续失败恢复主配置 | `688861c2be6ecba29ebd3bc284ac9bb2d44bf54054b4b7bd50c5ce7568de9b40`；**待 B 输出核对后执行** |
+
+命令准备验证：三个拼接文件 `bash -n` 均通过；使用真实 EXIT handler 和隔离 stub 验证 A/B/C 的回退成功、回退失败六个场景，成功恢复保留原退出码 65，恢复失败返回 71。fixture 不执行 sudo/nginx/SSH/Docker，不接触生产路径。此结果只验证命令控制流，不是主机安装或回退实测。
+
+### 压测与本地矩阵：受阻，未取得数据
+
+- 本机 `curl --noproxy '*'` 直连旧站 443 连续失败，`curl exit=35`、`http_code=000`、peer=`2.24.209.236`、连接被重置；HTTP 同样被重置，强制 TLS 1.2 仍失败。服务器自身查询旧站 HTTPS 正常 401。证据不能确定故障究竟来自本机、网络链路或对源地址的服务端过滤；**没有绕过网络或用服务器本机代替外部压测**。
+- 本地 Docker context=`desktop-linux`；`docker version` 默认及临时 API 1.41 查询均在 8/6 秒诊断上限内未返回，直接 socket `/_ping` 5 秒超时。前轮诊断出现 API 500，本轮未取得可用 daemon 响应。没有切换 context、重启 Docker 或操作任何 X8 容器。
+- 本轮没有执行线上负载请求，也没有运行本地矩阵，因此 200 比例、延迟分位、超预算 429、5xx 数量均 **无数据**；不能声明“零 5xx”或 `NGINX_MATRIX_ALL=PASS`。
+- 调参建议：在外部网络、Docker 及 rehearsal 就绪后执行已批准的页面/多语/预取/超预算测试，并补充匀速基线。当前无压测依据，模板数值保持现状；如果测得问题，交下一开发单，不在本段调整。
+
+### 备份：存在性实测，恢复演练暂缓
+
+最新本机逻辑备份 `/opt/cps-novel/shared/backups/logical/cps-novel-20261004T143811Z.dump`；三件 stat：
+
+| 文件 | 大小 | 最后修改（东京时间） | 权限/属主 |
+|---|---:|---|---|
+| dump | 283,215,297 bytes | 2026-10-04 23:39:08 | 0600 root |
+| dump.metadata | 260 bytes | 2026-10-04 23:39:09 | 0600 root |
+| dump.sha256 | 98 bytes | 2026-10-04 23:39:09 | 0600 root |
+
+三件非空、存在性 **PASS**；deploy 均不可读，**散列及 `pg_restore --list` 待 C 块 sudo 验收，不标记通过**。没有通过 Docker root 绕过这次 sudo 分工来读取文件。
+
+NAS 每六小时拉取、已接通来自交接材料，**本轮未取得最近成功日志或 Owner 确认**；已向 Owner 请求脱敏时间及结果。暂列“待 Owner 确认”，不冒充实测。异地完整恢复演练按 Owner 决定暂缓，**异地副本可恢复性未经实测**。
+
+### 偏离、修正与后续
+
+- 已确认的文档冲突处理：worker_connections 所在 events 块不属于安装器备份清单，采用手册单独备份；站点配置仍只用安装器回退。未执行 sed。
+- 由于 sudo、外部 HTTPS 和 Docker 前提未满足，本轮仅完成只读检查、ADR、命令包和证据提交；证书/rehearsal/连接数/压测不得写为完成。新凭据 worker 校验与 X8 排重仍缺证据。
+- 管理型 worktree 工具因聊天 cwd 不是 Git 仓库而返回 `Not a git repository`；改从同一仓库以 `git worktree add` 建立独立证据工作区，不改变既有发布工作区。
+- 一次远端 bash stdin 包装中的完整验证成功后，compose one-off 消耗了后续输入，独立匿名命令未执行；已单独重跑匿名复验取得 PASS，提供的 B 命令对两次验证均显式使用 `</dev/null`。属于包装修正，未绕过仓库门禁。
+- CPS 旧基线只读检查 HEAD=`d77c3b968285698529cf97c7f0f97b286d7a2a9c`、status 零行；X 系列参考已有未提交状态，仅比较本轮前后 HEAD/status 字节，不清理、不使用它构建或测试。
+- 接续顺序：Owner 在终端执行 A 并回传脱敏输出 → Codex 核对 → B → 核对 → C → 核对；外部直连和 Docker 就绪后补测并追加证据。凭据及 NAS 证据另补。**到此仍不进入切换当天。**
