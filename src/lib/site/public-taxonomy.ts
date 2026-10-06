@@ -18,6 +18,7 @@
  * 300s. `canonical_definition` is Chinese classifier copy and is not
  * projected onto the public tag.
  */
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isAutoTaggingEnabled } from "@/lib/flags/feature-flags";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -141,8 +142,42 @@ export async function loadPublicTaxonomyByNovelIds(
   const uniqueIds = [...new Set(novelIds)];
   if (uniqueIds.length === 0) return new Map();
 
+  // 小说 id 按块查（见 `PUBLIC_TAXONOMY_NOVEL_ID_CHUNK_SIZE`）：不超过一块时只发一条查询，SQL 与行序同改前。
+  // 每本书的标签顺序只取决于行自己的排序键（排序权重 / slug / 分数 / 稳定 id），与同批里有哪些别的书无关，
+  // 所以分块不改变任何一本书的结果；变的只有返回 Map 里「书」的插入顺序（调用方都是按 id 取，不依赖它）。
+  const grouped = new Map<string, PublicTaxonomyTag[]>();
+  for (const idChunk of chunkIds(uniqueIds, PUBLIC_TAXONOMY_NOVEL_ID_CHUNK_SIZE)) {
+    for (const row of await queryPublicTaxonomyRows(db, idChunk, locale, env)) {
+      const tags = grouped.get(row.novel_id) ?? [];
+      tags.push(project(row, locale));
+      grouped.set(row.novel_id, tags);
+    }
+  }
+  return grouped;
+}
+
+/**
+ * 每次查询最多带多少个小说 id。
+ *
+ * 🔴 不是性能旋钮，是正确性上限：下面的原生 SQL 里同一组 id 会**重复出现 2～3 次**
+ * （自动标签关闭：`target_source_item` + `public_membership` 两处；开启：再加 `auto_membership` 共三处），
+ * 每次出现都各占 N 个绑定变量，而 Prisma 单条语句最多 32,767 个
+ * （`too many bind variables in prepared statement, expected maximum of 32767`）。
+ * 即：自动标签开启时，一次超过约 10,900 本书就必然失败；关闭时约 16,300 本。
+ * 站点地图的分类页要对「一个语种全部公开小说」取归属，2026-10-06 预生产英语文章已过 1.3 万篇，
+ * 修掉站点地图整块读取之后，这里就是下一道墙（`tests/integration/tasks/sitemap-scale-postgres.test.ts` 的 mainpage 用例）。
+ * 2,000 × 3 次 = 6,000 个绑定变量，离上限还有 5 倍余量。
+ */
+export const PUBLIC_TAXONOMY_NOVEL_ID_CHUNK_SIZE = 2_000;
+
+async function queryPublicTaxonomyRows(
+  db: Db,
+  uniqueIds: readonly string[],
+  locale: string,
+  env: NodeJS.ProcessEnv,
+): Promise<PublicTaxonomyRow[]> {
   const ids = Prisma.join(uniqueIds.map((id) => Prisma.sql`${id}::uuid`));
-  const rows = await db.$queryRaw<PublicTaxonomyRow[]>(isAutoTaggingEnabled(env) ? Prisma.sql`
+  return db.$queryRaw<PublicTaxonomyRow[]>(isAutoTaggingEnabled(env) ? Prisma.sql`
     WITH target_source_item AS MATERIALIZED (
       SELECT nsi.id, nsi.novel_id, nsi.channel_app_id, nsi.raw_language_scope
       FROM novel_source_item nsi
@@ -272,14 +307,6 @@ export async function loadPublicTaxonomyByNovelIds(
       ON zh.canonical_tag_id = ct.id AND zh.locale = 'zh'
     ORDER BY ct.sort_order, ct.slug, membership.novel_id
   `);
-
-  const grouped = new Map<string, PublicTaxonomyTag[]>();
-  for (const row of rows) {
-    const tags = grouped.get(row.novel_id) ?? [];
-    tags.push(project(row, locale));
-    grouped.set(row.novel_id, tags);
-  }
-  return grouped;
 }
 
 export function listDistinctPublicTaxonomy(

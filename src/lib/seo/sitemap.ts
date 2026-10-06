@@ -5,6 +5,7 @@ import {
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
+import { loadAllByIdCursor, whereAfterId } from "@/lib/db/id-cursor-pages";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { buildChapterPath } from "@/lib/seo/chapter-path";
 import { getSiteUrl, toAbsoluteUrl } from "@/lib/seo/site-url";
@@ -82,6 +83,24 @@ export interface SitemapFile {
 export type BuildSitemapFamily = (spec: SitemapFamilySpec) => Promise<SitemapFile[]>;
 
 export const SITEMAP_SHARD_SIZE = 10_000;
+
+/**
+ * 站点地图读取一个语种的公开文章时，每条 `article.findMany` 最多取多少行。
+ *
+ * 🔴 这个值不是性能旋钮，是正确性上限：`ARTICLE_SITEMAP_SELECT` 带了组合外键关系 `promoLink`
+ * （`Article.[promoLinkId, novelId] → PromoLink.[id, novelId]`），Prisma 为它生成
+ * `(id, novel_id) IN ((…),(…),…)`，一次取回的行数一多就撑爆 PostgreSQL 的解析栈（54001）或
+ * Prisma 自己的 32,767 绑定变量上限——2026-10-06 预生产英语文章过万后站点地图刷新连续失败的根因。
+ * 完整机理与实测门槛见 `@/lib/db/id-cursor-pages`（本机 7,281 组起 54001、事故现场 6,835 组；500 组留出 13 倍以上余量）；
+ * 博客家族 select 里没有关系，也按同一个块大小读，只为让两条路径形状一致、结果集不再一次性整块进内存。
+ * 不要把它改回「一次读完」：`tests/integration/tasks/sitemap-scale-postgres.test.ts` 用 3 万篇真实库数据守着它。
+ */
+export const SITEMAP_ARTICLE_LOAD_CHUNK_SIZE = 500;
+
+/** 仅供测试覆盖块大小（验证任意块大小下输出逐字节相同）；生产调用方一律不传。 */
+export interface SitemapFamilyBuilderOptions {
+  readonly articleLoadChunkSize?: number;
+}
 
 type SitemapDb = PrismaClient | Prisma.TransactionClient;
 
@@ -437,16 +456,21 @@ function buildBlogPageFiles(
 export function createSitemapFamilyBuilder(
   db: SitemapDb,
   env: NodeJS.ProcessEnv = process.env,
+  options: SitemapFamilyBuilderOptions = {},
 ): BuildSitemapFamily {
+  const chunkSize = options.articleLoadChunkSize ?? SITEMAP_ARTICLE_LOAD_CHUNK_SIZE;
   const candidateCacheByRoute = new Map<SiteLocale, Promise<ArticleSitemapCandidateWithNovel[]>>();
   const loadVisible = (locale: SiteLocale) => {
     const existing = candidateCacheByRoute.get(locale);
     if (existing) return existing;
-    const pending = db.article.findMany({
-      where: articleSitemapWhere(locale, env),
+    // 按 id 游标分块读（块大小见 `SITEMAP_ARTICLE_LOAD_CHUNK_SIZE` 的注释）；过滤、排序、应用层复核都不变。
+    const where = articleSitemapWhere(locale, env);
+    const pending = loadAllByIdCursor(chunkSize, ({ take, after }) => db.article.findMany({
+      where: whereAfterId(where, after),
       select: ARTICLE_SITEMAP_SELECT,
       orderBy: { id: "asc" },
-    }).then((rows) => rows.filter((row) => isVisibleCandidate(row, env)));
+      take,
+    })).then((rows) => rows.filter((row) => isVisibleCandidate(row, env)));
     candidateCacheByRoute.set(locale, pending);
     return pending;
   };
@@ -458,11 +482,13 @@ export function createSitemapFamilyBuilder(
   const loadVisibleBlog = (locale: SiteLocale) => {
     const existing = blogCandidateCacheByRoute.get(locale);
     if (existing) return existing;
-    const pending = db.article.findMany({
-      where: blogArticleSitemapWhere(locale, env),
+    const where = blogArticleSitemapWhere(locale, env);
+    const pending = loadAllByIdCursor(chunkSize, ({ take, after }) => db.article.findMany({
+      where: whereAfterId(where, after),
       select: BLOG_ARTICLE_SITEMAP_SELECT,
       orderBy: { id: "asc" },
-    }).then((rows) => rows.filter((row) => isVisibleBlogCandidate(row, env)));
+      take,
+    })).then((rows) => rows.filter((row) => isVisibleBlogCandidate(row, env)));
     blogCandidateCacheByRoute.set(locale, pending);
     return pending;
   };
