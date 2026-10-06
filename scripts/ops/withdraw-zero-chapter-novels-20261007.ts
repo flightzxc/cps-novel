@@ -37,8 +37,8 @@
  *     `src/lib/locale/active-locales.ts`），它只关心「哪些语种有公开内容」，en 仍有大量已发布内容，
  *     集合不变，且 300 秒内自行过期；③ `revalidatePath` / `revalidateTag` 绑定 Next 的请求上下文，
  *     在独立 CLI 进程里调用只会抛错（按钮路径里也是 try/catch 吞掉的），根本到不了 web 进程的缓存；
- *   - 按钮的 `novel.findFirst` / `article.findMany` 多读了 slug、publicPageShortId 等字段只为拼缓存
- *     路径；这里不读，不影响写入。
+ *   - 按钮里 `article.findMany`（取受影响文章）还多选了 locale、slug、publicPageShortId，只为拼缓存
+ *     路径；这里只取 id，不影响写入。其余读写（含 `novel.findFirst` 取书目）与按钮逐字一致。
  *
  * ## 自包含
  *
