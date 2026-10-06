@@ -689,3 +689,320 @@ VPS 同名三件 stat 大小仍为 283,215,297 / 260 / 98 bytes，0600 root。�
 限流建议保持模板现值，本段不再以外部直连故障阻止收尾；外部性能数据待未来开放前取得，矩阵 PASS 不代替性能数据。前述底层 renderer 路径判断、矩阵 reset 就绪及 worker 冷读查询索引的后续修复事项仍不属于此次证据提交。
 
 **第二段准备按 Owner 最新决定收尾；提交并 push 本证据分支后停止。** 主机保持既有受保护 rehearsal，Basic Auth/noindex 保留，新域名普通路径拒绝，未正式切换；不安装 public 模式，不改变站点地址、模板、应用或数据库，不开 IndexNow，不操作 X8，不恢复批次，不新增提醒或自动后续任务。本次最终提交只包含文档/ADR；不合并。分支 HEAD 由最终交付回报给出，避免在提交内写入自身哈希。
+
+## 外部 HTTPS 压测（2026-10-07，切换前）
+
+本次按 Owner 2026-10-07 的任务及出站方式修订执行，运行态只读；证据分支 `ops/cutover-loadtest-2026-10` 基于收官提交 `62fc80fdde2ca8cb6d2165429b88f0cec218817a`，仅 push、不合并。本节只关闭前文外部 HTTPS 压测的 DEFERRED 项，不改变其它门禁结论。
+
+### 网络、身份与受控凭据
+
+- 客户机网络为 Wi-Fi，经本机 HTTP 代理（Owner 指定的海外出口）出站；所有 curl 使用 `--proxy http://127.0.0.1:7899`，去掉 `--noproxy` 和 `--resolve`。未读取或记录代理节点地址、账号，也未修改代理配置。延迟包含代理往返，只作相对比较；状态码分布、429 出现位置、5xx 观察及服务器负载的验收口径不变。
+- 第 0 步匿名探测：curl exit=0，目标 HTTP/2 401，`www-authenticate: Basic realm="CPS Novel Rehearsal"`，`x-robots-tag: noindex, nofollow, noarchive`；代理 CONNECT 的 200 不计作目标响应。响应时间戳 `2026-10-06T20:07:52Z`（东京 2026-10-07 05:07:52）。经代理的 remote_ip 是代理地址，因此没有用于判断源站。
+- 先前直连失败仍保留：DNS 返回 2.24.209.236；固定该 IP 且 `--noproxy` 的直连 curl exit=35、HTTP 000、Connection reset by peer、0.318757s。此前按停止规则没有继续；本轮仅在 Owner 明确授权代理出站后恢复。
+- SSH 只读 health（web 容器本机 `/api/health`）：HTTP 200 / healthy，`build.version=0.5.9`、`build.commit=6af0b2e5c79db932c4754a43580eed3729bd0334`；六个容器均 healthy。首次只读基线 `2026-10-06T20:08:03Z`，uptime 17 天 10:19、load average 0.02 / 0.04 / 0.07；正式批前基线及逐批快照见下文。
+- 服务器既有受控 config `/opt/cps-novel/shared/secrets/preprod-curl.conf` 元数据为 0600、deploy；通过 scp 复制到本机规定目录后立即 chmod 600。没有读取/打印内容或 Basic Auth 密码，没有提交凭据。认证首页探测 HTTP/2 200，保留 `noindex, nofollow, noarchive`（东京 05:12:22）。
+- 只读 GET `/sitemap.xml` 返回 200，为 35 个分片的已发布索引；读取其中 `site_novelpage_en.xml` 返回 200。英文小说及章节 URL 从该英文分片提取，默认英文路径不带 `/en`：
+  - 小说：`https://www.bangbangji.cloud/novel/contract-baby-and-billionaire-pg15q11wz`
+  - 章节：`https://www.bangbangji.cloud/novel/contract-baby-and-billionaire-pg15q11wz/chapter/1`
+- 本机 curl config 及其目录已删除，删除后检查均不存在；未触发 sitemap 刷新。
+
+### 批次、状态码与延迟
+
+请求总数 480；状态码合计 200=432、429=48；5xx=0。下表延迟单位秒，覆盖该批全部响应（超预算组包含 429）；每批先 `sort -n`，awk 数值取值及比较均 `+0`，以 nearest-rank（ceil(n×p)）计算 p50/p90/p99。样本量 30/40/100 时 p99 接近或等于最大值，不能当作更大样本的尾延迟估计。
+
+| 批次 | 东京开始–结束 | 次数 / 并发 | 状态码分布 | p50 | p90 | p99 | 最大值 |
+|---|---|---|---|---:|---:|---:|---:|
+| 匀速 `/` | 05:13:32–05:14:32 | 30 / 1（每 2 秒） | 200×30 | 1.782235 | 1.857004 | 2.109890 | 2.109890 |
+| 匀速 `/ko/browse` | 05:15:38–05:16:37 | 30 / 1（每 2 秒） | 200×30 | 1.591171 | 1.734267 | 1.833160 | 1.833160 |
+| 手册 `/` | 05:17:43–05:18:02 | 40 / 4 | 200×40 | 1.808934 | 1.943213 | 2.399522 | 2.399522 |
+| 手册 `/ko` | 05:19:08–05:19:27 | 40 / 4 | 200×40 | 1.857510 | 2.069982 | 2.096942 | 2.096942 |
+| 手册 `/browse` | 05:20:33–05:20:50 | 40 / 4 | 200×40 | 1.654644 | 1.938273 | 1.958283 | 1.958283 |
+| 手册 `/ko/browse` | 05:21:56–05:22:14 | 40 / 4 | 200×40 | 1.786093 | 1.884916 | 1.970495 | 1.970495 |
+| 预取 `/ko/browse` | 05:23:20–05:23:38 | 40 / 4 | 200×40 | 1.724506 | 1.893455 | 2.280509 | 2.280509 |
+| 超预算 `/ko/browse` | 05:24:44–05:24:53 | 100 / 20 | 200×52、429×48 | 1.595717 | 2.670058 | 2.780253 | 2.786325 |
+| 补充 `/es/browse` | 05:25:59–05:26:16 | 40 / 4 | 200×40 | 1.635656 | 2.058580 | 2.484931 | 2.484931 |
+| 补充 en 小说 | 05:27:22–05:27:41 | 40 / 4 | 200×40 | 1.819558 | 1.928086 | 2.125325 | 2.125325 |
+| 补充 en 章节 | 05:28:46–05:29:03 | 40 / 4 | 200×40 | 1.609727 | 1.927352 | 2.269340 | 2.269340 |
+
+每条路径独立成批；上批完成及只读服务器快照后，实际等待至少 60 秒再发下一批。普通并发 4 组按手册 `seq 1 40 | xargs -P 4 -I ... curl`，预取额外带 `Next-Router-Prefetch: 1`；超预算组为 `seq 1 100 | xargs -P 20 -I ... curl`。匀速基线每 2 秒发起一次且串行。未将 12r/s 持续速率预算简化为并发预算。低预算批无 429，因此无需恢复期重测；429 仅出现在超预算组。所有 curl 正常退出，无 000、5xx 或 stderr 错误。
+
+### 服务器负载与逐批只读快照
+
+`uptime` 与 `docker stats --no-stream` 均在正式批前及每批后通过 SSH 只读记录，同时确认六容器 healthy。快照不是请求进行中的连续监控，不能据此声称已测得瞬时 CPU 峰值。
+
+| 时点 | 东京采样 | load average（1/5/15 分钟） | web CPU | web 内存 | postgres CPU | postgres 内存 |
+|---|---|---|---:|---|---:|---|
+| 正式批前 | 05:13:30 | 0.28, 0.18, 0.11 | 0.00% | 75.97MiB / 2GiB | 6.93% | 3.141GiB / 15.62GiB |
+| 匀速 `/` 后 | 05:14:35 | 0.27, 0.20, 0.12 | 0.05% | 102.3MiB / 2GiB | 0.69% | 3.151GiB / 15.62GiB |
+| 匀速 `/ko/browse` 后 | 05:16:41 | 0.13, 0.16, 0.11 | 0.04% | 78.85MiB / 2GiB | 0.30% | 3.148GiB / 15.62GiB |
+| 手册 `/` 后 | 05:18:06 | 0.65, 0.29, 0.16 | 0.00% | 136.7MiB / 2GiB | 0.36% | 3.188GiB / 15.62GiB |
+| 手册 `/ko` 后 | 05:19:31 | 0.36, 0.26, 0.16 | 0.01% | 132MiB / 2GiB | 0.31% | 3.197GiB / 15.62GiB |
+| 手册 `/browse` 后 | 05:20:54 | 0.60, 0.31, 0.18 | 0.08% | 140.4MiB / 2GiB | 0.91% | 3.196GiB / 15.62GiB |
+| 手册 `/ko/browse` 后 | 05:22:18 | 0.67, 0.37, 0.21 | 0.00% | 138.6MiB / 2GiB | 7.42% | 3.197GiB / 15.62GiB |
+| 预取 `/ko/browse` 后 | 05:23:41 | 0.41, 0.35, 0.21 | 0.08% | 131.6MiB / 2GiB | 0.39% | 3.183GiB / 15.62GiB |
+| 超预算 `/ko/browse` 后 | 05:24:57 | 1.29, 0.54, 0.28 | 0.26% | 170.2MiB / 2GiB | 7.67% | 3.185GiB / 15.62GiB |
+| 补充 `/es/browse` 后 | 05:26:20 | 0.36, 0.43, 0.26 | 3.78% | 147.1MiB / 2GiB | 0.30% | 3.186GiB / 15.62GiB |
+| 补充 en 小说 后 | 05:27:44 | 0.24, 0.38, 0.26 | 0.19% | 151MiB / 2GiB | 0.29% | 3.199GiB / 15.62GiB |
+| 补充 en 章节 后 | 05:29:07 | 0.10, 0.31, 0.25 | 0.08% | 145.4MiB / 2GiB | 0.37% | 3.193GiB / 15.62GiB |
+
+六容器的正式批前 → 最后一批后对比（CPU 为采样值，内存为使用量/限制）：
+
+| 容器 | CPU 前 → 后 | 内存前 → 后 | PIDs 前 → 后 |
+|---|---|---|---|
+| cps-novel-backup-timer-1 | 0.00% → 0.00% | 19.84MiB / 15.62GiB → 19.84MiB / 15.62GiB | 2 → 2 |
+| cps-novel-scheduler-1 | 6.46% → 0.00% | 3.496MiB / 512MiB → 3.492MiB / 512MiB | 2 → 2 |
+| cps-novel-worker-light-1 | 0.58% → 0.77% | 96.77MiB / 1GiB → 96.33MiB / 1GiB | 45 → 45 |
+| cps-novel-worker-1 | 1.03% → 1.16% | 97.74MiB / 2GiB → 100.1MiB / 2GiB | 54 → 54 |
+| cps-novel-web-1 | 0.00% → 0.08% | 75.97MiB / 2GiB → 145.4MiB / 2GiB | 21 → 21 |
+| cps-novel-postgres-1 | 6.93% → 0.37% | 3.141GiB / 15.62GiB → 3.193GiB / 15.62GiB | 20 → 20 |
+
+正式批前 uptime：`05:13:30 up 17 days, 10:25,  1 user,  load average: 0.28, 0.18, 0.11`；最终：`05:29:07 up 17 days, 10:41,  1 user,  load average: 0.10, 0.31, 0.25`。逐批采样的 1 分钟负载最高 1.29；六容器全部快照 healthy。累计 Net I/O 和 Block I/O 及每次完整 stats 见下方留存（不等同于本次独占流量）。
+
+<details>
+<summary>正式批前及逐批后的完整只读 uptime / docker stats 快照</summary>
+
+**正式批前**
+
+```text
+2026-10-06T20:13:30Z
+ 05:13:30 up 17 days, 10:25,  1 user,  load average: 0.28, 0.18, 0.11
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|6.46%|3.496MiB / 512MiB|358kB / 485kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.58%|96.77MiB / 1GiB|37.7MB / 17.4MB|0B / 38MB|45
+cps-novel-worker-1|1.03%|97.74MiB / 2GiB|8.49MB / 14.7MB|299kB / 2.32MB|54
+cps-novel-web-1|0.00%|75.97MiB / 2GiB|25.4MB / 44.5MB|242kB / 434kB|21
+cps-novel-postgres-1|6.93%|3.141GiB / 15.62GiB|8.56GB / 78.2GB|721MB / 54.5GB|20
+```
+
+**匀速 `/` 后**
+
+```text
+2026-10-06T20:14:35Z
+ 05:14:35 up 17 days, 10:26,  1 user,  load average: 0.27, 0.20, 0.12
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.488MiB / 512MiB|362kB / 489kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.63%|96.48MiB / 1GiB|37.8MB / 17.5MB|0B / 38MB|45
+cps-novel-worker-1|0.97%|98.67MiB / 2GiB|8.56MB / 14.8MB|299kB / 2.32MB|54
+cps-novel-web-1|0.05%|102.3MiB / 2GiB|64MB / 54.3MB|242kB / 434kB|21
+cps-novel-postgres-1|0.69%|3.151GiB / 15.62GiB|8.56GB / 78.2GB|721MB / 54.5GB|20
+```
+
+**匀速 `/ko/browse` 后**
+
+```text
+2026-10-06T20:16:41Z
+ 05:16:41 up 17 days, 10:28,  1 user,  load average: 0.13, 0.16, 0.11
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.492MiB / 512MiB|368kB / 499kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.65%|94.83MiB / 1GiB|37.8MB / 17.6MB|0B / 38MB|45
+cps-novel-worker-1|0.95%|99.47MiB / 2GiB|8.69MB / 15.1MB|299kB / 2.32MB|54
+cps-novel-web-1|0.04%|78.85MiB / 2GiB|111MB / 62.8MB|242kB / 434kB|21
+cps-novel-postgres-1|0.30%|3.148GiB / 15.62GiB|8.57GB / 78.2GB|721MB / 54.5GB|20
+```
+
+**手册 `/` 后**
+
+```text
+2026-10-06T20:18:06Z
+ 05:18:06 up 17 days, 10:30,  1 user,  load average: 0.65, 0.29, 0.16
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.488MiB / 512MiB|375kB / 508kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.78%|96.32MiB / 1GiB|37.9MB / 17.7MB|0B / 38MB|45
+cps-novel-worker-1|1.14%|98.84MiB / 2GiB|8.77MB / 15.3MB|299kB / 2.32MB|54
+cps-novel-web-1|0.00%|136.7MiB / 2GiB|162MB / 76.1MB|242kB / 451kB|21
+cps-novel-postgres-1|0.36%|3.188GiB / 15.62GiB|8.57GB / 78.3GB|721MB / 54.5GB|20
+```
+
+**手册 `/ko` 后**
+
+```text
+2026-10-06T20:19:31Z
+ 05:19:31 up 17 days, 10:31,  1 user,  load average: 0.36, 0.26, 0.16
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.5MiB / 512MiB|379kB / 513kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.71%|96.29MiB / 1GiB|37.9MB / 17.8MB|0B / 38MB|45
+cps-novel-worker-1|0.79%|98.54MiB / 2GiB|8.86MB / 15.5MB|299kB / 2.32MB|54
+cps-novel-web-1|0.01%|132MiB / 2GiB|226MB / 89.4MB|242kB / 451kB|21
+cps-novel-postgres-1|0.31%|3.197GiB / 15.62GiB|8.58GB / 78.4GB|721MB / 54.5GB|20
+```
+
+**手册 `/browse` 后**
+
+```text
+2026-10-06T20:20:54Z
+ 05:20:54 up 17 days, 10:32,  1 user,  load average: 0.60, 0.31, 0.18
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.5MiB / 512MiB|382kB / 517kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.80%|97.72MiB / 1GiB|38MB / 17.9MB|0B / 38MB|45
+cps-novel-worker-1|1.18%|98.96MiB / 2GiB|8.95MB / 15.6MB|299kB / 2.32MB|54
+cps-novel-web-1|0.08%|140.4MiB / 2GiB|276MB / 99.9MB|242kB / 451kB|21
+cps-novel-postgres-1|0.91%|3.196GiB / 15.62GiB|8.58GB / 78.4GB|721MB / 54.5GB|20
+```
+
+**手册 `/ko/browse` 后**
+
+```text
+2026-10-06T20:22:18Z
+ 05:22:18 up 17 days, 10:34,  1 user,  load average: 0.67, 0.37, 0.21
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.5MiB / 512MiB|389kB / 527kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.66%|95.32MiB / 1GiB|38MB / 18MB|0B / 38MB|45
+cps-novel-worker-1|1.02%|98.54MiB / 2GiB|9.04MB / 15.8MB|299kB / 2.32MB|54
+cps-novel-web-1|0.00%|138.6MiB / 2GiB|338MB / 111MB|242kB / 451kB|21
+cps-novel-postgres-1|7.42%|3.197GiB / 15.62GiB|8.58GB / 78.5GB|721MB / 54.5GB|20
+```
+
+**预取 `/ko/browse` 后**
+
+```text
+2026-10-06T20:23:41Z
+ 05:23:42 up 17 days, 10:35,  1 user,  load average: 0.41, 0.35, 0.21
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.492MiB / 512MiB|392kB / 531kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.65%|96.9MiB / 1GiB|38.1MB / 18.1MB|0B / 38MB|45
+cps-novel-worker-1|1.18%|98.85MiB / 2GiB|9.13MB / 16MB|299kB / 2.32MB|54
+cps-novel-web-1|0.08%|131.6MiB / 2GiB|400MB / 122MB|242kB / 467kB|21
+cps-novel-postgres-1|0.39%|3.183GiB / 15.62GiB|8.59GB / 78.5GB|721MB / 54.5GB|20
+```
+
+**超预算 `/ko/browse` 后**
+
+```text
+2026-10-06T20:24:57Z
+ 05:24:57 up 17 days, 10:36,  1 user,  load average: 1.29, 0.54, 0.28
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.496MiB / 512MiB|396kB / 536kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.70%|97.3MiB / 1GiB|38.1MB / 18.2MB|0B / 38MB|45
+cps-novel-worker-1|0.92%|99.57MiB / 2GiB|9.21MB / 16.2MB|299kB / 2.32MB|55
+cps-novel-web-1|0.26%|170.2MiB / 2GiB|481MB / 137MB|242kB / 467kB|21
+cps-novel-postgres-1|7.67%|3.185GiB / 15.62GiB|8.59GB / 78.6GB|721MB / 54.5GB|20
+```
+
+**补充 `/es/browse` 后**
+
+```text
+2026-10-06T20:26:20Z
+ 05:26:20 up 17 days, 10:38,  1 user,  load average: 0.36, 0.43, 0.26
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|7.37%|3.496MiB / 512MiB|402kB / 546kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.68%|96.38MiB / 1GiB|38.1MB / 18.3MB|0B / 38MB|45
+cps-novel-worker-1|0.87%|98.55MiB / 2GiB|9.29MB / 16.4MB|299kB / 2.32MB|54
+cps-novel-web-1|3.78%|147.1MiB / 2GiB|538MB / 147MB|242kB / 467kB|21
+cps-novel-postgres-1|0.30%|3.186GiB / 15.62GiB|8.6GB / 78.7GB|721MB / 54.5GB|20
+```
+
+**补充 en 小说 后**
+
+```text
+2026-10-06T20:27:44Z
+ 05:27:44 up 17 days, 10:39,  1 user,  load average: 0.24, 0.38, 0.26
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.492MiB / 512MiB|406kB / 550kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|7.90%|96.86MiB / 1GiB|38.2MB / 18.4MB|0B / 38MB|45
+cps-novel-worker-1|7.18%|99.29MiB / 2GiB|9.38MB / 16.5MB|299kB / 2.32MB|54
+cps-novel-web-1|0.19%|151MiB / 2GiB|590MB / 156MB|242kB / 467kB|21
+cps-novel-postgres-1|0.29%|3.199GiB / 15.62GiB|8.6GB / 78.7GB|721MB / 54.5GB|20
+```
+
+**补充 en 章节 后**
+
+```text
+2026-10-06T20:29:07Z
+ 05:29:07 up 17 days, 10:41,  1 user,  load average: 0.10, 0.31, 0.25
+cps-novel-backup-timer-1|Up 2 hours (healthy)
+cps-novel-scheduler-1|Up 2 hours (healthy)
+cps-novel-worker-light-1|Up 2 hours (healthy)
+cps-novel-worker-1|Up 2 hours (healthy)
+cps-novel-web-1|Up 2 hours (healthy)
+cps-novel-postgres-1|Up 9 days (healthy)
+cps-novel-backup-timer-1|0.00%|19.84MiB / 15.62GiB|2.68GB / 663kB|14.9MB / 682MB|2
+cps-novel-scheduler-1|0.00%|3.492MiB / 512MiB|413kB / 560kB|786kB / 1.09MB|2
+cps-novel-worker-light-1|0.77%|96.33MiB / 1GiB|38.2MB / 18.5MB|0B / 38MB|45
+cps-novel-worker-1|1.16%|100.1MiB / 2GiB|9.47MB / 16.7MB|299kB / 2.32MB|54
+cps-novel-web-1|0.08%|145.4MiB / 2GiB|641MB / 164MB|242kB / 471kB|21
+cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
+```
+
+</details>
+
+### 结论、建议与执行偏离
+
+**本次受控页面压测 PASS（代理出站口径）：低预算各批全部 200；仅超预算组出现 429；全部 480 个请求中 5xx=0；六容器逐批仍 healthy。** 这是本次路径、源出口、样本量及并发条件下的验收结果，不外推为完整容量上限或直连延迟。外部 HTTPS 压测从 DEFERRED 更新为本次已取得数据；是否正式切换仍由主控汇总其它门禁决定。
+
+限流建议：当前数据不支持调整任何 nginx 模板数值，保持现状；正常及预取并发 4 组全 200、并发 20 超预算组产生 429 且无 5xx，保护行为符合预期。没有服务器配置安装、模板调参、DNS/证书/env/容器或业务开关修改；没有访问 `/go/`、后台或写接口，没有运行本地矩阵，没有开启站点地图刷新。
+
+本轮已知偏离/包装修正：
+
+1. Owner 追加授权出站方式为本机 HTTP 代理，替代原直连及关闭代理的前提；按指定 realm/noindex 验收身份，延迟仅作相对比较。
+2. 本地只读元数据查找最初遍历到无权限的备份目录，find 非零；改为精确 stat 后重跑成功。health 包装检查最初误把版本取自顶层 `h.version`，实际位于 `h.build.version`；修正并重跑 PASS。这两项是本地检查问题，线上响应及状态均符合预期，没有把初次非零结果伪记为 PASS。
+3. 为落实每批等待与“首个 5xx 立即停止”，在本机用只读编排包装手册原 seq/xargs/curl 命令；每条路径之间额外等待 60 秒，并记录每次原始 `http_code time_total`。5xx 时会终止在途 curl 并取消后续批次；本次未触发停止/重试。
+4. health 通过 SSH 在 web 容器内用 Node fetch 只读 `/api/health` 核对，避免为服务器内 curl 引入客户端代理；其它所有 curl 均走 Owner 指定的代理。英文页面路径来自英文 sitemap，未人为添加不存在的 `/en` 前缀。
+5. 清理时自动审批拒绝 `rm -f` 形式，理由为该命令形式不被允许；改用 Python 对指定 config 执行 unlink、对空目录执行 rmdir，已完成并确认文件及目录均不存在。没有因此留下凭据。
+
+证据提交使用中文说明及 `Agent: codex` / `Model: GPT-6` trailer；不合并。分支 HEAD 在交付回报给出，不在提交内写入自身哈希。
