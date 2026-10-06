@@ -60,6 +60,19 @@ import { describe, expect, it } from "vitest";
 
 const SCAN_ROOTS = ["src", "worker", "scheduler", "scripts"].map((dir) => path.resolve(process.cwd(), dir));
 const ALLOWED_ROOT = path.resolve(process.cwd(), "src/server/publish-gate");
+/**
+ * Narrow, file-exact exception (2026-10-07): a one-off ops script that replays the admin
+ * "withdraw" button's transaction for a batch of Novels from the command line (the admin UI has
+ * no batch withdraw, and the button path is bound to an admin login). It must write
+ * `Novel.status` / `Article.status` itself because it runs standalone inside the production web
+ * container, where it cannot import `src/`. It only ever writes `"unpublished"` — the direction
+ * this guard is not about — and the test below pins exactly that: every status write in these
+ * files must be the literal `"unpublished"` and the string `"published"` must never appear in
+ * a write's arguments. Adding another file here is a deliberate, reviewed act, never a pattern.
+ */
+const ALLOWED_OPS_SCRIPTS = new Set([
+  path.resolve(process.cwd(), "scripts/ops/withdraw-zero-chapter-novels-20261007.ts"),
+]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 
 async function collectSourceFiles(directory: string): Promise<string[]> {
@@ -133,7 +146,7 @@ describe("publish bypass regression", () => {
     const allFiles = (await Promise.all(SCAN_ROOTS.map(collectSourceFiles))).flat();
     const violations: Array<{ file: string; hits: string[] }> = [];
     for (const file of allFiles) {
-      if (file.startsWith(ALLOWED_ROOT)) continue;
+      if (file.startsWith(ALLOWED_ROOT) || ALLOWED_OPS_SCRIPTS.has(file)) continue;
       const source = await readFile(file, "utf8");
       const hits = findBypassCandidates(source);
       if (hits.length > 0) {
@@ -141,6 +154,25 @@ describe("publish bypass regression", () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("the allow-listed one-off ops scripts exist and only ever write status \"unpublished\", never \"published\"", async () => {
+    for (const file of ALLOWED_OPS_SCRIPTS) {
+      const source = await readFile(file, "utf8");
+      const writes = [...source.matchAll(MODEL_WRITE_CALL)].map((match) => ({
+        call: `.${match[1]}.${match[2]}(`,
+        args: extractCallArgs(source, (match.index ?? 0) + match[0].length),
+      }));
+      const statusWrites = writes.filter((write) => SETS_STATUS_KEY.test(write.args));
+      // Still a status write at all (otherwise the allow-list entry is stale and should be removed).
+      expect(statusWrites.length).toBeGreaterThan(0);
+      for (const write of statusWrites) {
+        expect(write.args, write.call).toMatch(/\bstatus\s*:\s*"unpublished"/);
+        expect(write.args, write.call).not.toMatch(/["']published["']/);
+      }
+      // No raw-SQL escape hatch either.
+      expect(findBypassCandidates(source).filter((hit) => hit.includes("raw SQL"))).toEqual([]);
+    }
   });
 
   it("sanity: detects the CPS-style bypass pattern it exists to catch (literal status)", () => {
