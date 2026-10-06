@@ -3,16 +3,71 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-05 · 共 1033 个 commit
+生成时间：2026-10-06 · 共 1085 个 commit
+- `42bc22c` 2026-10-07 文档：归档海阅 v0.5.9 重定基线后第一阶段门禁与发布身份  — _codex · GPT-6_
+
+## v0.5.9
+
+- `6af0b2e` 2026-10-07 发布：从 source-map-js 修复基线重做海阅 v0.5.9 版本身份  — _codex · GPT-6_
+- `59e84ef` 2026-10-07 合并(v0.5.9)：source-map-js 1.2.1→1.2.2 修复 GHSA-68fv-2mgg-jv7q（仅 package-lock.json 一处；Codex 第一阶段 audit 门禁发现第 6 项 high，Owner 2026-10-07 决定发版前修；fix/source-map-js-1.2.2 @ab7541d，主控复核）  — _claude-code · Claude Opus 5.5_
+- `ab7541d` 2026-10-06 依赖(安全)：source-map-js 1.2.1 升到 1.2.2，修复 GHSA-68fv-2mgg-jv7q  — _claude-code · Claude Sonnet 5_
+- `549760f` 2026-10-06 合并(v0.5.9)：文章后台批量发布任务（article.publish.batch.v1 / article.publish.v1，只跑 worker-light，整批一次站点地图刷新；env 需在 WORKER_LIGHT_TASK_ALLOWLIST 追加两个类型；feat/article-batch-publish-task @5a23f36，会话「海阅任务失败原因」复核）  — _claude-code · Claude Opus 5.5_
+- `5a23f36` 2026-10-06 测试(文章发布)：修正新增用例的类型断言与未使用的辅助代码  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `29a9a67` 2026-10-06 文档(文章发布)：后台批量发布任务 ADR，登记任务 JSON 键与授权结论  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `a2765a0` 2026-10-06 测试(文章发布)：后台批量发布任务真实库验收（场景 A–F），入队走 web_app、执行走 worker_app  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `54a348e` 2026-10-06 功能(文章列表)：全选当前筛选时提供「后台批量发布（N 篇）」入口  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `fb4a88e` 2026-10-06 功能(任务中心)：批量发布批次的整批控制与「发布结果」汇总  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `4373fcf` 2026-10-06 功能(文章发布)：后台批量发布任务的父子任务、worker-light 执行与整批收尾  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `365fe97` 2026-10-06 合并(v0.5.9)：站点地图规模缺陷修复——文章按 id 游标分块加载（避开组合外键元组 IN 的 54001），分类归属按小说 id 分块（避开 32767 绑定上限），试读开放候选同样分块（fix/sitemap-composite-fk-scale @635a63c，会话「海阅任务失败原因」复核）  — _claude-code · Claude Opus 5.5_
+- `635a63c` 2026-10-06 修复(试读开放)：enqueue-published 的候选全集按 id 游标分块读取，避免组合外键元组 IN 撑爆解析栈  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `a9e64b0` 2026-10-06 修复(站点地图)：公开文章按 id 游标分块读取，分类归属按小说 id 分块，消除文章过万后刷新必败的规模缺陷  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `5ef9ecb` 2026-10-06 合并(v0.5.9)：目录同步页「上游上架时间」筛选与排序（sourceCreatedFrom，按 source_created_at_raw 原串比较），批次上下文/预估认推广链接状态筛选（feat/catalog-source-created-time-filter @b2b7ffb，会话「海阅任务失败原因」复核）  — _claude-code · Claude Opus 5.5_
+- `b2b7ffb` 2026-10-06 修复(目录同步)：批次上下文/预估认「推广链接状态」筛选，与页面列表和 worker 枚举同一口径  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `3ccf2dd` 2026-10-06 测试(目录同步)：场景 B 每组用例都让「上架时间」条件真正起作用，运行器下限 41→42  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `0b5165e` 2026-10-06 文档(数据库治理)：登记批次快照新增 JSON 键 sourceCreatedFrom  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `01b27b1` 2026-10-06 测试(目录同步)：上架时间筛选与排序的单测与真实库验收（场景 A–F）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `227890a` 2026-10-06 功能(目录同步)：新增「上架时间」筛选与「上架时间（新→旧）」排序  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `150e8bc` 2026-10-06 合并(v0.5.9)：B-31 把 9 个从未运行的真实库测试开关（10 个文件、约 74 例）接进运行器，新增三个运行器与共用'禁止整文件跳过'断言；只改脚本与两处过时测试（fix/b31-wire-never-run-db-tests @37e25a1）  — _claude-code · Claude Opus 5.5_
+- `37e25a1` 2026-10-06 修复(B-31): catalog-batch 运行器并入 PROMO_CLAIM_LIFECYCLE_DATABASE_TEST 从未运行的第 4 个文件  — _claude-code · Claude Sonnet 5_
+- `7cbfa55` 2026-10-06 修复(B-31): 新增 article-blog-rebind 运行器，打开 C27/C28/C29/C30/PUBLISH_BATCH 五个从未运行的开关（六个文件）  — _claude-code · Claude Sonnet 5_
+- `f9a1e26` 2026-10-06 测试(B-31): c29 真实库测试的 slug 生成避开下划线  — _claude-code · Claude Sonnet 5_
+- `afde92c` 2026-10-06 测试(B-31): c28 真实库测试的两条原生 SQL 给 uuid 列补显式 ::uuid 转换  — _claude-code · Claude Sonnet 5_
+- `64629f1` 2026-10-06 修复(B-31): 新增 p2-04 运行器，打开 P2_04_DATABASE_TEST 从未运行的真实库测试  — _claude-code · Claude Sonnet 5_
+- `074e0f6` 2026-10-06 修复(B-31): 新增 task-claim-control 运行器，打开 TASK_CLAIM_SKIP_INELIGIBLE 与 X10_TASK_CONTROL 两个从未运行的真实库测试  — _claude-code · Claude Sonnet 5_
+- `f766ae1` 2026-10-06 新增(B-31): 真实库运行器共用的"禁止整文件跳过"断言脚本  — _claude-code · Claude Sonnet 5_
+- `a8bcb77` 2026-10-06 合并(v0.5.9)：B-8 catalog-batch 运行器打开两个从未运行的领推广真实库测试文件，并加'禁止整文件跳过'硬断言（fix/b8-catalog-batch-runner-coverage @c2830e1，仅运行器脚本）  — _claude-code · Claude Opus 5.5_
+- `c2830e1` 2026-10-06 修复(B-8): catalog-batch 真实库运行器真正跑两个领推广生命周期文件，并断言无整文件跳过  — _claude-code · Claude Sonnet 5_
+- `61e864c` 2026-10-06 合并(v0.5.9)：上线切换第二段证据与 ADR（证书/rehearsal/worker_connections/NAS 与凭据证据；恢复演练暂缓、worker 健康采样；ops/cutover-stage2-2026-10 @d8f3321，仅文档）  — _claude-code · Claude Opus 5.5_
+- `946d589` 2026-10-06 合并(v0.5.9)：领推广去掉跨批次占用阻断（改为提示）、建批次排除已有推广码/待人工核对、D4 恢复前检查收窄为本条、后台计数补齐（fix/promo-claim-dedup-at-execution @f11e679，会话「海阅任务失败原因」复核）  — _claude-code · Claude Opus 5.5_
+- `f11e679` 2026-10-06 修复(领推广)：弹窗新版计数统一用「本」，老批次两行保持「条」  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `5272dde` 2026-10-06 功能(领推广)：目录同步页提交后的弹窗补齐「已有推广码/待人工核对/其它未提交」计数与重叠提示  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `569c85c` 2026-10-06 文档(领推广)：ADR 增补 §8 修订（去掉跨批次占用，防重复回到执行时）与数据库治理词典/改动日志  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `01300cc` 2026-10-06 测试(领推广)：去掉跨批次占用的真实库验收（场景 A/B/C/E/F/H，真实 handler + 可计数上游假适配器）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `ad735ae` 2026-10-06 功能(后台)：批次详情与任务列表展示"已有推广码/待人工核对"计数与重叠提示，保留历史原因码说明  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `be30453` 2026-10-06 修复(领推广)：恢复/重放分片前的安全检查(D4)收窄为只看"这一条"（Owner 2026-10-06 确认）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `917e93c` 2026-10-06 修复(领推广)：建批次去掉跨批次占用阻断改为只提示，并一律排除已有推广码/待人工核对的书  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `306edb4` 2026-10-05 文档：补记海阅 v0.5.8 Notion 同步回读及 GitHub 发布身份  — _codex · GPT-6_
+- `f68712f` 2026-10-05 发布：完成海阅 v0.5.8 预生产部署及 E/F/G 验收  — _codex · GPT-6_
 - `cdf4228` 2026-10-05 文档：归档海阅 v0.5.8 第一阶段门禁与发布身份  — _codex · GPT-6_
 
 ## v0.5.8
 
 - `0329b11` 2026-10-05 发布：准备海阅 v0.5.8 版本身份  — _codex · GPT-6_
+- `d8f3321` 2026-10-05 补齐 NAS 与凭据 worker 证据并按 Owner 决定收尾第二段  — _codex · GPT-6_
 - `6504e8c` 2026-10-05 合并(v0.5.8)：worker 健康检查心跳查询加部分索引、改每表倒序取一行，修复冷缓存超时误报 503；过期锁查询 interval 反序列化修复（fix/worker-health-indexes @ffc9b7f）  — _claude-code · Claude Opus 5.5_
 - `d400167` 2026-10-05 合并(v0.5.8)：NAS 异地拉取脚本 stat 跨平台修复（GNU/BSD 方言探测、保留排序 LC_ALL=C；fix/offsite-pull-stat-portability @0d355eb）  — _claude-code · Claude Opus 5.5_
+- `b4afb67` 2026-10-05 记录第二段 C 备份连接数验收及本地矩阵通过  — _codex · GPT-6_
 - `ffc9b7f` 2026-10-05 修复(健康检查)：过期锁查询的 interval 列让 Prisma 反序列化抛错，degraded 永远走不到  — _claude-code · Claude Sonnet 5_
 - `41b5ca3` 2026-10-05 修复(健康检查)：worker 心跳查询加部分索引，冷缓存不再误报 503  — _claude-code · Claude Sonnet 5_
+- `5e0981e` 2026-10-05 记录第二段 rehearsal 整体验收通过并接续 C  — _codex · GPT-6_
+- `2a56c70` 2026-10-05 运维：按 Owner 决定采样 worker 健康并保留 rehearsal  — _codex · GPT-6_
+- `f1f7a95` 2026-10-05 运维：记录 B worker 503 与健康复验并保留状态正文  — _codex · GPT-6_
+- `7ae1421` 2026-10-05 运维：修正 B 后台认证 realm 预期并记录第三次回退  — _codex · GPT-6_
+- `9c2591b` 2026-10-05 运维：定位 B 空渲染并使用真实 release 目录及候选门禁  — _codex · GPT-6_
+- `1a82d76` 2026-10-05 运维：记录 B 首次回退并增加 rehearsal 就绪检查  — _codex · GPT-6_
+- `4a4b4bc` 2026-10-05 运维：记录第二段 A 证书准备通过及只读复核  — _codex · GPT-6_
+- `97e2efb` 2026-10-05 运维：记录 A 首次回退并补充 ACME 探针就绪等待  — _codex · GPT-6_
+- `ecd209c` 2026-10-05 运维：记录上线第二段只读预检、待执行 sudo 命令与恢复演练暂缓  — _codex · GPT-6_
 - `0278e73` 2026-10-02 治理：完成 v0.5.7 英文重新定类差集验收  — _codex · GPT-6_
 - `0d355eb` 2026-10-02 修复(异地拉取)：保留策略取 mtime 的 stat 写法跨 GNU/BSD 可移植  — _claude-code · Claude Sonnet 5_
 - `9dd4210` 2026-10-02 治理：记录 v0.5.7 英文重新定类启动及只读跟进  — _codex · GPT-6_

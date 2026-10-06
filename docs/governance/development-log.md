@@ -39,6 +39,28 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-07 03:02 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式部署 `v0.5.9`（PATCH），仅 haiyue-vps。原 RELEASE=PASS / EXIT=0，部署完成 2026-10-07 02:23:30 +0800 / 03:23:30 JST，耗时57秒。E / F / 5b / 5c / 5d 全部PASS。
+
+**背景**：Owner 授权第二阶段；先等10-06全量发布带出的试读抓取跑完，再部署领推广、上架时间、站点地图规模与批量发布后台任务的已复核集成代码。首次候选基于549760f，audit多出source-map-js 1.2.1（GHSA-68fv-2mgg-jv7q）第六项high，门禁停止。Owner 2026-10-07决定发版前升1.2.2，仅package-lock.json一处；基线重定59e84efa85756c0e957dcbf63f62b32aa5d7fca2，旧本地8772afd未推送且作废，从新工作树整段重跑，未rebase/cherry-pick。本轮没有功能开发、公共API修改或自动依赖修复。
+
+**变更内容**：Final `6af0b2e5c79db932c4754a43580eed3729bd0334` / tree `9894abdff08bf348a45aad025879c681ed5215b2` / image `cps-novel:0.5.9-6af0b2e`。生命周期领推广建批次不再以跨批次占用阻断、只提示；排除已有推广码和人工核对项并独立计数；D4恢复/重放只检查尝试记录与prepared/claim_retry_blocked未落定意图（Owner10-06确认）；后台新计数及历史中文原因保留。scheduler_app新增status列SELECT由原grants重放，response_shape仍不授权。目录同步增加北京时间上架时间范围与新到旧排序，共用sourceCreatedFrom判定，批次预估补齐推广链接状态。Sitemap/preview候选每500条游标分页、分类归属SQL每2000本分块，避免54001和32767绑定上限，原过滤/顺序/分片不变。后台跨页全选可创建批量发布父/子任务，200篇拆分、最多5万、整批仅一次Sitemap跟进，worker-light消费两个新类型；当前页同步入口不变。第二段证据和两份ADR文档已并入主线（d8f3321）；source-map-js1.2.2范围内锁文件安全升级。
+
+B-8/B-31补齐此前从未接入任何运行器的11个真实库测试文件（约79例），并加禁止整文件跳过硬断言；仅运行器及两处过时测试修正，无产品改动。B-8两文件此前在f11e679一次性PG16补跑两次均5passed；默认enumerateMs约2093/505，8万规模9121/9207，与改前同量级（施工交接证据）；永久覆盖现随c2830e1发布。
+
+**影响范围**：本版在密码保护预生产生效，正式域名尚未开放。env先备份，仅APP_VERSION、NEXT_PUBLIC_BUILD_VERSION、WORKER_LIGHT_TASK_ALLOWLIST三行；轻量通道追加article.publish.batch.v1/article.publish.v1，主通道逐字节不变且无两类型。nginx rehearsal三文件hash不变，旧域名BasicAuth/noindex、新域名404；未改nginx、证书、DNS、NAS入口，未连其它运维主机、未重建postgres、未开关业务开关、未新建/暂停/恢复领推广批次。已有标签true/YES及四写闸不变；web IndexNow出站两开关仍false，B-34尚待打开出站前修复。
+
+**验证方式**：第一阶段45项门禁、32个运行器PASS；511files/7900tests，0failed/Unhandled；lint0error；22迁移与字典drift0，strictproxy next16.3.7/probes1646/known_findings0；B21/nginx全矩阵/原public-cutover变异/真实品牌镜像/三Compose/归档PASS。audit0critical且恰好@prisma/config、deepmerge-ts、effect、nanoid、prisma五项high，npm ls所有source-map-js均1.2.2。
+
+第二阶段第一次远端操作为门禁0 postgres只读事务：18:05:21UTC任务2/条目349，未部署、不动任务；10分钟后18:15:32UTC0/0。145终态任务completed23/errors122，条目success28696/failed270（只记录）。随后立即B A–D：cancelled50/completed3/errors18=71；领取任务/条目/未落定意图各0，定类条目0。发布前14语种文章28981、可入图免费章节85964，deploy前复查不变。备份681522357bytes、restore-listPASS；服务器重算归档SHA256 `524379f2db0f0654258768b33b8966c244faa72b7d59aa92699f746ca4b31146`，331281258bytes，原verify --load批准完整Final/独立SHA并锚定descriptor通过。PREPROD_APPROVED_MIGRATION=YES，22迁移空操作与grants重放PASS。health0.5.9/Final、五应用及postgres健康、postgres ID不变、近5分钟错误0、Next16.3.7、backupok/timerRUNNING、写闸输出逐字节一致。status权限f→t/response_shape仍f，运行D4源码1处/旧阻断0/新计数4，permissiondenied0、light54001=0；不人为暂停/恢复验收。后台workerhealth预热0.047725s、间隔10秒三次0.035404/0.033111/0.033087s，全200/ok/expired0。原心跳SQL两表IndexOnlyScanBackward，无SeqScan，29.104/1.404ms，不声称冷缓存压测。
+
+UI F5/5b/5d已只读PASS：已中止71分片完整，新建批次新计数缺席符合老结果；历史65114原因中文保留；近30天pending211条三页全部日期有效；当前页无后台入口、跨页有入口及跳过试读选项，仅观察后清除选择；草稿生成146子任务/29039总/28966成功/73失败/0跳过与旧版一致。Sitemap5c PASS：系统04:00JST自然兜底，任务069eee5b completed/item success，21.432秒，35分片+索引，118537网址；逐语种小说28981/免费章节85964与部署前只读计数完全一致，收官前light54001=0/全部服务healthy/近5分钟错误0。未代为刷新，不执行可选UAT。
+
+**历史领推广与Owner裁决**：下面是10-06施工交接时点，非本轮重测值：eba8f359中止前已领29489/人工451/失败53/排队约5万；Owner04:59:55.432Z manual中止，审计636881终止49771条、第21–70片50片。05:01:39UTC只读A=50+3+18=71/B=C=D=0；70922条=skipped49771（task_manually_aborted）/success21097（claimed20693、manual397、already_fetched4、already_available2、readback_recovered1）/failed54（ambiguous53、locator_stale1），最后一本04:59:55.6Z正常收尾、中止时无在途请求。全库confirmed28115/manual458，promo_link claimed28115/upstream_existing1623/pending458，一一对应且无未释放账号暂停，status列权限f。本轮部署前A–D重新通过，历史有码成功条目20700保留、适用decision缺码0；全库同期claimed已增长到28128，不混用交接快照。
+
+**后续待办**：验收后annotated v0.5.9固定Final、原生成CHANGELOG/台账/本条日志已完成，Notion同步读回PASS（2026-10-06T19:03:52.094Z），旧历史与模板保留；Git推送正在执行。正式域名开放另行授权；IndexNow出站默认关闭，B-34须先修。回滚目标v0.5.8 Final0329b11，仅Owner回滚时另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复本次env备份、先查在途批次/枚举，原脚本重放旧grants，不down、不重建postgres、不改rehearsal。
+
 ### 2026-10-05 21:33 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式部署 `v0.5.8`（PATCH），仅 haiyue-vps；原 RELEASE=PASS / EXIT=0，E/F/G PASS，部署完成 2026-10-05 21:27:39 +0800 / 2026-10-05 22:27:39 JST。
