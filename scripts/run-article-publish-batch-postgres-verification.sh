@@ -121,7 +121,7 @@ fi
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs ARTICLE_PUBLISH_BATCH "$secret_dir/integration-result.json" \
   tests/integration/tasks/article-publish-batch-postgres.test.ts=9 \
-  tests/integration/publish-gate/withdraw-zero-chapter-novels-postgres.test.ts=19
+  tests/integration/publish-gate/withdraw-zero-chapter-novels-postgres.test.ts=20
 then
   echo "ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=FAIL (whole-file skip or not-executed assertion failed)" >&2
   exit 1

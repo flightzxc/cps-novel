@@ -533,7 +533,12 @@ describe.skipIf(!enabled)("withdraw-zero-chapter-novels script against real Post
   });
 
   describe("preconditions refuse to execute and leave the database untouched", () => {
-    async function expectRefused(argv: string[], expectedFailure: string, client?: () => PrismaClient): Promise<CliRun> {
+    async function expectRefused(
+      argv: string[],
+      expectedFailure: string,
+      client?: () => PrismaClient,
+      options: { expectedAudits?: number } = {},
+    ): Promise<CliRun> {
       const before = await fullSnapshot();
       const run = await runCli(argv, client);
       expect(run.code).toBe(1);
@@ -542,7 +547,7 @@ describe.skipIf(!enabled)("withdraw-zero-chapter-novels script against real Post
       expect(refused!.failures).toContain(expectedFailure);
       expect(run.lines.some((line) => line.type === "novel" || line.type === "summary")).toBe(false);
       expect(await fullSnapshot()).toEqual(before);
-      expect(await auditRows()).toHaveLength(0);
+      expect(await auditRows()).toHaveLength(options.expectedAudits ?? 0);
       return run;
     }
 
@@ -565,6 +570,17 @@ describe.skipIf(!enabled)("withdraw-zero-chapter-novels script against real Post
       const list = await writeList([...books, draft]);
       const run = await expectRefused(applyArgv(list, 4), "listAndQuerySetsEqual");
       expect(run.lines.find((line) => line.type === "refused")!.inListNotInQuery).toEqual([draft.novelId]);
+    });
+
+    it("a book already withdrawn under this prefix was published again: the replay guard would skip it, so stop", async () => {
+      const books = await seedCandidates(3);
+      const list = await writeList(books);
+      expect((await runCli(applyArgv(list, 3))).code).toBe(0);
+      // 事后被重新发布、又重新满足「已发布 + 零章节」：同前缀重跑会被幂等守卫回放而不写，留下一本仍在线的书。
+      await owner.novel.update({ where: { id: books[1]!.novelId }, data: { status: "published" } });
+      await owner.article.update({ where: { id: books[1]!.articleId }, data: { status: "published" } });
+      const run = await expectRefused(applyArgv(list, 3), "listAndQuerySetsEqual", undefined, { expectedAudits: 3 });
+      expect(run.lines.find((line) => line.type === "refused")!.republishedAfterWithdraw).toEqual([books[1]!.novelId]);
     });
 
     it("database has a matching book the list does not contain", async () => {
