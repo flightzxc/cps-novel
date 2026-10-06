@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { normalizeCatalogSelection } from "@/domain/catalog-batch";
+import {
+  beijingDateKey,
+  CatalogSelectionInputError,
+  normalizeCatalogSelection,
+  resolveSourceCreatedFromPreset,
+} from "@/domain/catalog-batch";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import {
   CATALOG_BATCH_TASK_TYPE,
@@ -14,7 +19,7 @@ import {
   recomputeParentTask,
   recoverExpiredItem,
 } from "@/lib/tasks";
-import { readCatalogBatchSummary } from "@/server/catalog-batch";
+import { estimatePromoClaimShardPlan, readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
 import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
@@ -22,7 +27,7 @@ import { buildPromoLinkIdempotencyKey, UPSTREAM_EXISTING_PROMO_OFFER_TYPE } from
 import { createPublicRedirectCode } from "@/lib/redirect";
 import { prepareSideEffectIntent, transitionSideEffectIntent } from "@/lib/tasks/side-effect-intent";
 import { PROMO_CLAIM_INTENT_OPERATION_TYPE } from "@/lib/tasks/promo-claim-release";
-import { readSourceItemsPage } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
+import { readSourceItemsPage, resolveSourceItemFilters } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
 import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -1139,5 +1144,409 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       }
     },
     180_000,
+  );
+  // -------------------------------------------------------------------
+  // 2026-10-06（开发单_Sonnet_目录同步页上游上架时间筛选）：
+  // 目录同步页新增"上架时间"筛选（快照里存绝对日期 `sourceCreatedFrom`，含当天）
+  // 与"上架时间（新→旧）"排序。判定直接比较 `novel_source_item.
+  // source_created_at_raw` 的原始字符串（固定格式 `YYYY-MM-DD HH:MM:SS`）。
+  // 页面列表/批次上下文/worker 枚举三处共用 `sourceCreatedAtRawWhere`（全选一致性）。
+  // 场景编号 A–F 对应开发单第四节验收表。
+  // -------------------------------------------------------------------
+
+  // 整套用例共用一个固定的"今天"（北京时间），预设换算与造数用同一个，避免跨零点抖动。
+  const SC_NOW = new Date();
+  const scDayKey = (daysAgo: number) => beijingDateKey(new Date(SC_NOW.getTime() - daysAgo * 86_400_000));
+  /** 上游原始上架时间字符串：北京时间"daysAgo 天前"那天的 `time`（默认中午）。 */
+  const scRaw = (daysAgo: number, time = "12:00:00") => `${scDayKey(daysAgo)} ${time}`;
+  const scPage = (query: Parameters<typeof resolveSourceItemFilters>[0]) =>
+    readSourceItemsPage(resolveSourceItemFilters({ pageSize: "200", ...query }, SC_NOW), web);
+
+  async function seedScRow(
+    prefix: string,
+    raw: string | null,
+    options: { status?: "pending" | "linked"; sourceLocale?: string; channelIndex?: number } = {},
+  ): Promise<string> {
+    const channel = foundation.channels[options.channelIndex ?? 0]!;
+    const [id] = await seedCatalogRows(owner, {
+      channelAppId: channel.channelAppId, count: 1, prefix, sourceLocale: options.sourceLocale ?? "en",
+    });
+    await owner.novelSourceItem.update({ where: { id: id! }, data: { sourceCreatedAtRaw: raw } });
+    if (options.status === "linked") await linkSource(id!);
+    return id!;
+  }
+
+  it("上架时间筛选·场景 A：近 30 天只出现 3 天前那本，近 90 天出现前两本，全部三本都在；空值/脏值在筛选生效时不出现 (web_app role)", async () => {
+    const d3 = await seedScRow("sc-a-3d", scRaw(3));
+    const d40 = await seedScRow("sc-a-40d", scRaw(40));
+    const d400 = await seedScRow("sc-a-400d", scRaw(400));
+    // 稳健性：原始值为空 / 空串 / 非日期的脏值——筛选生效时一律不出现，"全部"时照常出现。
+    const nullRaw = await seedScRow("sc-a-null", null);
+    const emptyRaw = await seedScRow("sc-a-empty", "");
+    const garbage = await seedScRow("sc-a-garbage", "garbage");
+    const na = await seedScRow("sc-a-na", "N/A");
+    // 与 status 取交集：近 30 天内但已 linked 的书不出现在 pending 列表里。
+    const linkedRecent = await seedScRow("sc-a-linked", scRaw(2), { status: "linked" });
+
+    const ids = async (query: Parameters<typeof scPage>[0]) => new Set((await scPage(query)).items.map((item) => item.id));
+    expect(await ids({ status: "pending", sourceCreatedWithin: "30" })).toEqual(new Set([d3]));
+    expect(await ids({ status: "pending", sourceCreatedWithin: "7" })).toEqual(new Set([d3]));
+    expect(await ids({ status: "pending", sourceCreatedWithin: "90" })).toEqual(new Set([d3, d40]));
+    expect(await ids({ status: "pending", sourceCreatedWithin: "180" })).toEqual(new Set([d3, d40]));
+    expect(await ids({ status: "pending", sourceCreatedWithin: "365" })).toEqual(new Set([d3, d40]));
+    expect(await ids({ status: "pending" })).toEqual(new Set([d3, d40, d400, nullRaw, emptyRaw, garbage, na]));
+    expect(await ids({ status: "linked", sourceCreatedWithin: "30" })).toEqual(new Set([linkedRecent]));
+    // total 与列表同一个 where。
+    expect((await scPage({ status: "pending", sourceCreatedWithin: "30" })).total).toBe(1);
+    expect((await scPage({ status: "pending", sourceCreatedWithin: "90" })).total).toBe(2);
+    expect((await scPage({ status: "pending" })).total).toBe(7);
+    // 行里带出原始上架时间供目视核对。
+    const withRaw = await scPage({ status: "pending", sourceCreatedWithin: "30" });
+    expect(withRaw.items[0]!.sourceCreatedAtRaw).toBe(scRaw(3));
+  });
+
+  it("上架时间筛选·场景 A 边界：含当天零点（>=），前一天 23:59:59 不含；当天 23:59:59 含 (web_app role)", async () => {
+    const from = resolveSourceCreatedFromPreset(30, SC_NOW);
+    const inStart = await seedScRow("sc-b-start", `${from} 00:00:00`);
+    const inEnd = await seedScRow("sc-b-end", `${from} 23:59:59`);
+    await seedScRow("sc-b-prev-end", `${scDayKey(31)} 23:59:59`);
+    await seedScRow("sc-b-prev-start", `${scDayKey(31)} 00:00:00`);
+    expect(scDayKey(30)).toBe(from);
+    const page = await scPage({ status: "pending", sourceCreatedWithin: "30" });
+    expect(new Set(page.items.map((item) => item.id))).toEqual(new Set([inStart, inEnd]));
+    expect(page.total).toBe(2);
+  });
+
+  // 每组用例都要"上架时间条件真的在起作用"：不带该条件时集合严格更大（见 expectedWithoutCreated）。
+  it.each([
+    { name: "领推广·linked + 近 30 天", status: "linked", preset: "30", expectedListed: 4, expectedWithoutCreated: 8 },
+    { name: "领推广·linked + en + 近 30 天", status: "linked", sourceLocale: "en", preset: "30", expectedListed: 3, expectedWithoutCreated: 4 },
+    { name: "领推广·linked + en + 未领取 + 近 30 天", status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed", preset: "30", expectedListed: 1, expectedWithoutCreated: 2 },
+    { name: "领推广·linked + ja + 未领取 + 近 90 天", status: "linked", sourceLocale: "ja", promoLinkStatus: "not_claimed", preset: "90", expectedListed: 1, expectedWithoutCreated: 2 },
+    { name: "领推广·linked + ja + 人工核对中 + 近 30 天（40 天前上架的那本不入选，结果为空）", status: "linked", sourceLocale: "ja", promoLinkStatus: "manual_review", preset: "30", expectedListed: 0, expectedWithoutCreated: 1 },
+    { name: "领推广·linked + 已领取 + 近 90 天", status: "linked", promoLinkStatus: "claimed", preset: "90", expectedListed: 1, expectedWithoutCreated: 2 },
+  ])(
+    "上架时间筛选·场景 B 全选一致性：$name —— 页面列表总数 = worker 枚举的 selectedCount，枚举入片的书都在页面集合里 (worker_app role)",
+    async ({ name: _name, preset, expectedListed, expectedWithoutCreated, ...filter }) => {
+      void _name;
+      const { channel, ids } = await seedPromoLinkStatusFixture();
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+      const enFree = ids["en-free"]!.split(",");
+      const jaFree = ids["ja-free"]!.split(",");
+      // 造上架时间：每个语种两本"未领取"一近一远（3 天/400 天前）；ja 人工核对那本 40 天前、
+      // ja 已领取那本 100 天前，其余近 3 天——保证每组筛选下"有上架时间条件 / 没有"集合不同。
+      const created: Record<string, string> = {
+        [ids["en-claimed"]!]: scRaw(3), [ids["en-manual"]!]: scRaw(3), [enFree[0]!]: scRaw(3), [enFree[1]!]: scRaw(400),
+        [ids["ja-claimed"]!]: scRaw(100), [ids["ja-manual"]!]: scRaw(40), [jaFree[0]!]: scRaw(3), [jaFree[1]!]: scRaw(400),
+        [ids["en-pending"]!]: scRaw(3), [ids["ja-pending"]!]: scRaw(3),
+      };
+      for (const [id, raw] of Object.entries(created)) await owner.novelSourceItem.update({ where: { id }, data: { sourceCreatedAtRaw: raw } });
+
+      const query = { ...filter, sourceCreatedWithin: preset };
+      const listed = await scPage(query);
+      expect(listed.total).toBe(expectedListed);
+      const listedIds = new Set(listed.items.map((item) => item.id));
+      expect((await scPage({ ...filter })).total).toBe(expectedWithoutCreated);
+
+      const canonical = resolveSourceItemFilters({ ...query }, SC_NOW);
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: {
+          status: canonical.status, sourceLocale: canonical.sourceLocale,
+          promoLinkStatus: canonical.promoLinkStatus, sourceCreatedFrom: canonical.sourceCreatedFrom,
+        },
+      }, SC_NOW);
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      await materialize(enqueued.taskId);
+
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total });
+      const children = await owner.genericTask.findMany({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+      const enumeratedIds = new Set(children.flatMap((child) => child.items.map((item) => item.targetId)));
+      for (const id of enumeratedIds) expect(listedIds.has(id)).toBe(true);
+      // 上架时间之外的书（400 天前那两本，超出所有预设）无论如何都不能入片。
+      for (const id of [enFree[1]!, jaFree[1]!]) expect(enumeratedIds.has(id)).toBe(false);
+    },
+    120_000,
+  );
+
+  it.each([
+    { name: "近 30 天", preset: "30", expectedFreshCount: 1 },
+    { name: "近 90 天", preset: "90", expectedFreshCount: 2 },
+    { name: "全部", preset: undefined, expectedFreshCount: 3 },
+  ])(
+    "上架时间筛选·场景 B 全选一致性：纳入书目·pending + $name —— 列表总数 = selectedCount = 批次上下文提交数 (worker_app role)",
+    async ({ preset, expectedFreshCount }) => {
+      const d3 = await seedScRow("sc-m-3d", scRaw(3));
+      const d40 = await seedScRow("sc-m-40d", scRaw(40));
+      const d400 = await seedScRow("sc-m-400d", scRaw(400));
+      const fresh = [d3, d40, d400].slice(0, expectedFreshCount);
+      const query = { status: "pending", sourceLocale: "en", sourceCreatedWithin: preset };
+      const listed = await scPage(query);
+      expect(new Set(listed.items.map((item) => item.id))).toEqual(new Set(fresh));
+
+      const canonical = resolveSourceItemFilters(query, SC_NOW);
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: { status: canonical.status, sourceLocale: canonical.sourceLocale, sourceCreatedFrom: canonical.sourceCreatedFrom },
+      }, SC_NOW);
+      // 批次上下文/预估：`readCatalogBatchContext` 的 `submittedCount` 与待纳入语种分组都按同一筛选。
+      const context = await readCatalogBatchContext(owner, selection);
+      expect(context.submittedCount).toBe(listed.total);
+      expect(context.locales.reduce((sum, locale) => sum + locale.eligibleCount, 0)).toBe(listed.total);
+
+      const queued = await enqueueContent(selection);
+      await materialize(queued.taskId);
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total, submittedCount: listed.total });
+      const children = await owner.genericTask.findMany({ where: { parentTaskId: queued.taskId }, include: { items: true } });
+      expect(new Set(children.flatMap((child) => child.items.map((item) => item.targetId)))).toEqual(new Set(fresh));
+    },
+    60_000,
+  );
+
+  // 复核追加（2026-10-06）：批次上下文（`readCatalogBatchContext`——领推广/纳入书目弹窗里的
+  // 渠道分组、预计分片与耗时）此前不认「推广链接状态」筛选：「已建立书目 + 未领取 + 近 N 天」
+  // 全选建批次时，弹窗会把已领取/人工核对中的书也算进去，预估偏大。现在与页面列表、worker
+  // 枚举同一口径（复用 promoLinkStatusIdConstraint + resolvePromoLinkStatusContext）。
+  it.each([
+    { name: "未领取", promoLinkStatus: "not_claimed", sourceLocale: undefined, expected: 2 },
+    { name: "已领取", promoLinkStatus: "claimed", sourceLocale: undefined, expected: 2 },
+    { name: "人工核对中", promoLinkStatus: "manual_review", sourceLocale: undefined, expected: 1 },
+    { name: "未领取 + en", promoLinkStatus: "not_claimed", sourceLocale: "en", expected: 1 },
+  ])(
+    "批次上下文认「推广链接状态」：已建立书目 + $name + 近 30 天 —— 上下文总数/渠道分组计数/预估 = 页面列表 total = worker 枚举 selectedCount (web_app / worker_app role)",
+    async ({ promoLinkStatus, sourceLocale, expected }) => {
+      const { channel, ids } = await seedPromoLinkStatusFixture();
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+      const enFree = ids["en-free"]!.split(",");
+      const jaFree = ids["ja-free"]!.split(",");
+      // 每个推广链接状态桶里都有"近 30 天内"与"近 30 天外"的书，且"近 30 天内"的集合里混着
+      // 其它状态的书：不认推广链接状态时上下文会数到 5（en/ja 的已领取、en 人工核对、两本近期未领取），
+      // 不认上架时间时更多。
+      const created: Record<string, string> = {
+        [ids["en-claimed"]!]: scRaw(3), [ids["en-manual"]!]: scRaw(3), [enFree[0]!]: scRaw(3), [enFree[1]!]: scRaw(400),
+        [ids["ja-claimed"]!]: scRaw(3), [ids["ja-manual"]!]: scRaw(40), [jaFree[0]!]: scRaw(3), [jaFree[1]!]: scRaw(400),
+        [ids["en-pending"]!]: scRaw(3), [ids["ja-pending"]!]: scRaw(3),
+      };
+      for (const [id, raw] of Object.entries(created)) await owner.novelSourceItem.update({ where: { id }, data: { sourceCreatedAtRaw: raw } });
+
+      const query = { status: "linked", promoLinkStatus, sourceLocale, sourceCreatedWithin: "30" };
+      const listed = await scPage(query);
+      expect(listed.total).toBe(expected);
+
+      const canonical = resolveSourceItemFilters(query, SC_NOW);
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: {
+          status: canonical.status, sourceLocale: canonical.sourceLocale,
+          promoLinkStatus: canonical.promoLinkStatus, sourceCreatedFrom: canonical.sourceCreatedFrom,
+        },
+      }, SC_NOW);
+
+      // 批次上下文（弹窗用，Web 侧以 web_app 角色读）：总数与渠道分组计数都等于页面 total。
+      const context = await readCatalogBatchContext(web, selection);
+      expect(context.submittedCount).toBe(listed.total);
+      expect(context.channelGroups.map((group) => [group.channelAppId, group.eligibleCount])).toEqual([[channel.channelAppId, expected]]);
+      // 预计分片：按上下文的分组计数算，所以也只数这 N 本。
+      const estimate = await estimatePromoClaimShardPlan(owner, context, { [channel.channelAppId]: channel.accountId });
+      expect(estimate.groups.map((group) => group.eligibleCount)).toEqual([expected]);
+
+      // worker 枚举：selectedCount 与页面 total、上下文总数是同一个集合。
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      await materialize(enqueued.taskId);
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total });
+      expect(context.submittedCount).toBe((parent.result as { selectedCount: number }).selectedCount);
+    },
+    60_000,
+  );
+
+  it("上架时间筛选·场景 C：批次快照存的是绝对日期 YYYY-MM-DD（预设按固定'今天'换算），不是'近 N 天'", async () => {
+    const fixedNow = new Date("2026-10-06T02:00:00.000Z"); // 北京时间 2026-10-06 10:00
+    const sourceCreatedFrom = resolveSourceCreatedFromPreset(30, fixedNow);
+    expect(sourceCreatedFrom).toBe("2026-09-06");
+    const selection = normalizeCatalogSelection({
+      scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom },
+    }, fixedNow);
+    const requestId = randomUUID();
+    const queued = await enqueueContent(selection, requestId);
+    const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId }, include: { items: true } });
+    const params = parent.params as { selection: { scope: string; filter: Record<string, unknown> } };
+    expect(params.selection.filter.sourceCreatedFrom).toBe("2026-09-06");
+    expect(params.selection.filter.sourceCreatedFrom).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(JSON.stringify(params.selection)).not.toMatch(/\b30\b|within|preset/i);
+    expect((parent.items[0]!.payload as { selection: { filter: Record<string, unknown> } }).selection.filter.sourceCreatedFrom).toBe("2026-09-06");
+    // 不同日期是不同的批次范围（指纹含日期）；同一 requestId 重放仍落在同一个父任务。
+    const otherDay = normalizeCatalogSelection({
+      scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: "2026-09-05" },
+    }, fixedNow);
+    const other = await enqueueContent(otherDay);
+    const otherParent = await owner.genericTask.findUniqueOrThrow({ where: { id: other.taskId } });
+    expect((otherParent.params as { inputFingerprint: string }).inputFingerprint)
+      .not.toBe((parent.params as { inputFingerprint: string }).inputFingerprint);
+    expect(await enqueueContent(selection, requestId)).toMatchObject({ taskId: queued.taskId, duplicate: true });
+  });
+
+  it("上架时间筛选·场景 D：非法日期/未来日期/非字符串被拒；不带该键的历史快照照常枚举且结果不变；畸形载荷 worker 拒绝解析", async () => {
+    const today = beijingDateKey(SC_NOW);
+    const tomorrow = beijingDateKey(new Date(SC_NOW.getTime() + 86_400_000));
+    for (const bad of ["2026-02-30", "not-a-date", "2026-1-1", tomorrow, 20260906, null]) {
+      let code: string | undefined;
+      try {
+        normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: bad as unknown as string } }, SC_NOW);
+      } catch (error) {
+        if (error instanceof CatalogSelectionInputError) code = error.code;
+      }
+      expect(code, `bad value ${JSON.stringify(bad)}`).toBe("filter_source_created_from_invalid");
+    }
+    expect(normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: today } }, SC_NOW))
+      .toMatchObject({ filter: { sourceCreatedFrom: today } });
+
+    // 历史快照（没有该键）：包括原始值为空的书在内，集合与"全部"逐本一致。
+    const ids = [
+      await seedScRow("sc-d-3d", scRaw(3)), await seedScRow("sc-d-400d", scRaw(400)), await seedScRow("sc-d-null", null),
+    ];
+    const legacy = normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "pending", sourceLocale: "en" } }, SC_NOW);
+    if (legacy.scope === "all_filtered") expect(legacy.filter).not.toHaveProperty("sourceCreatedFrom");
+    const queued = await enqueueContent(legacy);
+    await materialize(queued.taskId);
+    const listed = await scPage({ status: "pending", sourceLocale: "en" });
+    expect(listed.total).toBe(ids.length);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } }))
+      .toMatchObject({ result: expect.objectContaining({ enumerationStatus: "completed", selectedCount: ids.length }) });
+    const children = await owner.genericTask.findMany({ where: { parentTaskId: queued.taskId }, include: { items: true } });
+    expect(new Set(children.flatMap((child) => child.items.map((item) => item.targetId)))).toEqual(new Set(ids));
+
+    // 绕过入口规范化直接入库的畸形日期：worker 解析载荷时拒绝，而不是拿畸形字符串悄悄比较。
+    const malformed = await enqueueContent({
+      scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: "2026-02-30" },
+    } as unknown as ReturnType<typeof normalizeCatalogSelection>);
+    const lease = await claim();
+    expect(lease.taskId).toBe(malformed.taskId);
+    await expect(createCatalogBatchHandler(worker)(handlerContext(lease))).rejects.toThrow("catalog_batch_payload_invalid");
+  });
+
+  it("上架时间筛选·场景 E：排序'上架时间（新→旧）'按原始字符串倒序、空值垫底、id 升序兜底；默认排序与改前一致 (web_app role)", async () => {
+    const newest = await seedScRow("sc-e-newest", scRaw(5, "10:00:00"));
+    const tieA = await seedScRow("sc-e-tie-a", scRaw(5, "09:00:00"));
+    const tieB = await seedScRow("sc-e-tie-b", scRaw(5, "09:00:00"));
+    const middle = await seedScRow("sc-e-middle", scRaw(40, "09:00:00"));
+    const oldest = await seedScRow("sc-e-oldest", scRaw(539, "12:00:00"));
+    const nullRaw = await seedScRow("sc-e-null", null);
+    // 默认排序按最后扫描时间倒序：让它与上架时间顺序明显不同（上架最老的那本最近被扫到）。
+    const minutesAgo = new Map<string, number>([[newest, 1], [tieA, 2], [tieB, 3], [middle, 4], [nullRaw, 5], [oldest, 6]]);
+    for (const [id, minutes] of minutesAgo) {
+      await owner.novelSourceItem.update({ where: { id }, data: { lastSeenAt: new Date(SC_NOW.getTime() - minutes * 60_000) } });
+    }
+    const tieOrder = [tieA, tieB].sort();
+    const bySourceCreated = (await scPage({ status: "pending", sort: "source_created_desc" })).items.map((item) => item.id);
+    expect(bySourceCreated).toEqual([newest, ...tieOrder, middle, oldest, nullRaw]);
+    // 默认排序：与改动前一致（lastSeenAt desc, id asc）。
+    const byDefault = (await scPage({ status: "pending" })).items.map((item) => item.id);
+    expect(byDefault).toEqual([newest, tieA, tieB, middle, nullRaw, oldest]);
+    expect(byDefault).not.toEqual(bySourceCreated);
+    // 未知 sort 值落回默认；排序与筛选叠加：近 365 天 + 新→旧，顺序不变、只是少了超出范围的两本。
+    expect((await scPage({ status: "pending", sort: "bogus" })).items.map((item) => item.id)).toEqual(byDefault);
+    const recent = await scPage({ status: "pending", sort: "source_created_desc", sourceCreatedWithin: "365" });
+    expect(recent.items.map((item) => item.id)).toEqual([newest, ...tieOrder, middle]);
+  });
+
+  // ---------------------------------------------------------------------
+  // 场景 F：9.8 万本书目规模（无索引，只报实测耗时，不设门槛）。
+  // 分布参照 2026-10-06 只读核对的"未领取"现状（近 30 天 832 本、31–90 天 1,414 本、
+  // 91 天–1 年 9,547 本，其余 1 年以上）。
+  // ---------------------------------------------------------------------
+  const SCALE_TOTAL = 98_239;
+  const SCALE_BUCKETS = { last30: 832, d31to90: 1_414, d91to365: 9_547 } as const;
+  const SCALE_EXPECTED = {
+    "30": SCALE_BUCKETS.last30,
+    "90": SCALE_BUCKETS.last30 + SCALE_BUCKETS.d31to90,
+    "365": SCALE_BUCKETS.last30 + SCALE_BUCKETS.d31to90 + SCALE_BUCKETS.d91to365,
+  } as const;
+
+  async function seedScaleCatalog(): Promise<void> {
+    const channelAppId = foundation.channels[0]!.channelAppId;
+    const b1 = SCALE_BUCKETS.last30;
+    const b2 = b1 + SCALE_BUCKETS.d31to90;
+    const b3 = b2 + SCALE_BUCKETS.d91to365;
+    // 年龄（天）：近 30 天档 0–29；31–90 天档 31–89；91–365 天档 91–364；其余 ≥ 366。
+    // 边界天（30/90/365）本身不造，避免与预设的"含当天"判定纠缠——边界在场景 A 边界用例里单独验证。
+    await owner.$executeRaw(Prisma.sql`
+      INSERT INTO novel_source_item (
+        id, channel_app_id, external_book_id, source_language_code, source_locale,
+        title, description, status, raw_payload, source_created_at_raw, updated_at
+      )
+      SELECT
+        gen_random_uuid(), ${channelAppId}::uuid, 'sc-scale-' || n::text, 'en', 'en',
+        'sc scale title ' || lpad(n::text, 6, '0'), 'source created filter scale', 'pending',
+        jsonb_build_object('ordinal', n),
+        to_char(
+          (${scDayKey(0)}::date - (CASE
+            WHEN n <= ${b1} THEN (n % 30)
+            WHEN n <= ${b2} THEN 31 + (n % 59)
+            WHEN n <= ${b3} THEN 91 + (n % 274)
+            ELSE 366 + (n % 400)
+          END)::int) + ((n * 37) % 86400) * interval '1 second',
+          'YYYY-MM-DD HH24:MI:SS'
+        ),
+        transaction_timestamp()
+      FROM generate_series(1, ${SCALE_TOTAL}) AS n
+    `);
+    await owner.$executeRawUnsafe(`ANALYZE novel_source_item`);
+  }
+
+  const scMetric = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+    const startedAt = performance.now();
+    const result = await fn();
+    console.info(`SOURCE_CREATED_FILTER_SCALE_METRIC rows=${SCALE_TOTAL} step=${label} elapsedMs=${Math.round(performance.now() - startedAt)}`);
+    return result;
+  };
+
+  it("上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)", async () => {
+    await scMetric("seed", seedScaleCatalog);
+    const everything = await scMetric("list_all_default_order", () => scPage({ status: "pending", pageSize: "100" }));
+    expect(everything.total).toBe(SCALE_TOTAL);
+    const allSorted = await scMetric("list_all_sort_source_created_desc", () => scPage({ status: "pending", pageSize: "100", sort: "source_created_desc" }));
+    expect(allSorted.total).toBe(SCALE_TOTAL);
+    const raws = allSorted.items.map((item) => item.sourceCreatedAtRaw!);
+    expect([...raws].sort().reverse()).toEqual(raws);
+    for (const preset of ["30", "90", "365"] as const) {
+      const listed = await scMetric(`list_within_${preset}d`, () => scPage({ status: "pending", pageSize: "100", sourceCreatedWithin: preset }));
+      expect(listed.total).toBe(SCALE_EXPECTED[preset]);
+      const sorted = await scMetric(`list_within_${preset}d_sort_source_created_desc`, () =>
+        scPage({ status: "pending", pageSize: "100", sourceCreatedWithin: preset, sort: "source_created_desc" }));
+      expect(sorted.total).toBe(SCALE_EXPECTED[preset]);
+    }
+    const nextPage = await scMetric("list_within_365d_page_2", () => scPage({ status: "pending", pageSize: "100", page: "2", sourceCreatedWithin: "365" }));
+    expect(nextPage.items).toHaveLength(100);
+  }, 280_000);
+
+  it.each(["30", "90", "365"] as const)(
+    "上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 %s 天）实测耗时，selectedCount 与列表一致 (worker_app role)",
+    async (preset) => {
+      await scMetric("seed", seedScaleCatalog);
+      const listed = await scPage({ status: "pending", pageSize: "100", sourceCreatedWithin: preset });
+      expect(listed.total).toBe(SCALE_EXPECTED[preset]);
+      const canonical = resolveSourceItemFilters({ status: "pending", sourceCreatedWithin: preset }, SC_NOW);
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: canonical.sourceCreatedFrom },
+      }, SC_NOW);
+      const queued = await enqueueContent(selection);
+      await scMetric(`enumerate_within_${preset}d`, () => materialize(queued.taskId));
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: SCALE_EXPECTED[preset], submittedCount: SCALE_EXPECTED[preset] });
+      const itemCount = await owner.genericTaskItem.count({ where: { task: { parentTaskId: queued.taskId } } });
+      expect(itemCount).toBe(SCALE_EXPECTED[preset]);
+    },
+    280_000,
   );
 });

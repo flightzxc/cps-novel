@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { SOURCE_CREATED_PRESET_DAYS, SOURCE_ITEM_SORT_SOURCE_CREATED_DESC } from "@/domain/catalog-batch";
 import { NOVEL_SOURCE_ITEM_STATUSES } from "@/domain/database-statuses";
 import { NOVEL_SOURCE_ITEM_STATUS_BADGES } from "@/features/admin-ui/content-view";
 import { MOBOREADER_LANGUAGE_CODE_TO_LOCALE, UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
@@ -11,8 +12,20 @@ export type SourceItemFilterValues = {
   readonly status?: string;
   readonly sourceLocale?: string;
   readonly promoLinkStatus?: string;
+  /** 上架时间预设（天数字符串，`7|30|90|180|365`）；缺席 = 全部。URL 往返用它，不用日期。 */
+  readonly sourceCreatedWithin?: string;
+  /** 页面渲染时由预设换算出的绝对起始日期（`YYYY-MM-DD`，含当天），只用于显示"xxxx-xx-xx 起"供运营核对。 */
+  readonly sourceCreatedFrom?: string;
+  /** 列表排序；缺席 = 默认（最后扫描时间）。 */
+  readonly sort?: string;
   readonly pageSize?: string;
 };
+
+/** 2026-10-06：上游上架时间预设（"近 1 年" = 365 天）；值是天数，换算成日期在服务端页面里做。 */
+const SOURCE_CREATED_PRESET_OPTIONS: ReadonlyArray<{ value: string; label: string }> = SOURCE_CREATED_PRESET_DAYS.map((days) => ({
+  value: String(days),
+  label: days === 365 ? "近 1 年" : `近 ${days} 天`,
+}));
 
 /**
  * B-4：与"来源条目状态"/"来源语种"取交集的独立筛选，值集固定为
@@ -57,6 +70,8 @@ export function SourceItemFilters({ values }: { values: SourceItemFilterValues }
   function submit(form: HTMLFormElement) {
     const params = new URLSearchParams(Array.from(new FormData(form).entries()).map(([key, value]) => [key, String(value)]));
     params.delete("page");
+    // 新增的两项为空（全部/默认）时不进 URL，未使用时地址与改动前逐字一致。
+    for (const key of ["sourceCreatedWithin", "sort"]) if (params.get(key) === "") params.delete(key);
     router.push(`/catalog-sync?${params.toString()}`);
   }
   return (
@@ -110,6 +125,35 @@ export function SourceItemFilters({ values }: { values: SourceItemFilterValues }
               {item.label}
             </option>
           ))}
+        </select>
+        <div className="flex items-center gap-2">
+          <select
+            name="sourceCreatedWithin"
+            defaultValue={values.sourceCreatedWithin ?? ""}
+            aria-label="上架时间"
+            className="rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+          >
+            <option value="">全部上架时间</option>
+            {SOURCE_CREATED_PRESET_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          {values.sourceCreatedFrom && (
+            <span data-testid="source-created-from-hint" className="text-xs text-gray-500">
+              {values.sourceCreatedFrom} 起
+            </span>
+          )}
+        </div>
+        <select
+          name="sort"
+          defaultValue={values.sort ?? ""}
+          aria-label="排序"
+          className="rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+        >
+          <option value="">默认排序（最近可见）</option>
+          <option value={SOURCE_ITEM_SORT_SOURCE_CREATED_DESC}>上架时间（新→旧）</option>
         </select>
         <select
           name="pageSize"

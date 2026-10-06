@@ -1,3 +1,4 @@
+import { parseSourceCreatedPreset } from "@/domain/catalog-batch";
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { isNovelCatalogSyncEnabled } from "@/lib/flags";
@@ -11,7 +12,7 @@ import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form"
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
 import { readActiveChannelScanOptions } from "./_lib/read-channel-apps";
-import { canonicalCatalogFilter, readSourceItemsPage } from "./_lib/read-source-items";
+import { canonicalCatalogFilter, readSourceItemsPage, resolveSourceItemFilters } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,10 @@ type SearchParams = {
   search?: string;
   sourceLocale?: string;
   promoLinkStatus?: string;
+  /** 上架时间预设（天数，`7|30|90|180|365`）；换算成绝对日期只在下面做一次。 */
+  sourceCreatedWithin?: string;
+  /** 列表排序（`source_created_desc` = 上架时间新→旧）；只影响展示。 */
+  sort?: string;
   pageSize?: string;
 };
 
@@ -50,17 +55,23 @@ export default async function CatalogSyncPage({
   const promoClaim = findCapabilityState(capabilities, "promo:claim");
   const promoClaimBlockedReason = capabilityBlockReason("promo:claim", promoClaim);
 
-  const page = granted
-    ? await readSourceItemsPage({
-        page: params.page,
-        status: params.status,
-        search: params.search,
-        sourceLocale: params.sourceLocale,
-        promoLinkStatus: params.promoLinkStatus,
-        pageSize: params.pageSize,
-      })
-    : null;
-  const canonicalFilter = canonicalCatalogFilter(params);
+  // "近 N 天"预设在这里按北京时间的今天换算成绝对日期，**只算一次**，同一个结果
+  // 同时交给列表查询与批次快照（canonicalFilter）——全选建批次时页面看到的集合与
+  // worker 枚举的集合因此是同一个，不会因为跨零点而各算各的。
+  const sourceCreatedPreset = parseSourceCreatedPreset(params.sourceCreatedWithin);
+  const sourceCreatedWithin = sourceCreatedPreset ? String(sourceCreatedPreset) : undefined;
+  const filters = resolveSourceItemFilters({
+    page: params.page,
+    status: params.status,
+    search: params.search,
+    sourceLocale: params.sourceLocale,
+    promoLinkStatus: params.promoLinkStatus,
+    sourceCreatedWithin,
+    sort: params.sort,
+    pageSize: params.pageSize,
+  });
+  const page = granted ? await readSourceItemsPage(filters) : null;
+  const canonicalFilter = canonicalCatalogFilter(filters);
   const channels = granted ? await readActiveChannelScanOptions() : [];
 
   return (
@@ -83,7 +94,12 @@ export default async function CatalogSyncPage({
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
             <SourceItemFilters
-              values={{ ...canonicalFilter, pageSize: String(page.pageSize) }}
+              values={{
+                ...canonicalFilter,
+                sourceCreatedWithin,
+                sort: filters.sort,
+                pageSize: String(page.pageSize),
+              }}
             />
             <div className="space-y-2">
               <AdminTimeZoneNote />
@@ -100,7 +116,7 @@ export default async function CatalogSyncPage({
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, promoLinkStatus: params.promoLinkStatus, pageSize: String(page.pageSize) }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, promoLinkStatus: params.promoLinkStatus, sourceCreatedWithin, sort: filters.sort, pageSize: String(page.pageSize) }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

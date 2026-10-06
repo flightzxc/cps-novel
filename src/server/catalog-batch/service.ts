@@ -6,20 +6,42 @@ import {
   type NormalizedCatalogSelection,
   type PromoClaimShardEstimate,
   type PromoClaimShardEstimateGroup,
+  sourceCreatedAtRawWhere,
 } from "@/domain/catalog-batch";
 import { CATALOG_BATCH_CHUNK_SIZE, CATALOG_BATCH_TASK_TYPE } from "@/lib/tasks/catalog-batch";
 import { isPromoClaimLifecycleEnabled, resolvePromoClaimLifecycleConfig } from "@/lib/tasks/promo-claim-lifecycle";
 import { resolveLifecycleShardSize } from "@/lib/tasks/promo-claim-shard-sizing";
+import {
+  promoLinkStatusIdConstraint,
+  resolvePromoLinkStatusContext,
+  type PromoLinkStatusContext,
+} from "@/lib/tasks/promo-link-status-filter";
 
 const UNKNOWN_LOCALE = "__unknown";
 
-export function catalogSelectionWhere(selection: NormalizedCatalogSelection): Prisma.NovelSourceItemWhereInput {
+/**
+ * 批次上下文/预估的筛选条件，必须与目录同步页列表（`read-source-items.ts`）和 worker 枚举
+ * （`worker/handlers/catalog-batch.ts` 的 `selectionWhere`）产出同一个集合——"全选一致性"。
+ * 2026-10-06 复核补齐：此前这里不认「推广链接状态」，「已建立书目 + 未领取 + 近 N 天」全选
+ * 建领推广批次时，弹窗的渠道分组/预计分片/耗时会把已领取、人工核对中的书也算进去而偏大。
+ *
+ * `promoLinkStatusContext` 只在筛选值为 `manual_review`/`not_claimed` 时才由调用方解析并传入
+ * （`"claimed"` 是纯 `promoLinks` 关系过滤器，"全部"什么都不需要），缺省 = 不需要解析的情形，
+ * 与 `promoLinkStatusIdConstraint` 自己的契约一致；不把全量 id 搬进参数列表。
+ */
+export function catalogSelectionWhere(
+  selection: NormalizedCatalogSelection,
+  promoLinkStatusContext?: PromoLinkStatusContext,
+): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { id: { in: [...selection.ids] }, deletedAt: null };
-  const { status, search, sourceLocale } = selection.filter;
+  const { status, search, sourceLocale, promoLinkStatus, sourceCreatedFrom } = selection.filter;
   return {
     deletedAt: null, status,
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
     ...(sourceLocale ? { sourceLocale: sourceLocale === UNKNOWN_LOCALE ? null : sourceLocale } : {}),
+    ...promoLinkStatusIdConstraint(promoLinkStatus, promoLinkStatusContext),
+    // 上架时间：与页面列表、worker 枚举共用同一个判定片段（全选一致性）。
+    ...sourceCreatedAtRawWhere(sourceCreatedFrom),
   };
 }
 
@@ -47,7 +69,12 @@ export async function readCatalogBatchContext(db: PrismaClient, selection: Norma
   const localeCounts = new Map<string, number>();
   let submittedCount: number;
   if (selection.scope === "all_filtered") {
-    const where = catalogSelectionWhere(selection);
+    // 与 worker `streamSelection` 同一做法：只在 manual_review/not_claimed 两个值下才解析一次
+    // （有界小集合，带硬上限），其余情形不多发任何查询。
+    const promoLinkStatusContext = selection.filter.promoLinkStatus === "manual_review" || selection.filter.promoLinkStatus === "not_claimed"
+      ? await resolvePromoLinkStatusContext(db)
+      : undefined;
+    const where = catalogSelectionWhere(selection, promoLinkStatusContext);
     const [total, channels, locales] = await Promise.all([
       db.novelSourceItem.count({ where }),
       db.novelSourceItem.groupBy({

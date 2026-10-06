@@ -1,6 +1,14 @@
 import type { PrismaClient } from "@prisma/client";
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
-import { normalizeCatalogSelection, type CatalogFilterSnapshot, type PromoLinkStatusFilter } from "@/domain/catalog-batch";
+import {
+  normalizeCatalogSelection,
+  parseSourceCreatedPreset,
+  resolveSourceCreatedFromPreset,
+  SOURCE_ITEM_SORT_SOURCE_CREATED_DESC,
+  sourceCreatedAtRawWhere,
+  type CatalogFilterSnapshot,
+  type PromoLinkStatusFilter,
+} from "@/domain/catalog-batch";
 import { UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
 import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
 import {
@@ -96,6 +104,13 @@ export type SourceItemRow = {
     | "already_has_promo_code"
     | "manual_review_pending"
     | null;
+  /**
+   * 2026-10-06：上游上架时间原始字符串（`novel_source_item.source_created_at_raw`，
+   * 固定格式 `YYYY-MM-DD HH:MM:SS`，按上游自己的时钟解释，不做时区换算）。
+   * 供运营目视核对"上架时间"筛选/排序；上游没给时为 `null`。可选字段——
+   * 构造这个类型的既有测试 fixture 不用全部改。
+   */
+  readonly sourceCreatedAtRaw?: string | null;
 };
 
 export type SourceItemsPage = {
@@ -128,10 +143,40 @@ export type SourceItemFilters = {
    * never a replacement.
    */
   readonly promoLinkStatus?: string;
+  /**
+   * 2026-10-06：绝对日期键 `YYYY-MM-DD`（含当天），与 `CatalogFilterSnapshot.
+   * sourceCreatedFrom` 同一个值；缺席/空 = 全部。URL 上运营看到的是预设
+   * （`sourceCreatedWithin`，见 {@link resolveSourceItemFilters}），换算在页面
+   * 渲染时做一次，这里只认已经换算好的日期。
+   */
+  readonly sourceCreatedFrom?: string;
+  /** 列表排序：`"source_created_desc"` = 上架时间新→旧；其它/缺席 = 默认（最后扫描时间）。只影响展示，不进入批次快照。 */
+  readonly sort?: string;
 };
 
+/** 页面 URL 查询参数：在 {@link SourceItemFilters} 之上多一个预设 `sourceCreatedWithin`（天数）。 */
+export type SourceItemQueryParams = SourceItemFilters & { readonly sourceCreatedWithin?: string };
+
+/**
+ * 页面渲染时把 URL 里的"近 N 天"预设换算成绝对日期 `sourceCreatedFrom`
+ * （北京时间的今天为基准，`now` 可注入）。页面只调用一次，把同一个结果同时交给
+ * 列表查询与 {@link canonicalCatalogFilter}——两者因此不可能因为跨零点而各算各的。
+ * 不在预设集合内的 `sourceCreatedWithin` 一律视为"全部"；URL 里直接带的
+ * `sourceCreatedFrom` 不被采信（运营只能通过预设选，快照里的日期只由这里产生）。
+ */
+export function resolveSourceItemFilters(params: SourceItemQueryParams, now: Date = new Date()): SourceItemFilters {
+  const { sourceCreatedWithin, sourceCreatedFrom: _ignored, sort, ...rest } = params;
+  void _ignored;
+  const preset = parseSourceCreatedPreset(sourceCreatedWithin);
+  return {
+    ...rest,
+    ...(preset ? { sourceCreatedFrom: resolveSourceCreatedFromPreset(preset, now) } : {}),
+    ...(sort === SOURCE_ITEM_SORT_SOURCE_CREATED_DESC ? { sort } : {}),
+  };
+}
+
 /** The list and an all-filtered batch must describe exactly the same rows. */
-export function canonicalCatalogFilter(filters: SourceItemFilters): CatalogFilterSnapshot {
+export function canonicalCatalogFilter(filters: SourceItemFilters, now: Date = new Date()): CatalogFilterSnapshot {
   const normalized = normalizeCatalogSelection({
     scope: "all_filtered",
     filter: {
@@ -139,8 +184,9 @@ export function canonicalCatalogFilter(filters: SourceItemFilters): CatalogFilte
       search: filters.search,
       sourceLocale: filters.sourceLocale,
       promoLinkStatus: filters.promoLinkStatus,
+      sourceCreatedFrom: filters.sourceCreatedFrom,
     },
-  });
+  }, now);
   return normalized.scope === "all_filtered" ? normalized.filter : { status: "pending" };
 }
 
@@ -229,13 +275,22 @@ export async function readSourceItemsPage(
         : { sourceLocale: sourceLocaleFilter.locale }
       : {}),
     ...promoLinkStatusIdConstraint(promoLinkStatus, promoLinkStatusContext),
+    // 上架时间：与批次上下文/预估、worker 枚举共用同一个判定片段（全选一致性）。
+    ...sourceCreatedAtRawWhere(canonical.sourceCreatedFrom),
   };
+
+  // 默认排序不变。"上架时间（新→旧）"：原始字符串倒序（固定格式，字典序即时间序），
+  // 空值垫底（Postgres 的 DESC 默认把 NULL 排最前），`id` 升序兜底保证翻页稳定。
+  // 一大批书在同一时刻批量导入、上架时间相同——这是上游数据的事实，靠 `id` 兜底即可。
+  const orderBy = filters.sort === SOURCE_ITEM_SORT_SOURCE_CREATED_DESC
+    ? [{ sourceCreatedAtRaw: { sort: "desc" as const, nulls: "last" as const } }, { id: "asc" as const }]
+    : [{ lastSeenAt: "desc" as const }, { id: "asc" as const }];
 
   const [rows, total] = await Promise.all([
     db.novelSourceItem.findMany({
       where,
       // A timestamp alone is not stable when rows share a last-seen value.
-      orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
+      orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: {
@@ -251,6 +306,7 @@ export async function readSourceItemsPage(
         status: true,
         novelId: true,
         lastSeenAt: true,
+        sourceCreatedAtRaw: true,
         channelAppId: true,
         channelApp: {
           select: {
@@ -324,6 +380,7 @@ export async function readSourceItemsPage(
         status: row.status as NovelSourceItemStatus,
         novelId: row.novelId,
         lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+        sourceCreatedAtRaw: row.sourceCreatedAtRaw ?? null,
         channelAppId: row.channelAppId,
         channelCode: row.channelApp.channel.code,
         channelName: row.channelApp.channel.name,

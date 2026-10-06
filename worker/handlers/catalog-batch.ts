@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { NormalizedCatalogSelection } from "../../src/domain/catalog-batch";
+import {
+  isValidCatalogDateKey,
+  sourceCreatedAtRawWhere,
+  type NormalizedCatalogSelection,
+} from "../../src/domain/catalog-batch";
 import { evaluateNovelMaterializationLocale } from "../../src/domain/novel-materialization-locale";
 import {
   CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V1,
@@ -138,6 +142,14 @@ export function parsePayload(value: unknown): CatalogBatchPayload {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!Array.isArray(p.selection.ids) || p.selection.ids.some((id) => typeof id !== "string" || !uuid.test(id))) throw new Error("catalog_batch_payload_invalid");
   } else if (p.selection.scope !== "all_filtered" || !p.selection.filter || typeof p.selection.filter.status !== "string") {
+    throw new Error("catalog_batch_payload_invalid");
+  } else if (
+    // 上架时间筛选键（2026-10-06）：缺席 = 全部（历史载荷）；一旦出现必须是合法
+    // `YYYY-MM-DD`——否则枚举会拿一个畸形字符串去做字典序比较，悄悄选错书。
+    // 不在这里校验"不得晚于今天"：那是建批次时的入口校验，worker 只防畸形。
+    p.selection.filter.sourceCreatedFrom !== undefined
+    && (typeof p.selection.filter.sourceCreatedFrom !== "string" || !isValidCatalogDateKey(p.selection.filter.sourceCreatedFrom))
+  ) {
     throw new Error("catalog_batch_payload_invalid");
   }
   for (const record of [p.channelAccounts, p.templateKeysByLocale]) {
@@ -279,6 +291,9 @@ function selectionWhere(
     ...(f.search ? { title: { contains: f.search, mode: "insensitive" } } : {}),
     ...(f.sourceLocale ? { sourceLocale: f.sourceLocale === "__unknown" ? null : f.sourceLocale } : {}),
     ...promoLinkStatusIdConstraint(f.promoLinkStatus, promoLinkStatusContext),
+    // 上架时间（2026-10-06）：与目录同步页列表、批次上下文/预估共用同一个判定片段，
+    // 是"全选一致性"的承重点——这里漏掉，页面看到的集合与枚举出的集合就会不一致。
+    ...sourceCreatedAtRawWhere(f.sourceCreatedFrom),
   };
 }
 
