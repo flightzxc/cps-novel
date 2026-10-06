@@ -25,7 +25,7 @@
       "FEATURE_ARTICLE_NOVEL_REBIND": "false",
       "ARTICLE_NOVEL_REBIND_ALLOW_WRITE": "false"
     },
-    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1"
+    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1"
   },
   "uat": {
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2",
@@ -52,7 +52,7 @@
       "FEATURE_ARTICLE_NOVEL_REBIND": "false",
       "ARTICLE_NOVEL_REBIND_ALLOW_WRITE": "false"
     },
-    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1"
+    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1"
   },
   "r": {
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1",
@@ -79,6 +79,6 @@
       "FEATURE_ARTICLE_NOVEL_REBIND": "false",
       "ARTICLE_NOVEL_REBIND_ALLOW_WRITE": "false"
     },
-    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1"
+    "workerLightTaskAllowlist": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1"
   }
 }

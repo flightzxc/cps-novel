@@ -79,6 +79,8 @@ describe("X1 worker startup allowlist", () => {
       "article.generate.batch.v1",
       "article.generate.batch.v2",
       "article.generate.v1",
+      "article.publish.batch.v1",
+      "article.publish.v1",
       "batch.materialize.v1",
       "catalog_scan",
       "content.create.v1",

@@ -85,6 +85,6 @@ prepare_p1_12_local_environment() {
   export WORKER_LANE=main
   export WORKER_ID="${WORKER_ID:-compose-worker}"
   export WORKER_LIGHT_ID="${WORKER_LIGHT_ID:-compose-worker-light}"
-  export WORKER_LIGHT_TASK_ALLOWLIST="${WORKER_LIGHT_TASK_ALLOWLIST:-sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1}"
+  export WORKER_LIGHT_TASK_ALLOWLIST="${WORKER_LIGHT_TASK_ALLOWLIST:-sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1}"
   export MOBOREADER_PREVIEW_SOURCE_APP_CODES="${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}"
 }

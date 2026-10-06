@@ -26,6 +26,7 @@ export {
   withdrawNovel,
   PublishLifecycleError,
   type ApplyPublishTransitionInput,
+  type ApplyPublishTransitionOptions,
   type ApplyPublishTransitionResult,
   type Dependencies as PublishGateDependencies,
   type PublishArticlesBatchResult,

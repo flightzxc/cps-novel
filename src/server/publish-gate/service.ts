@@ -314,10 +314,25 @@ type TxPublishOutcome =
  */
 class PublishConflictSignal extends Error {}
 
+/**
+ * 后台批量发布任务（`article.publish.v1`，2026-10-06）的调用方选项。默认值
+ * （缺省或全为 false）下本函数的行为与此前逐字相同——同步「发布」按钮和同步
+ * 批量发布从不传它。
+ */
+export type ApplyPublishTransitionOptions = {
+  /**
+   * 首次发布时不在这一篇里触发站点地图刷新：后台批量任务要求"整批结束时只触发
+   * 一次"，所以每篇都触发会让触发次数随篇数线性增长。IndexNow 的派发不受影响，
+   * 仍然是逐篇首次发布各派发一次（沿用现有口径）。
+   */
+  readonly deferSitemapRefresh?: boolean;
+};
+
 export async function applyPublishTransition(
   db: PrismaClient,
   input: ApplyPublishTransitionInput,
   batchPreviewArticleIds?: string[],
+  options: ApplyPublishTransitionOptions = {},
 ): Promise<ApplyPublishTransitionResult> {
   const now = input.now ?? new Date();
   const actorType = auditActorType(input.actor);
@@ -525,10 +540,12 @@ export async function applyPublishTransition(
       // place, per the round's Q2 ruling (streams export handlers + wiring
       // list; the integrator applies the call-site edit). Each handler is
       // internally double-gated by its own feature flags, default off.
-      {
-        enqueueIndexNow,
-        enqueueSitemapRefresh: enqueueSitemapRefreshForPublication,
-      },
+      options.deferSitemapRefresh
+        ? { enqueueIndexNow }
+        : {
+            enqueueIndexNow,
+            enqueueSitemapRefresh: enqueueSitemapRefreshForPublication,
+          },
     );
   }
 

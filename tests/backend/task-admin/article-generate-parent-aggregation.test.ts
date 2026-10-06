@@ -156,6 +156,8 @@ describe("article.generate.batch.v1 parent read model (R2-01)", () => {
       "batch.materialize.v1",
       "article.generate.batch.v1",
       "article.generate.batch.v2",
+      // 文章后台批量发布（2026-10-06）：同一形状的父任务，进度与状态同样从子任务汇总。
+      "article.publish.batch.v1",
     ]);
   });
 

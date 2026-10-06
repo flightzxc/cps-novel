@@ -5,6 +5,10 @@ export const MOBOREADER_UPSTREAM_TASK_TYPES = Object.freeze([
 export const APPROVED_LIGHT_TASK_TYPES = Object.freeze([
   "sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1",
   "indexnow.sweep.v1", "indexnow_delivery",
+  // 文章后台批量发布（2026-10-06）：只做数据库操作、不调上游。放在轻量通道是因为主
+  // worker 每一轮都先处理试读抓取，发布子任务建出来的试读任务会插队，后面的发布要等
+  // 十几个小时。只能出现在 WORKER_LIGHT_TASK_ALLOWLIST，不能出现在主通道白名单。
+  "article.publish.batch.v1", "article.publish.v1",
 ]);
 export function parseWorkerLane(raw) {
   const lane = raw ?? "main";
