@@ -59,7 +59,7 @@ UI F5/5b/5d已只读PASS：已中止71分片完整，新建批次新计数缺席
 
 **历史领推广与Owner裁决**：下面是10-06施工交接时点，非本轮重测值：eba8f359中止前已领29489/人工451/失败53/排队约5万；Owner04:59:55.432Z manual中止，审计636881终止49771条、第21–70片50片。05:01:39UTC只读A=50+3+18=71/B=C=D=0；70922条=skipped49771（task_manually_aborted）/success21097（claimed20693、manual397、already_fetched4、already_available2、readback_recovered1）/failed54（ambiguous53、locator_stale1），最后一本04:59:55.6Z正常收尾、中止时无在途请求。全库confirmed28115/manual458，promo_link claimed28115/upstream_existing1623/pending458，一一对应且无未释放账号暂停，status列权限f。本轮部署前A–D重新通过，历史有码成功条目20700保留、适用decision缺码0；全库同期claimed已增长到28128，不混用交接快照。
 
-**后续待办**：验收后annotated v0.5.9固定Final、原生成CHANGELOG/台账/本条日志已完成，Notion同步读回PASS（2026-10-06T19:03:52.094Z），旧历史与模板保留；Git推送正在执行。正式域名开放另行授权；IndexNow出站默认关闭，B-34须先修。回滚目标v0.5.8 Final0329b11，仅Owner回滚时另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复本次env备份、先查在途批次/枚举，原脚本重放旧grants，不down、不重建postgres、不改rehearsal。
+**后续待办**：验收后annotated v0.5.9固定Final、原生成CHANGELOG/台账/本条日志已完成，Notion同步读回PASS（2026-10-06T19:05:00.415Z），旧历史与模板保留；Git治理提交/tag已推送回读PASS（8a4a4da9815bcacc0983d3624b1ba986f0ca7d1d）。正式域名开放另行授权；IndexNow出站默认关闭，B-34须先修。回滚目标v0.5.8 Final0329b11，仅Owner回滚时另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复本次env备份、先查在途批次/枚举，原脚本重放旧grants，不down、不重建postgres、不改rehearsal。
 
 ### 2026-10-05 21:33 - codex（GPT-6，发版执行；时间 +0800）
 
