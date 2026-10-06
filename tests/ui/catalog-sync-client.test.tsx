@@ -90,3 +90,25 @@ describe("领取资格列 · 推广链接状态 (B-4)", () => {
     expect(cell.textContent).toBe("不可领取 · 来源条目尚未关联书目");
   });
 });
+
+describe("上架时间筛选（2026-10-06）", () => {
+  it("全选当前筛选时，提交给批次动作的快照带着页面换算出的绝对日期 sourceCreatedFrom", async () => {
+    actions.readCatalogBatchContextAction.mockResolvedValue({ ok: true, data: singleContext });
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue({ ok: true, data: { taskId: "p3", phase: "queued" } });
+    actions.readCatalogBatchSummaryAction.mockResolvedValue({ ok: true, data: { taskId: "p3", phase: "completed", submittedCount: 2, ineligibleCount: 0 } });
+    renderPage({ status: "pending", sourceCreatedFrom: "2026-09-06" } as { status: string });
+    await selectPage();
+    fireEvent.click(screen.getByRole("button", { name: /选择符合当前筛选条件的全部 1001 条/ }));
+    fireEvent.click(screen.getByRole("button", { name: "领取推广链接" }));
+    await waitFor(() => expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1));
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledWith(expect.objectContaining({
+      selection: { scope: "all_filtered", filter: { status: "pending", sourceCreatedFrom: "2026-09-06" } },
+    }));
+  });
+
+  it("行里显示上游上架时间原始字符串；没有时不显示这一行", () => {
+    render(<CatalogSyncClient items={[{ ...row("with-created", "With Created"), sourceCreatedAtRaw: "2026-09-06 08:30:00" }, row("without-created", "Without Created")]} total={2} filter={{ status: "linked" }} catalogGate={{ featureEnabled: true }} contentPublish="granted" promoClaimGranted promoClaimBlockedReason={null} />);
+    expect(screen.getByTestId("source-created-at-with-created").textContent).toBe("上架 2026-09-06 08:30:00");
+    expect(screen.queryByTestId("source-created-at-without-created")).toBeNull();
+  });
+});
