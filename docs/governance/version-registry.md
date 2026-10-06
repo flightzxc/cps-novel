@@ -19,7 +19,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.9 —— 准备中（2026-10-07；重定基线后第一阶段，尚未部署）
+### v0.5.9 —— 第一阶段 PASS（2026-10-07；尚未部署）
 
 - 唯一基线 `59e84efa85756c0e957dcbf63f62b32aa5d7fca2`，基于 v0.5.8 收官 `306edb4`；已复核集成，本次不开发功能。上一轮基线 549760f 的本地候选 8772afd 在 audit 发现第六项 high 后停止、未推送，已按 Owner 要求丢弃工作树与本地分支，未 rebase/cherry-pick。新建 `release-v0.5.9-redo` / `release/v0.5.9-2026-10-07-redo`，全新 npm ci、Prisma generate、真实 node_modules，全部门禁从头重做。
 - 领推广生命周期修复：其它未完成批次中的书照常入队并记提示数；所有选书方式排除已有推广码或人工核对的书；ADR D4 仅检查本条是否尝试及本账号是否有 prepared / claim_retry_blocked 意图；后台展示新计数、保留历史原因码。worker 执行时三道防重复检查未改，旧路径不变；Owner 2026-10-06 已确认 D4 收窄。scheduler_app 新增 side_effect_intent.status 列级 SELECT，由部署脚本重放 grants 生效。
@@ -30,7 +30,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 无新迁移（仍 22 条）、无新环境变量或 Compose 变化；grants.sql 仅上述列级授权变化；Next 固定 16.3.7。先提交与 v0.5.8 相同六文件版本身份，再串行完成 32 个运行器及全部指定门禁，通过后推送、构建核验 linux/amd64 不可变归档。本版合入内容尚未部署，正式域名仍未开放。
 - 第一阶段不连接任何远程主机，GitHub 推送除外；交付归档后停止。第二阶段须 Owner 独立授权、等试读抓取跑完，仅限 haiyue-vps；保留 rehearsal，不改 nginx、证书、DNS、NAS 或业务开关，不触发业务任务。
 - 交接说明批次 eba8f359 已由 Owner 于 2026-10-06 中止，历史只读 A 为 cancelled 50 + completed 3 + completed_with_errors 18 = 71，B/C/D 均 0；这是来源交接，本轮未连服务器，部署前须重新核对。回滚目标 v0.5.8 Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25`，先恢复轻量 allowlist 并确认无在途批量发布或尚未完成枚举的上架时间筛选批次，不执行 down migration。
-- Final、归档身份及本轮结果待实测补齐；annotated tag v0.5.9、生成 CHANGELOG、正式发版级开发日志和 Notion 收官待第二阶段部署验收后完成。
+- 第一阶段 PASS：Final `6af0b2e5c79db932c4754a43580eed3729bd0334`，tree `9894abdff08bf348a45aad025879c681ed5215b2`，image `cps-novel:0.5.9-6af0b2e`（linux/amd64，Next 16.3.7，source-map-js 全部 1.2.2）；归档 331,281,258 字节，SHA256 `524379f2db0f0654258768b33b8966c244faa72b7d59aa92699f746ca4b31146`；原消费端 VERIFY=PASS。tsc/lint 0 error、全量 511 files / 7900 tests、32 运行器、22 迁移/drift 0、strict proxy 1646/0、完整 B21、nginx 矩阵、公开切换变异、真实品牌镜像与三套 Compose 全 PASS；audit 恰好指定五项 high / 0 critical。详见 [发布记录](releases/v0.5.9-preproduction.md)。后续文档提交不改变 Final；annotated tag v0.5.9、生成 CHANGELOG、正式发版级开发日志和 Notion 收官待第二阶段部署验收后完成。
 
 ### v0.5.8 —— 已部署密码保护预生产，E/F/G PASS（2026-10-05 21:27:39 +0800）
 
@@ -365,7 +365,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.9` | 2026-10-07 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | `release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 准备中，尚未部署；第一阶段交付后停止，第二阶段待 Owner 独立授权 |
+| `v0.5.9` | 2026-10-07 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 第一阶段全部门禁、归档核验 PASS，尚未部署；第二阶段等试读抓取跑完及 Owner 独立授权 |
 | `v0.5.8` | 2026-10-05 21:27:39 | PATCH | worker 心跳部分索引及健康检查修复；NAS stat 跨平台与排序修复；新增 1 条迁移 | Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25`；annotated `v0.5.8`；image `cps-novel:0.5.8-0329b11`；`release/v0.5.8-2026-10-05` | 已部署密码保护预生产；E/F/G PASS；批次 paused；正式域名未开放；Notion 第二阶段同步回读 PASS（2026-10-05T22:36:40.438000+09:00） |
 | `v0.5.7` | 2026-10-01 22:35:53 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 边界修复；无新迁移 | Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；image `cps-novel:0.5.7-bbb0625`；`release/v0.5.7-2026-10-01-redo` | 密码保护预生产 E/F/G PASS；F.1 主控裁决；15 语种只读报告、24 样本、en 前快照完成；tag/CHANGELOG 完成；第三阶段仅en completed / 43,431成功、0失败/skipped；实际差集133/0/133/126 PASS；公开auto0；快照保留，次日备份待复核；批次paused |
 | `v0.5.6` | 2026-10-01 03:38:32 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | Final `8625021d064f17d37e610d6038023c3ffecd9408`；image `cps-novel:0.5.6-8625021`；发布分支 `release/v0.5.6-2026-10-01-redo` | 预生产已发布；E/F/G PASS；tag/CHANGELOG/正式日志/Notion 同步回读完成 |
