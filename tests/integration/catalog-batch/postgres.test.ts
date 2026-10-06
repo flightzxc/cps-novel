@@ -19,7 +19,7 @@ import {
   recomputeParentTask,
   recoverExpiredItem,
 } from "@/lib/tasks";
-import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
+import { estimatePromoClaimShardPlan, readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
 import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
@@ -1305,6 +1305,67 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total, submittedCount: listed.total });
       const children = await owner.genericTask.findMany({ where: { parentTaskId: queued.taskId }, include: { items: true } });
       expect(new Set(children.flatMap((child) => child.items.map((item) => item.targetId)))).toEqual(new Set(fresh));
+    },
+    60_000,
+  );
+
+  // 复核追加（2026-10-06）：批次上下文（`readCatalogBatchContext`——领推广/纳入书目弹窗里的
+  // 渠道分组、预计分片与耗时）此前不认「推广链接状态」筛选：「已建立书目 + 未领取 + 近 N 天」
+  // 全选建批次时，弹窗会把已领取/人工核对中的书也算进去，预估偏大。现在与页面列表、worker
+  // 枚举同一口径（复用 promoLinkStatusIdConstraint + resolvePromoLinkStatusContext）。
+  it.each([
+    { name: "未领取", promoLinkStatus: "not_claimed", sourceLocale: undefined, expected: 2 },
+    { name: "已领取", promoLinkStatus: "claimed", sourceLocale: undefined, expected: 2 },
+    { name: "人工核对中", promoLinkStatus: "manual_review", sourceLocale: undefined, expected: 1 },
+    { name: "未领取 + en", promoLinkStatus: "not_claimed", sourceLocale: "en", expected: 1 },
+  ])(
+    "批次上下文认「推广链接状态」：已建立书目 + $name + 近 30 天 —— 上下文总数/渠道分组计数/预估 = 页面列表 total = worker 枚举 selectedCount (web_app / worker_app role)",
+    async ({ promoLinkStatus, sourceLocale, expected }) => {
+      const { channel, ids } = await seedPromoLinkStatusFixture();
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+      const enFree = ids["en-free"]!.split(",");
+      const jaFree = ids["ja-free"]!.split(",");
+      // 每个推广链接状态桶里都有"近 30 天内"与"近 30 天外"的书，且"近 30 天内"的集合里混着
+      // 其它状态的书：不认推广链接状态时上下文会数到 5（en/ja 的已领取、en 人工核对、两本近期未领取），
+      // 不认上架时间时更多。
+      const created: Record<string, string> = {
+        [ids["en-claimed"]!]: scRaw(3), [ids["en-manual"]!]: scRaw(3), [enFree[0]!]: scRaw(3), [enFree[1]!]: scRaw(400),
+        [ids["ja-claimed"]!]: scRaw(3), [ids["ja-manual"]!]: scRaw(40), [jaFree[0]!]: scRaw(3), [jaFree[1]!]: scRaw(400),
+        [ids["en-pending"]!]: scRaw(3), [ids["ja-pending"]!]: scRaw(3),
+      };
+      for (const [id, raw] of Object.entries(created)) await owner.novelSourceItem.update({ where: { id }, data: { sourceCreatedAtRaw: raw } });
+
+      const query = { status: "linked", promoLinkStatus, sourceLocale, sourceCreatedWithin: "30" };
+      const listed = await scPage(query);
+      expect(listed.total).toBe(expected);
+
+      const canonical = resolveSourceItemFilters(query, SC_NOW);
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: {
+          status: canonical.status, sourceLocale: canonical.sourceLocale,
+          promoLinkStatus: canonical.promoLinkStatus, sourceCreatedFrom: canonical.sourceCreatedFrom,
+        },
+      }, SC_NOW);
+
+      // 批次上下文（弹窗用，Web 侧以 web_app 角色读）：总数与渠道分组计数都等于页面 total。
+      const context = await readCatalogBatchContext(web, selection);
+      expect(context.submittedCount).toBe(listed.total);
+      expect(context.channelGroups.map((group) => [group.channelAppId, group.eligibleCount])).toEqual([[channel.channelAppId, expected]]);
+      // 预计分片：按上下文的分组计数算，所以也只数这 N 本。
+      const estimate = await estimatePromoClaimShardPlan(owner, context, { [channel.channelAppId]: channel.accountId });
+      expect(estimate.groups.map((group) => group.eligibleCount)).toEqual([expected]);
+
+      // worker 枚举：selectedCount 与页面 total、上下文总数是同一个集合。
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      await materialize(enqueued.taskId);
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total });
+      expect(context.submittedCount).toBe((parent.result as { selectedCount: number }).selectedCount);
     },
     60_000,
   );
