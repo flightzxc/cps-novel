@@ -7,6 +7,7 @@ import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/se
 import {
   ARTICLE_ID_RESOLVE_MAX_LIMIT,
   ArticleConflictError,
+  countArticlesForFilter,
   listArticleIdsForFilter,
   regenerateArticle,
   regenerateArticlesBatch,
@@ -29,6 +30,9 @@ import {
   enqueueArticleGenerateParentBatch,
   type ArticleGenerateAdmissionSummary,
 } from "@/lib/tasks/article-generate";
+import { ArticlePublishInputError, normalizeArticlePublishFilter } from "@/domain/article-publish-batch";
+import { enqueueArticlePublishParentBatch } from "@/lib/tasks/article-publish";
+import { AdminContentQueryError } from "@/server/admin-content";
 import { listNovelsForArticleGenerate } from "@/server/content-creation";
 import {
   BlogArticleInputError,
@@ -649,6 +653,55 @@ export async function publishArticlesByFilterChunkAction(input: {
     return { ok: true as const, data };
   } catch (error) {
     return { ok: false as const, code: writeErrorCode(error, "article_batch_publish_failed") };
+  }
+}
+
+/**
+ * 文章「全选 → 后台批量发布」（2026-10-06，开发单《文章批量发布后台任务_全选拆分》）。
+ *
+ * 只在列表"全选当前筛选"时由 `ArticleList` 调用。与上面两条同步路径的区别：本 action
+ * **不发布任何文章**，只提交一个后台任务（`article.publish.batch.v1`）——由 worker-light
+ * 枚举草稿、每 200 篇拆成一个子任务、逐篇调用同一个发布核心。同步路径
+ * （`publishArticlesBatchAction` / `publishArticlesByFilterChunkAction`）一个字都没改。
+ *
+ * 权限与按钮一致：`content:publish` 且会话已完成两步验证（`requireFreshAdminServiceMutation`）。
+ * 提交人写进任务参数，worker 以该管理员身份发布，审计里 actor 就是提交人。
+ * 筛选条件以快照形式持久化：枚举用的是与列表页同一个 WHERE，只是把状态固定为草稿。
+ */
+export async function enqueueArticlePublishBatchAction(input: {
+  requestId: string;
+  filters: ArticlePublishFilterInput;
+  /** 「发布时暂不抓试读」；缺省为 false，和同步按钮一致。 */
+  skipPreview?: boolean;
+}): Promise<
+  | { ok: true; data: { taskId: string; duplicate: boolean; draftCount: number } }
+  | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
+> {
+  try {
+    const auth = await authorization("admin.article.publish_batch_task", input.requestId);
+    const guards = guardDependencies();
+    const context = await requireFreshAdminServiceMutation(auth, "content:publish", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.article.publish_batch_task",
+      requestId: input.requestId,
+    });
+    const filter = normalizeArticlePublishFilter(input.filters);
+    // 与列表、枚举同一个 WHERE：数出来的就是 worker 将要枚举的草稿。
+    const draftCount = await countArticlesForFilter(prisma, { ...filter, status: "draft" });
+    const result = await enqueueArticlePublishParentBatch(prisma, {
+      filter,
+      skipPreview: input.skipPreview === true,
+      actorId: context.identity.id,
+      requestId: input.requestId,
+      draftCount,
+    });
+    revalidatePath("/tasks");
+    return { ok: true, data: { taskId: result.taskId, duplicate: result.duplicate, draftCount } };
+  } catch (error) {
+    if (error instanceof ArticlePublishInputError) return { ok: false, kind: "invalid_input", code: error.code };
+    if (error instanceof AdminContentQueryError) return { ok: false, kind: "invalid_input", code: error.code };
+    return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_publish_batch_task_denied") };
   }
 }
 

@@ -869,6 +869,21 @@ export async function listArticleIdsForFilter(
 }
 
 /**
+ * Counts the rows a filter matches — from the SAME `buildArticleListWhere`
+ * `listArticles`/`listArticleIdsForFilter` use, so "what the batch task will
+ * enumerate" and "what the operator is looking at" cannot drift (2026-10-06,
+ * 文章后台批量发布任务: the enqueue-time cap/emptiness check). Read-only; the
+ * worker's own enumeration re-resolves ids with `listArticleIdsForFilter`.
+ */
+export async function countArticlesForFilter(
+  db: Pick<PrismaClient, "article">,
+  input: ArticleListInput,
+): Promise<number> {
+  const normalized = normalizeArticleListInput({ ...input, page: 1, pageSize: ARTICLE_LIST_DEFAULT_PAGE_SIZE });
+  return db.article.count({ where: buildArticleListWhere(normalized) });
+}
+
+/**
  * C-19 (item #9, ADAPT): the filter bar's locale options, sourced from
  * distinct live `Article.locale` values instead of all 15 registered
  * `SITE_LOCALES` — with the site at (today) one populated locale, the other
