@@ -300,6 +300,13 @@ export const ADMIN_ARTICLE_ACTIONS = [
   { id: "admin.article.generate_apply", capability: "content:publish", mutation: true },
   { id: "admin.article.generate_batch", capability: "content:publish", mutation: true },
   { id: "admin.article.generate_candidates", capability: "content:view", mutation: false },
+  /**
+   * 文章「全选 → 后台批量发布」任务（2026-10-06）。能力与同步「批量发布」
+   * （`admin.article.publish_batch`）一致：`content:publish`（`requiresTwoFactor: true`）。
+   * 单独一个 id 而不复用同步批量发布的 id，是为了限流与审计里能区分"提交了后台任务"
+   * 和"在请求里同步逐篇发布"。
+   */
+  { id: "admin.article.publish_batch_task", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
 /**

@@ -21,6 +21,8 @@ import { createContentCreateWorkerHandlers } from "./handlers/content-create";
 import { createNovelMaterializeWorkerHandlers } from "./handlers/novel-materialize";
 import { createArticleGenerateWorkerHandlers } from "./handlers/article-generate";
 import { createArticleGenerateBatchWorkerHandlers } from "./handlers/article-generate-batch";
+import { createArticlePublishWorkerHandlers } from "./handlers/article-publish";
+import { createArticlePublishBatchWorkerHandlers } from "./handlers/article-publish-batch";
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
@@ -94,6 +96,10 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createNovelMaterializeWorkerHandlers(prisma),
     ...createArticleGenerateWorkerHandlers(prisma),
     ...createArticleGenerateBatchWorkerHandlers(prisma),
+    // 文章后台批量发布（2026-10-06）。两个类型只在 light 通道的白名单里
+    // （`APPROVED_LIGHT_TASK_TYPES`），主通道白名单不得出现。
+    ...createArticlePublishBatchWorkerHandlers(prisma),
+    ...createArticlePublishWorkerHandlers(prisma),
   });
 }
 

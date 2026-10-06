@@ -17,6 +17,7 @@ import { describePublishGateReason, summarizePublishGateWarnings } from "../../n
 import { describePublishLifecycleError, isPublishLifecycleErrorCode } from "../../novels/_lib/publish-outcome-copy";
 import { validateReason } from "../../novels/_lib/reason-guard";
 import {
+  enqueueArticlePublishBatchAction,
   publishArticleAction,
   publishArticlesBatchAction,
   publishArticlesByFilterChunkAction,
@@ -43,6 +44,18 @@ import { ArticleTypeBadge } from "./article-type-badge";
  */
 function describeArticleActionErrorCode(code: string): string {
   return isPublishLifecycleErrorCode(code) ? describePublishLifecycleError(code) : code;
+}
+
+/** 后台批量发布提交失败的中文提示：只翻译这个入口自己会返回的几个码，其余原样显示。 */
+function describeBackgroundPublishErrorCode(code: string): string {
+  const copy: Readonly<Record<string, string>> = {
+    no_draft_in_filter: "当前筛选条件下没有草稿可发布",
+    selection_too_large: "草稿超过一次后台任务的上限（50000 篇），请缩小筛选范围后再提交",
+    filter_status_not_draft: "筛选条件里选了非草稿状态；后台批量发布只处理草稿，请改为草稿或不筛状态",
+    batch_already_queued: "同一筛选条件的批次正在启动，请稍后再试",
+    request_replay_mismatch: "请求编号被重复使用，请刷新页面后重试",
+  };
+  return copy[code] ?? describeArticleActionErrorCode(code);
 }
 
 export type ArticleListRow = {
@@ -287,6 +300,12 @@ export function ArticleList({
   const [allMatching, setAllMatching] = useState(false);
   const [crossPageProgress, setCrossPageProgress] = useState<CrossPageProgress | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
+  /**
+   * 「后台批量发布」（2026-10-06）：勾选「发布时暂不抓试读」与提交后的任务提示。
+   * 与上面同步路径的状态互相独立——提交后台任务不发布任何文章，只建一个任务。
+   */
+  const [skipPreview, setSkipPreview] = useState(false);
+  const [queuedTask, setQueuedTask] = useState<{ taskId: string; draftCount: number; duplicate: boolean } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<{ articleId: string; novelId: string; title: string } | null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
@@ -580,6 +599,39 @@ export function ArticleList({
     }
   }
 
+  /**
+   * 全选当前筛选 → 提交一个后台批量发布任务。服务端把筛选条件存成快照，由 worker 枚举
+   * 草稿并拆成每 200 篇一个子任务；这里只负责提交，进度到任务中心看。不走上面的同步循环。
+   */
+  async function enqueueBackgroundPublish() {
+    if (!filters) return;
+    setBatchBusy(true);
+    setMessage(null);
+    setQueuedTask(null);
+    try {
+      const response = await enqueueArticlePublishBatchAction({
+        requestId: crypto.randomUUID(),
+        filters,
+        skipPreview,
+      });
+      if (!response.ok) {
+        setMessage(`后台批量发布未提交：${describeBackgroundPublishErrorCode(response.code)}。没有文章被改动，可修正后重试。`);
+        return;
+      }
+      setQueuedTask(response.data);
+      clearSelection();
+      router.refresh();
+    } catch (error) {
+      setMessage(
+        String(error).includes("Failed to find Server Action")
+          ? "后台批量发布未提交（页面版本已过期），请刷新页面后重试"
+          : "后台批量发布未提交（网络或页面版本已过期），请刷新页面后重试",
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
   async function batchPublish() {
     const selectedCount = selected.size;
     const result = await publishArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
@@ -732,6 +784,31 @@ export function ArticleList({
               </span>
             )}
           </div>
+          {allMatching && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="articles-background-publish-controls">
+              <button
+                disabled={!canWrite || batchBusy || selectionCount === 0}
+                className={buttonClassName("primary")}
+                onClick={() => void enqueueBackgroundPublish()}
+                data-testid="articles-batch-publish-task"
+              >
+                {batchBusy ? "正在提交…" : `后台批量发布（${matchingTotal} 篇）`}
+              </button>
+              <label className="flex items-center gap-1 text-xs text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={skipPreview}
+                  disabled={batchBusy}
+                  onChange={(event) => setSkipPreview(event.target.checked)}
+                  data-testid="articles-batch-publish-task-skip-preview"
+                />
+                发布时暂不抓试读
+              </label>
+              <span className="text-xs text-gray-500">
+                后台逐篇发布其中的草稿（每 200 篇一个子任务），可在任务中心暂停、中止、重试失败项
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button
               disabled={!canWrite || selected.size === 0 || selected.size > 50}
@@ -758,6 +835,23 @@ export function ArticleList({
           </div>
         </div>
       </div>
+      {queuedTask && (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          data-testid="articles-publish-task-queued"
+        >
+          {queuedTask.duplicate ? "该请求已提交过后台批量发布任务" : "已提交后台批量发布任务"}
+          （待发布草稿 {queuedTask.draftCount} 篇）。
+          <Link
+            href={`/tasks/${queuedTask.taskId}?family=generic`}
+            className="ml-1 font-medium underline underline-offset-2"
+            data-testid="articles-publish-task-link"
+          >
+            到任务中心查看进度
+          </Link>
+        </p>
+      )}
       {message && (
         <p role="status" className="rounded border bg-gray-50 p-3 text-sm">
           {message}

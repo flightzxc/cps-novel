@@ -183,6 +183,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.article.generate_apply",
       "admin.article.generate_batch",
       "admin.article.generate_candidates",
+      "admin.article.publish_batch_task",
       "admin.article.rebind_novel",
       "admin.article.rebind_rollback",
       "admin.article.rebind_candidates",

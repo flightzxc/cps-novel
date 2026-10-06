@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { isArticleGenerateBatchTaskType } from "@/domain/article-generation";
+import { isArticlePublishBatchTaskType } from "@/domain/article-publish-batch";
 import { notFound } from "next/navigation";
 
 import { buttonClassName } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import {
   taskControlKindLabel,
   taskFamilyLabel,
 } from "../_lib/task-copy";
+import { ArticlePublishBatchSummary } from "./_components/article-publish-batch-summary";
 import { TaskConfigSummary } from "./_components/task-config-summary";
 import { TaskDetailProgress } from "./_components/task-detail-progress";
 import { TaskItemsSection, type TaskDetailItemRow } from "./_components/task-items-section";
@@ -157,7 +159,11 @@ export default async function TaskDetailPage({
   // `TaskDetailDto.parentRawStatus` 自己的 doc comment。非批次任务两者相等。
   const parentRawStatus = detail.parentRawStatus ?? detail.status;
   const hasUnfinishedChildren = (detail.catalogBatch?.childTasks ?? []).some((child) => CHILD_ACTIVE_STATUSES.has(child.status));
-  const showStaleParentControlNote = Boolean(detail.catalogBatch) && !isLifecycleBatch
+  // 后台批量发布批次：暂停/恢复/中止/重试失败项由服务端级联到名下子任务（见
+  // `@/lib/tasks/article-publish-batch-control`），所以父任务页本身就能整批操作，
+  // 按钮可点性按"派生后"的批次状态（processing/paused）判定，不需要引导去子任务列表。
+  const isPublishBatch = isArticlePublishBatchTaskType(detail.taskType);
+  const showStaleParentControlNote = Boolean(detail.catalogBatch) && !isLifecycleBatch && !isPublishBatch
     && PARENT_NATURALLY_TERMINAL_STATUSES.has(parentRawStatus) && hasUnfinishedChildren;
   const processed = detail.successCount + detail.failedCount + detail.skippedCount;
   const percent = detail.totalCount > 0 ? Math.round((processed / detail.totalCount) * 100) : 0;
@@ -291,11 +297,11 @@ export default async function TaskDetailPage({
               <TaskControlButtons
                 family={detail.family}
                 taskId={detail.taskId}
-                status={detail.catalogBatch ? parentRawStatus : detail.status}
+                status={detail.catalogBatch && !isPublishBatch ? parentRawStatus : detail.status}
                 isLifecycleShard={detail.isLifecyclePromoClaimShard}
               />
             )}
-            {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
+            {isRetryableTaskStatus(detail.status) && (!detail.catalogBatch || isPublishBatch) && detail.failedCount > 0 && (
               <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
             )}
             {detail.catalogFinalize?.retryable && (
@@ -323,7 +329,11 @@ export default async function TaskDetailPage({
             <h2 className="font-medium text-gray-900">批量任务进度</h2>
             <p className="mt-1 text-sm text-gray-600">
               阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}。
-              {!isArticleGenerateBatchTaskType(detail.taskType) && <>
+              {isPublishBatch && <>
+                共 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 篇草稿，
+                每 200 篇拆成一个子任务（共 {detail.catalogBatch.childTasks?.length ?? 0} 个）。
+              </>}
+              {!isArticleGenerateBatchTaskType(detail.taskType) && !isPublishBatch && <>
                 已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
                 已纳入 {detail.catalogBatch.alreadyLinkedCount?.toLocaleString("zh-CN") ?? "—"} 条；
                 状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
@@ -366,6 +376,7 @@ export default async function TaskDetailPage({
         {detail.catalogBatch?.promoClaimLifecycle && (
           <PromoClaimShardList data={detail.catalogBatch.promoClaimLifecycle} />
         )}
+        {detail.articlePublishBatch && <ArticlePublishBatchSummary summary={detail.articlePublishBatch} />}
         {isTerminal && (bookCounts ? (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="task-detail-static-summary">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">

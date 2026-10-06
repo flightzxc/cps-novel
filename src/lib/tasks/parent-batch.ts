@@ -1,4 +1,5 @@
 import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 } from "./article-generate";
+import { ARTICLE_PUBLISH_BATCH_TASK_TYPE } from "./article-publish";
 import { CATALOG_BATCH_TASK_TYPE } from "./catalog-batch";
 
 /**
@@ -6,12 +7,14 @@ import { CATALOG_BATCH_TASK_TYPE } from "./catalog-batch";
  * item. Both `article.generate.batch.v1` (drain-only) and `.v2` (current)
  * are listed — an already-enqueued v1 parent still needs its progress/
  * detail read to come from its children, exactly like a v2 one, until its
- * TTL clears it.
+ * TTL clears it. `article.publish.batch.v1` (后台批量发布，2026-10-06) is the
+ * same shape: one enumeration item, then per-200 child tasks.
  */
 export const PARENT_BATCH_TASK_TYPES = [
   CATALOG_BATCH_TASK_TYPE,
   ARTICLE_GENERATE_BATCH_TASK_TYPE,
   ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
+  ARTICLE_PUBLISH_BATCH_TASK_TYPE,
 ] as const;
 
 export type ParentBatchTaskType = (typeof PARENT_BATCH_TASK_TYPES)[number];
