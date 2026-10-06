@@ -93,10 +93,10 @@ docker exec \
 # 同样用无参 `new PrismaClient()`（读 DATABASE_URL = owner）、beforeEach TRUNCATE 整库，
 # 所以并入同一次串行运行；库名已按上面的说明含 `lifecycletest`。
 #
-# 2026-10-06（目录同步页上游上架时间筛选/排序）：postgres.test.ts 新增 17 例（场景 A–F：
+# 2026-10-06（目录同步页上游上架时间筛选/排序）：postgres.test.ts 新增 18 例（场景 A–F：
 # 列表筛选与含当天边界、全选一致性、快照绝对日期、非法输入/历史快照、排序、9.8 万本规模计时），
 # 沿用本运行器已有的 CATALOG_BATCH_DATABASE_TEST 与三个角色连接串，不新增任何开关；
-# 下方硬断言里 postgres.test.ts 的通过数下限相应由 24 提到 41（零跳过）。
+# 下方硬断言里 postgres.test.ts 的通过数下限相应由 24 提到 42（零跳过）。
 CATALOG_BATCH_DATABASE_TEST=1 \
 CATALOG_BATCH_OWNER_DATABASE_URL="$owner_url" \
 CATALOG_BATCH_WEB_DATABASE_URL="$web_url" \
@@ -135,7 +135,7 @@ const fail = (reason, detail) => {
 if (!fs.existsSync(reportPath)) fail("report_missing", [reportPath]);
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const required = new Map([
-  ["postgres.test.ts", 41],
+  ["postgres.test.ts", 42],
   ["promo-claim-lifecycle-shard-enumeration-postgres.test.ts", 4],
   ["promo-claim-catalog-position-sort-postgres.test.ts", 1],
   [path.basename(extraFile), 6],

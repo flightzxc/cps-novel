@@ -1217,25 +1217,28 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(page.total).toBe(2);
   });
 
+  // 每组用例都要"上架时间条件真的在起作用"：不带该条件时集合严格更大（见 expectedWithoutCreated）。
   it.each([
-    { name: "领推广·linked + 近 30 天", status: "linked", preset: "30", expectedListed: 5 },
-    { name: "领推广·linked + en + 近 30 天", status: "linked", sourceLocale: "en", preset: "30", expectedListed: 3 },
-    { name: "领推广·linked + en + 未领取 + 近 30 天", status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed", preset: "30", expectedListed: 1 },
-    { name: "领推广·linked + ja + 人工核对中 + 近 90 天", status: "linked", sourceLocale: "ja", promoLinkStatus: "manual_review", preset: "90", expectedListed: 1 },
-    { name: "领推广·linked + 已领取 + 近 1 年", status: "linked", promoLinkStatus: "claimed", preset: "365", expectedListed: 2 },
+    { name: "领推广·linked + 近 30 天", status: "linked", preset: "30", expectedListed: 4, expectedWithoutCreated: 8 },
+    { name: "领推广·linked + en + 近 30 天", status: "linked", sourceLocale: "en", preset: "30", expectedListed: 3, expectedWithoutCreated: 4 },
+    { name: "领推广·linked + en + 未领取 + 近 30 天", status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed", preset: "30", expectedListed: 1, expectedWithoutCreated: 2 },
+    { name: "领推广·linked + ja + 未领取 + 近 90 天", status: "linked", sourceLocale: "ja", promoLinkStatus: "not_claimed", preset: "90", expectedListed: 1, expectedWithoutCreated: 2 },
+    { name: "领推广·linked + ja + 人工核对中 + 近 30 天（40 天前上架的那本不入选，结果为空）", status: "linked", sourceLocale: "ja", promoLinkStatus: "manual_review", preset: "30", expectedListed: 0, expectedWithoutCreated: 1 },
+    { name: "领推广·linked + 已领取 + 近 90 天", status: "linked", promoLinkStatus: "claimed", preset: "90", expectedListed: 1, expectedWithoutCreated: 2 },
   ])(
     "上架时间筛选·场景 B 全选一致性：$name —— 页面列表总数 = worker 枚举的 selectedCount，枚举入片的书都在页面集合里 (worker_app role)",
-    async ({ name: _name, preset, expectedListed, ...filter }) => {
+    async ({ name: _name, preset, expectedListed, expectedWithoutCreated, ...filter }) => {
       void _name;
       const { channel, ids } = await seedPromoLinkStatusFixture();
       process.env.FEATURE_PROMO_LINK_CLAIM = "true";
       process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
       const enFree = ids["en-free"]!.split(",");
       const jaFree = ids["ja-free"]!.split(",");
-      // 造上架时间：每个语种两本"未领取"一近一远，ja 人工核对那本落在 31–90 天，其余近 3 天。
+      // 造上架时间：每个语种两本"未领取"一近一远（3 天/400 天前）；ja 人工核对那本 40 天前、
+      // ja 已领取那本 100 天前，其余近 3 天——保证每组筛选下"有上架时间条件 / 没有"集合不同。
       const created: Record<string, string> = {
         [ids["en-claimed"]!]: scRaw(3), [ids["en-manual"]!]: scRaw(3), [enFree[0]!]: scRaw(3), [enFree[1]!]: scRaw(400),
-        [ids["ja-claimed"]!]: scRaw(3), [ids["ja-manual"]!]: scRaw(40), [jaFree[0]!]: scRaw(3), [jaFree[1]!]: scRaw(400),
+        [ids["ja-claimed"]!]: scRaw(100), [ids["ja-manual"]!]: scRaw(40), [jaFree[0]!]: scRaw(3), [jaFree[1]!]: scRaw(400),
         [ids["en-pending"]!]: scRaw(3), [ids["ja-pending"]!]: scRaw(3),
       };
       for (const [id, raw] of Object.entries(created)) await owner.novelSourceItem.update({ where: { id }, data: { sourceCreatedAtRaw: raw } });
@@ -1244,6 +1247,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       const listed = await scPage(query);
       expect(listed.total).toBe(expectedListed);
       const listedIds = new Set(listed.items.map((item) => item.id));
+      expect((await scPage({ ...filter })).total).toBe(expectedWithoutCreated);
 
       const canonical = resolveSourceItemFilters({ ...query }, SC_NOW);
       const selection = normalizeCatalogSelection({
