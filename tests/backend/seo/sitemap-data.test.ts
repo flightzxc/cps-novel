@@ -179,7 +179,17 @@ describe("Sitemap DB family builder", () => {
       slug: `novel-${index}`,
       publicPageShortId: `id${index}`,
     }));
-    const files = await createSitemapFamilyBuilder(db(rows) as never)({
+    // 站点地图按 id 游标分块读（规模缺陷修复，2026-10-06），所以替身要认 `take` 与 `id > 游标`，
+    // 不能再像其它用例那样对每次调用都原样返回全部行。
+    const fixtureDb = db(rows);
+    fixtureDb.article.findMany.mockImplementation((async (args: {
+      where: { AND?: Array<{ id?: { gt: string } }> }; take?: number;
+    }) => {
+      const after = args.where.AND?.find((part) => part.id?.gt !== undefined)?.id?.gt;
+      const rest = after === undefined ? rows : rows.filter((row) => row.id > after);
+      return rest.slice(0, args.take ?? rest.length);
+    }) as never);
+    const files = await createSitemapFamilyBuilder(fixtureDb as never)({
       type: "novelpage",
       locale: "en",
     });

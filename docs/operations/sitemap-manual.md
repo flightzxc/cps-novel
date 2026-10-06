@@ -59,3 +59,8 @@ npm run typecheck
 
 数据库脚本每次新建私有 PostgreSQL 16.14 容器和数据库，运行真实 web_app/worker_app
 用例，退出即删除容器；不接已有业务库。未增加表、字段或 grants；该脚本也验证字典 drift。
+
+脚本同时跑规模验收（`sitemap-scale-postgres.test.ts`）：单语种 3 万篇公开文章（带组合外键推广链接、章节、分类归属）
+外加事故同款量级的 1.4 万篇语种，覆盖 2026-10-06 的 54001 `stack depth limit exceeded` 与
+Prisma 32,767 绑定变量上限；跑完会打印 `[sitemap-scale] ...` 行（生成耗时、进程 RSS / heapUsed 峰值）。
+站点地图按 id 游标分块读取文章（`SITEMAP_ARTICLE_LOAD_CHUNK_SIZE`，500）——这是正确性上限，不是性能旋钮，勿改回一次读完。
