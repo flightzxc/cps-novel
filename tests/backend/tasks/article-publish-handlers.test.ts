@@ -152,7 +152,7 @@ describe("article.publish.v1 handler", () => {
 
 describe("注册", () => {
   it("子任务注册在 generic 家族、maxAttempts=3，并挂了 afterItemCommit（子任务收尾 + 整批收尾的唯一入口）", async () => {
-    const registry = createArticlePublishWorkerHandlers({} as PrismaClient, { SITE_URL: "x" } as NodeJS.ProcessEnv);
+    const registry = createArticlePublishWorkerHandlers({} as PrismaClient, { SITE_URL: "x" } as unknown as NodeJS.ProcessEnv);
     const registration = registry[ARTICLE_PUBLISH_TASK_TYPE]!;
     expect(registration).toMatchObject({ family: "generic", maxAttempts: 3 });
     await registration.afterItemCommit!("child-1");

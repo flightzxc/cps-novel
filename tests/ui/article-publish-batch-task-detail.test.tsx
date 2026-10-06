@@ -60,7 +60,6 @@ vi.mock("@/server/task-admin", async (importOriginal) => {
 });
 
 const { default: TaskDetailPage } = await import("@/app/(admin)/tasks/[id]/page");
-const { TaskAdminError } = await import("@/server/task-admin");
 
 const TASK_ID = "10000000-0000-4000-8000-000000000001";
 
@@ -79,20 +78,6 @@ function detail(overrides: Partial<TaskDetailDto> = {}): TaskDetailDto {
     createdAt: "2026-08-26T02:00:00.000Z",
     updatedAt: "2026-08-26T02:30:00.000Z",
     mode: "apply",
-    ...overrides,
-  };
-}
-
-function item(overrides: Partial<TaskItemDto> = {}): TaskItemDto {
-  return {
-    family: "generic",
-    itemId: "60000000-0000-4000-8000-000000000001",
-    taskId: TASK_ID,
-    status: "failed",
-    attemptCount: 2,
-    leaseEpoch: "3",
-    lockedUntil: null,
-    errorSummary: "redacted",
     ...overrides,
   };
 }
