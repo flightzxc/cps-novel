@@ -5,6 +5,15 @@
 # web_app，枚举/逐篇发布/试读合并派发/站点地图触发用 worker_app——发布核心原本只在 web 进程里跑，
 # 挪到 worker-light 之后必须以 worker_app 跑通整条路径（缺授权 = permission denied）。
 # 跑完做字典 drift 复核；skipped=0 由共用断言 `scripts/lib/assert-vitest-no-skipped-files.mjs` 硬卡。
+#
+# 2026-10-07 起同一个运行器还跑第二个文件：
+#   tests/integration/publish-gate/withdraw-zero-chapter-novels-postgres.test.ts
+# 一次性运维脚本 `scripts/ops/withdraw-zero-chapter-novels-20261007.ts`（上游零章节 236 本切换前下线）
+# 的真实库验收——脚本核心与后台「撤回」按钮的服务函数（`withdrawNovel`）都用这里的真实 web_app 连接串，
+# 夹具与整库快照用 owner 连接串。选这个运行器的理由：它已经同时备好 owner / web_app / worker_app 三条
+# 真实角色连接（脚本生产上就以 web_app 跑，列级授权如 novel_source_item 只能走真实角色才测得出），
+# 一次性库、库名守卫、skipped=0 硬断言与字典 drift 复核俱全，且属于发布生命周期这一族。
+# 两个文件共用同一个一次性库、串行（--no-file-parallelism），各自开头整库 TRUNCATE，互不依赖。
 set -euo pipefail
 set +x
 
@@ -98,6 +107,7 @@ ARTICLE_PUBLISH_BATCH_WEB_DATABASE_URL="$web_url" \
 ARTICLE_PUBLISH_BATCH_WORKER_DATABASE_URL="$worker_url" \
 npm exec vitest run -- --project node \
   tests/integration/tasks/article-publish-batch-postgres.test.ts \
+  tests/integration/publish-gate/withdraw-zero-chapter-novels-postgres.test.ts \
   ${pattern_args[@]+"${pattern_args[@]}"} \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
@@ -110,7 +120,8 @@ fi
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs ARTICLE_PUBLISH_BATCH "$secret_dir/integration-result.json" \
-  tests/integration/tasks/article-publish-batch-postgres.test.ts=9
+  tests/integration/tasks/article-publish-batch-postgres.test.ts=9 \
+  tests/integration/publish-gate/withdraw-zero-chapter-novels-postgres.test.ts=19
 then
   echo "ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=FAIL (whole-file skip or not-executed assertion failed)" >&2
   exit 1
