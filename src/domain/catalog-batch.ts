@@ -8,11 +8,22 @@
 export const PROMO_LINK_STATUS_FILTER_VALUES = ["not_claimed", "claimed", "manual_review"] as const;
 export type PromoLinkStatusFilter = (typeof PROMO_LINK_STATUS_FILTER_VALUES)[number];
 
+/**
+ * 2026-10-06（开发单_Sonnet_目录同步页上游上架时间筛选）：目录同步页新增"上架
+ * 时间"筛选。快照里存的是**绝对日期键** `sourceCreatedFrom`（`YYYY-MM-DD`，
+ * 含当天），不是"近 N 天"——预设在页面渲染那一刻按北京时间的今天换算成日期，
+ * 之后"全选当前筛选"建批次、worker 枚举都只认这个日期，不会因为提交与枚举
+ * 之间跨零点而漂移。判定直接比较上游原始字符串 `novel_source_item.
+ * source_created_at_raw`（固定格式 `YYYY-MM-DD HH:MM:SS`，字典序即时间序），
+ * 不做时区换算、不读从未写入的 `source_created_at` 列。键缺席 = 全部，
+ * 所以不带该键的历史 `all_filtered` 负载天然落到"全部"，不需要迁移。
+ */
 export type CatalogFilterSnapshot = Readonly<{
   status?: string;
   search?: string;
   sourceLocale?: string;
   promoLinkStatus?: string;
+  sourceCreatedFrom?: string;
 }>;
 
 export type CatalogSelection =
@@ -24,6 +35,7 @@ export type NormalizedCatalogFilterSnapshot = Readonly<{
   search?: string;
   sourceLocale?: string;
   promoLinkStatus?: PromoLinkStatusFilter;
+  sourceCreatedFrom?: string;
 }>;
 
 export type NormalizedCatalogSelection =
@@ -37,11 +49,66 @@ export class CatalogSelectionInputError extends Error {
   }
 }
 
+/** 目录同步页"上架时间"预设（天数）；`null`/缺席 = 全部。"近 1 年"按 365 天算。 */
+export const SOURCE_CREATED_PRESET_DAYS = [7, 30, 90, 180, 365] as const;
+export type SourceCreatedPresetDays = (typeof SOURCE_CREATED_PRESET_DAYS)[number];
+
+/** 列表排序：按上游上架时间新→旧；只影响展示，不进入批次快照。缺席 = 默认（最后扫描时间）。 */
+export const SOURCE_ITEM_SORT_SOURCE_CREATED_DESC = "source_created_desc";
+
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+/** Asia/Shanghai 自 1991 年起无夏令时，固定 UTC+8 即可，避免依赖 Intl/时区库。 */
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1_000;
+
+/** 北京时间"今天"的日期键（`YYYY-MM-DD`）。`now` 可注入，便于测试跨零点边界。 */
+export function beijingDateKey(now: Date = new Date()): string {
+  return new Date(now.getTime() + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** 合法的 `YYYY-MM-DD` 日历日期（拒绝 `2026-02-30`、`0000-01-01`、`2026-1-1` 等）。 */
+export function isValidCatalogDateKey(value: string): boolean {
+  if (!DATE_KEY.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+/** URL 里的预设值（`"30"` 等）；不在预设集合内一律视为"全部"（`undefined`）。 */
+export function parseSourceCreatedPreset(value: string | undefined): SourceCreatedPresetDays | undefined {
+  const trimmed = value?.trim();
+  return SOURCE_CREATED_PRESET_DAYS.find((days) => String(days) === trimmed);
+}
+
+/** 预设 → 绝对起始日期键：北京时间今天往前推 N 天（含当天零点起）。 */
+export function resolveSourceCreatedFromPreset(days: SourceCreatedPresetDays, now: Date = new Date()): string {
+  const [year, month, day] = beijingDateKey(now).split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(year, month - 1, day - days)).toISOString().slice(0, 10);
+}
+
+/**
+ * 页面列表、批次上下文/预估、worker 枚举三处共用的**唯一**判定片段——三处都
+ * 展开这个函数的返回值，保证"全选一致性"（同一筛选产出同一集合）。
+ *
+ * 下界 `>= 'YYYY-MM-DD 00:00:00'`（含当天）；上界 `<= '9999-12-31 23:59:59'`
+ * 只是一道格式护栏：原始值为空（NULL 不满足比较）、空串、或以字母开头的脏值
+ * （字母的字典序大于数字）在筛选生效时都不会出现，不依赖正则（Prisma 没有）。
+ */
+export function sourceCreatedAtRawWhere(
+  sourceCreatedFrom: string | undefined,
+): { sourceCreatedAtRaw?: { gte: string; lte: string } } {
+  if (!sourceCreatedFrom) return {};
+  return { sourceCreatedAtRaw: { gte: `${sourceCreatedFrom} 00:00:00`, lte: "9999-12-31 23:59:59" } };
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STATUSES = new Set(["pending", "linked", "ignored", "stale"]);
 
-/** Browser-safe canonicalization used by actions and catalog UI. */
-export function normalizeCatalogSelection(selection: CatalogSelection): NormalizedCatalogSelection {
+/**
+ * Browser-safe canonicalization used by actions and catalog UI.
+ * `now` is injectable only for the "不得晚于今天（北京时间）" check of
+ * `sourceCreatedFrom`.
+ */
+export function normalizeCatalogSelection(selection: CatalogSelection, now: Date = new Date()): NormalizedCatalogSelection {
   if (!selection || typeof selection !== "object") throw new CatalogSelectionInputError("selection_required");
   if (selection.scope === "explicit_ids") {
     if (!Array.isArray(selection.ids) || selection.ids.some((id) => typeof id !== "string")) {
@@ -73,6 +140,15 @@ export function normalizeCatalogSelection(selection: CatalogSelection): Normaliz
   if (promoLinkStatus && !(PROMO_LINK_STATUS_FILTER_VALUES as readonly string[]).includes(promoLinkStatus)) {
     throw new CatalogSelectionInputError("filter_promo_link_status_invalid");
   }
+  if (raw.sourceCreatedFrom !== undefined && typeof raw.sourceCreatedFrom !== "string") {
+    throw new CatalogSelectionInputError("filter_source_created_from_invalid");
+  }
+  const sourceCreatedFrom = raw.sourceCreatedFrom?.trim();
+  if (sourceCreatedFrom && (!isValidCatalogDateKey(sourceCreatedFrom) || sourceCreatedFrom > beijingDateKey(now))) {
+    throw new CatalogSelectionInputError("filter_source_created_from_invalid");
+  }
+  // 键顺序固定（新键追加在最后）：`catalogBatchScopeHash` 对 selection 做
+  // `JSON.stringify`，不带新键的历史快照序列化结果逐字不变。
   return Object.freeze({
     scope: "all_filtered",
     filter: Object.freeze({
@@ -80,6 +156,7 @@ export function normalizeCatalogSelection(selection: CatalogSelection): Normaliz
       ...(search ? { search } : {}),
       ...(sourceLocale ? { sourceLocale } : {}),
       ...(promoLinkStatus ? { promoLinkStatus: promoLinkStatus as PromoLinkStatusFilter } : {}),
+      ...(sourceCreatedFrom ? { sourceCreatedFrom } : {}),
     }),
   });
 }

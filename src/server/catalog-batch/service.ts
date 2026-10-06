@@ -6,6 +6,7 @@ import {
   type NormalizedCatalogSelection,
   type PromoClaimShardEstimate,
   type PromoClaimShardEstimateGroup,
+  sourceCreatedAtRawWhere,
 } from "@/domain/catalog-batch";
 import { CATALOG_BATCH_CHUNK_SIZE, CATALOG_BATCH_TASK_TYPE } from "@/lib/tasks/catalog-batch";
 import { isPromoClaimLifecycleEnabled, resolvePromoClaimLifecycleConfig } from "@/lib/tasks/promo-claim-lifecycle";
@@ -15,11 +16,13 @@ const UNKNOWN_LOCALE = "__unknown";
 
 export function catalogSelectionWhere(selection: NormalizedCatalogSelection): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { id: { in: [...selection.ids] }, deletedAt: null };
-  const { status, search, sourceLocale } = selection.filter;
+  const { status, search, sourceLocale, sourceCreatedFrom } = selection.filter;
   return {
     deletedAt: null, status,
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
     ...(sourceLocale ? { sourceLocale: sourceLocale === UNKNOWN_LOCALE ? null : sourceLocale } : {}),
+    // 上架时间：与页面列表、worker 枚举共用同一个判定片段（全选一致性）。
+    ...sourceCreatedAtRawWhere(sourceCreatedFrom),
   };
 }
 
