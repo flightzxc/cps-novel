@@ -28,6 +28,7 @@ import { enqueuePublicationPreviews } from "@/server/publication/preview-enqueue
 import { abortTask, TASK_ABORT_AUDIT_ACTION, TASK_ABORT_TERMINATION_REASON } from "@/server/task-admin";
 
 import { issueTaskAuthorization, newStores, NOW, seedTaskAdmin } from "../../backend/task-admin/test-support";
+import { applyBulkNoise, createChannelFixture, seedBulkPublicArticles } from "./fixtures/bulk-public-articles";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 
 import {
@@ -454,6 +455,39 @@ describe.skipIf(!enabled).sequential("preview-opening · enqueue-published (real
     expect(stats.skipReasonCounts).toMatchObject({ promo_not_ready: 1 });
     expect(new Set(stats.groups.map((g) => g.channelAccountId))).toEqual(new Set([foundation.account, foundation.secondAccount]));
   });
+
+  // 站点地图规模缺陷（2026-10-06）的同类排查：候选全集曾是一条不分页的 `findMany`，select 里带组合外键关系 `promoLink`，
+  // 候选过 ~7,000 篇就报 PostgreSQL 54001、过 ~16,000 篇被 Prisma 绑定变量上限拦下。14,000 篇落在 54001 区间。
+  it("stats gathers a 14,000-article universe in id-cursor chunks (one un-paged findMany would hit 54001 on the composite FK) and still plans exactly", async () => {
+    const COUNT = 14_000;
+    const channel = await createChannelFixture(owner);
+    await seedBulkPublicArticles(owner, {
+      prefix: "po", locale: "en", count: COUNT, channel, baseUpdatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await applyBulkNoise(owner, { prefix: "po", count: COUNT });
+    // 独立推算：噪声 k = g % 700。k = 1..5（草稿 / 软删文章 / 小说未发布 / 小说软删 / 推广 pending）被 buildPublicArticleWhere 挡掉；
+    // k = 6（推广地址纯空白）与 k = 0（推广链接软删）进候选，但在计划里被判 promo_not_ready。
+    let included = 0;
+    let notReady = 0;
+    for (let ordinal = 1; ordinal <= COUNT; ordinal += 1) {
+      const kind = ordinal % 700;
+      if (kind >= 1 && kind <= 5) continue;
+      included += 1;
+      if (kind === 6 || kind === 0) notReady += 1;
+    }
+    expect(included).toBeGreaterThan(6_835);
+
+    const before = await tableCounts();
+    const stats = await computeEnqueuePublishedStats(web, env);
+    expect(await tableCounts()).toEqual(before);
+
+    expect(stats.articleCount).toBe(included);
+    expect(stats.skipReasonCounts).toEqual({ promo_not_ready: notReady });
+    expect(stats.distinctNovelCount).toBe(included - notReady);
+    expect(stats.groups).toEqual([{
+      channelAccountId: channel.channelAccountId, channelAppId: channel.channelAppId, novelCount: included - notReady,
+    }]);
+  }, 120_000);
 
   it("refuses both stats and apply against a non-web_app role", async () => {
     await expect(computeEnqueuePublishedStats(owner, env)).rejects.toMatchObject({ code: "wrong_database_role" });

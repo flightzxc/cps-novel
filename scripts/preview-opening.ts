@@ -105,6 +105,7 @@ import path from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { withDbRetry } from "../src/lib/db/db-retry";
+import { loadAllByIdCursor, whereAfterId } from "../src/lib/db/id-cursor-pages";
 import { terminatePendingTaskItems } from "../src/lib/tasks/task-termination";
 import { mergeTaskControlResult, type TaskControlMarker } from "../src/lib/tasks/task-control";
 import { enqueuePublicationPreviews } from "../src/server/publication/preview-enqueue";
@@ -497,10 +498,22 @@ type CandidateArticleRow = {
   } | null;
 };
 
+/**
+ * Rows per `article.findMany` when gathering the candidate universe. 🔴 A correctness ceiling, not a tuning knob:
+ * the select below carries `promoLink`, whose FK is the composite `Article.[promoLinkId, novelId] → PromoLink.[id,
+ * novelId]`, and Prisma loads such a relation with `(id, novel_id) IN ((…),(…),…)` — one tuple per returned row. This
+ * query used to be a single un-paged `findMany` over EVERY public novel article, which at ~7k+ rows trips PostgreSQL
+ * 54001 `stack depth limit exceeded` and at ~16k+ rows Prisma's own 32,767 bind-variable cap (same root cause as the
+ * 2026-10-06 sitemap refresh incident; see `src/lib/db/id-cursor-pages.ts`). Reading in `id` cursor chunks keeps every
+ * query's tuple count at this size; the concatenated result is row-for-row the old one (same `where`, same `id` order).
+ */
+const CANDIDATE_ARTICLE_CHUNK_SIZE = 500;
+
 /** Same candidate universe `enqueuePublicationPreviews` itself would accept: every currently-public `novel_article` in a site locale. Both the stats path and the execute path gather this exact same set — the only difference is what they do with it afterward. */
 async function fetchCandidateArticles(db: PrismaClient, env: NodeJS.ProcessEnv): Promise<CandidateArticleRow[]> {
-  return db.article.findMany({
-    where: buildPublicArticleWhere({ articleType: "novel_article", locale: { in: [...SITE_LOCALES] } }, env),
+  const where = buildPublicArticleWhere({ articleType: "novel_article", locale: { in: [...SITE_LOCALES] } }, env);
+  return loadAllByIdCursor(CANDIDATE_ARTICLE_CHUNK_SIZE, ({ take, after }) => db.article.findMany({
+    where: whereAfterId(where, after),
     select: {
       id: true, novelId: true,
       promoLink: { select: {
@@ -510,7 +523,8 @@ async function fetchCandidateArticles(db: PrismaClient, env: NodeJS.ProcessEnv):
       } },
     },
     orderBy: { id: "asc" },
-  });
+    take,
+  }));
 }
 
 export type EnqueuePublishedPlanGroup = {

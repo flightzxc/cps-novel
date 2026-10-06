@@ -106,7 +106,7 @@ const file = files[0];
 const passed = file?.assertionResults?.filter((test) => test.status === "passed").length ?? 0;
 const skipped = report.numPendingTests ?? -1;
 if (files.length !== 1 || path.resolve(file?.name ?? "") !== expected
-    || file.status !== "passed" || passed < (filtered ? 1 : 20) || (!filtered && skipped !== 0)
+    || file.status !== "passed" || passed < (filtered ? 1 : 27) || (!filtered && skipped !== 0)
     || report.numFailedTests !== 0 || report.numPassedTests !== passed) {
   console.error(`PREVIEW_OPENING_INTEGRATION=FAIL reason=not_executed passed=${passed} skipped=${skipped}`);
   process.exit(1);
