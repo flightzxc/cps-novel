@@ -10,6 +10,7 @@ import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import {
   CATALOG_BATCH_TASK_TYPE,
+  abortArticlePublishBatchTx,
   catalogFinalizeGeneration,
   isLifecycleBatchParams,
   isLifecycleShardParams,
@@ -22,11 +23,14 @@ import {
   abortPromoClaimBatchTx,
   isParentBatchTaskType,
   mergeTaskControlResult,
+  pauseArticlePublishBatchTx,
   pausePromoClaimBatchTx,
   reapprovePromoClaimBatchTx,
   readTaskControlMarker,
   resolvePromoClaimLifecycleConfig,
+  resumeArticlePublishBatchTx,
   resumePromoClaimBatchTx,
+  retryFailedArticlePublishBatchTx,
   terminatePendingTaskItems,
   type PromoClaimBatchControlError,
   type TaskControlMarker,
@@ -37,6 +41,8 @@ import {
   ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
   ARTICLE_GENERATE_TASK_TYPE,
 } from "@/lib/tasks/article-generate";
+import { settleArticlePublishBatch } from "@/lib/tasks/article-publish-finalize";
+import { isArticlePublishBatchTaskType } from "@/domain/article-publish-batch";
 import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
@@ -52,7 +58,13 @@ import {
   type AdminServiceAuthorization,
 } from "@/server/auth/guards";
 
+import {
+  loadArticlePublishBatchSummary,
+  type ArticlePublishBatchSummaryDto,
+} from "./article-publish-batch-summary";
 import { projectSafeTaskFailure, type SafeTaskFailureDto } from "./safe-task-error";
+
+export type { ArticlePublishBatchSummaryDto };
 
 export const TASK_RETRY_ENTRY_ID = "admin.api.task.retry_failed";
 export const CATALOG_FINALIZE_RETRY_ENTRY_ID = "admin.api.task.retry_catalog_finalize";
@@ -854,6 +866,8 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
    * 遇到：父批次 bfae6a25 已完成，真正在跑的是子任务）。
    */
   parentRawStatus?: string;
+  /** 后台批量发布批次（`article.publish.batch.v1`）的结果汇总；其它任务类型恒缺省。见 `./article-publish-batch-summary`。 */
+  articlePublishBatch?: ArticlePublishBatchSummaryDto;
   /**
    * 阶段2 第4步（Opus 复核 2026-09-24 F2）：这个任务本身是不是一个生命周期
    * 分片（`promo_link.claim.v1` 且 `params.lifecycleVersion===1 &&
@@ -1363,8 +1377,12 @@ export async function getAdminTaskDetail(
     && row.task_type === PROMO_LINK_CLAIM_TASK_TYPE
     && isLifecycleShardParams(rawRow.params);
   const summary = taskSummary(row, bookCounts);
+  const articlePublishBatch = family === "generic" && isArticlePublishBatchTaskType(row.task_type)
+    ? await loadArticlePublishBatchSummary(db, taskId, { params: rawRow.params, result: rawRow.result })
+    : undefined;
   return Object.freeze({
     ...summary,
+    ...(articlePublishBatch ? { articlePublishBatch } : {}),
     ...(summary.catalogBatch ? { catalogBatch: { ...summary.catalogBatch,
       childTasks: childTasks.map((child) => ({ taskId: child.id, taskType: child.taskType, status: child.status })),
       ...(promoClaimLifecycle ? { promoClaimLifecycle } : {}),
@@ -1940,12 +1958,60 @@ export async function retryFailedTask(
         await lockMutationRequest(tx, input.requestId);
         const parent = await lockParent(tx, family, taskId);
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
-        if (family === "generic" && isParentBatchTaskType(parent.task_type)) {
+        if (family === "generic" && isParentBatchTaskType(parent.task_type)
+          && !isArticlePublishBatchTaskType(parent.task_type)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
 
         const prior = await committedAudit(tx, TASK_RETRY_AUDIT_ACTION, input.requestId);
         if (prior) return replayRetry(prior, context.identity.id, family, taskId, reason);
+
+        // 后台批量发布批次：父任务自己只有一条已完成的枚举条目，失败的条目都在子任务里，
+        // 所以"重试失败项"级联到名下有失败条目的子任务（其它批次类型仍然只能逐个子任务重试）。
+        if (family === "generic" && isArticlePublishBatchTaskType(parent.task_type)) {
+          const cascade = await retryFailedArticlePublishBatchTx(tx, taskId);
+          if (cascade.retriedItemCount === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
+          const totals = await tx.genericTask.aggregate({
+            where: { parentTaskId: taskId, originTaskId: null },
+            _sum: { totalCount: true, successCount: true, failedCount: true, skippedCount: true },
+          });
+          const counts = {
+            totalCount: totals._sum.totalCount ?? 0,
+            successCount: totals._sum.successCount ?? 0,
+            failedCount: totals._sum.failedCount ?? 0,
+            skippedCount: totals._sum.skippedCount ?? 0,
+          };
+          const audit = await tx.operationAudit.create({
+            data: {
+              actorType: "admin",
+              actorId: context.identity.id,
+              action: TASK_RETRY_AUDIT_ACTION,
+              entityType: "Task",
+              entityId: taskId,
+              requestId: input.requestId,
+              taskType: family,
+              taskId,
+              reason,
+              beforeSnapshot: { status: parent.status, failedChildCount: cascade.affectedChildCount },
+              afterSnapshot: {
+                status: "pending",
+                retriedItemCount: cascade.retriedItemCount,
+                affectedChildCount: cascade.affectedChildCount,
+                ...counts,
+              },
+            },
+            select: { id: true },
+          });
+          return Object.freeze({
+            family,
+            taskId,
+            status: "pending" as const,
+            retriedItemCount: cascade.retriedItemCount,
+            ...counts,
+            wrote: true,
+            auditId: audit.id.toString(),
+          });
+        }
         if (!RETRYABLE_PARENT_STATUSES.has(parent.status)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
@@ -2231,6 +2297,17 @@ function replayAbort(
 }
 
 /**
+ * 后台批量发布批次（`article.publish.batch.v1`）且枚举已经结束——父任务自己的原始状态
+ * 不再是 pending/processing/paused（枚举条目处理完几乎立刻变成 completed）。此时批次
+ * 的暂停/恢复/中止/重试作用于名下的子任务（`@/lib/tasks/article-publish-batch-control`）。
+ * 枚举阶段（父任务自己仍在排队或处理）继续走原有的单任务路径。
+ */
+function isEnumeratedArticlePublishBatch(family: TaskFamily, parent: LockedParentRow): boolean {
+  return family === "generic" && isArticlePublishBatchTaskType(parent.task_type)
+    && !["pending", "processing", "paused"].includes(parent.status);
+}
+
+/**
  * Pause — stop leasing new items; every still-`pending` item is left exactly
  * as `pending`; whichever item is currently `processing` finishes normally
  * (its own `finalizeTaskItem` never consults the parent's status at all, and
@@ -2270,6 +2347,32 @@ export async function pauseTask(
 
         const prior = await committedAudit(tx, TASK_PAUSE_AUDIT_ACTION, input.requestId);
         if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, reason, "paused");
+
+        // 后台批量发布批次且枚举已经结束：真正在跑的是名下的子任务，整批级联暂停。
+        // （枚举阶段——父任务自己还是 pending/processing/paused——走下面原有的单任务路径。）
+        if (isEnumeratedArticlePublishBatch(family, parent)) {
+          const cascade = await pauseArticlePublishBatchTx(tx, taskId, {
+            kind: "paused", source: "manual", at: now.toISOString(), actorId: context.identity.id, reason,
+          });
+          if (cascade.affectedChildCount === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
+          const audit = await tx.operationAudit.create({
+            data: {
+              actorType: "admin",
+              actorId: context.identity.id,
+              action: TASK_PAUSE_AUDIT_ACTION,
+              entityType: "Task",
+              entityId: taskId,
+              requestId: input.requestId,
+              taskType: family,
+              taskId,
+              reason,
+              beforeSnapshot: { status: parent.status },
+              afterSnapshot: { status: "paused", affectedChildCount: cascade.affectedChildCount },
+            },
+            select: { id: true },
+          });
+          return Object.freeze({ family, taskId, status: "paused" as const, wrote: true, auditId: audit.id.toString() });
+        }
 
         if (!["pending", "processing"].includes(parent.status)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
@@ -2371,6 +2474,29 @@ export async function resumeTask(
         const prior = await committedAudit(tx, TASK_RESUME_AUDIT_ACTION, input.requestId);
         if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, null, "pending");
 
+        // 后台批量发布批次且枚举已经结束：整批级联恢复名下被暂停的子任务。
+        if (isEnumeratedArticlePublishBatch(family, parent)) {
+          const cascade = await resumeArticlePublishBatchTx(tx, taskId);
+          if (cascade.affectedChildCount === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
+          const audit = await tx.operationAudit.create({
+            data: {
+              actorType: "admin",
+              actorId: context.identity.id,
+              action: TASK_RESUME_AUDIT_ACTION,
+              entityType: "Task",
+              entityId: taskId,
+              requestId: input.requestId,
+              taskType: family,
+              taskId,
+              reason: null,
+              beforeSnapshot: { status: "paused" },
+              afterSnapshot: { status: "pending", affectedChildCount: cascade.affectedChildCount },
+            },
+            select: { id: true },
+          });
+          return Object.freeze({ family, taskId, status: "pending" as const, wrote: true, auditId: audit.id.toString() });
+        }
+
         // X10 formal statuses: eligibility is decided off `status` alone —
         // `"paused"` is a real CHECK-enforced column value now, so there is
         // no longer any need (and, per this feature's own "never determine
@@ -2456,15 +2582,54 @@ export async function abortTask(
   const reason = optionalBoundedText(input.reason, 2_000);
   const now = dependencies.now ?? new Date();
 
-  return withDbRetry(
+  let abortedArticlePublishBatch = false;
+  const aborted = await withDbRetry(
     () =>
       dependencies.db.$transaction(async (tx) => {
+        abortedArticlePublishBatch = false;
         await lockMutationRequest(tx, input.requestId);
         const parent = await lockParent(tx, family, taskId);
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
 
         const prior = await committedAudit(tx, TASK_ABORT_AUDIT_ACTION, input.requestId);
         if (prior) return replayAbort(prior, context.identity.id, family, taskId, reason);
+
+        // 后台批量发布批次且枚举已经结束：整批级联中止名下所有未终结的子任务。
+        if (isEnumeratedArticlePublishBatch(family, parent)) {
+          const cascade = await abortArticlePublishBatchTx(tx, taskId, {
+            kind: "aborted", source: "manual", at: now.toISOString(), actorId: context.identity.id, reason,
+          });
+          if (cascade.affectedChildCount === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
+          const audit = await tx.operationAudit.create({
+            data: {
+              actorType: "admin",
+              actorId: context.identity.id,
+              action: TASK_ABORT_AUDIT_ACTION,
+              entityType: "Task",
+              entityId: taskId,
+              requestId: input.requestId,
+              taskType: family,
+              taskId,
+              reason,
+              beforeSnapshot: { status: parent.status },
+              afterSnapshot: {
+                status: "cancelled",
+                terminatedPendingItemCount: cascade.terminatedPendingItemCount,
+                affectedChildCount: cascade.affectedChildCount,
+              },
+            },
+            select: { id: true },
+          });
+          abortedArticlePublishBatch = true;
+          return Object.freeze({
+            family,
+            taskId,
+            status: "cancelled" as const,
+            terminatedPendingItemCount: cascade.terminatedPendingItemCount,
+            wrote: true,
+            auditId: audit.id.toString(),
+          });
+        }
 
         // X10 formal statuses: eligibility is decided off `status` alone —
         // `"paused"` is a real CHECK-enforced column value now, so aborting a
@@ -2523,6 +2688,18 @@ export async function abortTask(
       }),
     { op: "task-admin.abortTask", itemId: taskId, idempotencyKey: input.requestId },
   );
+  if (abortedArticlePublishBatch) {
+    // 中止提交之后：若恰好没有在途条目，就没有任何后续条目提交会来收尾已发布的那部分
+    // （试读合并派发、站点地图刷新）。收尾失败不得让已经提交的中止变成报错。
+    try {
+      await settleArticlePublishBatch(dependencies.db, taskId, { env: dependencies.env });
+    } catch (error) {
+      console.error("[task-admin] article publish batch settle after abort failed", {
+        taskId, errorKind: error instanceof Error ? error.name : "Error",
+      });
+    }
+  }
+  return aborted;
 }
 
 // ---------------------------------------------------------------------

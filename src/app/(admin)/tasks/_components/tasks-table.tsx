@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import type { CatalogBookCountsDto } from "@/server/task-admin";
 import { isArticleGenerateBatchTaskType, type ArticleGenerateBlockedReason } from "@/domain/article-generation";
+import { isArticlePublishBatchTaskType } from "@/domain/article-publish-batch";
 import type { SafeTaskFailureDto } from "@/server/task-admin/safe-task-error";
 
 import {
@@ -212,9 +213,10 @@ export function TasksTable({
                 {task.catalogBatch && (
                   <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
                     {catalogBatchPhaseLabel(task.catalogBatch.phase)}
-                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
-                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
-                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
+                    {isArticlePublishBatchTaskType(task.taskType) && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 篇草稿`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && !isArticlePublishBatchTaskType(task.taskType) && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && !isArticlePublishBatchTaskType(task.taskType) && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && !isArticlePublishBatchTaskType(task.taskType) && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
                     {catalogBatchPromoClaimCountLabels(task.catalogBatch).length > 0 && (
                       <span className="block" data-testid={`catalog-batch-promo-claim-notices-${task.taskId}`}>
                         {catalogBatchPromoClaimCountLabels(task.catalogBatch).join(" · ")}

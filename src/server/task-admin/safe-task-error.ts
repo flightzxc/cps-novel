@@ -70,6 +70,8 @@ const SAFE_ERROR_LABELS: Readonly<Record<string, string>> = Object.freeze({
   legacy_content_create_retired: "旧版内容创建协议已停用",
   article_generate_batch_v1_filter_unsupported: "旧版批量建稿协议不支持新版筛选字段",
   dry_run_protected_write_blocked: "演练任务禁止执行受保护写入",
+  publish_gate_rejected: "发布检查未通过",
+  publish_conflict: "发布时文章状态被并发修改",
   home_carousel_payload_invalid: "首页轮播任务参数无效",
   sitemap_refresh_failed: "站点地图刷新失败",
   tagging_disabled: "标签功能未启用",
