@@ -91,7 +91,7 @@ npm exec vitest run -- --project node \
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs SITEMAP_REFRESH "$secret_dir/integration-result.json" \
   tests/integration/tasks/sitemap-refresh-postgres.test.ts=13 \
   tests/integration/tasks/sitemap-scale-postgres.test.ts=8 \
-  tests/integration/tasks/sitemap-category-cap-postgres.test.ts=9; then
+  tests/integration/tasks/sitemap-category-cap-postgres.test.ts=11; then
   exit 1
 fi
 

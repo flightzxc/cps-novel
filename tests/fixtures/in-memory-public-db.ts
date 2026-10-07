@@ -37,7 +37,8 @@ export function bookRow(ordinal: number, locale = "en") {
     title: `Book ${ordinal}`,
     slug: `book-${locale}-${ordinal}`,
     locale,
-    publicPageShortId: `s${ordinal}`,
+    // 短码全局唯一：en 保持 `s{序号}`（既有用例依赖），其它语种带语种码，免得不同语种同序号的书撞短码。
+    publicPageShortId: locale === "en" ? `s${ordinal}` : `s${locale.toLowerCase().replace(/[^a-z0-9]/g, "")}${ordinal}`,
     publishedAt: new Date(BASE + ordinal * 1000),
     updatedAt: new Date(BASE + ordinal * 1000),
     summary: null as string | null,

@@ -102,11 +102,11 @@ const CATEGORIES: Category[] = [
   { slug: "mystery", sortOrder: 4, ordinals: [[250, 252]] }, // 全在窗口之内：页面 200
 ];
 
-function startRequest(categories: readonly Category[] = CATEGORIES) {
+function startRequest(categories: readonly Category[] = CATEGORIES, rows: typeof ROWS = ROWS) {
   for (const store of h.stores) store.clear();
   invalidateSiteSettingCache();
   clearRelatedNovelsPoolCacheForTest();
-  const fake = makeFakeDb(ROWS, categories);
+  const fake = makeFakeDb(rows, categories);
   h.db.current = fake.db;
   return fake;
 }
@@ -114,11 +114,11 @@ function startRequest(categories: readonly Category[] = CATEGORIES) {
 type Fake = FakeDb;
 
 /** 一次详情页渲染 = 同一个请求里的 `generateMetadata` 与页面本体（Next 并行解析两者）。 */
-async function renderDetail(ordinal: number, fake: Fake) {
-  const params = Promise.resolve({ slugParam: slugParamOf(ordinal) });
+async function renderDetail(ordinal: number, fake: Fake, locale: "en" | "ko" = "en") {
+  const params = Promise.resolve({ slugParam: slugParamOf(ordinal, locale) });
   const [metadata, tree] = await Promise.all([
-    novelDetail.buildNovelMetadata("en", params),
-    novelDetail.NovelBody({ locale: "en", params }),
+    novelDetail.buildNovelMetadata(locale, params),
+    novelDetail.NovelBody({ locale, params }),
   ]);
   const { container } = render(tree);
   return { metadata, container, counts: { ...fake.counts } };
@@ -245,6 +245,91 @@ describe("章节页、推荐区、首页主推位的分类链接同口径", () =
     expect(items.length).toBeGreaterThan(0);
     // 主推位取的是详情视图，但 `toFeatured` 不加载标签；有人给它加标签时，必须同时给它过 `restrictViewTagLinks`。
     expect(items.every((item) => item.novel.tags.length === 0)).toBe(true);
+  });
+});
+
+/**
+ * 语种错配（主控复核补的盲区）：判定集合必须按**这本书自己的语种**取。
+ * 若误用别的语种（例如固定取 en）的集合，非 en 的书会按 en 的窗口决定是否保留链接：一个分类在 en 窗口里有书、
+ * 在 ko 窗口里没有时，ko 详情页就会给它留下 `/ko/category/x`，而这个页面是 404；反向，只在 ko 窗口里有书的分类
+ * 在 ko 详情页上反而会被去掉链接。夹具里同一个分类在两个语种的窗口里情况相反，两个方向都钉住。
+ */
+describe("语种错配：判定集合按书自己的语种取，不能串用别的语种的窗口", () => {
+  // en、ko 各 300 本：各自最新 240 本 = 序号 61..300。
+  const LOCALE_ROWS = [...books(300), ...books(300, "ko")];
+  const MISMATCH: Category[] = [
+    // sci-fi：en 窗口里有书（250..252）→ en 页面 200；ko 的书只有序号 30、31（ko 窗口之外）→ ko 页面 404。
+    { slug: "sci-fi", sortOrder: 1, locale: "en", ordinals: [[250, 252]] },
+    { slug: "sci-fi", sortOrder: 2, locale: "ko", ordinals: [[30, 31]] },
+    // wuxia：ko 窗口里有书（250..252，另有窗口之外的 30）→ ko 页面 200；en 只有窗口之外的序号 30 → en 页面 404。
+    { slug: "wuxia", sortOrder: 3, locale: "ko", ordinals: [[30, 30], [250, 252]] },
+    { slug: "wuxia", sortOrder: 4, locale: "en", ordinals: [[30, 30]] },
+    // mecha：只有 ko，最新的 11 本（ko 窗口之内）→ ko 页面 200，en 一本都没有。推荐区的"最新几本"都带它。
+    { slug: "mecha", sortOrder: 5, locale: "ko", ordinals: [[290, 300]] },
+  ];
+
+  it("夹具自检：同一个分类在 en 与 ko 的页面状态相反", async () => {
+    const { db } = startRequest(MISMATCH, LOCALE_ROWS);
+    expect(await getPublicCategoryPage(db, "en", "sci-fi", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(db, "ko", "sci-fi", 1)).toBeNull();
+    expect(await getPublicCategoryPage(db, "ko", "wuxia", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(db, "en", "wuxia", 1)).toBeNull();
+  });
+
+  it("ko 详情页：en 窗口里有书、ko 窗口里没有的分类无 href；只在 ko 窗口里有书的分类有 href（含 /ko 前缀）", async () => {
+    // ko 序号 30（ko 窗口之外）同时挂 sci-fi（ko 页面 404）与 wuxia（ko 页面 200）。
+    const { container } = await renderDetail(30, startRequest(MISMATCH, LOCALE_ROWS), "ko");
+    expect(detailTags(container)).toEqual([
+      { text: "Sci-fi", tag: "span", href: null },
+      { text: "Wuxia", tag: "a", href: "/ko/category/wuxia" },
+    ]);
+    expect(container.querySelector('a[href*="/category/sci-fi"]')).toBeNull();
+  });
+
+  it("ko 详情页：书在 ko 窗口之内、分类只在 ko 窗口里有书 → 仍是链接", async () => {
+    const { container } = await renderDetail(250, startRequest(MISMATCH, LOCALE_ROWS), "ko");
+    expect(detailTags(container)).toEqual([{ text: "Wuxia", tag: "a", href: "/ko/category/wuxia" }]);
+  });
+
+  it("en 详情页对称：只看 en 窗口——sci-fi 是链接、窗口之外才有书的 wuxia 无 href", async () => {
+    expect(detailTags((await renderDetail(250, startRequest(MISMATCH, LOCALE_ROWS), "en")).container))
+      .toEqual([{ text: "Sci-fi", tag: "a", href: "/category/sci-fi" }]);
+    expect(detailTags((await renderDetail(30, startRequest(MISMATCH, LOCALE_ROWS), "en")).container))
+      .toEqual([{ text: "Wuxia", tag: "span", href: null }]);
+  });
+
+  it("ko 全页核对：页面上出现的每个 /ko/category/{slug} 链接，ko 的 getPublicCategoryPage 都不为 null（含页脚）", async () => {
+    const fake = startRequest(MISMATCH, LOCALE_ROWS);
+    const { container } = await renderDetail(30, fake, "ko");
+    const anchors = categoryAnchors(container);
+    expect(anchors.length).toBeGreaterThan(0);
+    for (const { slug } of anchors) {
+      expect(await getPublicCategoryPage(fake.db, "ko", slug, 1), `/ko/category/${slug}`).not.toBeNull();
+    }
+  });
+
+  it("ko 推荐卡片（数据层同一个函数，相关推荐与新书推荐两处都走）：每个标签有 href ⟺ ko 页面 200；两个方向都出现", async () => {
+    // Math.random() = 0：随机采样取候选池最前面的。当前书 = ko 序号 31（只有 sci-fi）：
+    //   相关推荐 = 共享 sci-fi 的 ko 序号 30（标签 sci-fi：ko 页面 404、en 页面 200；wuxia：ko 页面 200、en 页面 404），
+    //             再用最新的无共享标签的书（序号 300..296，标签 mecha：只有 ko 有，ko 页面 200）补齐；
+    //   新书推荐 = 其后最新的几本（序号 295..290，标签同为 mecha）。
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const fake = startRequest(MISMATCH, LOCALE_ROWS);
+    const { related, newReleases } = await publicLoad.loadRelatedAndNewReleases("ko", "article-ko-0031", "novel-ko-31");
+
+    const tagsOf = (cards: typeof related) => cards.flatMap((card) => card.tags);
+    expect(tagsOf(related).filter((tag) => tag.slug === "sci-fi").map((tag) => tag.href)).toEqual([undefined]);
+    expect(tagsOf(related).filter((tag) => tag.slug === "wuxia").map((tag) => tag.href)).toEqual(["/ko/category/wuxia"]);
+    // 两个推荐区各自都带 mecha（只有 ko 有）：若判定误用 en 的集合，两处都会被去掉链接。
+    for (const [name, cards] of [["相关推荐", related], ["新书推荐", newReleases]] as const) {
+      const mecha = tagsOf(cards).filter((tag) => tag.slug === "mecha");
+      expect(mecha.length, name).toBeGreaterThan(0);
+      expect(mecha.map((tag) => tag.href), name).toEqual(mecha.map(() => "/ko/category/mecha"));
+    }
+    for (const tag of [...tagsOf(related), ...tagsOf(newReleases)]) {
+      const pageOk = (await getPublicCategoryPage(fake.db, "ko", tag.slug, 1)) !== null;
+      expect(tag.href !== undefined, `${tag.slug}: ko 页面 200=${pageOk}`).toBe(pageOk);
+    }
   });
 });
 

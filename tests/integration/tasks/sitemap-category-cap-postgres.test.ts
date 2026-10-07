@@ -22,7 +22,10 @@
  *      与 `listPublicCategoryPageCounts` 的键集合**完全一致**，集合里每个分类 `getPublicCategoryPage` 都不为 null，
  *      集合之外的分类页面都是 null；窗口之外的书（cap-30）的详情视图里，窗口里没有书的 adventure 没有 href，其余照常有；
  *   8. 推荐卡片（候选池 500 本 > 窗口 240 本）同理：每张卡片的每个标签，有 href ⟺ 页面 200；
- *   9. `seo_only`：书只是 seo_only（详情页可达、列表不收），它独占的分类页面 404，详情视图里该标签没有 href；开关打开下集合等价仍成立。
+ *   9. `seo_only`：书只是 seo_only（详情页可达、列表不收），它独占的分类页面 404，详情视图里该标签没有 href；开关打开下集合等价仍成立；
+ *  10. 语种错配（详情页）：判定集合按书自己的语种取。同一个分类在 en 窗口里有书、在 es 窗口里没有（反向亦然）：
+ *      es 详情页上前者无 href、后者有 href（带 /es 前缀）；
+ *  11. 语种错配（推荐卡片）：es 的推荐卡片按 es 的窗口判定，两个方向都有。
  *
  * 开关与角色约定同 `sitemap-refresh-postgres.test.ts`（同一个运行器喂同一组环境变量）。
  */
@@ -45,6 +48,7 @@ import {
   seedBulkBlogArticles,
   seedBulkPreviewChapters,
   seedBulkPublicArticles,
+  seedExistingCategoryRanges,
   seedManualCategoryRanges,
   type ChannelFixture,
   type ManualCategoryRange,
@@ -374,11 +378,12 @@ describe.skipIf(!enabled).sequential("B-38 站点地图分类网址只列页面�
     counts: ReadonlyMap<string, number>,
     status: ReadonlyMap<string, boolean>,
     where: string,
+    prefix = "",
   ) {
     for (const tag of tags) {
       expect(tag.href !== undefined, `${where}: ${tag.slug}（页面 200=${status.get(tag.slug)}）`).toBe(counts.has(tag.slug));
       expect(status.get(tag.slug), `${where}: ${tag.slug}`).toBe(counts.has(tag.slug));
-      if (tag.href !== undefined) expect(tag.href).toBe(`/category/${tag.slug}`);
+      if (tag.href !== undefined) expect(tag.href).toBe(`${prefix}/category/${tag.slug}`);
     }
   }
 
@@ -458,5 +463,83 @@ describe.skipIf(!enabled).sequential("B-38 站点地图分类网址只列页面�
     } finally {
       if (previous === undefined) delete process.env[flag]; else process.env[flag] = previous;
     }
+  }, 180_000);
+
+  /**
+   * 语种错配夹具：在默认夹具之上再加 es 300 本（最新 240 本 = 序号 61..300）。分类是全局的、归属是按书的：
+   *   - adventure：en 窗口里没有书（en 的书序号 7..50，页面 404）；es 窗口里有（250..252 与最新的 290..300）→ es 页面 200；另挂 es 序号 30。
+   *   - mystery：en 窗口里有书（250..252，页面 200）；es 的书只有序号 30、31（窗口之外）→ es 页面 404。
+   * 判定集合若误用别的语种（例如固定取 en），es 详情页上 adventure 会被去掉链接、mystery 会留下 `/es/category/mystery` 死链。
+   */
+  async function seedSpanishMismatch() {
+    const channel = await createChannelFixture(owner);
+    await seedBulkPublicArticles(owner, { prefix: "es", locale: "es", count: 300, channel, baseUpdatedAt });
+    await seedExistingCategoryRanges(owner, { prefix: "es", count: 300, categories: [
+      { slug: "adventure", ordinals: [[30, 30], [250, 252], [290, 300]] },
+      { slug: "mystery", ordinals: [[30, 31]] },
+    ] });
+  }
+
+  it("10) 语种错配（详情页）：判定集合按书自己的语种取——en 窗口里有书而 es 窗口里没有的分类无 href，只在 es 窗口里有书的分类有 href", async () => {
+    await seedSpanishMismatch();
+    const enCounts = await listPublicCategoryPageCounts(web, "en");
+    const esCounts = await listPublicCategoryPageCounts(web, "es");
+    // 夹具自检：同一个分类在两个语种里页面状态相反。
+    expect(enCounts.has("mystery")).toBe(true);
+    expect(enCounts.has("adventure")).toBe(false);
+    expect([...esCounts.keys()]).toEqual(["adventure"]);
+    expect(await getPublicCategoryPage(web, "es", "adventure", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(web, "es", "mystery", 1)).toBeNull();
+    expect(await getPublicCategoryPage(web, "en", "mystery", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(web, "en", "adventure", 1)).toBeNull();
+    // es 的页脚集合 === es 页面返回 200 的集合（不是 en 的）。
+    expect((await loadPublicCategories("es")).map((tag) => tag.slug)).toEqual([...esCounts.keys()]);
+
+    // es 序号 30（窗口之外）同时挂 adventure（es 页面 200）与 mystery（es 页面 404）。
+    const detail = (await loadNovelDetail((await articleOf("es-30")).id))!;
+    expect(detail.locale.code).toBe("es");
+    expect(detail.tags.map((tag) => tag.slug)).toEqual(["adventure", "mystery"]);
+    expect(detail.tags.map((tag) => tag.href)).toEqual(["/es/category/adventure", undefined]);
+    await expectLinksMatchPages(detail.tags, esCounts, await pageStatusBySlug("es"), "es-30", "/es");
+
+    // es 序号 250（窗口之内）：adventure 在 es 窗口里 → 仍是链接，尽管 en 窗口里没有它。
+    const inside = (await loadNovelDetail((await articleOf("es-250")).id))!;
+    expect(inside.tags.map((tag) => [tag.slug, tag.href])).toEqual([["adventure", "/es/category/adventure"]]);
+
+    // en 一侧不受影响：cap-250 的 mystery 照常是链接（en 窗口）。
+    const enDetail = (await loadNovelDetail((await articleOf("cap-250")).id))!;
+    expect(enDetail.tags.map((tag) => tag.href)).toEqual(["/category/mystery"]);
+  }, 180_000);
+
+  it("11) 语种错配（推荐卡片）：es 的推荐卡片按 es 窗口判定（相关推荐、新书推荐两处都走），每个标签有 href ⟺ es 页面 200，两个方向都出现", async () => {
+    await seedSpanishMismatch();
+    const esCounts = await listPublicCategoryPageCounts(web, "es");
+    const status = await pageStatusBySlug("es");
+    const current = await articleOf("es-31");
+
+    // Math.random() = 0（只在这一次调用期间生效）：当前书 = es 序号 31（只有 mystery）。
+    //   相关推荐 = 共享 mystery 的 es 序号 30（adventure：es 页面 200、en 页面 404；mystery：es 页面 404、en 页面 200），
+    //             再用最新的无共享标签的书（序号 300..296，标签 adventure）补齐；
+    //   新书推荐 = 其后最新的几本（序号 295..290，标签同为 adventure）。
+    clearRelatedNovelsPoolCacheForTest();
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    let recommendations;
+    try {
+      recommendations = await loadRelatedAndNewReleases("es", current.id, current.novelId!);
+    } finally {
+      random.mockRestore();
+      clearRelatedNovelsPoolCacheForTest();
+    }
+
+    const { related, newReleases } = recommendations;
+    const tagsOf = (cards: typeof related) => cards.flatMap((card) => card.tags);
+    expect(tagsOf(related).filter((tag) => tag.slug === "mystery").map((tag) => tag.href)).toEqual([undefined]);
+    // 两个推荐区各自都带 adventure（es 页面 200）：若判定误用 en 的集合（en 里 adventure 是 404），两处都会被去掉链接。
+    for (const [name, cards] of [["相关推荐", related], ["新书推荐", newReleases]] as const) {
+      const adventure = tagsOf(cards).filter((tag) => tag.slug === "adventure");
+      expect(adventure.length, name).toBeGreaterThan(0);
+      expect(adventure.map((tag) => tag.href), name).toEqual(adventure.map(() => "/es/category/adventure"));
+    }
+    await expectLinksMatchPages([...tagsOf(related), ...tagsOf(newReleases)], esCounts, status, "es 推荐卡片", "/es");
   }, 180_000);
 });
