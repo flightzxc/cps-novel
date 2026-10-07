@@ -451,7 +451,10 @@ export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,
   locale: SiteLocale,
   current?: PublicChromeCurrent,
-  categories?: readonly PublicTaxonomyTag[],
+  // B-38 第二部分：也可以传一个还没结算的 Promise（`Promise.all` 本来就会等它）。公开路由的
+  // `loadChrome` 借此把"页脚分类"落到请求内去重的 `loadPublicCategories`，同时保持与
+  // `getSiteSetting` 并行发起，不因为先等分类而把设置读取推迟一拍。
+  categories?: readonly PublicTaxonomyTag[] | PromiseLike<readonly PublicTaxonomyTag[]>,
   activeLocales?: readonly SiteLocale[],
 ) {
   const [settings, resolvedCategories] = await Promise.all([

@@ -303,6 +303,38 @@ export async function seedManualCategoryRanges(owner: PrismaClient, input: {
 }
 
 /**
+ * 把**已经存在**的分类（`canonical_tag`，按 slug 找）按序号区间挂到另一批书上——同一个分类同时出现在两个语种里
+ * （分类是全局的，归属是按书的）。与 `seedManualCategoryRanges` 的区别：不新建 `canonical_tag`，所以不会撞 slug 唯一约束。
+ * 同样走真实约束：`novel_tag_state.mode = 'manual'`、`novel_canonical_tag.source = 'manual'` 且带 `decided_by`。
+ * 用来构造"某分类在 A 语种窗口里有书、在 B 语种窗口里没有"这类语种错配场景。
+ */
+export async function seedExistingCategoryRanges(owner: PrismaClient, input: {
+  prefix: string;
+  count: number;
+  categories: ReadonlyArray<{ readonly slug: string; readonly ordinals: ManualCategoryRange["ordinals"] }>;
+}): Promise<void> {
+  const { prefix, count, categories } = input;
+  const admin = await owner.adminIdentity.create({ data: {
+    username: `existing-${prefix}-${randomUUID()}`, passwordHash: "scrypt$v1$test-only", sessionVersion: 1, role: "super_admin",
+  } });
+  await owner.$executeRaw`
+    INSERT INTO novel_tag_state (novel_id, mode, revision, created_at, updated_at)
+    SELECT md5(${prefix} || '-n-' || g)::uuid, 'manual', 0, now(), now()
+    FROM generate_series(1, ${count}::int) AS g`;
+  for (const category of categories) {
+    const tag = await owner.canonicalTag.findUniqueOrThrow({ where: { slug: category.slug }, select: { id: true } });
+    for (const [from, to] of category.ordinals) {
+      await owner.$executeRaw`
+        INSERT INTO novel_canonical_tag (id, novel_id, canonical_tag_id, source, decided_by, evidence,
+                                         created_at, updated_at, decided_at)
+        SELECT md5(${prefix} || '-t-' || ${category.slug} || '-' || g)::uuid, md5(${prefix} || '-n-' || g)::uuid,
+               ${tag.id}::uuid, 'manual', ${admin.id}::uuid, '{}'::jsonb, now(), now(), now()
+        FROM generate_series(${from}::int, ${to}::int) AS g`;
+    }
+  }
+}
+
+/**
  * 独立预期：每个分类（slug）在**全部公开可见书目**（站点地图候选口径）里归属书的最大 `article.updated_at`。
  * 站点地图分类条目的 lastmod = max(分类 updatedAt, 这个值)。
  */

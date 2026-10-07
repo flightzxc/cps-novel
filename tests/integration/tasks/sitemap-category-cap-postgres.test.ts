@@ -17,15 +17,26 @@
  *   5. `seo_only`：书在最新 240 本之内、但只是 seo_only（站点地图收、列表不收）→ 不列这个分类；
  *   6. 性能：每个语种只调用一次页面的列表查询（`take = PUBLIC_LIST_CAP`），与分类个数无关。
  *
+ * B-38 第二部分（同一批夹具，站内分类链接）：详情页标签 / 推荐卡片的 `href` 只给页面返回 200 的分类。
+ *   7. 详情页数据层（真实 `public-load`，走 web_app 角色）给出的"可链接分类集合"（页脚用的 `listPublicCategories`）
+ *      与 `listPublicCategoryPageCounts` 的键集合**完全一致**，集合里每个分类 `getPublicCategoryPage` 都不为 null，
+ *      集合之外的分类页面都是 null；窗口之外的书（cap-30）的详情视图里，窗口里没有书的 adventure 没有 href，其余照常有；
+ *   8. 推荐卡片（候选池 500 本 > 窗口 240 本）同理：每张卡片的每个标签，有 href ⟺ 页面 200；
+ *   9. `seo_only`：书只是 seo_only（详情页可达、列表不收），它独占的分类页面 404，详情视图里该标签没有 href；开关打开下集合等价仍成立；
+ *  10. 语种错配（详情页）：判定集合按书自己的语种取。同一个分类在 en 窗口里有书、在 es 窗口里没有（反向亦然）：
+ *      es 详情页上前者无 href、后者有 href（带 /es 前缀）；
+ *  11. 语种错配（推荐卡片）：es 的推荐卡片按 es 的窗口判定，两个方向都有。
+ *
  * 开关与角色约定同 `sitemap-refresh-postgres.test.ts`（同一个运行器喂同一组环境变量）。
  */
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { createSitemapFamilyBuilder, type SitemapEntry, type SitemapType } from "@/lib/seo/sitemap";
-import { getPublicCategoryPage } from "@/lib/site/category-queries";
-import { BROWSE_PAGE_SIZE, listPublicArticles, PUBLIC_LIST_CAP } from "@/lib/site/queries";
+import { getPublicCategoryPage, listPublicCategoryPageCounts } from "@/lib/site/category-queries";
+import { BROWSE_PAGE_SIZE, listPublicArticles, listPublicCategories, PUBLIC_LIST_CAP } from "@/lib/site/queries";
+import { clearRelatedNovelsPoolCacheForTest } from "@/lib/site/related-novels";
 
 import {
   applyBulkNoise,
@@ -37,10 +48,17 @@ import {
   seedBulkBlogArticles,
   seedBulkPreviewChapters,
   seedBulkPublicArticles,
+  seedExistingCategoryRanges,
   seedManualCategoryRanges,
   type ChannelFixture,
   type ManualCategoryRange,
 } from "./fixtures/bulk-public-articles";
+
+// 详情页数据层（`@/app/_lib/public-load`）走 `@/app/_lib/public-deps` 的 `prisma`；这里把它指到 web_app 角色的连接
+// （与 `tests/integration/tagging/public-auto-postgres.test.ts` 同款做法），测的就是生产里详情页用的那套 loader。
+const shared = vi.hoisted(() => ({ web: null as PrismaClient | null }));
+vi.mock("@/app/_lib/public-deps", () => ({ prisma: new Proxy({}, { get: (_target, key) => Reflect.get(shared.web!, key) }) }));
+import { loadNovelDetail, loadPublicCategories, loadRelatedAndNewReleases } from "@/app/_lib/public-load";
 
 const enabled = process.env.SITEMAP_REFRESH_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.SITEMAP_REFRESH_OWNER_DATABASE_URL });
@@ -156,7 +174,7 @@ async function expectedListedCounts(locale: string, prefix: string, categories: 
 }
 
 describe.skipIf(!enabled).sequential("B-38 站点地图分类网址只列页面返回 200 的（disposable PostgreSQL 16.14）", () => {
-  beforeAll(() => { process.env.SITE_URL = SITE; });
+  beforeAll(() => { process.env.SITE_URL = SITE; shared.web = web; });
   beforeEach(async () => {
     await resetDatabase();
     await seedFixture();
@@ -341,4 +359,187 @@ describe.skipIf(!enabled).sequential("B-38 站点地图分类网址只列页面�
     await build("blogpage", "en", blogEnv, counted);
     expect(listQueries).toBe(2);
   }, 120_000);
+
+  /** 页面（web_app 角色）的分类视图：库里每个分类 → 第 1 页是否 200。 */
+  async function pageStatusBySlug(locale: SiteLocale) {
+    const slugs = (await owner.canonicalTag.findMany({ select: { slug: true } })).map((tag) => tag.slug);
+    const status = new Map<string, boolean>();
+    for (const slug of slugs) status.set(slug, (await getPublicCategoryPage(web, locale, slug, 1)) !== null);
+    return status;
+  }
+
+  async function articleOf(slug: string) {
+    return owner.article.findFirstOrThrow({ where: { slug }, select: { id: true, novelId: true } });
+  }
+
+  /** 断言：有 href 的标签 ⟺ 页面 200（slug 在 `counts` 里）；有 href 的 href 就是 `/category/{slug}`。 */
+  async function expectLinksMatchPages(
+    tags: ReadonlyArray<{ slug: string; href?: string }>,
+    counts: ReadonlyMap<string, number>,
+    status: ReadonlyMap<string, boolean>,
+    where: string,
+    prefix = "",
+  ) {
+    for (const tag of tags) {
+      expect(tag.href !== undefined, `${where}: ${tag.slug}（页面 200=${status.get(tag.slug)}）`).toBe(counts.has(tag.slug));
+      expect(status.get(tag.slug), `${where}: ${tag.slug}`).toBe(counts.has(tag.slug));
+      if (tag.href !== undefined) expect(tag.href).toBe(`${prefix}/category/${tag.slug}`);
+    }
+  }
+
+  it("7) 详情页的可链接分类集合 === listPublicCategoryPageCounts 的键；集合里每个分类页面都 200、集合之外都 404；窗口之外的书只有 200 的分类带 href", async () => {
+    for (const locale of ["en", "ko"] as const) {
+      const counts = await listPublicCategoryPageCounts(web, locale);
+      // 详情页用的集合：页脚那份（loadPublicCategories = listPublicCategories，同一请求内已取过）。
+      const footer = (await loadPublicCategories(locale)).map((tag) => tag.slug);
+      expect([...new Set(footer)].sort(), `${locale} 页脚集合`).toEqual([...counts.keys()].sort());
+      expect((await listPublicCategories(web, locale)).map((tag) => tag.slug).sort()).toEqual([...counts.keys()].sort());
+      const status = await pageStatusBySlug(locale);
+      for (const [slug, ok] of status) expect(counts.has(slug), `${locale} ${slug}`).toBe(ok);
+      for (const slug of counts.keys()) expect(await getPublicCategoryPage(web, locale, slug, 1), `${locale} ${slug}`).not.toBeNull();
+    }
+    // 非空洞：en 里 adventure 被排除（库里有它的 44 本书，但页面 404）。
+    const enCounts = await listPublicCategoryPageCounts(web, "en");
+    expect([...enCounts.keys()].sort()).toEqual(["fantasy", "mystery", "romance", "staff-pick"]);
+
+    // cap-30（序号 30，在窗口 61..300 之外）同时挂 adventure（页面 404）、fantasy、romance（页面 200）。
+    const status = await pageStatusBySlug("en");
+    const outside = await articleOf("cap-30");
+    const detail = (await loadNovelDetail(outside.id))!;
+    expect(detail.tags.map((tag) => tag.slug)).toEqual(["adventure", "fantasy", "romance"]);
+    expect(detail.tags.map((tag) => tag.href)).toEqual([undefined, "/category/fantasy", "/category/romance"]);
+    await expectLinksMatchPages(detail.tags, enCounts, status, "cap-30");
+
+    // cap-250（窗口之内）的 mystery 照常是链接。
+    const inside = (await loadNovelDetail((await articleOf("cap-250")).id))!;
+    expect(inside.tags.map((tag) => [tag.slug, tag.href])).toEqual([["mystery", "/category/mystery"]]);
+  }, 180_000);
+
+  it("8) 推荐卡片同理：候选池（500 本）里窗口之外的卡片，每个标签有 href ⟺ 页面 200", async () => {
+    const counts = await listPublicCategoryPageCounts(web, "en");
+    const status = await pageStatusBySlug("en");
+    const current = await articleOf("cap-45");
+
+    // 随机采样固定取候选池最前面的（`sampleEntries` 的 Math.random() = 0，只在这一次调用期间生效）：
+    // cap-45 只有 adventure，"相关推荐"取共享 adventure 的最新几本（序号 50..44，adventure 页面 404），
+    // "新书推荐"取最新几本（序号 300..295，其中 299、300 有页面 200 的 staff-pick）。
+    clearRelatedNovelsPoolCacheForTest();
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    let recommendations;
+    try {
+      recommendations = await loadRelatedAndNewReleases("en", current.id, current.novelId!);
+    } finally {
+      random.mockRestore();
+      clearRelatedNovelsPoolCacheForTest();
+    }
+
+    const { related, newReleases } = recommendations;
+    const tags = [...related, ...newReleases].flatMap((card) => card.tags);
+    expect(related.length).toBeGreaterThan(0);
+    expect(newReleases.length).toBeGreaterThan(0);
+    expect(tags.some((tag) => tag.href === undefined)).toBe(true);
+    expect(tags.some((tag) => tag.href !== undefined)).toBe(true);
+    await expectLinksMatchPages(tags, counts, status, "推荐卡片");
+  }, 180_000);
+
+  it("9) seo_only：书在窗口之内但只是 seo_only → 它独占的分类页面 404，详情视图里该标签没有 href；开关打开时集合等价仍成立", async () => {
+    const flag = "FEATURE_ARTICLE_SEO_VISIBILITY";
+    const previous = process.env[flag];
+    process.env[flag] = "true";
+    try {
+      await owner.$executeRaw`UPDATE article SET seo_visibility = 'seo_only' WHERE slug IN ('cap-299', 'cap-300')`;
+      const counts = await listPublicCategoryPageCounts(web, "en");
+      expect([...counts.keys()].sort()).toEqual(["fantasy", "mystery", "romance"]);
+      expect((await loadPublicCategories("en")).map((tag) => tag.slug).sort()).toEqual([...counts.keys()].sort());
+
+      // seo_only 书的详情页仍可达（可收录、只是不进列表）；它独占的 staff-pick 页面 404 → 不能是链接。
+      expect(await getPublicCategoryPage(web, "en", "staff-pick", 1)).toBeNull();
+      const detail = (await loadNovelDetail((await articleOf("cap-299")).id))!;
+      expect(detail.tags.map((tag) => [tag.slug, tag.href])).toEqual([["staff-pick", undefined]]);
+
+      // 同一个窗口里的普通书不受影响：cap-250 的 mystery 仍是链接。
+      const normal = (await loadNovelDetail((await articleOf("cap-250")).id))!;
+      expect(normal.tags.map((tag) => tag.href)).toEqual(["/category/mystery"]);
+    } finally {
+      if (previous === undefined) delete process.env[flag]; else process.env[flag] = previous;
+    }
+  }, 180_000);
+
+  /**
+   * 语种错配夹具：在默认夹具之上再加 es 300 本（最新 240 本 = 序号 61..300）。分类是全局的、归属是按书的：
+   *   - adventure：en 窗口里没有书（en 的书序号 7..50，页面 404）；es 窗口里有（250..252 与最新的 290..300）→ es 页面 200；另挂 es 序号 30。
+   *   - mystery：en 窗口里有书（250..252，页面 200）；es 的书只有序号 30、31（窗口之外）→ es 页面 404。
+   * 判定集合若误用别的语种（例如固定取 en），es 详情页上 adventure 会被去掉链接、mystery 会留下 `/es/category/mystery` 死链。
+   */
+  async function seedSpanishMismatch() {
+    const channel = await createChannelFixture(owner);
+    await seedBulkPublicArticles(owner, { prefix: "es", locale: "es", count: 300, channel, baseUpdatedAt });
+    await seedExistingCategoryRanges(owner, { prefix: "es", count: 300, categories: [
+      { slug: "adventure", ordinals: [[30, 30], [250, 252], [290, 300]] },
+      { slug: "mystery", ordinals: [[30, 31]] },
+    ] });
+  }
+
+  it("10) 语种错配（详情页）：判定集合按书自己的语种取——en 窗口里有书而 es 窗口里没有的分类无 href，只在 es 窗口里有书的分类有 href", async () => {
+    await seedSpanishMismatch();
+    const enCounts = await listPublicCategoryPageCounts(web, "en");
+    const esCounts = await listPublicCategoryPageCounts(web, "es");
+    // 夹具自检：同一个分类在两个语种里页面状态相反。
+    expect(enCounts.has("mystery")).toBe(true);
+    expect(enCounts.has("adventure")).toBe(false);
+    expect([...esCounts.keys()]).toEqual(["adventure"]);
+    expect(await getPublicCategoryPage(web, "es", "adventure", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(web, "es", "mystery", 1)).toBeNull();
+    expect(await getPublicCategoryPage(web, "en", "mystery", 1)).not.toBeNull();
+    expect(await getPublicCategoryPage(web, "en", "adventure", 1)).toBeNull();
+    // es 的页脚集合 === es 页面返回 200 的集合（不是 en 的）。
+    expect((await loadPublicCategories("es")).map((tag) => tag.slug)).toEqual([...esCounts.keys()]);
+
+    // es 序号 30（窗口之外）同时挂 adventure（es 页面 200）与 mystery（es 页面 404）。
+    const detail = (await loadNovelDetail((await articleOf("es-30")).id))!;
+    expect(detail.locale.code).toBe("es");
+    expect(detail.tags.map((tag) => tag.slug)).toEqual(["adventure", "mystery"]);
+    expect(detail.tags.map((tag) => tag.href)).toEqual(["/es/category/adventure", undefined]);
+    await expectLinksMatchPages(detail.tags, esCounts, await pageStatusBySlug("es"), "es-30", "/es");
+
+    // es 序号 250（窗口之内）：adventure 在 es 窗口里 → 仍是链接，尽管 en 窗口里没有它。
+    const inside = (await loadNovelDetail((await articleOf("es-250")).id))!;
+    expect(inside.tags.map((tag) => [tag.slug, tag.href])).toEqual([["adventure", "/es/category/adventure"]]);
+
+    // en 一侧不受影响：cap-250 的 mystery 照常是链接（en 窗口）。
+    const enDetail = (await loadNovelDetail((await articleOf("cap-250")).id))!;
+    expect(enDetail.tags.map((tag) => tag.href)).toEqual(["/category/mystery"]);
+  }, 180_000);
+
+  it("11) 语种错配（推荐卡片）：es 的推荐卡片按 es 窗口判定（相关推荐、新书推荐两处都走），每个标签有 href ⟺ es 页面 200，两个方向都出现", async () => {
+    await seedSpanishMismatch();
+    const esCounts = await listPublicCategoryPageCounts(web, "es");
+    const status = await pageStatusBySlug("es");
+    const current = await articleOf("es-31");
+
+    // Math.random() = 0（只在这一次调用期间生效）：当前书 = es 序号 31（只有 mystery）。
+    //   相关推荐 = 共享 mystery 的 es 序号 30（adventure：es 页面 200、en 页面 404；mystery：es 页面 404、en 页面 200），
+    //             再用最新的无共享标签的书（序号 300..296，标签 adventure）补齐；
+    //   新书推荐 = 其后最新的几本（序号 295..290，标签同为 adventure）。
+    clearRelatedNovelsPoolCacheForTest();
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    let recommendations;
+    try {
+      recommendations = await loadRelatedAndNewReleases("es", current.id, current.novelId!);
+    } finally {
+      random.mockRestore();
+      clearRelatedNovelsPoolCacheForTest();
+    }
+
+    const { related, newReleases } = recommendations;
+    const tagsOf = (cards: typeof related) => cards.flatMap((card) => card.tags);
+    expect(tagsOf(related).filter((tag) => tag.slug === "mystery").map((tag) => tag.href)).toEqual([undefined]);
+    // 两个推荐区各自都带 adventure（es 页面 200）：若判定误用 en 的集合（en 里 adventure 是 404），两处都会被去掉链接。
+    for (const [name, cards] of [["相关推荐", related], ["新书推荐", newReleases]] as const) {
+      const adventure = tagsOf(cards).filter((tag) => tag.slug === "adventure");
+      expect(adventure.length, name).toBeGreaterThan(0);
+      expect(adventure.map((tag) => tag.href), name).toEqual(adventure.map(() => "/es/category/adventure"));
+    }
+    await expectLinksMatchPages([...tagsOf(related), ...tagsOf(newReleases)], esCounts, status, "es 推荐卡片", "/es");
+  }, 180_000);
 });

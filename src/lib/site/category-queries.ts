@@ -44,6 +44,11 @@ function hasCategory(card: NovelCardView, slug: string): boolean {
  * `listPublicCategoryPageCounts`（站点地图该列哪些分类网址）都经由它，不得在别处另写一份——
  * 否则站点地图与页面会再次漂移（B-38：站点地图按全量书目列分类，页面只看最新 240 本，
  * 冷门分类在最新 240 本里一本都没有时，站点地图列了、页面 404）。
+ *
+ * 站内链接（B-38 第二部分，`@/lib/site/category-links`）是这条谓词的第三个消费者：详情页标签只有在
+ * 分类页返回 200 时才保留 `href`。那边取的"可链接分类集合"是页脚用的 `listPublicCategories`
+ * （同一窗口、同一标签投影，新增 0 次查询），其 slug 集合与本函数族恒等，由
+ * `tests/backend/site/category-link-set-equality.test.ts` 与真实库用例钉死。
  */
 function cardsInCategory(cards: readonly NovelCardView[], slug: string): NovelCardView[] {
   return cards.filter((card) => hasCategory(card, slug));
