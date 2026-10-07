@@ -1495,3 +1495,10 @@ Owner回复“我登录了基本正常”，并提供v0.5.9后台渠道账户页
 第0～5步保持既有PASS；第6步worker预热+三采样PASS、Owner登录/2FA及只读认证记录核对PASS；第7步一次刷新成功、35分片/118292 URL/22.522秒、14语种28745小说/85964正文及236撤回排除PASS，分类404登记“已知缺陷B-38，Owner接受开放”，随v0.5.10修复；第8步GSC/三监控待做（Owner明确延后）；第9步无批次需恢复、Git证据/台账/同版开发日志已push核远端、Notion开放状态已同步读回，后台完成核验收据随后同步。既有DEFERRED/WAIVED保留，不混写成PASS。
 
 **v0.5.9 于 2026-10-07 切换到正式域名 pulsenovels.com 对外开放；公开确认时间2026-10-07 19:39:17 JST（10:39:17.521832Z）。维护OFF；成功public部署后未回退；本次不发新版本或tag，ops分支不合并。**
+
+
+### 19:49 JST 最终认证收据 Notion同步读回与治理完成
+
+后台认证记录及Owner截图证据HEAD `2f8cfa96c7a97dfb1d683a63b955e9afbc59a32b` 已push，远端HEAD一致。既有Notion当前快照及v0.5.9台账已更新Owner登录/2FA完成、实际会话/challenge时间与operation_audit无对应Auth事件的真实口径；异步任务 `task_426aa7d7776741ce8a8bae76e86f738b` succeeded，fetch核对全部关键值PASS，除目标v0.5.9状态单元外第二区及之后的规则、其它版本、历史和模板逐字一致。链接：https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2。
+
+发版治理：原Final/tag/image复用，本轮按Owner要求不发新版本、不打tag；ops证据分支已push核远端，不合并；版本台账与既有同版开发日志已登记正式开放及Owner2FA完成；Notion已同步读回PASS。本收据后续提交只追加文档，不改变运行身份。GSC、三条外部监控待做；B-38为Owner接受的既有缺陷、随v0.5.10修复；异地恢复DEFERRED、X8排重WAIVED如实保留。授权范围收尾完成。
