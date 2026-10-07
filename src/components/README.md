@@ -12,7 +12,8 @@
 | --- | --- |
 | `Container.tsx` | 内容宽度容器，最大宽度走 `--novel-content-max` |
 | `Button.tsx` | 行动按钮三档：`accent`（纸色填充）/ `outline`（描边）/ `quiet`。**没有全圆角** |
-| `CoverImage.tsx` | 封面，比例只走 `--novel-cover-aspect`；缺图渲染占位块 |
+| `CoverImage.tsx` | 封面，比例只走 `--novel-cover-aspect`；缺图或加载失败都渲染占位块；`priority` 为真时 eager + 高优先级 |
+| `CoverPreconnect.tsx` | 封面图床 `<link rel="preconnect">`（服务端组件，仅 https 绝对地址、按 origin 去重） |
 | `Tag.tsx` | 站点标签与标签列表。**空数组返回 `null`**，让「标签为空即整块消失」难以违反 |
 | `MetaList.tsx` | 元信息行：流式，只渲染真实存在的项；一项也没有时整行不渲染 |
 | `SectionHeader.tsx` | 区块小标题。**不用 emoji 装饰** |

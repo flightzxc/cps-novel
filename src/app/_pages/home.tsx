@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { JsonLd } from "@/app/_components/json-ld";
+import { CoverPreconnect } from "@/components/CoverPreconnect";
 import { loadActiveLocales, loadChrome, loadHomeCarousel, loadHomeNovels, loadPublicCategories } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
@@ -109,6 +110,8 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
 
   return (
     <>
+      {/* 初始激活的轮播项封面（上游图床直链）首屏一定会加载：提前握手，B-37 阶段 0。 */}
+      <CoverPreconnect urls={[featuredList[0]?.novel.coverUrl]} />
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
       <HomeScreen
         locale={locale}

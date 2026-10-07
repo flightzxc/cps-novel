@@ -257,3 +257,31 @@ describe("小说详情页 · 只有一个 H1（A2/D2）", () => {
     expect(container.querySelectorAll("h1")).toHaveLength(1);
   });
 });
+/**
+ * B-37 阶段 0：详情页主封面在首屏一定可见，传 `priority`（eager + fetchpriority=high）。
+ * 推荐区的 BookCard 封面不动，继续 lazy——优先级是相对的，全部拉高等于没拉。
+ */
+describe("小说详情页 · 主封面加载优先级（B-37 阶段 0）", () => {
+  it("主封面 eager + fetchpriority=high；推荐区与新书区的封面仍是 lazy", () => {
+    const { container } = render(
+      <NovelDetailScreen
+        locale="en"
+        novel={{ ...MOCK_NOVEL_DETAIL, coverUrl: "https://img.example.test/cover/main.jpg" }}
+        related={MOCK_NOVEL_CARDS.slice(0, 2)}
+        newReleases={MOCK_NOVEL_CARDS.slice(2, 4)}
+      />,
+    );
+
+    const main = container.querySelector<HTMLImageElement>('img[src="https://img.example.test/cover/main.jpg"]')!;
+    expect(main).not.toBeNull();
+    expect(main.getAttribute("loading")).toBe("eager");
+    expect(main.getAttribute("fetchpriority")).toBe("high");
+
+    const others = [...container.querySelectorAll<HTMLImageElement>("img")].filter((img) => img !== main);
+    expect(others.length).toBeGreaterThanOrEqual(4);
+    for (const img of others) {
+      expect(img.getAttribute("loading")).toBe("lazy");
+      expect(img.hasAttribute("fetchpriority")).toBe(false);
+    }
+  });
+});

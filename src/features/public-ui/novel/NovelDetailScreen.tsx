@@ -61,6 +61,8 @@ export function NovelDetailScreen({
                 src={novel.coverUrl}
                 alt={t("novel.coverAlt", { title: novel.title })}
                 sizeHint="(min-width: 768px) 260px, 200px"
+                // 主封面在首屏一定可见：eager + 高优先级（B-37 阶段 0；CPS 详情主封面同款）
+                priority
               />
             </div>
 
