@@ -221,3 +221,109 @@ export async function oracleVisibleBlogArticles(owner: PrismaClient, locale: str
       AND status = 'published' AND deleted_at IS NULL
     ORDER BY id`;
 }
+
+export type ListedArticleRow = { slug: string; id: string };
+
+/**
+ * 公开列表（首页 / 浏览 / 分类页共用的 `listPublicArticles`）的**独立预期**：先在库里按页面自己的 where 取
+ * 「已发布、未软删、小说已发布且未软删、推广链接状态 fetched」，按 `published_at DESC, id ASC` 只取前
+ * `cap` 条（`PUBLIC_LIST_CAP`），**然后**再在应用层去掉推广地址去空白后为空的行（`filterPromoReady`
+ * 在截断之后才执行，所以被去掉的行不会让后面的书补位进来）。注意它**不**排除推广链接软删的行
+ * （列表 where 没有这一条）——与 `oracleVisibleArticles`（站点地图候选口径）有意不同。
+ * 与被测代码完全不共用实现。
+ */
+export async function oracleListedArticles(
+  owner: PrismaClient,
+  locale: string,
+  cap: number,
+): Promise<ListedArticleRow[]> {
+  return owner.$queryRaw<ListedArticleRow[]>`
+    SELECT slug, id FROM (
+      SELECT a.slug, a.id::text AS id, a.published_at, p.web_url, p.app_url
+      FROM article a
+      JOIN novel n ON n.id = a.novel_id
+      JOIN promo_link p ON p.id = a.promo_link_id AND p.novel_id = a.novel_id
+      WHERE a.locale = ${locale} AND a.article_type = 'novel_article'
+        AND a.status = 'published' AND a.deleted_at IS NULL
+        AND n.status = 'published' AND n.deleted_at IS NULL
+        AND p.status = 'fetched'
+      ORDER BY a.published_at DESC, a.id ASC
+      LIMIT ${cap}::int
+    ) top
+    WHERE btrim(coalesce(web_url, '')) <> '' OR btrim(coalesce(app_url, '')) <> ''
+    ORDER BY published_at DESC, id ASC`;
+}
+
+export type ManualCategoryRange = {
+  readonly slug: string;
+  readonly displayName: string;
+  /** 序号闭区间：序号落在任一区间里的书归这个分类（一本书可以同时归多个分类）。 */
+  readonly ordinals: ReadonlyArray<readonly [from: number, to: number]>;
+};
+
+/**
+ * 按序号区间指定归属的手工分类（与 `seedBulkManualCategories` 的「序号取模」互补：这里要精确控制
+ * 「哪个分类的书落在最新 N 本之外」）。走同样的真实约束：`novel_tag_state.mode = 'manual'`、
+ * `novel_canonical_tag.source = 'manual'` 且带 `decided_by`。`canonical_tag.updated_at` 统一回拨到 `tagUpdatedAt`，
+ * 让站点地图 lastmod（取分类与归属文章 updatedAt 的最大值）由文章决定，而不是被「分类刚建好」的当前时间盖过。
+ */
+export async function seedManualCategoryRanges(owner: PrismaClient, input: {
+  prefix: string;
+  count: number;
+  categories: readonly ManualCategoryRange[];
+  tagUpdatedAt: Date;
+}): Promise<Array<{ slug: string; id: string }>> {
+  const { prefix, count, categories, tagUpdatedAt } = input;
+  const admin = await owner.adminIdentity.create({ data: {
+    username: `ranges-${prefix}-${randomUUID()}`, passwordHash: "scrypt$v1$test-only", sessionVersion: 1, role: "super_admin",
+  } });
+  await owner.$executeRaw`
+    INSERT INTO novel_tag_state (novel_id, mode, revision, created_at, updated_at)
+    SELECT md5(${prefix} || '-n-' || g)::uuid, 'manual', 0, now(), now()
+    FROM generate_series(1, ${count}::int) AS g`;
+  const created: Array<{ slug: string; id: string }> = [];
+  for (const [index, category] of categories.entries()) {
+    const tag = await owner.canonicalTag.create({ data: {
+      stableId: `ct-v1-${prefix}-${category.slug}`, slug: category.slug, canonicalDefinition: "Fixture",
+      sortOrder: index + 1, taxonomyVersion: "category-cap-fixture",
+      translations: { create: [{ locale: "en", displayName: category.displayName }] },
+    } });
+    created.push({ slug: category.slug, id: tag.id });
+    for (const [from, to] of category.ordinals) {
+      await owner.$executeRaw`
+        INSERT INTO novel_canonical_tag (id, novel_id, canonical_tag_id, source, decided_by, evidence,
+                                         created_at, updated_at, decided_at)
+        SELECT md5(${prefix} || '-t-' || ${category.slug} || '-' || g)::uuid, md5(${prefix} || '-n-' || g)::uuid,
+               ${tag.id}::uuid, 'manual', ${admin.id}::uuid, '{}'::jsonb, now(), now(), now()
+        FROM generate_series(${from}::int, ${to}::int) AS g`;
+    }
+  }
+  await owner.$executeRaw`UPDATE canonical_tag SET updated_at = ${tagUpdatedAt}::timestamptz`;
+  return created;
+}
+
+/**
+ * 独立预期：每个分类（slug）在**全部公开可见书目**（站点地图候选口径）里归属书的最大 `article.updated_at`。
+ * 站点地图分类条目的 lastmod = max(分类 updatedAt, 这个值)。
+ */
+export async function oracleCategoryNewestArticleUpdate(
+  owner: PrismaClient,
+  locale: string,
+): Promise<Map<string, Date>> {
+  const rows = await owner.$queryRaw<Array<{ slug: string; newest: Date }>>`
+    SELECT ct.slug, max(a.updated_at) AS newest
+    FROM novel_canonical_tag nct
+    JOIN canonical_tag ct ON ct.id = nct.canonical_tag_id AND ct.status = 'active'
+    JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
+    JOIN article a ON a.novel_id = nct.novel_id
+    JOIN novel n ON n.id = a.novel_id
+    JOIN promo_link p ON p.id = a.promo_link_id AND p.novel_id = a.novel_id
+    WHERE nct.source = 'manual'
+      AND a.locale = ${locale} AND a.article_type = 'novel_article'
+      AND a.status = 'published' AND a.deleted_at IS NULL
+      AND n.status = 'published' AND n.deleted_at IS NULL
+      AND p.status = 'fetched' AND p.deleted_at IS NULL
+      AND (btrim(coalesce(p.web_url, '')) <> '' OR btrim(coalesce(p.app_url, '')) <> '')
+    GROUP BY ct.slug`;
+  return new Map(rows.map((row) => [row.slug, row.newest]));
+}
