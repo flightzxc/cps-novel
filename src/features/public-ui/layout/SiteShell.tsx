@@ -3,6 +3,7 @@ import type { NavItem } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT, loadMessages } from "@/lib/locale/messages";
 import { MessagesProvider } from "@/lib/locale/messages/MessagesProvider";
+import { DocumentLocaleSync } from "./DocumentLocaleSync";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 
@@ -55,6 +56,9 @@ export function SiteShell({
 
   return (
     <MessagesProvider locale={locale} messages={messages}>
+      {/* 软跳转（语言菜单 router.push）不会让根布局重渲染，`<html lang dir>` 会停在
+          上一个语种；外壳挂载后按本页 locale 同步一次，见 DocumentLocaleSync。 */}
+      <DocumentLocaleSync locale={locale} />
       <div className="relative flex min-h-screen flex-col bg-novel-bg">
         <a
           href="#main"

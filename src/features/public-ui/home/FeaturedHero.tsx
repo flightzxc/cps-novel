@@ -208,14 +208,18 @@ export function FeaturedHero({
     if (count < 2) {
       return;
     }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      go(index + 1);
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+      return;
     }
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      go(index - 1);
-    }
+    // 🔴 方向在**按键时**读，不在渲染时读：根属性 `<html dir>` 会在语言切换后被
+    // `DocumentLocaleSync` 改写，渲染期快照会过期。读最近的带 `dir` 属性的祖先，
+    // 而不是 `getComputedStyle`——jsdom 不实现 `dir` 的继承，计算样式在测试里恒为 ltr。
+    // 从右到左时「下一项」从左侧进入，所以 ArrowLeft 前进、ArrowRight 后退；
+    // 从左到右（含找不到 `dir` 属性）时与改前逐字一致：ArrowRight 前进。
+    const rtl = event.currentTarget.closest("[dir]")?.getAttribute("dir")?.toLowerCase() === "rtl";
+    const forwardKey = rtl ? "ArrowLeft" : "ArrowRight";
+    event.preventDefault();
+    go(event.key === forwardKey ? index + 1 : index - 1);
   }
 
   return (
@@ -309,10 +313,21 @@ export function FeaturedHero({
           实现方式是整条轨道横向位移，而不是把相邻项单独定位——后者在项数变化
           时要算一堆边界条件，轨道位移只有一个公式。
 
-          定位公式：轨道左边缘先放到父容器 50%（left-1/2），再左移半个 banner
-          让第 0 项居中，之后每前进一项就再左移「一个 banner + 一个间距」。
+          定位公式（从左到右）：轨道起始边先放到父容器 50%（start-1/2，从左到右时即
+          left: 50%），再左移半个 banner 让第 0 项居中，之后每前进一项就再左移
+          「一个 banner + 一个间距」。
           用 --novel-hero-banner-w 而不是百分比，是因为百分比会相对轨道自身
           总宽（随项数变化），公式会随项数漂移。
+
+          🔴 从右到左（2026-10-07，PN-02）：轨道是 flex 容器，项目从**右**边起排，
+          所以起始边是右边缘——必须用逻辑属性 start-1/2（从右到左时即 right: 50%），
+          不能用物理的 left-1/2；位移也要整体反号（第 N 项向**右**移才回到中心，
+          「下一项」因此从左侧进入）。反号靠方向系数 --hero-dir：轨道上默认 1，
+          用 Tailwind 的 rtl: 变体在从右到左时改成 -1（跟随祖先 dir，不新增 prop），
+          transform 写成 translateX(calc(var(--hero-dir) * (原公式)))。
+          从左到右时系数恒为 1，几何与改前逐像素一致。
+          有了这条，轮播不再依赖「`<html dir>` 恰好是 ltr」才可见——此前菜单切到
+          阿拉伯语时根属性遗留 ltr 让它偶然正常、直接打开 /ar 却整块在屏幕外。
 
           🔴 2026-09-20 首屏密度收口：这一列从 `justify-center` 改成
           `justify-start` + 显式 pt/pb。居中会把上下留白锁成相等，而这一屏
@@ -329,13 +344,14 @@ export function FeaturedHero({
           <div
             data-testid="featured-hero-track"
             className={
-              "relative left-1/2 flex items-stretch gap-[var(--novel-hero-banner-gap)] " +
+              "relative start-1/2 flex items-stretch gap-[var(--novel-hero-banner-gap)] " +
+              "[--hero-dir:1] rtl:[--hero-dir:-1] " +
               "transition-transform duration-500 ease-out motion-reduce:transition-none"
             }
             style={{
               transform:
-                "translateX(calc(-1 * var(--novel-hero-banner-w) / 2 - " +
-                `${trackIndex} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap))))`,
+                "translateX(calc(var(--hero-dir) * (-1 * var(--novel-hero-banner-w) / 2 - " +
+                `${trackIndex} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap)))))`,
             }}
           >
             {/* 数量边界（Owner 2026-09-20 钉死）：

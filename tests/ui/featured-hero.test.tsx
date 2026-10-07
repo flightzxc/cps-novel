@@ -840,3 +840,173 @@ describe("首屏加载优先级 · 前景封面只有初始激活项是高优先
     expect(current.hasAttribute("fetchpriority")).toBe(false);
   });
 });
+
+/**
+ * PN-02（2026-10-07 审计）：阿拉伯语首页直接打开/刷新时轮播整块被推到屏幕外。
+ *
+ * 根因：轨道是 flex 容器，在 `dir="rtl"` 下项目从**右**边起排，而定位与位移公式
+ * 却写死了「从左起排」的物理 `left-1/2` + 负向 translateX，结果第 N 项落在
+ * 约 `-N*(banner+gap)` 之外，被外层 `overflow-hidden` 裁掉。
+ *
+ * jsdom 没有布局引擎，证明不了「居中」——这里钉的是**类名与 transform 字符串契约**
+ * 和**键盘方向**；真正的坐标由本地浏览器验收（390×844 / 1440×1000）负责。
+ * 做法同 `tests/ui/design-tokens.test.ts` 的类名契约。
+ */
+describe("轮播几何 · 从右到左（PN-02）", () => {
+  const track = (c: HTMLElement) =>
+    c.querySelector<HTMLElement>('[data-testid="featured-hero-track"]')!;
+  const tokens = (el: HTMLElement) => el.className.split(/\s+/).filter(Boolean);
+
+  /** 当前选中的 dot 下标（0 起）。 */
+  function selectedIndex() {
+    const tabs = [
+      ...screen.getByTestId("featured-hero-dots").querySelectorAll('[role="tab"]'),
+    ];
+    return tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+  }
+
+  function expectedTransform(trackIndex: number) {
+    return (
+      "translateX(calc(var(--hero-dir) * (-1 * var(--novel-hero-banner-w) / 2 - " +
+      `${trackIndex} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap)))))`
+    );
+  }
+
+  it("轨道用逻辑起始边 start-1/2，不再用物理 left-1/2", () => {
+    const { container } = renderHome();
+    const list = tokens(track(container));
+
+    // 从右到左时 start-1/2 即 right: 50%——轨道起始边（右边缘）放到父容器中线
+    expect(list).toContain("start-1/2");
+    expect(list).not.toContain("left-1/2");
+    expect(list).not.toContain("right-1/2");
+  });
+
+  it("位移公式整体乘方向系数 --hero-dir；系数在轨道上从左到右=1、从右到左=-1", () => {
+    const { container } = renderHome();
+    const el = track(container);
+    const list = tokens(el);
+
+    // 系数由 Tailwind 的 rtl: 变体设置，跟随祖先 dir，不新增 prop
+    expect(list).toContain("[--hero-dir:1]");
+    expect(list).toContain("rtl:[--hero-dir:-1]");
+
+    expect(el.style.transform).toContain("var(--hero-dir");
+    // 系数必须在最外层、包住整条原公式（只乘其中一项会让某一项方向不翻）。
+    // 环形（≥3 本）初始 trackIndex = count + 0。
+    expect(el.style.transform).toBe(expectedTransform(HERO_COUNT));
+  });
+
+  it("切换后位移仍带方向系数，只有槽位下标在变", () => {
+    const { container } = renderHome();
+
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 3" })[0]);
+
+    expect(track(container).style.transform).toBe(expectedTransform(HERO_COUNT + 2));
+  });
+
+  it("从右到左：ArrowLeft 前进一项（下一项从左侧进入），ArrowRight 后退，首尾环绕", () => {
+    render(
+      <div dir="rtl">
+        <HomeScreen locale="en" featuredList={entries()} novels={MOCK_NOVEL_CARDS} />
+      </div>,
+    );
+    expect(HERO_COUNT).toBeGreaterThanOrEqual(3);
+    const hero = screen.getByTestId("featured-hero");
+    expect(selectedIndex()).toBe(0);
+
+    fireEvent.keyDown(hero, { key: "ArrowLeft" });
+    expect(selectedIndex()).toBe(1);
+
+    fireEvent.keyDown(hero, { key: "ArrowRight" });
+    expect(selectedIndex()).toBe(0);
+
+    // 第 0 项再后退 → 环绕到最后一项
+    fireEvent.keyDown(hero, { key: "ArrowRight" });
+    expect(selectedIndex()).toBe(HERO_COUNT - 1);
+
+    // 最后一项再前进 → 环绕回第 0 项
+    fireEvent.keyDown(hero, { key: "ArrowLeft" });
+    expect(selectedIndex()).toBe(0);
+  });
+
+  it("从右到左时被处理的方向键必须 preventDefault（别让页面横向滚动）", () => {
+    render(
+      <div dir="rtl">
+        <HomeScreen locale="en" featuredList={entries()} novels={MOCK_NOVEL_CARDS} />
+      </div>,
+    );
+    const hero = screen.getByTestId("featured-hero");
+
+    // fireEvent 返回 dispatchEvent 的结果：被 preventDefault 时为 false
+    expect(fireEvent.keyDown(hero, { key: "ArrowLeft" })).toBe(false);
+    expect(fireEvent.keyDown(hero, { key: "ArrowRight" })).toBe(false);
+    // 无关按键不拦截
+    expect(fireEvent.keyDown(hero, { key: "a" })).toBe(true);
+  });
+
+  it("从左到右（显式 dir=ltr）：ArrowRight 前进、ArrowLeft 后退，与改前一致", () => {
+    render(
+      <div dir="ltr">
+        <HomeScreen locale="en" featuredList={entries()} novels={MOCK_NOVEL_CARDS} />
+      </div>,
+    );
+    const hero = screen.getByTestId("featured-hero");
+
+    fireEvent.keyDown(hero, { key: "ArrowRight" });
+    expect(selectedIndex()).toBe(1);
+
+    fireEvent.keyDown(hero, { key: "ArrowLeft" });
+    expect(selectedIndex()).toBe(0);
+
+    fireEvent.keyDown(hero, { key: "ArrowLeft" });
+    expect(selectedIndex()).toBe(HERO_COUNT - 1);
+  });
+
+  it("取最近的带 dir 的祖先：rtl 里嵌一层 ltr，按 ltr 处理", () => {
+    render(
+      <div dir="rtl">
+        <div dir="ltr">
+          <HomeScreen locale="en" featuredList={entries()} novels={MOCK_NOVEL_CARDS} />
+        </div>
+      </div>,
+    );
+
+    fireEvent.keyDown(screen.getByTestId("featured-hero"), { key: "ArrowRight" });
+    expect(selectedIndex()).toBe(1);
+  });
+
+  it("方向在按键时读取，不是渲染时快照：祖先 dir 变了不用重渲染就生效", () => {
+    // 语言菜单软跳转后 <html dir> 会被 DocumentLocaleSync 改写；轮播不会因此重渲染，
+    // 所以方向必须在 onKeyDown 里现读。
+    const { container } = render(
+      <div dir="ltr" data-testid="dir-host">
+        <HomeScreen locale="en" featuredList={entries()} novels={MOCK_NOVEL_CARDS} />
+      </div>,
+    );
+    const hero = screen.getByTestId("featured-hero");
+
+    fireEvent.keyDown(hero, { key: "ArrowRight" });
+    expect(selectedIndex()).toBe(1);
+
+    container.querySelector('[data-testid="dir-host"]')!.setAttribute("dir", "rtl");
+    fireEvent.keyDown(hero, { key: "ArrowLeft" });
+    expect(selectedIndex()).toBe(2);
+  });
+
+  it("真实根属性：<html dir=rtl> 时同样按从右到左处理", () => {
+    renderHome();
+    const hero = screen.getByTestId("featured-hero");
+    const root = document.documentElement;
+    const previous = root.getAttribute("dir");
+    try {
+      // 渲染之后再改：HomeScreen 里的 DocumentLocaleSync 会在挂载时把根属性写成 en/ltr
+      root.setAttribute("dir", "rtl");
+      fireEvent.keyDown(hero, { key: "ArrowLeft" });
+      expect(selectedIndex()).toBe(1);
+    } finally {
+      if (previous === null) root.removeAttribute("dir");
+      else root.setAttribute("dir", previous);
+    }
+  });
+});
