@@ -96,8 +96,17 @@ export function ReaderSettingsPanel({
       data-testid="reader-settings-panel"
       className={
         // 移动端：贴底浮层，横向铺满 —— 桌面端：锚定在按钮下方的定宽面板
-        "fixed inset-x-0 bottom-0 z-40 rounded-t-novel-lg border-t border-novel-border bg-novel-bg-elevated p-5 " +
-        "md:absolute md:inset-x-auto md:top-full md:right-0 md:bottom-auto md:mt-2 md:w-[22rem] md:rounded-novel-lg md:border"
+        //
+        // 🔴 层级必须高于固定底部续读条（StickyCTA，z-40，同样 fixed bottom-0）。
+        // 两者同为 z-40 时，DOM 里更靠后的续读条会盖在面板上，面板底部的「重置」
+        // 按钮被命中成推广链接（PN-03）。z-50 同时覆盖移动端贴底与桌面 md:absolute
+        // 两种形态，所以不写 md:z-*。
+        //
+        // 移动端另需三样保护：最大高度（矮屏/横屏时面板不顶出视口）、面板内部滚动
+        // （控件一个都不能被裁在屏外）、overscroll-contain（滚到头不带动背后的正文）；
+        // 底部内边距叠加安全区。桌面端把这几项复位，保持原有的锚定面板形态。
+        "fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-novel-lg border-t border-novel-border bg-novel-bg-elevated p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] " +
+        "md:absolute md:inset-x-auto md:top-full md:right-0 md:bottom-auto md:mt-2 md:max-h-none md:w-[22rem] md:overflow-visible md:overscroll-auto md:rounded-novel-lg md:border md:pb-5"
       }
     >
       <div className="flex items-center justify-between">
