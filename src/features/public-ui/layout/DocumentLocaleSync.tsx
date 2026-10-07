@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getTextDirection } from "@/lib/site/text-direction";
 
@@ -18,10 +18,19 @@ import { getTextDirection } from "@/lib/site/text-direction";
  * 样式重算；不做卸载还原——下一页的外壳会写它自己的值，卸载时还原只会在两页之间
  * 闪回上一个语种。
  *
+ * 🔴 用 `useLayoutEffect` 而不是 `useEffect`（与后台先例 `admin-document-lang.tsx` 的
+ * 唯一差别，不是风格选择）：轮播轨道的 `transform` 带 `transition-transform
+ * duration-500`，而它的位移公式随 `dir` 翻转。软跳转时新页面的外壳与轮播在同一次提交里
+ * 挂载；若根属性要等到绘制之后的被动副作用才改，浏览器会先按**旧方向**算出并画出第一帧，
+ * 随后 `dir` 翻转触发 500ms 过渡——轮播从屏幕外「飞入」（本机 390×844 实测首帧
+ * x=3674px，约 0.5s 收敛到 36px）。布局副作用在同一次提交内、浏览器第一次计算样式
+ * 之前执行，新挂载的轮播第一次样式计算就已是正确方向，不触发过渡（实测首帧 x=36px）。
+ * 服务端渲染不执行任何副作用，React 19 对此也不再告警。
+ *
  * 先例：`src/features/admin-ui/admin-document-lang.tsx`（后台同步 `<html lang>`）。
  */
 export function DocumentLocaleSync({ locale }: { locale: SiteLocale }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const dir = getTextDirection(locale);
     if (root.lang !== locale) {

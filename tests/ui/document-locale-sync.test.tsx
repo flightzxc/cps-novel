@@ -1,4 +1,5 @@
 import "./setup-cleanup";
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { DocumentLocaleSync } from "@/features/public-ui/layout/DocumentLocaleSync";
@@ -125,6 +126,34 @@ describe("DocumentLocaleSync 本体", () => {
     view.unmount();
 
     expect(attrs()).toEqual({ lang: "ar", dir: "rtl" });
+  });
+
+  /**
+   * 时机承重：必须在提交阶段（布局副作用）就同步，不能等绘制之后的被动副作用。
+   * 轮播轨道的 transform 带 500ms 过渡且随 dir 翻转；晚一拍改根属性，新挂载的轮播
+   * 会先按旧方向画一帧，再从屏幕外「飞入」（浏览器实测首帧 x=3674px）。
+   *
+   * 探针放在 DocumentLocaleSync 之后的兄弟节点：同一提交里布局副作用按树序执行，
+   * 探针读到的是同步结果当且仅当 DocumentLocaleSync 自己也是布局副作用；
+   * 若改回 useEffect，探针（布局阶段）读到的仍是旧值，被动副作用要等提交之后。
+   */
+  it("在提交阶段（布局副作用）就写好根属性，探针在同一次提交里读到的已经是新值", () => {
+    const seen: string[] = [];
+    function Probe() {
+      useLayoutEffect(() => {
+        seen.push(`${root().lang}/${root().dir}`);
+      }, []);
+      return null;
+    }
+
+    render(
+      <>
+        <DocumentLocaleSync locale="ar" />
+        <Probe />
+      </>,
+    );
+
+    expect(seen).toEqual(["ar/rtl"]);
   });
 
   it("不渲染任何 DOM", () => {
