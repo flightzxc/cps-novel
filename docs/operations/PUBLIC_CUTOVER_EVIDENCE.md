@@ -1175,3 +1175,76 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 - 本地版本台账追加切换当前状态并更新v0.5.9既有行；开发日志只补同一次v0.5.9发布条目，不新建版本、不移动tag或生成无关CHANGELOG。Git提交31bfeb5ed464c5cb7e1e08faace05def3aa0ba5f已推送远端并核对HEAD一致。
 - 已同步既有Notion《海阅 版本管理与发版手账》page 3e4601b5-fd34-81b5-a39b-cf48408015c2：当前快照添加public部署通过但外部og:image冲突后维护的详细记录，原预生产当前快照改标历史，既有v0.5.9台账行追加暂停状态。异步任务task_21c6af0ef5da4216a8e04c86e372b0f1 succeeded；再次fetch回读当前身份、备份SHA、install.nFW11rwP、上游封面及维护待裁决全部PASS。除本次既有台账行追加以外，第二区及后续历史文本逐字节一致；没有覆盖历史或模板。
 - 本次同步只登记已核实的暂停状态，不宣称正式开放或步骤5～9已全部完成。Owner封面裁决、后台2FA、sitemap、GSC/监控仍按上述验收表处理。
+
+
+### 16:15–16:20 JST：Owner 更正分享图口径，剩余外部通过；唯一限流组未取得429后维护
+
+- Owner 已裁决：上游HTTPS书封属于设计如此，首次og:image阻断来自主控提示词验收口径错误，不是线上缺陷。本次不改代码、不回退；更正规则已记录ADR。全部站内canonical/hreflang/og:url严格正式域名；og:image只允许HTTPS且无旧/短剧/本机/预生产域名，无书封取样必须正式默认图。
+- 初次关闭维护包装漏带release.sh要求的PREPROD_RELEASE_VERIFIED=YES，返回MAINTENANCE_OFF=REFUSED，维护未关闭；依赖脚本启动过早取得一次en章节维护503。核对既有RELEASE=PASS与deploy.pass后补带标记关闭维护，原verify-release.sh --anonymous-only --expect-live PASS；随后各次包装修正后都先关闭维护、匿名live通过才继续。不修改release脚本、不新发镜像。
+- 分类首样错误地来自待刷新的旧sitemap：/category/adventure得到404；fail-closed先维护。当前browse没有该链接，改为当前browse实际分类链接取样，HTTP200。保留旧404证据，待当天刷新验证旧空分类链接是否排除，不擅自修改分类数据。
+- 后台根路径匿名404是public renderer的location /直接拒绝，包装原误要求401已改正；/login匿名401/CPS Novel Administration/noindex，认证后200；后台根路径认证后仍404/noindex符合隔离。没有修改renderer或放宽后台登录门禁。
+- 外部续验复用已通过的首页/browse/小说响应及原时间记录，没有重复声称重新抓取；未完成项继续取真实响应。外部EXTERNAL_ACCEPTANCE=PASS于07:19:24.750112Z附近完成；全部本机curl经http://127.0.0.1:7899，未使用-k/-L。所有取样HTML不含bangbangji，canonical/hreflang/og:url用正式域名；撤回页200、This book is temporarily unavailable、HTML noindex，未重新发布撤回书。
+- 默认图200/image/png/缓存一天，字节SHA256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb；真实JS/CSS均200、一年immutable、gzip。公开后台/worker/backup404，无公开认证或X-Robots-Tag；robots允许抓取、正式sitemap地址及no-store，IndexNowkey404/no-store；公开health200/0.5.9完整Final/no-store。HSTS86400，无提级/subdomains/preload。
+- www、旧主站及旧后台三组首跳301，保留/ko?q=1或/login?q=1，严格TLS成功；按renderer实际跳转响应无HSTS，不伪造响应头。未知Host此前服务器合法SNI回环拒绝证据PASS保持。
+- 仅一个书封HEAD：https://cos-enres.cdreader.com/site-322(new)/0/84876/coverbig.jpg 经代理07:19:23.752234Z，HTTP200/image/jpeg/1.729561s；.requested标记防重复，未GET。仅一个真实短码首跳 /go/hpsuxf95w4，07:19:24.750112Z，302/0.977734s，Location=https://eng.moboreader.com/vRK5N/273MMA，no-store/HSTS86400；未跟随，未开点击追踪，不再请求该短码。
+
+#### 每种页面类型的实际 og:image
+
+| 页面取样 | og:image 实际值 |
+| --- | --- |
+| browse | https://pulsenovels.com/brand/og-default.png |
+| category | https://pulsenovels.com/brand/og-default.png |
+| en-chapter | https://cos-enres.cdreader.com/site-322(new)/0/84876/coverbig.jpg |
+| en-novel | https://cos-enres.cdreader.com/site-322(new)/0/84876/coverbig.jpg |
+| es-browse | https://pulsenovels.com/brand/og-default.png |
+| es-novel | https://cos-spres.cdreader.com/site-375(new)/0/13880/coverbig.jpg |
+| home | https://pulsenovels.com/brand/og-default.png |
+| ko-browse | https://pulsenovels.com/brand/og-default.png |
+| ko-home | https://pulsenovels.com/brand/og-default.png |
+| ko-novel | https://cos-enres.cdreader.com/site-436(new)/0/95741/coverbig.jpg |
+| removed-zero-chapter | 无（撤回提示页） |
+
+#### 已取响应状态与耗时（完整关键响应头另存受控JSON）
+
+| 取样 | HTTP | 秒 | Content-Type |
+| --- | --- | --- | --- |
+| home | 200 | 1.658801 | text/html; charset=utf-8 |
+| ko-home | 200 | 1.73021 | text/html; charset=utf-8 |
+| browse | 200 | 1.398545 | text/html; charset=utf-8 |
+| ko-browse | 200 | 1.521249 | text/html; charset=utf-8 |
+| es-browse | 200 | 2.173408 | text/html; charset=utf-8 |
+| en-novel | 200 | 2.234722 | text/html; charset=utf-8 |
+| en-chapter | 200 | 1.332697 | text/html; charset=utf-8 |
+| es-novel | 200 | 1.700534 | text/html; charset=utf-8 |
+| ko-novel | 200 | 1.661151 | text/html; charset=utf-8 |
+| pre-refresh-sitemap | 200 | 1.671182 | application/xml; charset=utf-8 |
+| category-sample-source | 200 | 1.17299 | application/xml; charset=utf-8 |
+| category | 200 | 3.525774 | text/html; charset=utf-8 |
+| removed-zero-chapter | 200 | 1.731624 | text/html; charset=utf-8 |
+| brand-png | 200 | 1.550347 | image/png |
+| static-js | 200 | 2.400236 | application/javascript; charset=UTF-8 |
+| static-css | 200 | 2.288323 | text/css; charset=UTF-8 |
+| public-deny--dashboard | 404 | 1.114061 | text/html |
+| public-deny--api-admin | 404 | 1.926112 | text/html |
+| public-deny--api-health-worker | 404 | 1.944638 | text/html |
+| public-deny--api-health-backup | 404 | 1.083045 | text/html |
+| public-deny--indexnow-key.txt | 404 | 1.101733 | text/plain;charset=UTF-8 |
+| robots | 200 | 1.954735 | text/plain |
+| public-health | 200 | 0.94842 | application/json |
+| admin-login-anon | 401 | 0.998091 | text/html |
+| admin-root-anon | 404 | 0.960392 | text/html |
+| admin-login-auth | 200 | 1.150261 | text/html; charset=utf-8 |
+| admin-root-auth | 404 | 0.95745 | text/html |
+| redirect-www | 301 | 1.248267 | text/html |
+| redirect-old-public | 301 | 0.968763 | text/html |
+| redirect-old-admin | 301 | 0.963283 | text/html |
+| book-cover-head | 200 | 1.729561 | image/jpeg |
+| promo-first-hop | 302 | 0.977734 | — |
+
+#### 唯一 30/10 限流组：429未验证，停止并维护
+
+- 只执行一组 /ko/browse 30次、ThreadPool并发10；开始标记rate-small.started防止意外重跑，逐条状态/头/真实时间留存rate-small-results.json。总墙钟6.495256秒；首完成2026-10-07T07:19:41.633308+00:00、末完成2026-10-07T07:19:46.111049+00:00。
+- HTTP200=30、429=0、502及其它5xx=0，curlExit0=30；耗时最短1.404669、中位1.946296、最长2.590961秒。**未观察到429，不宣称限流复测PASS**。RATE_SMALL=FAIL reason=rate_no_429_observed，按失败处理MAINTENANCE=ON。
+- 未追加整轮压测、未改变并发/请求数/UA/参数或限流配置，未重装nginx。已向Owner报告并请求裁决是否接受429未验证的明确遗留项后继续，或保持维护/恢复旧站；没有把默认预选当作批准。
+- 当前六容器healthy，public配置哈希仍d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe，正式env保留；本次public部署后未回退，首次回退历史保留。sitemap尚未入队/刷新；完整worker4采样未开始重测，Owner后台2FA/手动刷新/GSC/监控仍待回报。主站当前维护ON，不能登记正式开放。
+- 检查器已修正为先留存worker原始响应再解析JSON，原暖机证据保留；修正版仅受控包装，没有产品代码改动。站点设置只读确认PulseNovel、/brand/og-default.png和IndexNow三项全空，不打印key值。
