@@ -1,18 +1,29 @@
 import { buildHreflangAlternates, generateWebSiteJsonLd } from "../seo-utils";
-import { buildLocaleCanonical, openGraphLocaleTag, resolveOgImage, truncateDescription } from "./_shared";
+import { buildLocaleCanonical, openGraphLocaleTag, resolveShareImage, truncateDescription } from "./_shared";
 
 export interface HomeSeoData {
   siteName: string;
   title?: string;
   description: string;
   defaultOgImage?: string | null;
+  /**
+   * 站点默认图缺失时的兜底：首页列表第一本书的封面。注意不要把它合并进 `defaultOgImage`——
+   * 模板需要知道最终分享图是站点默认图还是书封，才能给出对应的卡片口径（B-37）。
+   */
+  fallbackCoverUrl?: string | null;
 }
 
 export function buildHomeSeoMeta(data: HomeSeoData, locale = "en") {
   const title = (data.title?.trim() || data.siteName).trim();
   const description = truncateDescription(data.description);
   const canonical = buildLocaleCanonical(locale, "/");
-  const ogImage = resolveOgImage(null, data.defaultOgImage);
+  // 站点默认图优先，书封只是默认图缺失时的兜底（与此前 `default || novels[0].coverUrl` 同序）。
+  const share = resolveShareImage({
+    coverUrl: data.fallbackCoverUrl,
+    defaultOgImage: data.defaultOgImage,
+    prefer: "default",
+    alt: data.siteName,
+  });
   const ogLocale = openGraphLocaleTag(locale);
   const websiteLd = generateWebSiteJsonLd(data.siteName, description);
 
@@ -27,13 +38,13 @@ export function buildHomeSeoMeta(data: HomeSeoData, locale = "en") {
       url: canonical,
       siteName: data.siteName,
       locale: ogLocale,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: data.siteName }],
+      images: share.openGraphImages,
     },
     twitter: {
-      card: "summary_large_image" as const,
+      card: share.twitterCard,
       title,
       description,
-      images: [ogImage],
+      images: [share.url],
     },
     alternates: {
       canonical,

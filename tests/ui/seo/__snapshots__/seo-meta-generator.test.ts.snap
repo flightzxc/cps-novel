@@ -16,9 +16,7 @@ exports[`generateSeoMeta > builds novel metadata without PulseDrama, /drama/, or
     "images": [
       {
         "alt": "The Lantern Keeper's Daughter",
-        "height": 630,
         "url": "https://example.test/covers/lantern.jpg",
-        "width": 1200,
       },
     ],
     "locale": "en_US",
@@ -33,7 +31,7 @@ exports[`generateSeoMeta > builds novel metadata without PulseDrama, /drama/, or
   "robots": undefined,
   "title": "The Lantern Keeper's Daughter",
   "twitter": {
-    "card": "summary_large_image",
+    "card": "summary",
     "description": "A coastal town keeps one lantern burning.",
     "images": [
       "https://example.test/covers/lantern.jpg",

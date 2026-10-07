@@ -28,10 +28,12 @@ export interface SeoOutput {
     url: string;
     siteName: string;
     locale: string;
-    images: { url: string; width: number; height: number; alt: string }[];
+    /** `width`/`height` 只在尺寸确知时声明（站点默认图 1200×630）；书封不声明。 */
+    images: { url: string; width?: number; height?: number; alt: string }[];
   };
   twitter: {
-    card: "summary_large_image";
+    /** 站点默认图 → 大图卡片；书封（250×350，低于 X 大图卡片最小宽度 300）→ 小图卡片。 */
+    card: "summary_large_image" | "summary";
     title: string;
     description?: string;
     images: string[];

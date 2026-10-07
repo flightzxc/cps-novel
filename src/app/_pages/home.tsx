@@ -77,7 +77,9 @@ function homeSeoData(
     description:
       (useSettingsMetadata && (settings.homeMetaDescription || settings.siteDescription)) ||
       t("meta.siteDescription"),
-    defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
+    defaultOgImage: settings.defaultOgImage.trim() || null,
+    // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
+    fallbackCoverUrl: novels[0]?.coverUrl ?? null,
   };
 }
 

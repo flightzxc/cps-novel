@@ -83,6 +83,106 @@ export function resolveOgImage(imageUrl?: string | null, fallback?: string | nul
   return resolved;
 }
 
+/** 站点默认分享图的固定尺寸：`public/brand/og-default.png` 实测 1200×630。 */
+export const SITE_DEFAULT_OG_IMAGE_WIDTH = 1200;
+export const SITE_DEFAULT_OG_IMAGE_HEIGHT = 630;
+
+/** `og:image` 的一条声明。`width`/`height` 只在尺寸**确知**时才声明。 */
+export interface OpenGraphImage {
+  url: string;
+  alt: string;
+  width?: number;
+  height?: number;
+}
+
+export type ShareImageKind = "site-default" | "cover";
+
+export interface ShareImage {
+  /** 绝对地址。JSON-LD 的 `image` 也用它。 */
+  url: string;
+  /** 最终选中的是站点默认图还是书封。 */
+  kind: ShareImageKind;
+  /** `twitter:card`：站点默认图 → `summary_large_image`；书封 → `summary`。 */
+  twitterCard: "summary_large_image" | "summary";
+  /** 直接放进 `openGraph.images`。 */
+  openGraphImages: OpenGraphImage[];
+}
+
+export interface ShareImageInput {
+  /** 书封（可为相对路径，会转成绝对地址）。 */
+  coverUrl?: string | null;
+  /** 站点默认分享图（后台 `SiteSetting.defaultOgImage`）。 */
+  defaultOgImage?: string | null;
+  /**
+   * 两者都可用时选哪个。
+   *   - `"cover"`（默认）：小说页、章节页——书封优先，站点默认图兜底；
+   *   - `"default"`：首页、浏览页、分类页——站点默认图优先，`coverUrl` 只是默认图缺失时
+   *     拿「列表第一本」书封兜底。
+   * 这两个优先级原样沿用此前各页面的取值顺序，本函数只新增「选中的是哪一种」的判定。
+   */
+  prefer?: "cover" | "default";
+  /** og:image 的 alt。 */
+  alt: string;
+}
+
+/**
+ * 解析最终分享图，并按「最终选中的是哪一种」统一给出卡片口径（B-37，2026-10-07）。
+ *
+ * 为什么要按种类区分：此前所有模板都把分享图声明成 `1200×630` +
+ * `twitter:card = summary_large_image`，但书封实际是 **250×350**，宽度低于 X 大图卡片
+ * 的最小宽度（300）——声明了假尺寸，平台要么拒绝大图卡片、要么把竖封面拉伸裁切。
+ *
+ *   - 站点默认图（`og-default.png`，1200×630）：保持 `summary_large_image` +
+ *     `width: 1200, height: 630`；
+ *   - 书封：`twitter:card = summary`（小图卡片），og:image **不声明** width/height
+ *     （尺寸并不是 1200×630，不能谎报；不声明时由平台自己抓取探测）。
+ *
+ * 所有用到 `resolveOgImage` 语义的模板都走这一个函数，不要在模板里各写一份判断。
+ * 两者都缺失时与 `resolveOgImage` 一样 fail closed。
+ * 博客模板不在此列：博客封面是运营上传的，尺寸未知，仍沿用 `resolveOgImage` 与旧口径。
+ */
+export function resolveShareImage(input: ShareImageInput): ShareImage {
+  const cover = toAbsoluteUrl(input.coverUrl ?? undefined);
+  const siteDefault = toAbsoluteUrl(input.defaultOgImage ?? undefined);
+
+  const picked: { url: string; kind: ShareImageKind } | undefined =
+    input.prefer === "default"
+      ? siteDefault
+        ? { url: siteDefault, kind: "site-default" }
+        : cover
+          ? { url: cover, kind: "cover" }
+          : undefined
+      : cover
+        ? { url: cover, kind: "cover" }
+        : siteDefault
+          ? { url: siteDefault, kind: "site-default" }
+          : undefined;
+
+  if (!picked) {
+    throw new Error("OG image is required: pass coverUrl or defaultOgImage");
+  }
+
+  if (picked.kind === "site-default") {
+    return {
+      ...picked,
+      twitterCard: "summary_large_image",
+      openGraphImages: [
+        {
+          url: picked.url,
+          width: SITE_DEFAULT_OG_IMAGE_WIDTH,
+          height: SITE_DEFAULT_OG_IMAGE_HEIGHT,
+          alt: input.alt,
+        },
+      ],
+    };
+  }
+  return {
+    ...picked,
+    twitterCard: "summary",
+    openGraphImages: [{ url: picked.url, alt: input.alt }],
+  };
+}
+
 /** Pagination pages are indexable by default; omit robots metadata. */
 export function paginatedRobots(_pageNumber?: number) {
   void _pageNumber;
