@@ -1140,3 +1140,31 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 - 本地及远端 WRAPPER_FIXTURES=PASS cases=16，增加 curl60 必须失败、PID 完整交接/仍有旧 worker/master 改变/无 worker 检查；Bash 语法通过。修正版 checks.py SHA256=`154a81fe7095e0e820869e151db0fb4a2b295e9b84ac95abeec2c469acfc07e4`；owner-edge.sh SHA256=`9384ed4a260c24b92b672f17cf3b0776c595ea639910bb6614ed6bfc4d42b531`，本地/远端一致。
 - 15:32 JST 独立只读重验输出 RETRY_DATABASE_BASELINE=PASS、BASELINE=PASS published=28745 chapters=85964 withdrawn=236 shards=35。原暂停 SQL、22 迁移、站点设置、逐语种小说/章节和撤回记录与维护前基线一致；旧站匿名 503/维护/noindex、认证健康及新 Host 拒绝通过。因维护期间 sitemap 返回维护页，35 分片/118537 条明确继承维护前完整快照，不冒充新的 HTTP 分片核验。
 - 当时 nginx master=679455，worker=3160295,3160296,3160297,3160298；仅只读采集，没有安装或 reload。仍保持旧 env/rehearsal nginx/维护，未同镜像发布，未对外开放。下一动作是 Owner 在终端输入 sudo 执行已准备的修正版第 3 步；命令及哈希见 Owner 命令单。
+
+
+### 15:51–15:54 JST：public 就绪及同镜像发布 PASS，外部 og:image 条件冲突后维护
+
+- Owner 重试目录 `/opt/cps-novel/shared/cutover/20261007T053946Z/attempts/20261007T065104Z`；原 SQL/数据库基线与候选重验 PASS；env 两行 diff/其余字节 cmp PASS；public preflight PASS，IndexNow保持关闭。
+- cutover_nginx_backup=`/opt/cps-novel/shared/nginx-backups/install.nFW11rwP`；nginx -t/安装器/安装文件哈希 PASS。worker交接第2轮通过，master679455，新worker3186083,3186084,3186085,3186086；严格 HTTPS 第1轮 PUBLIC_READY=PASS，06:51:23Z 写 edge.pass。此次等待交接后通过支持首次过早探测的可能性，仍不追认首次实际证书根因已确证。
+- Codex 再次严格就绪通过、重跑原暂停 SQL 后，以完整批准Final/PREPROD_APPROVED_MIGRATION=YES 执行原 release.sh。同镜像身份、22迁移无待执行、grants、各服务健康与发布验证全部 PASS，RELEASE=PASS，06:52:59Z 写 deploy.pass；当时维护OFF、匿名live验证PASS。
+- 四应用 `.Image` 均保持 sha256:faa2c75b7c6e00efbe20d65bee89e685556429f98d6901de79adf1d53318cb11；postgres CID保持691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e；backup-timer RUNNING_HEALTHY。15:54只读复核六容器仍healthy，安装站点哈希仍d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。
+- 外部所有请求经 http://127.0.0.1:7899，不使用-k/-L，HTTP均200/curlExit0。首页1.658801s、ko首页1.730210s、browse1.398545s、ko/browse1.521249s、es/browse2.173408s；HSTS均max-age=86400，无X-Robots-Tag/认证头，HTML gzip。已完成页面canonical/hreflang/og:url/og:image使用正式域名，首页默认图 https://pulsenovels.com/brand/og-default.png。
+- en小说 `/novel/contract-baby-and-billionaire-pg15q11wz` HTTP200/2.234722s；canonical、两个alternate及og:url均是该正式域名URL、HTML robots=index,follow、无bangbangji。**og:image=https://cos-enres.cdreader.com/site-322(new)/0/84876/coverbig.jpg**，和本轮明确要求“og:image使用正式域名”矛盾。模板 novel/chapter调用resolveOgImage(coverUrl,defaultOgImage)，优先小说封面，是现有运行行为；不擅自放宽，不开发功能或改封面数据。EXTERNAL_ACCEPTANCE=FAIL reason=metadata_host_en-novel，随即MAINTENANCE=ON；停止后续验收并请求Owner裁决。
+- 未知Host服务器回环验收独立PASS：HTTP合法域名resolve回环+未知Host得到curl52/000 emptyreply；HTTPS使用pulsenovels.com合法SNI、resolve回环+未知Host，严格TLS curl0/HTTP404，保护头noindex及HSTS86400保留。
+- worker仅暖机一次HTTP200/workerStatus=ok/expiredLocks=0/0.059731s，等待10秒后与外部失败开启维护交叠，JSON解析失败停止。原日志和暖机响应留存；没有完成后三采样，**不宣称worker健康整组PASS或四次无过期锁**。包装后续须先留存raw再解析，以保存非JSON失败响应；本次不重复采样。
+- 本次public部署后未回退nginx/env；只开启维护。首次15:22恢复历史仍保留。sitemap尚未刷新，仍以维护前35分片/118537条作为旧快照，不宣称已切正式域名或排除236本；未请求推广短码，未运行30次/并发10测试，未新增业务批次或其它写闸。
+
+| 步骤 | 当前验收状态 |
+| --- | --- |
+| 0 门禁及基线 | PASS，运行领取/后台发布任务均无，逐语种及迁移一致 |
+| 1 备份及身份 | PASS，dump/sha256/metadata/restore-list齐全，见前述备份路径及哈希 |
+| 2 env/preflight/候选 | PASS，两行域名diff、余字节cmp、public preflight及候选 |
+| 3 public nginx/TLS/维护就绪 | 第二次PASS，备份install.nFW11rwP，严格TLS不放宽 |
+| 4 同版发布 | PASS，镜像/CID不变，backup-timer及匿名live通过 |
+| 5 外部验收 | FAIL/停止：en og:image上游域名和条件冲突；未知Host独立PASS，其余待做 |
+| 6 Owner后台/worker | 待做；仅worker暖机正常，后三次未完成；2FA/设置未回报 |
+| 7 sitemap | 未执行，待Owner裁决后仅刷新一次并完整验收 |
+| 8 GSC/监控 | GSC待做、三探针外部监控待Owner确认，不冒充已配置 |
+| 9 同批次恢复/治理 | 本轮无暂停批次，恢复跳过；Git文档继续记录，Notion本次待同步；不合并 |
+
+**当前是否开放：否，维护ON；是否回退：首次nginx/env已回退，本次public部署后未回退。** 不恢复数据库或删除任务。等待Owner决定接受既有上游HTTPS封面后继续、恢复旧nginx/env同manifest重发，或保持维护。

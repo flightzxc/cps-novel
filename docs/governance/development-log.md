@@ -61,6 +61,8 @@ UI F5/5b/5d已只读PASS：已中止71分片完整，新建批次新计数缺席
 
 **后续待办**：验收后annotated v0.5.9固定Final、原生成CHANGELOG/台账/本条日志已完成，Notion同步读回PASS（2026-10-06T19:05:00.415Z），旧历史与模板保留；Git治理提交/tag已推送回读PASS（8a4a4da9815bcacc0983d3624b1ba986f0ca7d1d）。正式域名开放另行授权；IndexNow出站默认关闭，B-34须先修。回滚目标v0.5.8 Final0329b11，仅Owner回滚时另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复本次env备份、先查在途批次/枚举，原脚本重放旧grants，不down、不重建postgres、不改rehearsal。
 
+**同版正式域名切换追加（2026-10-07 14:54 +0800 / 15:54 JST）**：复用 v0.5.9 / Final `6af0b2e5c79db932c4754a43580eed3729bd0334`，未开发功能、未发新版本或打新 tag。第二次 public nginx 安装、worker PID 交接及严格 TLS 就绪 PASS；备份 `install.nFW11rwP`，候选及安装文件 SHA256=d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。env 只切 SITE_URL/ADMIN_CANONICAL_ORIGIN 两行，余字节 cmp 通过；以批准完整 Final 和 PREPROD_APPROVED_MIGRATION=YES 同镜像发布，RELEASE=PASS，22迁移无待执行，四应用镜像/postgres CID不变，backup-timer运行健康，匿名live PASS，部署完成06:52:59Z。随后外部验收在 en 小说页发现 og:image 使用上游 cos-enres.cdreader.com，和“全部正式域名”条件冲突；canonical/hreflang/og:url 已用正式域名。已重新开启维护并停止，当前 public nginx/env 保留，六容器 healthy；本次 public 配置未回退，首次15:22的nginx/env回退历史保留。未完成外部全矩阵、完整worker四采样、sitemap刷新、后台2FA确认、GSC/监控；短码及30/10限流测试均未执行；领取批次本轮未暂停/恢复。等待 Owner 裁决上游封面是否可接受或回退，**不登记为正式开放**。详情见 PUBLIC_CUTOVER_EVIDENCE.md。
+
 ### 2026-10-05 21:33 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式部署 `v0.5.8`（PATCH），仅 haiyue-vps；原 RELEASE=PASS / EXIT=0，E/F/G PASS，部署完成 2026-10-05 21:27:39 +0800 / 2026-10-05 22:27:39 JST。

@@ -19,6 +19,9 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+**同版正式域名切换追加（2026-10-07 14:54 +0800 / 15:54 JST）**：复用 v0.5.9 / Final `6af0b2e5c79db932c4754a43580eed3729bd0334`，未开发功能、未发新版本或打新 tag。第二次 public nginx 安装、worker PID 交接及严格 TLS 就绪 PASS；备份 `install.nFW11rwP`，候选及安装文件 SHA256=d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。env 只切 SITE_URL/ADMIN_CANONICAL_ORIGIN 两行，余字节 cmp 通过；以批准完整 Final 和 PREPROD_APPROVED_MIGRATION=YES 同镜像发布，RELEASE=PASS，22迁移无待执行，四应用镜像/postgres CID不变，backup-timer运行健康，匿名live PASS，部署完成06:52:59Z。随后外部验收在 en 小说页发现 og:image 使用上游 cos-enres.cdreader.com，和“全部正式域名”条件冲突；canonical/hreflang/og:url 已用正式域名。已重新开启维护并停止，当前 public nginx/env 保留，六容器 healthy；本次 public 配置未回退，首次15:22的nginx/env回退历史保留。未完成外部全矩阵、完整worker四采样、sitemap刷新、后台2FA确认、GSC/监控；短码及30/10限流测试均未执行；领取批次本轮未暂停/恢复。等待 Owner 裁决上游封面是否可接受或回退，**不登记为正式开放**。详情见 PUBLIC_CUTOVER_EVIDENCE.md。
+
+
 ### v0.5.9 —— 已部署密码保护预生产，E/F/5b/5c/5d PASS（2026-10-07 02:23:30 +0800）
 
 - 唯一基线 `59e84efa85756c0e957dcbf63f62b32aa5d7fca2`，基于 v0.5.8 收官 `306edb4`；已复核集成，本次不开发功能。上一轮基线 549760f 的本地候选 8772afd 在 audit 发现第六项 high 后停止、未推送，已按 Owner 要求丢弃工作树与本地分支，未 rebase/cherry-pick。新建 `release-v0.5.9-redo` / `release/v0.5.9-2026-10-07-redo`，全新 npm ci、Prisma generate、真实 node_modules，全部门禁从头重做。
@@ -369,7 +372,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已部署密码保护预生产；RELEASE=PASS / EXIT=0；E/F/5b/5c/5d全PASS；正式域名未开放；Notion同步回读PASS；Git治理提交/tag已推送回读PASS |
+| `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已部署密码保护预生产；RELEASE=PASS / EXIT=0；E/F/5b/5c/5d全PASS；正式域名未开放；Notion同步回读PASS；Git治理提交/tag已推送回读PASS；10-07同版public配置与部署通过，外部og:image矛盾后维护，待Owner裁决，切换未收官 |
 | `v0.5.8` | 2026-10-05 21:27:39 | PATCH | worker 心跳部分索引及健康检查修复；NAS stat 跨平台与排序修复；新增 1 条迁移 | Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25`；annotated `v0.5.8`；image `cps-novel:0.5.8-0329b11`；`release/v0.5.8-2026-10-05` | 已部署密码保护预生产；E/F/G PASS；批次 paused；正式域名未开放；Notion 第二阶段同步回读 PASS（2026-10-05T22:36:40.438000+09:00） |
 | `v0.5.7` | 2026-10-01 22:35:53 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 边界修复；无新迁移 | Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；image `cps-novel:0.5.7-bbb0625`；`release/v0.5.7-2026-10-01-redo` | 密码保护预生产 E/F/G PASS；F.1 主控裁决；15 语种只读报告、24 样本、en 前快照完成；tag/CHANGELOG 完成；第三阶段仅en completed / 43,431成功、0失败/skipped；实际差集133/0/133/126 PASS；公开auto0；快照保留，次日备份待复核；批次paused |
 | `v0.5.6` | 2026-10-01 03:38:32 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | Final `8625021d064f17d37e610d6038023c3ffecd9408`；image `cps-novel:0.5.6-8625021`；发布分支 `release/v0.5.6-2026-10-01-redo` | 预生产已发布；E/F/G PASS；tag/CHANGELOG/正式日志/Notion 同步回读完成 |
