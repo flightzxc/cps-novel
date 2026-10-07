@@ -1,0 +1,34 @@
+[
+  {
+    "curlExit": 0,
+    "http": 200,
+    "error": "",
+    "seconds": 0.036221,
+    "headers": "HTTP/2 200 \nserver: nginx/1.24.0 (Ubuntu)\ndate: Wed, 07 Oct 2026 09:42:30 GMT\ncontent-type: application/json\nvary: Accept-Encoding\nvary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch\nx-robots-tag: noindex, nofollow, noarchive\nstrict-transport-security: max-age=86400\nx-content-type-options: nosniff\nreferrer-policy: strict-origin-when-cross-origin\nx-frame-options: DENY\npermissions-policy: camera=(), microphone=(), geolocation=()\ncache-control: no-store\n\n",
+    "body": "{\"workerStatus\":\"ok\",\"expiredLocks\":0,\"lastHeartbeatAgeSeconds\":null,\"checkedAt\":\"2026-10-07T09:42:30.641Z\"}"
+  },
+  {
+    "curlExit": 0,
+    "http": 200,
+    "error": "",
+    "seconds": 0.041627,
+    "headers": "HTTP/2 200 \nserver: nginx/1.24.0 (Ubuntu)\ndate: Wed, 07 Oct 2026 09:42:40 GMT\ncontent-type: application/json\nvary: Accept-Encoding\nvary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch\nx-robots-tag: noindex, nofollow, noarchive\nstrict-transport-security: max-age=86400\nx-content-type-options: nosniff\nreferrer-policy: strict-origin-when-cross-origin\nx-frame-options: DENY\npermissions-policy: camera=(), microphone=(), geolocation=()\ncache-control: no-store\n\n",
+    "body": "{\"workerStatus\":\"ok\",\"expiredLocks\":0,\"lastHeartbeatAgeSeconds\":null,\"checkedAt\":\"2026-10-07T09:42:40.695Z\"}"
+  },
+  {
+    "curlExit": 0,
+    "http": 200,
+    "error": "",
+    "seconds": 0.031584,
+    "headers": "HTTP/2 200 \nserver: nginx/1.24.0 (Ubuntu)\ndate: Wed, 07 Oct 2026 09:42:40 GMT\ncontent-type: application/json\nvary: Accept-Encoding\nvary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch\nx-robots-tag: noindex, nofollow, noarchive\nstrict-transport-security: max-age=86400\nx-content-type-options: nosniff\nreferrer-policy: strict-origin-when-cross-origin\nx-frame-options: DENY\npermissions-policy: camera=(), microphone=(), geolocation=()\ncache-control: no-store\n\n",
+    "body": "{\"workerStatus\":\"ok\",\"expiredLocks\":0,\"lastHeartbeatAgeSeconds\":null,\"checkedAt\":\"2026-10-07T09:42:40.740Z\"}"
+  },
+  {
+    "curlExit": 0,
+    "http": 200,
+    "error": "",
+    "seconds": 0.030684,
+    "headers": "HTTP/2 200 \nserver: nginx/1.24.0 (Ubuntu)\ndate: Wed, 07 Oct 2026 09:42:40 GMT\ncontent-type: application/json\nvary: Accept-Encoding\nvary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch\nx-robots-tag: noindex, nofollow, noarchive\nstrict-transport-security: max-age=86400\nx-content-type-options: nosniff\nreferrer-policy: strict-origin-when-cross-origin\nx-frame-options: DENY\npermissions-policy: camera=(), microphone=(), geolocation=()\ncache-control: no-store\n\n",
+    "body": "{\"workerStatus\":\"ok\",\"expiredLocks\":0,\"lastHeartbeatAgeSeconds\":null,\"checkedAt\":\"2026-10-07T09:42:40.781Z\"}"
+  }
+]

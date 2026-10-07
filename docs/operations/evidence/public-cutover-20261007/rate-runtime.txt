@@ -1,0 +1,8 @@
+2026-10-07T09:42:04Z
+ 18:42:04 up 17 days, 23:53,  1 user,  load average: 0.21, 0.13, 0.10
+{"BlockIO":"0B / 32.8kB","CPUPerc":"0.08%","Container":"cps-novel-web-1","ID":"016ce79c75da","MemPerc":"7.29%","MemUsage":"149.3MiB / 2GiB","Name":"cps-novel-web-1","NetIO":"183MB / 19.3MB","PIDs":"16"}
+{"BlockIO":"0B / 2.24MB","CPUPerc":"0.65%","Container":"cps-novel-worker-1","ID":"3248e3ffa7a5","MemPerc":"4.57%","MemUsage":"93.55MiB / 2GiB","Name":"cps-novel-worker-1","NetIO":"10.6MB / 22.2MB","PIDs":"45"}
+{"BlockIO":"0B / 2.24MB","CPUPerc":"0.75%","Container":"cps-novel-worker-light-1","ID":"6a2109ce7472","MemPerc":"9.15%","MemUsage":"93.66MiB / 1GiB","Name":"cps-novel-worker-light-1","NetIO":"5.37MB / 12MB","PIDs":"45"}
+{"BlockIO":"0B / 8.56MB","CPUPerc":"0.00%","Container":"cps-novel-scheduler-1","ID":"9f08f4918302","MemPerc":"0.69%","MemUsage":"3.508MiB / 512MiB","Name":"cps-novel-scheduler-1","NetIO":"580kB / 800kB","PIDs":"2"}
+{"BlockIO":"721MB / 54.7GB","CPUPerc":"0.30%","Container":"cps-novel-postgres-1","ID":"691f4c3e43d7","MemPerc":"20.39%","MemUsage":"3.184GiB / 15.62GiB","Name":"cps-novel-postgres-1","NetIO":"8.8GB / 81.7GB","PIDs":"20"}
+{"BlockIO":"23.6MB / 1.36GB","CPUPerc":"0.00%","Container":"cps-novel-backup-timer-1","ID":"e833f8434144","MemPerc":"0.24%","MemUsage":"39.13MiB / 15.62GiB","Name":"cps-novel-backup-timer-1","NetIO":"5.37GB / 12.5MB","PIDs":"2"}

@@ -18,3 +18,10 @@
 ## Owner 追加裁决：分享图口径更正（2026-10-07）
 
 Owner 明确接受现有上游 HTTPS 封面，并指出主控提示词“og:image 全部正式域名”写错，属于验收标准错误，不是线上缺陷；本次不改代码、不回退。现有 resolveOgImage 有书封时优先书封，无书封时使用站点默认图。更正口径：canonical/hreflang/og:url 全部 https://pulsenovels.com；og:image 必须 HTTPS，且无 bangbangji、enpulsedrama、localhost 或预生产域名；首页/browse/分类等无书封取样使用正式默认图，图200/image/png；一个书封经指定代理仅HEAD一次验证200图片。逐页类型记录实际值。依裁决关闭维护、原匿名live复验后继续第5～9步，其余要求不变。
+
+
+## Owner 追加裁决：限流复测设计更正（2026-10-07）
+
+Owner指出全站页面key=$server_name，PAGE_CONN=10、PAGE_RATE=12r/s、PAGE_BURST=30 nodelay；原30次/并发10组全200符合设计，不能把错误的测试预算写成限流失效或“429未验证”遗留。追加只跑一次100次/并发20，经指定代理访问 /ko/browse，必须有429且零5xx/502；紧接只读记录一次uptime/docker stats。失败则维护停止，不改参数。本次实际63次200、37次429、无5xx，PASS。
+
+新sitemap包含adventure分类404另属真实业务范围矛盾：分类页最近240本与sitemap完整候选范围不同。已有源码V1上限说明不替代此次Owner裁决；本轮不改功能，按停止边界维护ON，等待明确接受缺陷继续或另定处置。GSC及外部三探针Owner回复“待做吧，不急”，只记待做。

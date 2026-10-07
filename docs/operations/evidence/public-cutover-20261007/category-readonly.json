@@ -1,0 +1,13 @@
+{
+  "transaction": "READ ONLY",
+  "locale": "en",
+  "slug": "adventure",
+  "activeTag": true,
+  "publicListCap": 240,
+  "publicCards": 240,
+  "adventureCardsWithinCap": 0,
+  "categoryResult": "null",
+  "eligibleListArticles": 12947,
+  "scannedThroughRank": 740,
+  "adventureArticlesBeyondCapInLastBatch": 6
+}

@@ -1,0 +1,272 @@
+{
+  "manifest": {
+    "runId": "ef3f78a9-7270-4e51-a49c-3d296400d420",
+    "releaseName": "ef3f78a9-7270-4e51-a49c-3d296400d420",
+    "rootDir": "/app/runtime/static-sitemaps",
+    "releaseDir": "/app/runtime/static-sitemaps/releases/ef3f78a9-7270-4e51-a49c-3d296400d420",
+    "generatedAt": "2026-10-07T09:44:27.754Z",
+    "promotedAt": "2026-10-07T09:44:27.757Z",
+    "durationMs": 22522,
+    "fileCount": 36,
+    "urlCount": 118292,
+    "sitemapFiles": [
+      "sitemap/site_mainpage_en.xml",
+      "sitemap/site_mainpage_es.xml",
+      "sitemap/site_mainpage_pt-BR.xml",
+      "sitemap/site_mainpage_id.xml",
+      "sitemap/site_mainpage_vi.xml",
+      "sitemap/site_mainpage_th.xml",
+      "sitemap/site_mainpage_ja.xml",
+      "sitemap/site_mainpage_ko.xml",
+      "sitemap/site_mainpage_zh-Hant.xml",
+      "sitemap/site_mainpage_ar.xml",
+      "sitemap/site_mainpage_fr.xml",
+      "sitemap/site_mainpage_de.xml",
+      "sitemap/site_mainpage_pl.xml",
+      "sitemap/site_mainpage_ru.xml",
+      "sitemap/site_novelpage_en.xml",
+      "sitemap/site_novelpage_en_1.xml",
+      "sitemap/site_novelpage_en_2.xml",
+      "sitemap/site_novelpage_en_3.xml",
+      "sitemap/site_novelpage_en_4.xml",
+      "sitemap/site_novelpage_en_5.xml",
+      "sitemap/site_novelpage_es.xml",
+      "sitemap/site_novelpage_es_1.xml",
+      "sitemap/site_novelpage_pt-BR.xml",
+      "sitemap/site_novelpage_id.xml",
+      "sitemap/site_novelpage_vi.xml",
+      "sitemap/site_novelpage_th.xml",
+      "sitemap/site_novelpage_ja.xml",
+      "sitemap/site_novelpage_ko.xml",
+      "sitemap/site_novelpage_zh-Hant.xml",
+      "sitemap/site_novelpage_ar.xml",
+      "sitemap/site_novelpage_fr.xml",
+      "sitemap/site_novelpage_de.xml",
+      "sitemap/site_novelpage_pl.xml",
+      "sitemap/site_novelpage_ru.xml",
+      "sitemap/site_novelpage_ru_1.xml"
+    ],
+    "version": "p2-10",
+    "initiatedBy": "sitemap-cli",
+    "reason": "正式域名切换后刷新 sitemap"
+  },
+  "shards": [
+    {
+      "file": "site_mainpage_en.xml",
+      "entries": 1789
+    },
+    {
+      "file": "site_mainpage_es.xml",
+      "entries": 302
+    },
+    {
+      "file": "site_mainpage_pt-BR.xml",
+      "entries": 260
+    },
+    {
+      "file": "site_mainpage_id.xml",
+      "entries": 189
+    },
+    {
+      "file": "site_mainpage_vi.xml",
+      "entries": 92
+    },
+    {
+      "file": "site_mainpage_th.xml",
+      "entries": 104
+    },
+    {
+      "file": "site_mainpage_ja.xml",
+      "entries": 61
+    },
+    {
+      "file": "site_mainpage_ko.xml",
+      "entries": 80
+    },
+    {
+      "file": "site_mainpage_zh-Hant.xml",
+      "entries": 7
+    },
+    {
+      "file": "site_mainpage_ar.xml",
+      "entries": 9
+    },
+    {
+      "file": "site_mainpage_fr.xml",
+      "entries": 285
+    },
+    {
+      "file": "site_mainpage_de.xml",
+      "entries": 113
+    },
+    {
+      "file": "site_mainpage_pl.xml",
+      "entries": 2
+    },
+    {
+      "file": "site_mainpage_ru.xml",
+      "entries": 290
+    },
+    {
+      "file": "site_novelpage_en.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_en_1.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_en_2.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_en_3.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_en_4.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_en_5.xml",
+      "entries": 1546
+    },
+    {
+      "file": "site_novelpage_es.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_es_1.xml",
+      "entries": 679
+    },
+    {
+      "file": "site_novelpage_pt-BR.xml",
+      "entries": 9240
+    },
+    {
+      "file": "site_novelpage_id.xml",
+      "entries": 6292
+    },
+    {
+      "file": "site_novelpage_vi.xml",
+      "entries": 3312
+    },
+    {
+      "file": "site_novelpage_th.xml",
+      "entries": 3728
+    },
+    {
+      "file": "site_novelpage_ja.xml",
+      "entries": 1532
+    },
+    {
+      "file": "site_novelpage_ko.xml",
+      "entries": 3064
+    },
+    {
+      "file": "site_novelpage_zh-Hant.xml",
+      "entries": 60
+    },
+    {
+      "file": "site_novelpage_ar.xml",
+      "entries": 124
+    },
+    {
+      "file": "site_novelpage_fr.xml",
+      "entries": 9779
+    },
+    {
+      "file": "site_novelpage_de.xml",
+      "entries": 3369
+    },
+    {
+      "file": "site_novelpage_pl.xml",
+      "entries": 160
+    },
+    {
+      "file": "site_novelpage_ru.xml",
+      "entries": 10000
+    },
+    {
+      "file": "site_novelpage_ru_1.xml",
+      "entries": 1824
+    }
+  ],
+  "counts": {
+    "ar": {
+      "novels": 31,
+      "chapters": 93,
+      "main": 9
+    },
+    "de": {
+      "novels": 843,
+      "chapters": 2526,
+      "main": 113
+    },
+    "en": {
+      "novels": 12947,
+      "chapters": 38599,
+      "main": 1789
+    },
+    "es": {
+      "novels": 2671,
+      "chapters": 8008,
+      "main": 302
+    },
+    "fr": {
+      "novels": 2447,
+      "chapters": 7332,
+      "main": 285
+    },
+    "id": {
+      "novels": 1573,
+      "chapters": 4719,
+      "main": 189
+    },
+    "ja": {
+      "novels": 383,
+      "chapters": 1149,
+      "main": 61
+    },
+    "ko": {
+      "novels": 766,
+      "chapters": 2298,
+      "main": 80
+    },
+    "pl": {
+      "novels": 40,
+      "chapters": 120,
+      "main": 2
+    },
+    "pt-BR": {
+      "novels": 2312,
+      "chapters": 6928,
+      "main": 260
+    },
+    "ru": {
+      "novels": 2957,
+      "chapters": 8867,
+      "main": 290
+    },
+    "th": {
+      "novels": 932,
+      "chapters": 2796,
+      "main": 104
+    },
+    "vi": {
+      "novels": 828,
+      "chapters": 2484,
+      "main": 92
+    },
+    "zh-Hant": {
+      "novels": 15,
+      "chapters": 45,
+      "main": 7
+    }
+  },
+  "urlCount": 118292,
+  "withdrawnExcluded": 236,
+  "imageLocCount": 28745,
+  "hreflangCount": 0,
+  "staleAdventureExcluded": false
+}

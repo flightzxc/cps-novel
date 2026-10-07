@@ -1266,3 +1266,146 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 | 9 | 无本轮暂停批次，恢复跳过；Git/台账/原v0.5.9日志和Notion最新暂停状态已同步；不合并、无新tag |
 
 **是否开放：当前否（维护ON）；是否回退：本次public部署后未回退，首次TLS失败的nginx/env回退仍为真实历史。** 当前阻断是30/10组未取得要求的429，分享图标准错误已获Owner纠正，不登记为产品缺陷。
+
+
+## 2026-10-07 18:52 JST 接续：限流补测、worker、当天 sitemap 与新分类矛盾
+
+本节为当前状态；前述16:20“429未验证”、15:54分享图暂停及“分类404为旧图残留”只保留历史，已分别由Owner更正或本节事实纠正。**当前维护ON，主站匿名503；public nginx/env保留，未正式开放。第二次成功public部署后未执行回退。**
+
+### Owner 裁决及偏离
+
+- Owner明确原30次/并发10复测落在PAGE_CONN=10、PAGE_RATE=12r/s、PAGE_BURST=30 nodelay预算内；全站key为server_name，全部200是正确结果。本轮更正验收设计，不把它记录成限流失效或豁免。只授权追加一个100次/并发20组，出现429且无任何5xx才通过；失败则维护停下、不调参数。
+- 关闭维护补齐原脚本标记 `PREPROD_RELEASE_VERIFIED=YES`，原 `verify-release.sh --anonymous-only --expect-live` PASS后才跑补测。没有再跑30/10、没有追加另一组100/20、未更改限流配置。
+- Owner手动后台确认/刷新意向回复到达前，已等待超过60秒并说明采用计划备用CLI，仅入队一次。回复到达后立即给出实际任务ID并提醒不要重复点击；该次不是Owner手动刷新。请求ID `public-cutover-20261007-01`，reason“正式域名切换后刷新 sitemap”。
+- GSC与三条外部监控收到Owner“待做吧，不急”，均记待做；三探针应为公开 `/api/health`、带Basic Auth后台 `/api/health/worker` 和 `/api/health/backup`，未冒充已配置。后台登录及二步验证仍待实际确认，设置只读值不能替代Owner登录。
+- 包装核验错误：最终备份散列最初在postgres容器检查错误挂载路径，报No such file；改在已有backup-timer挂载读取原备份后SHA通过，未重建备份。分类只读包装最初误用不存在的node_modules/.bin/tsx；改用镜像已有全局tsx后成功。均为包装错误，无运行代码、配置或数据库改动。
+
+### 唯一100/20组及即时主机采样
+
+目标 `https://pulsenovels.com/ko/browse`，本机所有请求经 `http://127.0.0.1:7899`，严格证书、不使用-k/-L；100次、并发20，耗时9.171694秒。完成时间首条2026-10-07T09:41:53.035576Z、末条09:42:01.214619Z。**63次200、37次429、100次curl exit 0，502=0、其它5xx=0，PASS。** 429响应HSTS为max-age=86400，200响应gzip/private,no-cache,no-store。每条UTC、状态、curl退出及耗时保存于 [rate-100x20.csv](evidence/public-cutover-20261007/rate-100x20.csv)。
+
+立即于09:42:04Z只读一次uptime和docker stats：uptime17天23:53，load0.21/0.13/0.10；[原始采样](evidence/public-cutover-20261007/rate-runtime.txt)。
+
+| 容器 | CPU | 内存 |
+|---|---:|---|
+| web | 0.08% | 149.3MiB / 2GiB |
+| worker | 0.65% | 93.55MiB / 2GiB |
+| worker-light | 0.75% | 93.66MiB / 1GiB |
+| scheduler | 0.00% | 3.508MiB / 512MiB |
+| postgres | 0.30% | 3.184GiB / 15.62GiB |
+| backup-timer | 0.00% | 39.13MiB / 15.62GiB |
+
+### Worker 预热和三次采样
+
+预热1次后等待10秒，随后3次采样；四次均200/ok/expiredLocks=0，正式三采样3/3通过。逐次真实响应头、JSON和耗时见 [worker-four-samples.json](evidence/public-cutover-20261007/worker-four-samples.json)，没有改写lastHeartbeatAgeSeconds=null，也未把预热算成正式采样。backup健康PASS。
+
+| 次序 | HTTP / 状态 / 过期锁 | 耗时秒 |
+|---|---|---:|
+| 0，预热 | 200 / ok / 0 | 0.036221 |
+| 1 | 200 / ok / 0 | 0.041627 |
+| 2 | 200 / ok / 0 | 0.031584 |
+| 3 | 200 / ok / 0 | 0.030684 |
+
+### 当天新域名 sitemap
+
+任务 `ef3f78a9-7270-4e51-a49c-3d296400d420`：created09:44:04.972Z、started09:44:05.210901Z、completed09:44:27.760204Z；1个item success、failed0、error=null。manifest generated09:44:27.754Z、promoted09:44:27.757Z、duration22522ms、fileCount36（1索引+35分片）、urlCount118292。与旧图118537差245（撤回小说236，mainpage净减9），不是章节缺失。worker-light从06:52:59Z至停下读回54001/stack depth计数0。
+
+总索引及全部35分片实际HTTP200、gzip、HSTS86400、no-store。所有主s:loc均https://pulsenovels.com、无预生产域名；XML没有hreflang节点（实际0），不声明存在已验收的hreflang节点。小说image:loc实际28745个，HTTPS上游封面，无禁用域名，按Owner接受现有上游书封的口径记录，未混入主URL计数。236本撤回书逐一排除。完整 [验证记录](evidence/public-cutover-20261007/sitemap-verification.json)。
+
+| 语种 | 小说：第0步=新图 | 免费正文：第0步=新图 | mainpage |
+|---|---:|---:|---:|
+| ar | 31 | 93 | 9 |
+| de | 843 | 2526 | 113 |
+| en | 12947 | 38599 | 1789 |
+| es | 2671 | 8008 | 302 |
+| fr | 2447 | 7332 | 285 |
+| id | 1573 | 4719 | 189 |
+| ja | 383 | 1149 | 61 |
+| ko | 766 | 2298 | 80 |
+| pl | 40 | 120 | 2 |
+| pt-BR | 2312 | 6928 | 260 |
+| ru | 2957 | 8867 | 290 |
+| th | 932 | 2796 | 104 |
+| vi | 828 | 2484 | 92 |
+| zh-Hant | 15 | 45 | 7 |
+
+| 分片 | 主URL条目 |
+|---|---:|
+| site_mainpage_en.xml | 1789 |
+| site_mainpage_es.xml | 302 |
+| site_mainpage_pt-BR.xml | 260 |
+| site_mainpage_id.xml | 189 |
+| site_mainpage_vi.xml | 92 |
+| site_mainpage_th.xml | 104 |
+| site_mainpage_ja.xml | 61 |
+| site_mainpage_ko.xml | 80 |
+| site_mainpage_zh-Hant.xml | 7 |
+| site_mainpage_ar.xml | 9 |
+| site_mainpage_fr.xml | 285 |
+| site_mainpage_de.xml | 113 |
+| site_mainpage_pl.xml | 2 |
+| site_mainpage_ru.xml | 290 |
+| site_novelpage_en.xml | 10000 |
+| site_novelpage_en_1.xml | 10000 |
+| site_novelpage_en_2.xml | 10000 |
+| site_novelpage_en_3.xml | 10000 |
+| site_novelpage_en_4.xml | 10000 |
+| site_novelpage_en_5.xml | 1546 |
+| site_novelpage_es.xml | 10000 |
+| site_novelpage_es_1.xml | 679 |
+| site_novelpage_pt-BR.xml | 9240 |
+| site_novelpage_id.xml | 6292 |
+| site_novelpage_vi.xml | 3312 |
+| site_novelpage_th.xml | 3728 |
+| site_novelpage_ja.xml | 1532 |
+| site_novelpage_ko.xml | 3064 |
+| site_novelpage_zh-Hant.xml | 60 |
+| site_novelpage_ar.xml | 124 |
+| site_novelpage_fr.xml | 9779 |
+| site_novelpage_de.xml | 3369 |
+| site_novelpage_pl.xml | 160 |
+| site_novelpage_ru.xml | 10000 |
+| site_novelpage_ru_1.xml | 1824 |
+
+
+### 新发现的真实矛盾，维护停止
+
+新 `site_mainpage_en.xml` 仍列出 `https://pulsenovels.com/category/adventure`。本次仅补查一次该URL，2026-10-07T09:46:43.547340Z外部HTTP404、curl0、1.165974秒；HSTS86400、gzip/private,no-cache,no-store。因此先前“旧图残留”判断不成立，此处纠正，不能将当天新图业务可达性整体登记PASS。
+
+运行镜像原函数在Prisma READ ONLY事务复核：activeTag=true、PUBLIC_LIST_CAP=240、publicCards=240、adventureCardsWithinCap=0、getPublicCategoryPage=null；同语种eligibleListArticles=12947，扫描241～740候选发现6本adventure。这6本仅为该区间数，不冒充全量分类总数。源码分类函数先调用最近240本列表再筛标签，而sitemap分类生成使用全量可收录候选及其分页，范围确实不同；不是本轮域名、封面、限流或TLS改动导致。源码已有V1上限说明不自动构成本轮Owner接受该404的裁决。[运行只读结果](evidence/public-cutover-20261007/category-readonly.json)。
+
+按原计划“未获裁决的真实矛盾立即停止；切换后验收失败先维护”，已原脚本maintenance on，marker回读ON；外部首页严格代理复验HTTP503 / Maintenance in progress / no-store / HSTS86400，耗时0.933940秒。未改代码、未去掉分类URL、未重新入队sitemap、未自动回nginx/env或数据库。已向Owner提供接受既有缺陷继续、保持维护另修、由Owner指定回退范围的裁决选项；当前未收到该项裁决。
+
+### 最后身份、备份与env读回
+
+09:47:25Z最终读回（重新维护前）env其它字节cmp不变，两行域名正确，四应用镜像与postgres CID不变，六容器healthy，backup-timer常驻，IndexNow与tracking闭闸，原匿名live PASS，nginx安装文件散列仍d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。维护仅切marker，不再发版。
+
+- dump：`/opt/cps-novel/shared/backups/logical/public-cutover-20261007T053946Z.dump`；681549422字节；SHA256 `27321aaaf79b6a4a3ea5feb6b81859ad5464524e5b77de5443fb9e6e0e0e461d`，初始dump/sha256/metadata及restore-list齐全，最终从backup-timer挂载重算相同。
+- `cutover_nginx_backup=/opt/cps-novel/shared/nginx-backups/install.nFW11rwP`。第一次失败原站备份install.xzocFoFH与保护备份install.nBoCCanA用途不混淆。
+- 四应用前后同一Image：`sha256:faa2c75b7c6e00efbe20d65bee89e685556429f98d6901de79adf1d53318cb11`。
+- postgres前后CID：`691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。
+- 站名PulseNovel、相对默认图 `/brand/og-default.png`、IndexNow host/key/keyLocation空值再次只读确认；GA4/Yandex缺失跳过。
+
+```diff
+-SITE_URL=https://www.bangbangji.cloud
+-ADMIN_CANONICAL_ORIGIN=https://zbcwf.bangbangji.cloud
++SITE_URL=https://pulsenovels.com
++ADMIN_CANONICAL_ORIGIN=https://zbcwf.pulsenovels.com
+```
+
+### 第0～9步当前交付状态
+
+| 步骤 | 当前事实 |
+|---|---|
+| 0 | Final/22迁移/任务暂停原SQL/14语种书目和章节/旧35分片基线PASS，无运行领取或后台发布任务 |
+| 1 | 逻辑备份三件、归档读回与散列PASS，backup-timer常驻 |
+| 2 | 维护、env仅两行diff/其它字节cmp、public preflight及IndexNow闭闸PASS |
+| 3 | public候选/安装散列、worker交接、维护503/health和严格TLS PASS；首次TLS失败已完整记回退 |
+| 4 | 原完整批准SHA同镜像RELEASE PASS，镜像/CID不变，原匿名live PASS |
+| 5 | 分享图更正后外部矩阵、短码首跳一次、书封HEAD一次、唯一100/20限流及unknown Host PASS |
+| 6 | worker四次及backup PASS；Owner新后台登录/二步验证待实际回报，设置只读值已确认 |
+| 7 | 新域名一次刷新成功，索引/35分片200、逐语种计数/236撤回排除PASS；分类adventure404范围矛盾待Owner裁决，整体未收官 |
+| 8 | GSC待做；三条外部监控待做，Owner已明确延后，不阻断 |
+| 9 | 无本轮暂停批次，恢复跳过；ops分支证据/台账/同版日志追加及Notion同步进行中，未合并 |
+
+**是否开放：否，维护ON；是否回退：成功public部署后未回退。** 第0～9步尚未全部完成：分类范围矛盾需Owner裁决；Owner后台2FA需实际确认。其它既有DEFERRED/WAIVED不变。
