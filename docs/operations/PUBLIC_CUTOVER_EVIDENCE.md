@@ -1107,3 +1107,24 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 - 本机外部旧站经指定代理匿名 401、rehearsal/noindex。新域名 exit 60 的切换前差异按 Owner 已确认 ADR 接受，public 安装后不放宽 TLS。
 - 逻辑备份和候选先于需要 sudo 的整份 nginx 备份完成；两者都须在维护/env/安装前齐全。这是执行顺序偏离，不替代 nginx 备份。
 - 当前记录只证明准备结果，不宣称第 1～9 步全部完成。
+
+### 15:21–15:22 JST：首次 public 安装后 TLS 检查失败，nginx/env 已回退，保持维护
+
+来源：Owner 回传交互脚本完整关键输出；Codex 于 2026-10-07 15:23–15:25 JST 独立只读复核。**本轮第 3 步失败，没有进入第 4 步，没有对外开放；确实执行过 nginx/env 回退。**
+
+- Owner 的 sudo 会话先完成整份 nginx 备份；重验基线 `BASELINE=PASS published=28745 chapters=85964 withdrawn=236 shards=35`，原暂停 SQL 通过。公开候选 SHA256 仍为 `d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe`。
+- 第 2 步开启维护，env 仅两个域名切为正式主站/后台；域名 diff 和其余字节 cmp 通过。`PREPROD_SITE_MODE=public`、`PREPROD_PREFLIGHT=PASS`、secret consumer/access、既有写闸和 worker lanes 全 PASS；没有新增写闸或配置 IndexNow。
+- 第 3 步安装器备份 `cutover_nginx_backup=/opt/cps-novel/shared/nginx-backups/install.xzocFoFH`；nginx -t、安装器和安装后站点哈希均 PASS。安装 log 文件修改时间 15:22:04.784848375 JST。
+- 第一轮公开首页探测记录修改时间 15:22:04.933848540 JST，约在安装 log 返回后 149ms。受控记录为 curlExit=60 / HTTP=000 / time=0.075343s，无 HTTP 响应头或正文。**严格就绪未通过**，没有把证书失败当作允许重试的 7/52/28 或旧 rehearsal HTTP 响应。
+- 原包装随即开启维护，使用 `install.xzocFoFH` 恢复 nginx，并恢复 env。恢复操作额外生成的安全备份 `/opt/cps-novel/shared/nginx-backups/install.nBoCCanA` 是恢复前的 public 配置，不是本次所选恢复源。Owner 输出 `CUTOVER_EDGE_ROLLBACK=PASS env_restored=1 maintenance=ON`。
+- Codex 独立 `cmp`：env 全文与受控备份字节一致，域名以外字节也一致（只打印比较结论，没有打印 env 全文）；当前两个域名已回到旧值。四应用镜像锚点完全不变，postgres CID 不变；六容器 healthy、nginx active、443 保留；edge.pass 不存在。
+- 恢复后站点文件 SHA256=`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`，与原 rehearsal 证据一致。旧公开 health 认证 HTTP200/healthy、version0.5.9/完整Final、database及metadata passed、noindex/no-store。以合法旧域名 SNI + 新 Host 的回环探针得到新 Host 404。
+- 本机经规定代理的旧站匿名首页为 HTTP503；维护明确仍开启，因此**不宣称已经恢复旧站业务 200 或完整回退后的 401/200 验收**。应用容器未重发，数据库和任务数据未恢复、未删除；第 4～9 步均未继续。
+
+#### TLS 诊断限制与接续
+
+- VPS DNS 中主站/后台均解析到 2.24.209.236。回退后的新 SNI 握手呈现旧公开站证书（CN/SAN www.bangbangji.cloud）；这是恢复后的 rehearsal 状态，不能倒推安装期间呈现的证书。
+- 探测开始过早可能仍命中旧 worker，但目前仅有时间关联，**没有已确证的根因**。新证书 SAN/链问题与 reload 交接问题仍需区分。
+- 自写 fetch 包装没有保存首次 curl stderr 或失败时证书元数据，导致仅知道 exit60，无法从保存证据区分具体 TLS 失败原因。已在本地修正后续错误文本留存并重跑 11 项隔离检查 PASS；不放宽证书验证或 curl60 门禁，未替换运行版代码，也未重新安装。
+- deploy 无权读取新证书公开 fullchain 元数据、nginx error.log 和系统 reload journal，sudo -n 需要密码。已上传只读诊断脚本 `tls-readonly-diagnostic.sh`，本地/远端 SHA256=`2f3183c8f39ce232e645ed22ca7a84281c7985b2c01e7004679682b5258ab8fb`，Bash 语法通过；只取公钥证书元数据、指定窗口的控制日志及两份配置备份哈希，不读取私钥、不安装或 reload。Owner 的交互命令见命令单。
+- 当前暂停在第 3 步失败后的诊断；保持维护。版本台账、正式开发日志和 Notion 尚未登记“正式开放”，GSC/监控保持待做。重跑或恢复旧站业务须先根据诊断确定处理方式，不重复执行原安装命令。

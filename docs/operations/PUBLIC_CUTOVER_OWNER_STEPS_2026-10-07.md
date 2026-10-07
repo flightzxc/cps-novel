@@ -24,3 +24,13 @@ sudo 提示出现时，只在该终端输入密码，不在聊天发送。所有
 - `init.sh`：`5e634d05335f9bfd9690cc78af8db7b36dcb728051a5639e1b0c1fde0f738773`
 - `prepare.sh`：`9125e26091da2e2e488bbbff33677f676e6b3272fa7c1dd40a8be24e8fce38c8`
 - `owner-edge.sh`：`eadb22475550831d40e092fcf5c9f1372fc26c5e493180111b02d80888fab28b`
+
+## 首次执行失败后的接续（15:22 JST）
+
+首次 public 安装与哈希检查成功，严格 TLS 就绪检查返回 curl60；脚本已回退 nginx/env 并保持维护。**当前不要重复执行上面的安装命令。** 先在交互终端执行以下只读诊断，输入 sudo 密码后回传输出：
+
+```bash
+ssh -t -o KexAlgorithms=curve25519-sha256 haiyue-vps 'bash /opt/cps-novel/shared/cutover-public-20261007/tls-readonly-diagnostic.sh'
+```
+
+诊断脚本 SHA256：`2f3183c8f39ce232e645ed22ca7a84281c7985b2c01e7004679682b5258ab8fb`。仅显示公钥证书 SAN/有效期/指纹、指定窗口 nginx 控制日志、原配置及恢复前安全备份哈希；不读取私钥，不修改配置，不 reload，不发布应用。
