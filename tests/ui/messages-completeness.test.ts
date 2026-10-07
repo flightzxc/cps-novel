@@ -222,6 +222,9 @@ const EXPECTED_PLURAL_CATEGORIES: Readonly<Record<SiteLocale, readonly string[]>
  *    {total}"), which is also fine — the allowlist only needs to cover the
  *    locales that legitimately stay identical, and per-key (not per-locale)
  *    matches how `pagination.pageOf` is already registered above.
+ *  - `novel.coverAlt` ("{title}"): 书封 alt 只保留书名（Owner 2026-10-07），整条文案
+ *    就是一个插值变量、没有任何可翻译的文字，15 个语种逐字相同是预期，不是漏译。
+ *    与 `pagination.pageOf` 同形，所以同样按键（而非按语种）登记。
  *  - `nav.genres` ("Genres") in `fr`: the correct French word — French is
  *    the etymological source of the English word, not a leftover.
  *  - `pagination.label` ("Pagination") in `fr`: same — French is the
@@ -233,6 +236,7 @@ const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set([
   "blog.listTitle",
   "pagination.pageOf",
   "chapter.previewPosition",
+  "novel.coverAlt",
 ]);
 const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "fr:pagination.label", "fr:meta.pageSuffix"]);
 

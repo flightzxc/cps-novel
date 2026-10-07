@@ -55,7 +55,7 @@ const messages = {
     chapterCount: "Capítulos: {count}",
   },
   novel: {
-    coverAlt: "Capa de {title}",
+    coverAlt: "{title}",
     tagsLabel: "Etiquetas",
     genreTags: "Etiquetas de gênero",
     chapterCount: "Capítulos: {count}",

@@ -64,7 +64,7 @@ const messages = {
       "{count, plural, zero {لا فصول} one {فصل واحد} two {فصلان} few {{count} فصول} many {{count} فصلاً} other {{count} فصل}}",
   },
   novel: {
-    coverAlt: "غلاف {title}",
+    coverAlt: "{title}",
     tagsLabel: "العلامات",
     genreTags: "علامات النوع",
     // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（zero/one/two/few/many/other，

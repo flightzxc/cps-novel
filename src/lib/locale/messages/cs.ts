@@ -62,7 +62,7 @@ const messages = {
       "{count, plural, one {{count} kapitola} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
   },
   novel: {
-    coverAlt: "Obálka {title}",
+    coverAlt: "{title}",
     tagsLabel: "Tagy",
     genreTags: "Žánrové tagy",
     // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("cs") 实测；

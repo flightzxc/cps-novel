@@ -180,15 +180,21 @@ describe("TemplateManager · 基本信息表单", () => {
     expect(input.template.status).toBe("active");
   });
 
-  it("新建模板时模板 Key 可编辑，编辑既有模板时 disabled", () => {
+  it("新建模板时模板 Key 可编辑，编辑既有模板时只读（readOnly，不是 disabled）", () => {
     const { unmount } = render(<TemplateManager rows={[]} canWrite />);
     fireEvent.click(screen.getByText("新建模板"));
-    expect((screen.getByLabelText("模板 Key") as HTMLInputElement).disabled).toBe(false);
+    const createKey = screen.getByLabelText("模板 Key") as HTMLInputElement;
+    expect(createKey.readOnly).toBe(false);
+    expect(createKey.disabled).toBe(false);
     unmount();
 
     render(<TemplateManager rows={[ROW]} canWrite />);
     fireEvent.click(screen.getByText("编辑"));
-    expect((screen.getByLabelText("模板 Key") as HTMLInputElement).disabled).toBe(true);
+    const editKey = screen.getByLabelText("模板 Key") as HTMLInputElement;
+    expect(editKey.readOnly).toBe(true);
+    // disabled 的控件不会进入浏览器构造的 FormData——这正是"编辑任何模板都报 Key 不能为空"的成因。
+    expect(editKey.disabled).toBe(false);
+    expect(editKey.value).toBe("tpl-1");
   });
 });
 
@@ -381,6 +387,63 @@ describe("TemplateManager · 新建/编辑提交", () => {
     const [input] = actions.updateTemplateAction.mock.calls[0];
     expect(input.id).toBe("template-1");
     expect(input.template.contentTemplate).toEqual([{ type: "paragraph", content: "{novel_title}" }]);
+  });
+
+  /**
+   * 回归：编辑已有模板点保存必报「模板 Key 不能为空」。
+   *
+   * 编辑态下 Key 输入框曾是 `disabled`，而浏览器（jsdom 同样）构造 FormData 时会跳过
+   * disabled 控件，`formData.get("templateKey")` 于是是 null，被 `String(… ?? "")` 变成
+   * 空串，服务端 `required()` 拒绝。前一条用例点了保存却没断言 key，所以没拦住。
+   */
+  it("编辑已有模板：updateTemplateAction 收到的 templateKey 等于原模板的 key（不是空串）", async () => {
+    actions.updateTemplateAction.mockResolvedValue({ ok: true });
+    render(<TemplateManager rows={[ROW]} canWrite />);
+    fireEvent.click(screen.getByText("编辑"));
+    fireEvent.change(screen.getByLabelText("模板名称"), { target: { value: "改过的名称" } });
+    fireEvent.click(screen.getByText("保存并校验"));
+
+    await vi.waitFor(() => expect(actions.updateTemplateAction).toHaveBeenCalledTimes(1));
+    const [input] = actions.updateTemplateAction.mock.calls[0];
+    expect(input.id).toBe("template-1");
+    expect(input.template.templateKey).toBe("tpl-1");
+    expect(input.template.templateName).toBe("改过的名称");
+    expect(actions.createTemplateAction).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("编辑内置默认模板同样提交它自己的 key", async () => {
+    actions.updateTemplateAction.mockResolvedValue({ ok: true });
+    render(<TemplateManager rows={[SEED_ROW]} canWrite />);
+    fireEvent.click(screen.getByText("编辑"));
+    fireEvent.click(screen.getByText("保存并校验"));
+
+    await vi.waitFor(() => expect(actions.updateTemplateAction).toHaveBeenCalledTimes(1));
+    const [input] = actions.updateTemplateAction.mock.calls[0];
+    expect(input.template.templateKey).toBe(DEFAULT_ARTICLE_TEMPLATE_KEY);
+  });
+
+  it("编辑成功后不出现「模板 Key 不能为空」错误提示", async () => {
+    actions.updateTemplateAction.mockResolvedValue({ ok: true });
+    render(<TemplateManager rows={[ROW]} canWrite />);
+    fireEvent.click(screen.getByText("编辑"));
+    fireEvent.click(screen.getByText("保存并校验"));
+    await vi.waitFor(() => expect(actions.updateTemplateAction).toHaveBeenCalledTimes(1));
+    expect(document.body.textContent).not.toContain("模板 Key 不能为空");
+  });
+
+  it("新建路径不受影响：key 取自表单输入，走 createTemplateAction，不调 updateTemplateAction", async () => {
+    actions.createTemplateAction.mockResolvedValue({ ok: true });
+    render(<TemplateManager rows={[ROW]} canWrite />);
+    fireEvent.click(screen.getByText("新建模板"));
+    fillBasicFields("tpl-brand-new");
+    addBlock("段落");
+    fireEvent.click(screen.getByText("保存并校验"));
+
+    await vi.waitFor(() => expect(actions.createTemplateAction).toHaveBeenCalledTimes(1));
+    const [input] = actions.createTemplateAction.mock.calls[0];
+    expect(input.template.templateKey).toBe("tpl-brand-new");
+    expect(actions.updateTemplateAction).not.toHaveBeenCalled();
   });
 
   it("打开内置默认模板（system-default-v1）时显示正文将被重新编译的提示", () => {

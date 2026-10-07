@@ -44,7 +44,9 @@ export const en = {
     chapterCount: "{count} chapters",
   },
   novel: {
-    coverAlt: "Cover of {title}",
+    // Owner 2026-10-07：书封 alt 只保留书名，不带 "Cover of" 一类前缀（15 个语种同）。
+    // 书名恒非空：公开页的书名来自已发布文章，库里有 article_published_title_check 兜底。
+    coverAlt: "{title}",
     tagsLabel: "Tags",
     genreTags: "Genre tags",
     chapterCount: "{count} chapters",

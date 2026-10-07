@@ -61,7 +61,7 @@ const messages = {
       "{count, plural, one {{count} глава} few {{count} главы} many {{count} глав} other {{count} главы}}",
   },
   novel: {
-    coverAlt: "Обложка «{title}»",
+    coverAlt: "{title}",
     tagsLabel: "Теги",
     genreTags: "Теги жанра",
     // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("ru") 实测）。

@@ -120,7 +120,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `common.episodes` → `novel.chapterCount` / `home.chapterCount` | `src/messages/en.json` | `31` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `{count} Episodes` → `{count} chapters` | Claude |
 | `error.title` → `unavailable.unpublishedTitle` | `src/messages/en.json` | `64` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `This drama is unavailable` → `This book is temporarily unavailable`；另写 takedown 永久性撤回（短剧站无对等句） | Claude |
 | `error.home` → `unavailable.returnHome` | `src/messages/en.json` | `66` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `Return Home Now` → `Back to home`，去掉促销口吻 | Claude |
-| tag/drama `coverAlt` → `novel.coverAlt` | `src/messages/en.json` | `91,97` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `{name} cover` → `Cover of {title}`；不用《》 | Claude |
+| tag/drama `coverAlt` → `novel.coverAlt` | `src/messages/en.json` | `91,97` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `{name} cover` → `{title}`（2026-10-07 Owner 决定：书封 alt 只保留书名，不带 "Cover of" 一类前缀，15 语种同；此前为 `Cover of {title}`）；不用《》 | Claude |
 | `generateWebSiteJsonLd` | `src/lib/seo-utils.ts` | `14-22` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 改走 `_shared.getSiteUrl`，无 PulseDrama 默认域 | Cursor |
 | `generateCreativeWorkJsonLd` | `src/lib/seo-utils.ts` | `38-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `@type` 改 Book；`/drama/${slug}` 改为调用方传入 url；`episodeCount`→`chapterCount`；删 platform/provider | Cursor |
 | `generateBreadcrumbJsonLd` | `src/lib/seo-utils.ts` | `66-77` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（origin 经 getSiteUrl） | Cursor |

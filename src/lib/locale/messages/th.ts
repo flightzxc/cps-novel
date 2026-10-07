@@ -63,7 +63,7 @@ const messages = {
     chapterCount: "{count} ตอน",
   },
   novel: {
-    coverAlt: "ปก {title}",
+    coverAlt: "{title}",
     tagsLabel: "แท็ก",
     genreTags: "แท็กหมวดหมู่",
     chapterCount: "{count} ตอน",

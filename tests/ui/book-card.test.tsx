@@ -29,7 +29,7 @@ describe("书籍卡片", () => {
     render(<BookCard locale="en" novel={WITH_TAGS} />);
 
     expect(screen.getByRole("heading", { name: WITH_TAGS.title })).toBeTruthy();
-    expect(screen.getByAltText(`Cover of ${WITH_TAGS.title}`)).toBeTruthy();
+    expect(screen.getByAltText(WITH_TAGS.title)).toBeTruthy();
     expect(screen.getByText("言情")).toBeTruthy();
     expect(screen.getByText("都市")).toBeTruthy();
   });
@@ -43,7 +43,7 @@ describe("书籍卡片", () => {
     const { container } = render(<BookCard locale="en" novel={WITH_TAGS} minimal />);
 
     expect(screen.getByRole("heading", { name: WITH_TAGS.title })).toBeTruthy();
-    expect(screen.getByAltText(`Cover of ${WITH_TAGS.title}`)).toBeTruthy();
+    expect(screen.getByAltText(WITH_TAGS.title)).toBeTruthy();
     expect(container.querySelector('[data-testid="tag-list"]')).toBeNull();
     expect(screen.queryByText("言情")).toBeNull();
     expect(screen.queryByText("都市")).toBeNull();
