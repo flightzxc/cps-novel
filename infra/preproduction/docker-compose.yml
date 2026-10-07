@@ -110,6 +110,15 @@ services:
       TOTP_ENCRYPTION_KEY_FILE: /run/secrets/totp_encryption_key
       PUBLIC_TRACKING_WRITE_DISABLED: "1"
       ADMIN_TWO_FACTOR_ENFORCEMENT: "true"
+      # B-39: the Turnstile secret key reaches web only as a file (never a
+      # literal in this env, mirroring TOTP above): the direct value is pinned
+      # empty so a stray ADMIN_LOGIN_TURNSTILE_SECRET_KEY in preprod.env cannot
+      # leak through the root compose passthrough, and start-web.sh loads the
+      # file only when ADMIN_LOGIN_TURNSTILE_ENABLED is exactly "true". The
+      # switch and the public site key are NOT pinned here -- they pass through
+      # from preprod.env via the root compose (default off).
+      ADMIN_LOGIN_TURNSTILE_SECRET_KEY: ""
+      ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE: /run/secrets/admin_login_turnstile_secret_key
       BACKUP_OUTPUT_DIR: /var/lib/cps-novel/backups/logical
       BACKUP_STATUS_FILE: /var/lib/cps-novel/backups/last-success.json
     volumes:
@@ -117,6 +126,7 @@ services:
     secrets:
       - tracking_hash_salt
       - totp_encryption_key
+      - admin_login_turnstile_secret_key
 
   worker:
     # 同 web：目标机不得具备就地构建能力，见上面的说明。
@@ -288,5 +298,18 @@ secrets:
     file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/tracking_hash_salt
   totp_encryption_key:
     file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/totp_encryption_key
+  # B-39: a CONDITIONAL secret -- the one Docker secret in this file that must
+  # not exist on a host until the Owner turns Turnstile on. A Compose file
+  # secret whose source is missing makes `up` fail ("bind source path does not
+  # exist", verified on Compose v5.0.1), which would take the whole web
+  # container -- and the public site with it -- down at release time, before any
+  # key exists. So the source defaults to /dev/null (mounts fine, reads empty,
+  # never read while the switch is off), and scripts/preproduction/lib.sh's
+  # `preprod_compose` points ADMIN_LOGIN_TURNSTILE_SECRET_SOURCE at
+  # <PREPROD_SHARED_ROOT>/secrets/admin_login_turnstile_secret_key if and only if
+  # ADMIN_LOGIN_TURNSTILE_ENABLED is exactly "true". Its presence, mode, owner
+  # and ACL are then enforced by secrets-preflight.sh's conditional entry.
+  admin_login_turnstile_secret_key:
+    file: ${ADMIN_LOGIN_TURNSTILE_SECRET_SOURCE:-/dev/null}
   backup_role_pgpass:
     file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/backup_role.pgpass

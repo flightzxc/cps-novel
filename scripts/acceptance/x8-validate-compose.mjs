@@ -95,6 +95,38 @@ for (const service of [worker, services.scheduler]) {
     fail("ADMIN_TWO_FACTOR_ENFORCEMENT is an admin-UI/session switch and must not reach worker/scheduler");
   }
 }
+// B-39: the admin-login Turnstile switch (src/lib/auth/admin-login-turnstile.ts)
+// is web-only, same category as ADMIN_TWO_FACTOR_ENFORCEMENT above. Unlike that
+// one it is NOT pinned per X8_LEVEL: it defaults to "false" at every level (the
+// local topology has no real Turnstile keys), and a developer may export
+// "true" together with Cloudflare's published dummy keys to rehearse it. So
+// this asserts the shape rather than a value -- exactly "true" or "false" (a
+// typo such as "TRUE" would be silently read as off by the runtime), and a
+// "true" must come with a site key and some form of secret key, because an ON
+// switch without them makes every admin login refuse. It must never reach
+// worker/worker-light/scheduler: they serve no login.
+const turnstileSwitch = web.environment?.ADMIN_LOGIN_TURNSTILE_ENABLED ?? "";
+if (turnstileSwitch !== "true" && turnstileSwitch !== "false") {
+  fail(`ADMIN_LOGIN_TURNSTILE_ENABLED must be exactly "true" or "false" in web (got "${turnstileSwitch}")`);
+}
+if (turnstileSwitch === "true") {
+  if (!(web.environment?.ADMIN_LOGIN_TURNSTILE_SITE_KEY ?? "")) {
+    fail("ADMIN_LOGIN_TURNSTILE_ENABLED is true but web has no ADMIN_LOGIN_TURNSTILE_SITE_KEY");
+  }
+  if (
+    !(web.environment?.ADMIN_LOGIN_TURNSTILE_SECRET_KEY ?? "")
+    && !(web.environment?.ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE ?? "")
+  ) {
+    fail("ADMIN_LOGIN_TURNSTILE_ENABLED is true but web has neither ADMIN_LOGIN_TURNSTILE_SECRET_KEY nor ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE");
+  }
+}
+for (const service of [worker, services["worker-light"], services.scheduler]) {
+  for (const key of Object.keys(service.environment ?? {})) {
+    if (key.startsWith("ADMIN_LOGIN_TURNSTILE_")) {
+      fail(`${key} is an admin-login switch and must not reach worker/worker-light/scheduler`);
+    }
+  }
+}
 for (const service of [web, worker, services.scheduler]) {
   if (service.network_mode === "host") fail("host networking is forbidden");
 }

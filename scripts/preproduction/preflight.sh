@@ -38,6 +38,11 @@ lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fa
 # "别等部署完才在日志里发现笔误"的理由，见 lib.sh 里
 # `preprod_assert_moboreader_rate_gate_config()` 上方的详细说明。
 rate_gate_config_evidence="$(preprod_assert_moboreader_rate_gate_config)" || fail "$rate_gate_config_evidence"
+# B-39（后台登录 Turnstile）：开关只接受 true/false/未设置，开启时站点密钥必须
+# 存在且合形；服务端密钥文件由下面的 secrets-preflight.sh 条件项校验。默认关闭，
+# 关闭时这一步只打印 enabled=false，不影响既有判定。详见 lib.sh 里
+# `preprod_assert_admin_login_turnstile_config()` 上方的说明。
+admin_login_turnstile_evidence="$(preprod_assert_admin_login_turnstile_config)" || fail "$admin_login_turnstile_evidence"
 # 🔴 auto tagging（FEATURE_NOVEL_TAG_AUTO / AUTO_WRITE_AUTHORIZED）的硬编码恒
 # false/NO 判定已删除，改由上面的 preprod_assert_write_gates()（封闭枚举第四
 # 项 auto_tag_write）覆盖——同 2026-09-23 catalog/promo、2026-09-26 sitemap
@@ -98,4 +103,5 @@ fi
 echo "$write_gates_evidence"
 echo "$lifecycle_config_evidence"
 echo "$rate_gate_config_evidence"
+echo "$admin_login_turnstile_evidence"
 echo "PREPROD_PREFLIGHT=PASS"
