@@ -501,6 +501,22 @@ describe("7. secrets-preflight: the Turnstile secret is checked if and only if t
     expect(hostOnly(dir, { [ENV.enabled]: "false" }).status).toBe(0);
   });
 
+  it("the switch loaded from preprod.env is EXPORTED, so the secrets-preflight child process preflight.sh spawns actually sees it", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "turnstile-env-export-"));
+    const envFile = path.join(dir, "preprod.env");
+    await writeFile(envFile, `P1_12_COMPOSE_PROJECT=cps-novel\n${ENV.enabled}=true\n`, "utf8");
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -euo pipefail\nsource "${path.join(root, "scripts/preproduction/lib.sh")}"\npreprod_load_env\nbash -c 'printf %s "\${${ENV.enabled}:-unset}"'`],
+      { encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile } },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("true");
+    // and preflight.sh runs secrets-preflight.sh as a child process (not sourced), after the gate
+    const body = code(preflightSh);
+    expect(body).toContain('"$root/scripts/preproduction/secrets-preflight.sh"');
+  });
+
   it("a consumer matrix file with no trailing newline cannot swallow the conditional row", async () => {
     const dir = await fixture();
     const matrix = path.join(dir, "matrix.tsv");
