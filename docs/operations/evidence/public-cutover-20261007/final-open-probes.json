@@ -1,0 +1,73 @@
+[
+  {
+    "label": "final-open-corrected-home",
+    "url": "https://pulsenovels.com/",
+    "http": 200,
+    "curlExit": 0,
+    "seconds": 1.334319,
+    "utc": "2026-10-07T10:39:15.076126+00:00",
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "content-encoding": "gzip",
+      "strict-transport-security": "max-age=86400"
+    }
+  },
+  {
+    "label": "final-open-corrected-en-novel",
+    "url": "https://pulsenovels.com/novel/contract-baby-and-billionaire-pg15q11wz",
+    "http": 200,
+    "curlExit": 0,
+    "seconds": 1.10808,
+    "utc": "2026-10-07T10:39:16.203859+00:00",
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "content-encoding": "gzip",
+      "strict-transport-security": "max-age=86400"
+    }
+  },
+  {
+    "label": "final-open-corrected-en-chapter",
+    "url": "https://pulsenovels.com/novel/contract-baby-and-billionaire-pg15q11wz/chapter/1",
+    "http": 200,
+    "curlExit": 0,
+    "seconds": 1.298931,
+    "utc": "2026-10-07T10:39:17.521832+00:00",
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "content-encoding": "gzip",
+      "strict-transport-security": "max-age=86400"
+    }
+  },
+  {
+    "label": "final-admin-login-anon",
+    "url": "https://zbcwf.pulsenovels.com/login",
+    "http": 401,
+    "curlExit": 0,
+    "seconds": 0.939972,
+    "utc": "2026-10-07T10:39:18.486182+00:00",
+    "headers": {
+      "content-type": "text/html",
+      "strict-transport-security": "max-age=86400",
+      "x-robots-tag": "noindex, nofollow, noarchive",
+      "www-authenticate": "Basic realm=\"CPS Novel Administration\""
+    }
+  },
+  {
+    "label": "final-admin-login-auth",
+    "url": "https://zbcwf.pulsenovels.com/login",
+    "http": 200,
+    "curlExit": 0,
+    "seconds": 0.999514,
+    "utc": "2026-10-07T10:39:19.500106+00:00",
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "content-encoding": "gzip",
+      "strict-transport-security": "max-age=86400",
+      "x-robots-tag": "noindex, nofollow, noarchive"
+    }
+  }
+]

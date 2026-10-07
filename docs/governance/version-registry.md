@@ -19,6 +19,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+**正式域名开放（2026-10-07 18:39 +0800 / 19:39 JST）**：v0.5.9 于 2026-10-07 切换到正式域名 pulsenovels.com 对外开放；最终maintenance OFF于10:39:15Z，原匿名live PASS，首页/en小说/第1章经代理均200、非维护页、无X-Robots-Tag，三页确认10:39:17.521832Z。复用Final `6af0b2e5c79db932c4754a43580eed3729bd0334`，镜像/CID/env其余字节不变。Owner接受部分分类页404为已知缺陷B-38（最近240本与sitemap全量范围差异），随v0.5.10修复，本次不改功能、不回退；未全量扫描分类、未追加压测/刷新。100/20、worker四采样及新图35分片/118292 URL/236撤回排除既有证据保留。后台正确登录入口/login，应用登录与2FA待Owner完成后核对；GSC/监控待做，无批次需恢复。此次同版开放不发新版本或tag，Git/Notion收官同步进行中。
+
 **切换接续（2026-10-07 17:52 +0800 / 18:52 JST）**：Owner 更正限流复测设计，原30/10全200符合预算；追加唯一100/20组取得37次429、63次200，全部curl0、无502/其它5xx，9.171694秒，紧接只读uptime/docker stats留证，未调参数。关闭维护后原匿名live PASS；worker预热一次、等10秒、三次采样全部200/ok/expiredLocks=0，backup PASS。当天sitemap只入队一次，任务 `ef3f78a9-7270-4e51-a49c-3d296400d420` completed，35分片+索引全部200，118292网址，22.522秒；逐语种小说28745/章节85964均与第0步一致，236撤回全部排除，主loc全部正式域名。新图仍列出 `/category/adventure`，外部404；运行代码READ ONLY复核：分类只取最近240本，adventure为0，241～740候选中有6本，sitemap用全量书目。已维护ON（外部503）并停止，public nginx/env保留，本次未回退，等待Owner裁决真实范围矛盾。Owner后台登录/2FA确认待回报；GSC及三条外部监控依Owner回复记待做。无暂停批次，恢复跳过；证据已push且远端HEAD一致；Notion最新暂停状态已同步回读PASS（2026-10-07 18:55 JST），既有历史/模板保留，不登记正式开放。
 
 **切换接续（2026-10-07 15:20 +0800 / 16:20 JST）**：Owner 已更正分享图验收标准，接受现有上游 HTTPS 书封，不是线上缺陷；不改代码、不回退。关闭维护并匿名live复验PASS后，剩余外部页面/分享图HEAD一次/真实短码首跳302及其它隔离、缓存、压缩、robots、三组301均PASS；逐类型分享图实际值见切换证据。唯一30次/并发10限流组全部200、无5xx，但429=0，不能宣称通过；已维护ON并停止，等待Owner裁决。sitemap及完整worker采样、Owner后台2FA/GSC/监控待做，不登记正式开放；本次最新暂停状态已同步既有Notion并回读PASS（2026-10-07 16:24 JST），历史/模板保留。
@@ -26,7 +28,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 **同版正式域名切换追加（2026-10-07 14:54 +0800 / 15:54 JST）**：复用 v0.5.9 / Final `6af0b2e5c79db932c4754a43580eed3729bd0334`，未开发功能、未发新版本或打新 tag。第二次 public nginx 安装、worker PID 交接及严格 TLS 就绪 PASS；备份 `install.nFW11rwP`，候选及安装文件 SHA256=d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。env 只切 SITE_URL/ADMIN_CANONICAL_ORIGIN 两行，余字节 cmp 通过；以批准完整 Final 和 PREPROD_APPROVED_MIGRATION=YES 同镜像发布，RELEASE=PASS，22迁移无待执行，四应用镜像/postgres CID不变，backup-timer运行健康，匿名live PASS，部署完成06:52:59Z。随后外部验收在 en 小说页发现 og:image 使用上游 cos-enres.cdreader.com，和“全部正式域名”条件冲突；canonical/hreflang/og:url 已用正式域名。已重新开启维护并停止，当前 public nginx/env 保留，六容器 healthy；本次 public 配置未回退，首次15:22的nginx/env回退历史保留。未完成外部全矩阵、完整worker四采样、sitemap刷新、后台2FA确认、GSC/监控；短码及30/10限流测试均未执行；领取批次本轮未暂停/恢复。等待 Owner 裁决上游封面是否可接受或回退，**不登记为正式开放**。详情见 PUBLIC_CUTOVER_EVIDENCE.md。本次暂停状态已同步既有Notion当前快照及v0.5.9台账并回读PASS（2026-10-07 15:57 JST），历史及模板保留。
 
 
-### v0.5.9 —— 已部署密码保护预生产，E/F/5b/5c/5d PASS（2026-10-07 02:23:30 +0800）
+### v0.5.9 —— 已于2026-10-07切换正式域名对外开放；原预生产E/F/5b/5c/5d PASS
 
 - 唯一基线 `59e84efa85756c0e957dcbf63f62b32aa5d7fca2`，基于 v0.5.8 收官 `306edb4`；已复核集成，本次不开发功能。上一轮基线 549760f 的本地候选 8772afd 在 audit 发现第六项 high 后停止、未推送，已按 Owner 要求丢弃工作树与本地分支，未 rebase/cherry-pick。新建 `release-v0.5.9-redo` / `release/v0.5.9-2026-10-07-redo`，全新 npm ci、Prisma generate、真实 node_modules，全部门禁从头重做。
 - 领推广生命周期修复：其它未完成批次中的书照常入队并记提示数；所有选书方式排除已有推广码或人工核对的书；ADR D4 仅检查本条是否尝试及本账号是否有 prepared / claim_retry_blocked 意图；后台展示新计数、保留历史原因码。worker 执行时三道防重复检查未改，旧路径不变；Owner 2026-10-06 已确认 D4 收窄。scheduler_app 新增 side_effect_intent.status 列级 SELECT，由部署脚本重放 grants 生效。
@@ -376,7 +378,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已部署密码保护预生产；RELEASE=PASS / EXIT=0；E/F/5b/5c/5d全PASS；正式域名未开放；Notion同步回读PASS；Git治理提交/tag已推送回读PASS；10-07同版public配置与部署通过，Owner更正分享图/限流口径后外部及100/20 PASS，worker PASS，sitemap当天一次刷新/计数PASS但分类404矛盾后维护待裁决，2FA待确认，GSC/监控待做，切换未收官 |
+| `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已于2026-10-07切换正式域名pulsenovels.com对外开放（19:39:17 JST确认）；同版Final不变；public配置/部署/live/外部/100x20/worker及当天sitemap计数通过；Owner接受已知B-38部分分类404，随v0.5.10修复；预生产E/F/5b/5c/5d为历史PASS；2FA待核对，GSC/监控待做；Git/Notion开放状态收官同步中 |
 | `v0.5.8` | 2026-10-05 21:27:39 | PATCH | worker 心跳部分索引及健康检查修复；NAS stat 跨平台与排序修复；新增 1 条迁移 | Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25`；annotated `v0.5.8`；image `cps-novel:0.5.8-0329b11`；`release/v0.5.8-2026-10-05` | 已部署密码保护预生产；E/F/G PASS；批次 paused；正式域名未开放；Notion 第二阶段同步回读 PASS（2026-10-05T22:36:40.438000+09:00） |
 | `v0.5.7` | 2026-10-01 22:35:53 | PATCH | B-24 路径 fail-closed；B-21 定类内存优化；B-23 公版套话校准；Docker 边界修复；无新迁移 | Final `bbb06253828d9fd338f0ece1749c2020d8ec4679`；image `cps-novel:0.5.7-bbb0625`；`release/v0.5.7-2026-10-01-redo` | 密码保护预生产 E/F/G PASS；F.1 主控裁决；15 语种只读报告、24 样本、en 前快照完成；tag/CHANGELOG 完成；第三阶段仅en completed / 43,431成功、0失败/skipped；实际差集133/0/133/126 PASS；公开auto0；快照保留，次日备份待复核；批次paused |
 | `v0.5.6` | 2026-10-01 03:38:32 | PATCH | Yandex 设置；站点地图瘦身及免费章节；B-27；Next 16.3.7 安全修复；新增 1 条迁移 | Final `8625021d064f17d37e610d6038023c3ffecd9408`；image `cps-novel:0.5.6-8625021`；发布分支 `release/v0.5.6-2026-10-01-redo` | 预生产已发布；E/F/G PASS；tag/CHANGELOG/正式日志/Notion 同步回读完成 |

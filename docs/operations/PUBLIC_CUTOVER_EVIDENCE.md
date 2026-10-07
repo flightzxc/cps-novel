@@ -1419,3 +1419,35 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 既有Notion正式手账当前快照及v0.5.9台账已同步，异步任务 `task_286d995a53804dfc913d60e234f241f7` succeeded；fetch读回核对37次429、worker四采样、118292/236排除、分类240/404真实矛盾、维护状态、后台2FA待确认及Owner延后GSC/监控均PASS。16:20限流暂停标为历史；第二节及之后的规则/其它版本/历史/模板除v0.5.9台账目标状态外逐字完全相同。同步证据HEAD `beb2864381c72c5bafc2c8496c031f3ab2540042` 已push且远端一致；本收据追加不改变运行身份。Notion链接：https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2。
 
 当前未收到分类范围矛盾的Owner裁决及后台实际2FA确认；保持维护ON，不声明全部收官。
+
+
+## 2026-10-07 19:39 JST 正式开放：Owner接受 B-38 后完成最终 live 与三页复验
+
+**v0.5.9 于 2026-10-07 切换到正式域名 pulsenovels.com 对外开放。** 最终关闭维护2026-10-07T10:39:15Z（19:39:15 JST），同秒原匿名live验证PASS；三个公开页最终确认完成2026-10-07T10:39:17.521832Z（19:39:17 JST）。当前维护OFF；public nginx/env保留，成功public部署后未回退。此次只复用原Final/image，不改功能、不发新版本或新tag。
+
+### Owner裁决 B-38
+
+Owner明确接受“站点地图里部分分类页404”既有缺陷，继续开放、不回退：getPublicCategoryPage仅在该语种最新240本PUBLIC_LIST_CAP中筛分类，为0即notFound；sitemap用全量书目。这是V1既有范围限制，不是本次切换引入。按Owner已登记的 **B-38** 随v0.5.10修复，当前 `/category/adventure` 404登记为 **已知缺陷B-38，Owner接受开放**，不是分类业务整体修复PASS。
+
+没有执行分类页全量扫描、没有新增分类探针，也没有再跑限流或刷新sitemap。此前海阅这轮仅一次adventure补查及运行代码READ ONLY核实；Owner提示主控另一次全量扫描曾将负载推到约5，按此次裁决严格限制分类抽查。其它既有DEFERRED/WAIVED沿用。
+
+### 最终开启及代理复验
+
+source原manifest初始化确认四应用实际镜像、物理Final不变，env两行域名正确、其余字节cmp未变，postgres CID不变，IndexNow/点击追踪闭闸。`PREPROD_RELEASE_VERIFIED=YES release.sh maintenance off` 后执行原 `verify-release.sh --anonymous-only --expect-live`：PREPROD_SITE_MODE=public / RELEASE_VERIFY=PASS。marker不存在、六容器healthy；nginx安装SHA仍d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。[原始复验](evidence/public-cutover-20261007/final-open-release.txt)。
+
+本机均经指定代理http://127.0.0.1:7899、严格TLS、无-k/-L；首页、一本en小说、该书第1章各200、不是维护页、无X-Robots-Tag/公开认证头，HTML无noindex。canonical/hreflang/og:url再次正式域名；首页默认图正式域名，小说/章节书封沿用Owner接受的上游HTTPS值，没有重新HEAD书封或请求推广首跳。[逐请求记录](evidence/public-cutover-20261007/final-open-probes.json)。
+
+| 页面 | HTTP | UTC完成 | 耗时秒 | 关键头 |
+|---|---:|---|---:|---|
+| `https://pulsenovels.com/` | 200 | 2026-10-07T10:39:15.076126+00:00 | 1.334319 | HSTS86400；无X-Robots-Tag；gzip/private,no-cache,no-store |
+| `https://pulsenovels.com/novel/contract-baby-and-billionaire-pg15q11wz` | 200 | 2026-10-07T10:39:16.203859+00:00 | 1.10808 | HSTS86400；无X-Robots-Tag；gzip/private,no-cache,no-store |
+| `https://pulsenovels.com/novel/contract-baby-and-billionaire-pg15q11wz/chapter/1` | 200 | 2026-10-07T10:39:17.521832+00:00 | 1.298931 | HSTS86400；无X-Robots-Tag；gzip/private,no-cache,no-store |
+| `https://zbcwf.pulsenovels.com/login` | 401 | 2026-10-07T10:39:18.486182+00:00 | 0.939972 | HSTS86400；Administration Basic Auth；noindex,nofollow,noarchive |
+| `https://zbcwf.pulsenovels.com/login` | 200 | 2026-10-07T10:39:19.500106+00:00 | 0.999514 | HSTS86400；认证后200；noindex,nofollow,noarchive；gzip/no-store |
+
+
+后台根路径 `/` 按既有renderer返回404，实际登录入口为 `https://zbcwf.pulsenovels.com/login`。本轮首次提示遗漏/login，Owner报根路径404后立即纠正，Owner已回复找到并正在登录；登录入口实际匿名401/Administration realm、Basic Auth后200，保留noindex。Basic Auth成功不等同应用登录/二步验证成功，后者等Owner回报后只读核对。
+
+包装错误保留：首次本轮三页抽查将章节写为不存在的/chapter-1，10:38:50Z返回404并按保护流程重新维护；不是线上正确章节路由异常。改为已有路由/chapter/1后重新关闭维护、原live复验及三个新探针全部PASS，最终开放时间采用后一次10:39:15Z，不用第一次10:38:24Z。原失败日志保留；没有产品代码或nginx更改。
+
+后台应用登录/二步验证仍待Owner完成及数据库读回；GSC和三条外部监控已按Owner裁决记待做。领取批次本轮没有暂停，恢复跳过。当前对外开放已技术确认，待后台核验及治理同步收据收官。

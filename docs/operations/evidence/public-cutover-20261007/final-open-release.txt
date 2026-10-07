@@ -1,0 +1,19 @@
+IMAGE=PASS anchor=descriptor
+RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+RUNTIME_IMAGE=PASS services=web worker worker-light scheduler
+MAINTENANCE=OFF
+MAINTENANCE_OFF_UTC=2026-10-07T10:39:15Z
+PREPROD_SITE_MODE=public
+RELEASE_VERIFY=PASS mode=anonymous_only
+d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe  /etc/nginx/conf.d/cps-novel-preprod.conf
+/cps-novel-web-1 running healthy
+/cps-novel-worker-1 running healthy
+/cps-novel-worker-light-1 running healthy
+/cps-novel-scheduler-1 running healthy
+/cps-novel-postgres-1 running healthy
+/cps-novel-backup-timer-1 running healthy
+LIVE_VERIFIED_UTC=2026-10-07T10:39:15Z
+REOPEN_FINAL=PASS
