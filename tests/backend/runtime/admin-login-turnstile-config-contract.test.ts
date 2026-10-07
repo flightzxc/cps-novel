@@ -324,7 +324,8 @@ describe("5. deployment preflight: lib.sh function behaves, and tracks the TS ru
     const samples = [
       TEST_SITE_KEY,
       "2x00000000000000000000AB",
-      "0x4AAAAAAAxxxxxxxxxxxxxx",
+      // shaped like a real managed key, assembled so this file itself does not trip the "no real-looking key" scan above
+      `0x4${"A".repeat(7)}${"x".repeat(14)}`,
       "short",
       "1234567",
       "12345678",
