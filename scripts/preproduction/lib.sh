@@ -500,7 +500,71 @@ preprod_assert_moboreader_rate_gate_config() {
   return 0
 }
 
+# --- Admin 登录 Turnstile 配置门禁（B-39）--------------------------------
+#
+# 与 `src/lib/auth/admin-login-turnstile.ts` 的 `resolveAdminLoginTurnstileConfig`
+# 逐条对应，但**刻意更严**——运行时读取器沿用本仓库"精确 true 才开启、其余一律
+# 关闭"的开关写法（宽容），而这里要在配置落到主机之前就把笔误挡下：
+#   - `ADMIN_LOGIN_TURNSTILE_ENABLED` 只接受未设置 / `true` / `false`（不 trim，
+#     同 `preprod_assert_promo_claim_lifecycle_config` 开关那条纪律）；`TRUE`、
+#     `1`、`yes` 这类值在运行时会被静默当成"关"，等于把人机验证悄悄关掉，所以在
+#     这里就拒绝。
+#   - 开关为 `true` 时：`ADMIN_LOGIN_TURNSTILE_SITE_KEY` 必须存在且形如
+#     `^[A-Za-z0-9_-]{8,128}$`（与 TS 的 `TURNSTILE_SITE_KEY_PATTERN` 同一个
+#     正则）；服务端密钥只能走密钥文件，文件本身的存在/权限/属主/ACL 由
+#     `secrets-preflight.sh` 的条件项校验（开关为 true 才纳入），本函数不重复。
+#   - 无论开关状态：`ADMIN_LOGIN_TURNSTILE_SECRET_KEY` 不得以明文出现在 env 文件里
+#     （overlay 会把它钉成空串，写了也到不了容器——与其让运维以为生效了，不如在这里
+#     直接失败）。
+# 开关为 false/未设置时不检查站点密钥（半填配置不影响"关"的主机）。
+#
+# 失败时 stdout 写 `admin_login_turnstile_config_invalid variable=... reason=...`
+# 并 `return 65`；成功时打印取证行并 `return 0`。取证行不含任何密钥值。
+preprod_assert_admin_login_turnstile_config() {
+  if [[ -n "${ADMIN_LOGIN_TURNSTILE_SECRET_KEY:-}" ]]; then
+    echo "admin_login_turnstile_config_invalid variable=ADMIN_LOGIN_TURNSTILE_SECRET_KEY reason=secret_must_not_be_in_env_file"
+    return 65
+  fi
+  local enabled_raw="${ADMIN_LOGIN_TURNSTILE_ENABLED:-}"
+  case "$enabled_raw" in
+    ""|"false")
+      echo "PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false"
+      return 0
+      ;;
+    "true") ;;
+    *)
+      echo "admin_login_turnstile_config_invalid variable=ADMIN_LOGIN_TURNSTILE_ENABLED value=$enabled_raw reason=must_be_true_false_or_unset"
+      return 65
+      ;;
+  esac
+  local site_key="${ADMIN_LOGIN_TURNSTILE_SITE_KEY:-}"
+  if [[ -z "$site_key" ]]; then
+    echo "admin_login_turnstile_config_invalid variable=ADMIN_LOGIN_TURNSTILE_SITE_KEY reason=site_key_missing"
+    return 65
+  fi
+  if ! [[ "$site_key" =~ ^[A-Za-z0-9_-]{8,128}$ ]]; then
+    echo "admin_login_turnstile_config_invalid variable=ADMIN_LOGIN_TURNSTILE_SITE_KEY reason=site_key_invalid"
+    return 65
+  fi
+  echo "PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=true siteKey=set secret=file:admin_login_turnstile_secret_key"
+  return 0
+}
+
+# B-39：Turnstile 服务端密钥是**条件性**Docker secret，源路径只在开关为精确 "true"
+# 时才指向真实文件，否则落到 /dev/null（Compose 能挂、读出为空、开关关闭时从不被读）。
+# 原因与完整说明见 infra/preproduction/docker-compose.yml 顶层 secrets 段：源文件缺失
+# 会让 `up` 直接失败，而发版时目标机上还没有密钥。所有 preprod Compose 调用都经
+# `preprod_compose`，所以只在这里算一次，config / up / run / ps 看到的是同一个值。
+preprod_admin_login_turnstile_secret_source() {
+  if [[ "${ADMIN_LOGIN_TURNSTILE_ENABLED:-}" == "true" ]]; then
+    printf '%s' "${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/admin_login_turnstile_secret_key"
+  else
+    printf '%s' "/dev/null"
+  fi
+}
+
 preprod_compose() {
+  ADMIN_LOGIN_TURNSTILE_SECRET_SOURCE="$(preprod_admin_login_turnstile_secret_source)" \
   docker compose --env-file "$PREPROD_ENV_FILE" -p cps-novel \
     -f "$PREPROD_REPO_ROOT/docker-compose.yml" \
     -f "$PREPROD_REPO_ROOT/infra/preproduction/docker-compose.yml" "$@"

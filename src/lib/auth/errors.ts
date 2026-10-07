@@ -10,6 +10,11 @@ export type AdminAccessErrorCode =
   | "admin_origin_denied"
   | "admin_mutation_request_id_invalid"
   | "admin_rate_limited"
+  // B-39: admin login human verification (Cloudflare Turnstile). Both are
+  // refusals that happen after the lockout check and before any credential
+  // work, so neither is ever recorded as a failed login attempt.
+  | "admin_human_verification_failed"
+  | "admin_human_verification_unavailable"
   | "admin_service_authorization_required"
   | "two_factor_failed"
   | "two_factor_expired"

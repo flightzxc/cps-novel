@@ -127,6 +127,21 @@ services:
       # scripts/lib/x8-levels.json's Level UAT sets this to "false";
       # production must never override it.
       ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-true}
+      # B-39: Cloudflare Turnstile on the admin login (src/lib/auth/
+      # admin-login-turnstile.ts). Web only -- worker/worker-light/scheduler
+      # never serve a login. The switch defaults CLOSED, and closed means the
+      # login is exactly what it was before B-39 (no widget, no Cloudflare
+      # script, no siteverify call), so leaving these unset reproduces today's
+      # behavior byte-for-byte in every environment. The site key is public. The
+      # secret key follows the TOTP pattern: a direct value (local X8 only) or a
+      # *_FILE path that scripts/start-web.sh loads into the web process; the
+      # preproduction overlay pins the direct value empty and mounts the file as
+      # a Docker secret, which is only a real file once the switch is on (see
+      # infra/preproduction/docker-compose.yml).
+      ADMIN_LOGIN_TURNSTILE_ENABLED: ${ADMIN_LOGIN_TURNSTILE_ENABLED:-false}
+      ADMIN_LOGIN_TURNSTILE_SITE_KEY: ${ADMIN_LOGIN_TURNSTILE_SITE_KEY:-}
+      ADMIN_LOGIN_TURNSTILE_SECRET_KEY: ${ADMIN_LOGIN_TURNSTILE_SECRET_KEY:-}
+      ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE: ${ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE:-}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
       FEATURE_INDEXNOW_OUTBOX: ${FEATURE_INDEXNOW_OUTBOX:-false}

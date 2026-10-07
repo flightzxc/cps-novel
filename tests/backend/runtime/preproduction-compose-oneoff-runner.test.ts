@@ -213,6 +213,10 @@ describe.skipIf(!dockerOk)("真实仓库 compose 文件：preproduction 目标�
     const web = config.services.web;
     expect(web.user).toBe("1001:1001");
     expect((web.secrets ?? []).map((s) => s.source).sort()).toEqual([
+      // B-39: the conditional Turnstile secret is always MOUNTED (to /dev/null
+      // while the switch is off -- see the overlay's top-level `secrets:` note),
+      // so it shows up here on every render, enabled or not.
+      "admin_login_turnstile_secret_key",
       "channel_credential_encryption_key_v1",
       "channel_credential_fingerprint_key",
       "totp_encryption_key",

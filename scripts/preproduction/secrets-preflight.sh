@@ -35,6 +35,23 @@ declare -a names=()
 declare -a classes=()
 declare -a uids=()
 declare -a gids=()
+# B-39: the Turnstile secret is a CONDITIONAL entry -- deliberately not in
+# secret-files.txt / secret-consumers.tsv, whose every row is required on every
+# host. It is appended to the consumer rows (same APP class, same checks as the
+# four static APP secrets: regular non-empty file, owner 1000:1000, mode 640,
+# exactly one named ACL u:1001:r--, readable by the app uid, unreadable by the
+# postgres uid) if and only if ADMIN_LOGIN_TURNSTILE_ENABLED is exactly "true"
+# in the environment preflight.sh loaded. A host with the switch off -- i.e. a
+# release made before the Owner has any Turnstile key -- needs no such file.
+# It is not in secret-identity-files.txt either: a Turnstile secret is rotated
+# in the Cloudflare dashboard, it is not a stable-identity key.
+# The name must equal ADMIN_LOGIN_TURNSTILE_SECRET_NAME
+# (src/lib/auth/admin-login-turnstile.ts) and the overlay's Docker secret;
+# tests/backend/runtime/admin-login-turnstile-config-contract.test.ts pins it.
+conditional_rows=""
+if [[ "${ADMIN_LOGIN_TURNSTILE_ENABLED:-}" == "true" ]]; then
+  conditional_rows=$'admin_login_turnstile_secret_key\tAPP\t1001\t1001\n'
+fi
 while IFS=$'\t' read -r name consumer_class uid gid extra; do
   [[ -n "$name" && "$name" != \#* ]] || continue
   [[ "$name" == "name" ]] && continue
@@ -49,7 +66,9 @@ while IFS=$'\t' read -r name consumer_class uid gid extra; do
   classes+=("$consumer_class")
   uids+=("$uid")
   gids+=("$gid")
-done <"$consumer_matrix"
+# The leading "\n" keeps a matrix file without a trailing newline from gluing
+# the conditional row onto its last line; blank lines are skipped above.
+done < <(cat "$consumer_matrix"; printf '\n%s' "$conditional_rows")
 
 manifest="$secret_root/secret-identity.sha256"
 [[ -f "$manifest" && ! -L "$manifest" ]] || fail secret_identity_manifest

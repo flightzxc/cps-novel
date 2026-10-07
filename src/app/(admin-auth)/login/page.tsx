@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { readAdminLoginTurnstilePublicState } from "@/lib/auth/admin-login-turnstile";
+
 import { AuthCard } from "../_components/auth-card";
 import { postAuthDestination, readActiveContext, safeNextPath } from "../_lib/auth-session";
 import { LoginForm } from "./_components/login-form";
@@ -12,6 +14,11 @@ type SearchParams = { next?: string };
  * Public login page — intentionally outside `(admin)` / `ADMIN_PAGE_ROOTS`.
  * See `(admin-auth)/_lib/auth-session.ts` for why that is the correct
  * default-deny answer here rather than a registry exemption.
+ *
+ * B-39: the Turnstile state is read from the runtime environment on every
+ * request (`dynamic = "force-dynamic"` above; the image is built once and
+ * deployed without keys), never from a build-time `NEXT_PUBLIC_*` value. It
+ * carries the public site key only — the secret key never reaches this tree.
  */
 export default async function LoginPage({
   searchParams,
@@ -28,7 +35,7 @@ export default async function LoginPage({
 
   return (
     <AuthCard title="海外阅读后台" description="使用管理员账号登录">
-      <LoginForm next={safeNextPath(next)} />
+      <LoginForm next={safeNextPath(next)} turnstile={readAdminLoginTurnstilePublicState()} />
     </AuthCard>
   );
 }

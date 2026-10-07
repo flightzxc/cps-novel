@@ -21,6 +21,12 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   admin_origin_denied: "请求来源校验未通过，请刷新页面后重试",
   admin_mutation_request_id_invalid: "请求标识无效或已被用于另一次提交",
   admin_rate_limited: "操作过于频繁，请稍后重试",
+  // B-39: login human verification (Turnstile). "failed" is the visitor's to
+  // fix (the widget resets itself); "unavailable" covers a misconfigured
+  // deployment and an unreachable verification service alike, so it points at
+  // the administrator rather than at the credentials just typed.
+  admin_human_verification_failed: "人机验证未通过，请重新完成验证后再登录",
+  admin_human_verification_unavailable: "人机验证服务暂时不可用，请稍后重试；若持续出现，请联系管理员检查配置",
   admin_service_authorization_required: "服务端授权校验未通过，请刷新页面后重试",
   // Distinct from `admin_capability_denied`: this is not a permission problem,
   // it is an unrecognised server-side failure. Conflating the two sends an

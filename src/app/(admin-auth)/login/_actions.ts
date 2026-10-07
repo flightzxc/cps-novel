@@ -1,6 +1,7 @@
 "use server";
 
 import type { ErrorEnvelope } from "@/contracts";
+import { createAdminLoginHumanVerification } from "@/lib/auth/admin-login-turnstile";
 import { authenticateAdminLogin } from "@/lib/auth/login";
 import { createTwoFactorChallenge } from "@/lib/auth/two-factor";
 import { isTwoFactorEnforced } from "@/lib/auth/two-factor-enforcement";
@@ -34,6 +35,15 @@ export type LoginActionResult = { ok: true; next: string } | { ok: false; envelo
  * `errorEnvelopeCopy` renders one fixed string for it — nothing username-shaped
  * ever reaches the client.
  *
+ * B-39: when `ADMIN_LOGIN_TURNSTILE_ENABLED=true`, the Turnstile token from the
+ * form is verified server-side inside `authenticateAdminLogin` — after the
+ * lockout check, before any identity lookup / password check, and without ever
+ * counting a refusal as a failed login (see `verifyHuman` there). When the
+ * switch is off (the default), `createAdminLoginHumanVerification` returns
+ * `undefined`, no `verifyHuman` key is passed, and this action calls
+ * `authenticateAdminLogin` exactly as it did before B-39. The 2FA branches
+ * below are untouched either way.
+ *
  * RC-10: when `ADMIN_TWO_FACTOR_ENFORCEMENT=disabled` (local UAT only — see
  * `@/lib/auth/two-factor-enforcement.ts`), a successful login goes straight
  * to the deep link or landing page instead of detouring through
@@ -46,17 +56,22 @@ export async function loginAction(input: {
   username: string;
   password: string;
   next?: string;
+  /** Only sent by the form when Turnstile is on; untrusted client input either way. */
+  turnstileToken?: string;
 }): Promise<LoginActionResult> {
   try {
     await requireSameOriginSubmission();
     const { identities, sessions } = guardDependencies();
+    const ip = requestIp(await currentHeaders());
+    const verifyHuman = createAdminLoginHumanVerification({ token: input.turnstileToken, remoteIp: ip });
     const { token, context } = await authenticateAdminLogin({
       username: input.username,
       password: input.password,
-      ip: requestIp(await currentHeaders()),
+      ip,
       identities,
       sessions,
       attempts: loginAttemptStore(),
+      ...(verifyHuman ? { verifyHuman } : {}),
     });
     await writeSessionCookie(token);
 

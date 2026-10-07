@@ -92,6 +92,16 @@ back, by design. The alternative is to roll forward (fix and deploy a
 newer commit) instead of rolling back past this one. Do not patch the
 older release's checkout to work around this.
 
+### Admin login Turnstile (B-39, default off)
+
+`ADMIN_LOGIN_TURNSTILE_ENABLED` (default `false`) puts Cloudflare Turnstile in
+front of the admin `/login` password check. It is a switch plus one *conditional*
+secret file, so a release can be made before any Turnstile key exists: with the
+switch off nothing about it is required on the host (the Compose secret mounts
+`/dev/null`, `secrets-preflight.sh` does not look for the file). Enabling and
+rolling back are env edits plus recreating `web`, not a new release — see
+[`ADMIN_LOGIN_TURNSTILE_ENABLEMENT_2026-10-07.md`](ADMIN_LOGIN_TURNSTILE_ENABLEMENT_2026-10-07.md).
+
 ### Channel credentials: one environment, one credential
 
 With `promo_write` open, the channel credential stored in this host's
