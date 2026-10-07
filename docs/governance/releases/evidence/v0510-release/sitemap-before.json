@@ -1,0 +1,283 @@
+{
+  "shards": [
+    {
+      "file": "site_mainpage_en.xml",
+      "entries": 1789,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 1788
+    },
+    {
+      "file": "site_mainpage_es.xml",
+      "entries": 302,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 301
+    },
+    {
+      "file": "site_mainpage_pt-BR.xml",
+      "entries": 260,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 259
+    },
+    {
+      "file": "site_mainpage_id.xml",
+      "entries": 189,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 188
+    },
+    {
+      "file": "site_mainpage_vi.xml",
+      "entries": 92,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 91
+    },
+    {
+      "file": "site_mainpage_th.xml",
+      "entries": 104,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 103
+    },
+    {
+      "file": "site_mainpage_ja.xml",
+      "entries": 61,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 60
+    },
+    {
+      "file": "site_mainpage_ko.xml",
+      "entries": 80,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 79
+    },
+    {
+      "file": "site_mainpage_zh-Hant.xml",
+      "entries": 7,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 6
+    },
+    {
+      "file": "site_mainpage_ar.xml",
+      "entries": 9,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 8
+    },
+    {
+      "file": "site_mainpage_fr.xml",
+      "entries": 285,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 284
+    },
+    {
+      "file": "site_mainpage_de.xml",
+      "entries": 113,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 112
+    },
+    {
+      "file": "site_mainpage_pl.xml",
+      "entries": 2,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 1
+    },
+    {
+      "file": "site_mainpage_ru.xml",
+      "entries": 290,
+      "novels": 0,
+      "chapters": 0,
+      "categories": 289
+    },
+    {
+      "file": "site_novelpage_en.xml",
+      "entries": 10000,
+      "novels": 2511,
+      "chapters": 7489,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_en_1.xml",
+      "entries": 10000,
+      "novels": 2511,
+      "chapters": 7489,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_en_2.xml",
+      "entries": 10000,
+      "novels": 2511,
+      "chapters": 7489,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_en_3.xml",
+      "entries": 10000,
+      "novels": 2517,
+      "chapters": 7483,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_en_4.xml",
+      "entries": 10000,
+      "novels": 2509,
+      "chapters": 7491,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_en_5.xml",
+      "entries": 1546,
+      "novels": 388,
+      "chapters": 1158,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_es.xml",
+      "entries": 10000,
+      "novels": 2501,
+      "chapters": 7499,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_es_1.xml",
+      "entries": 679,
+      "novels": 170,
+      "chapters": 509,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_pt-BR.xml",
+      "entries": 9240,
+      "novels": 2312,
+      "chapters": 6928,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_id.xml",
+      "entries": 6292,
+      "novels": 1573,
+      "chapters": 4719,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_vi.xml",
+      "entries": 3312,
+      "novels": 828,
+      "chapters": 2484,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_th.xml",
+      "entries": 3728,
+      "novels": 932,
+      "chapters": 2796,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_ja.xml",
+      "entries": 1532,
+      "novels": 383,
+      "chapters": 1149,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_ko.xml",
+      "entries": 3064,
+      "novels": 766,
+      "chapters": 2298,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_zh-Hant.xml",
+      "entries": 60,
+      "novels": 15,
+      "chapters": 45,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_ar.xml",
+      "entries": 124,
+      "novels": 31,
+      "chapters": 93,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_fr.xml",
+      "entries": 9779,
+      "novels": 2447,
+      "chapters": 7332,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_de.xml",
+      "entries": 3369,
+      "novels": 843,
+      "chapters": 2526,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_pl.xml",
+      "entries": 160,
+      "novels": 40,
+      "chapters": 120,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_ru.xml",
+      "entries": 10000,
+      "novels": 2501,
+      "chapters": 7499,
+      "categories": 0
+    },
+    {
+      "file": "site_novelpage_ru_1.xml",
+      "entries": 1824,
+      "novels": 456,
+      "chapters": 1368,
+      "categories": 0
+    }
+  ],
+  "novels": {
+    "en": 12947,
+    "es": 2671,
+    "pt-BR": 2312,
+    "id": 1573,
+    "vi": 828,
+    "th": 932,
+    "ja": 383,
+    "ko": 766,
+    "zh-Hant": 15,
+    "ar": 31,
+    "fr": 2447,
+    "de": 843,
+    "pl": 40,
+    "ru": 2957
+  },
+  "chapters": {
+    "en": 38599,
+    "es": 8008,
+    "pt-BR": 6928,
+    "id": 4719,
+    "vi": 2484,
+    "th": 2796,
+    "ja": 1149,
+    "ko": 2298,
+    "zh-Hant": 45,
+    "ar": 93,
+    "fr": 7332,
+    "de": 2526,
+    "pl": 120,
+    "ru": 8867
+  },
+  "total": 118292,
+  "en_categories": 1788
+}

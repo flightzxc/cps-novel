@@ -1,0 +1,30 @@
+{
+  "book": {
+    "id": "fb377f9f-7084-45a0-9d38-0fdc1de3fff5",
+    "novel_id": "5ac87df4-8645-4eab-9a7f-029a968ddb55",
+    "title": "14 Days to Love",
+    "slug": "14-days-to-love",
+    "public_page_short_id": "1hht62vp",
+    "rn": 250
+  },
+  "tags": [
+    {
+      "tag": "a",
+      "href": "/category/female-audience",
+      "class": "inline-flex items-center rounded-novel-sm bg-novel-bg-raised px-2.5 py-1 text-xs text-novel-fg-muted hover:text-novel-fg transition-colors",
+      "text": "Female Audience"
+    },
+    {
+      "tag": "a",
+      "href": "/category/romance",
+      "class": "inline-flex items-center rounded-novel-sm bg-novel-bg-raised px-2.5 py-1 text-xs text-novel-fg-muted hover:text-novel-fg transition-colors",
+      "text": "Romance"
+    },
+    {
+      "tag": "span",
+      "class": "inline-flex items-center rounded-novel-sm bg-novel-bg-raised px-2.5 py-1 text-xs text-novel-fg-muted",
+      "text": "Emotional Healing"
+    }
+  ],
+  "status": "PASS"
+}

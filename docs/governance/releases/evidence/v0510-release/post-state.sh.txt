@@ -1,0 +1,16 @@
+PREPROD_SITE_MODE=public
+IMAGE=PASS anchor=descriptor
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write open=catalog_write,promo_write,sitemap_write,auto_tag_write
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+PREPROD_PREFLIGHT=PASS
+BACKUP_HEALTH=ok SOURCE=status_file
+BACKUP_TIMER_STATUS=running HEALTH=healthy
+HEALTH_HTTP=200 VERSION=0.5.10 COMMIT=7f955106a82f8dff82568e305ea35f1a68b8c934 DATABASE=passed METADATA=passed
+0 /run/secrets/admin_login_turnstile_secret_key
+16.3.7

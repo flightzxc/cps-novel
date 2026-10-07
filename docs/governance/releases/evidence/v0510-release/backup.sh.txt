@@ -1,0 +1,6 @@
+LOGICAL_BACKUP=PASS
+BACKUP_ARCHIVE=/var/lib/cps-novel/backups/logical/cps-novel-v0510-20261007T170617Z.dump
+52e594de03055725afd2102a1abbc1704a0a42339dee96430e9972ccdcaee7b5  /var/lib/cps-novel/backups/logical/cps-novel-v0510-20261007T170617Z.dump
+681606611
+ONLINE_BACKUP_HOST_PATH=/opt/cps-novel/shared/backups/logical/cps-novel-v0510-20261007T170617Z.dump
+ONLINE_BACKUP_RESTORE_LIST=PASS

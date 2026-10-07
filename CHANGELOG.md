@@ -3,7 +3,57 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-06 · 共 1085 个 commit
+生成时间：2026-10-07 · 共 1132 个 commit
+
+## v0.5.10
+
+- `7f95510` 2026-10-08 发布：准备海阅 v0.5.10 六文件版本身份  — _codex · GPT-6_
+- `1310535` 2026-10-07 合并(v0.5.10)：运营反馈三项（后台书目与标签管理筛选「全部」提交空串导致搜索必报错；编辑已有模板因 Key 输入框 disabled 不提交而必报「Key 不能为空」；书封 alt 按运营要求 15 语种只保留书名）；fix/ops-admin-search-and-template-key @6476ba4，主控独立变异  — _claude-code · Claude Opus 5.5_
+- `6476ba4` 2026-10-07 优化(公开站)：书封 alt 只保留书名，去掉 "Cover of" 一类前缀（15 个语种）  — _claude-code · Claude Sonnet 5_
+- `a0d4247` 2026-10-07 修复(模板管理)：编辑已有模板点保存必报"模板 Key 不能为空"  — _claude-code · Claude Sonnet 5_
+- `715a2d0` 2026-10-07 修复(后台列表)：筛选栏「全部」提交空串导致书目管理搜索必报"内容数据读取失败"  — _claude-code · Claude Sonnet 5_
+- `519e277` 2026-10-07 合并(v0.5.10)：PN-02 阿语首页轮播在从右到左排版下居中可见 + 切换语言后 <html lang dir> 同步（轨道 start-1/2 + 方向系数 --hero-dir、键盘随 dir 翻转；SiteShell 挂 DocumentLocaleSync，用布局副作用避免软跳转首帧飞入；从左到右几何改前改后逐项相等；fix/pn02-rtl-hero-document-lang @f4affab，主控独立变异）  — _claude-code · Claude Opus 5.5_
+- `44725ed` 2026-10-07 合并(v0.5.10)：PN-01 剩余 + PN-08 分页页口径对齐 CPS v8.7.2（第 2 页起不再 noindex、不输出跨语种 hreflang、分类页第 2 页起不再逐语种探测；第 1 页元数据与改前逐字相同；Owner 2026-10-07 确认分页允许收录；fix/pn01-pn08-pagination-seo-cps-parity @b4830d0，主控独立边界变异）  — _claude-code · Claude Opus 5.5_
+- `f4affab` 2026-10-07 优化(公开站外壳)：DocumentLocaleSync 改用布局副作用，软跳转进出从右到左语种时轮播不再从屏外飞入（PN-02 补充）  — _claude-code · Claude Sonnet 5_
+- `645ac1a` 2026-10-07 合并(v0.5.10)：PN-03 阅读设置面板不再被固定底部续读条盖住（面板 z-40→z-50、移动端 85dvh 内部滚动与安全区内边距、桌面复位类；浏览器 360×800/390×844 elementFromPoint 命中「重置」本身，对照复现原遮挡；fix/pn03-reader-settings-layer @a4745dd）  — _claude-code · Claude Opus 5.5_
+- `2a25c14` 2026-10-07 合并(v0.5.10)：B-38 第二部分 站内分类链接只指向分类页返回 200 的分类（详情页标签与推荐卡片数据层按书自己的语种收口，集合复用页脚 loadPublicCategories 并由等价性测试钉死；loadChrome 去重使详情页/章节页列表查询 2→1；语种错配双向用例经主控变异证明承重；fix/b38b-category-links-200-only @9db8a79）  — _claude-code · Claude Opus 5.5_
+- `b4830d0` 2026-10-07 文档(搬运登记)：登记分页页口径对齐 CPS v8.7.2（paginatedRobots 首次接入模板；shouldNoIndex 补注不再调用；第 2 页起 hreflang 为空是有意偏离）  — _claude-code · Claude Sonnet 5_
+- `5968d2d` 2026-10-07 修复(SEO)：分页页对齐 CPS v8.7.2——第 2 页起可收录、不输出跨语种 hreflang、分类页不再逐语种探测（PN-01 剩余部分 + PN-08）  — _claude-code · Claude Sonnet 5_
+- `239401d` 2026-10-07 修复(公开站外壳)：切换语言后 <html lang dir> 立即同步成目标语种（PN-02 第 2 部分）  — _claude-code · Claude Sonnet 5_
+- `f1c30e4` 2026-10-07 修复(首页轮播)：从右到左排版下轮播当前项居中可见，键盘方向随之翻转（PN-02 第 1 部分）  — _claude-code · Claude Sonnet 5_
+- `9db8a79` 2026-10-07 测试：补语种错配用例，钉死判定集合按书自己的语种取（B-38 第二部分）  — _claude-code · Claude Sonnet 5_
+- `a4745dd` 2026-10-07 修复(阅读器)：设置面板不再被固定底部续读条盖住（PN-03）  — _claude-code · Claude Sonnet 5_
+- `5bd524f` 2026-10-07 修复：站内分类链接只指向分类页确实返回 200 的（B-38 第二部分）  — _claude-code · Claude Sonnet 5_
+- `639605c` 2026-10-07 合并(v0.5.10)：B-38 站点地图分类网址只列分类页确实返回 200 的（与分类页共用唯一谓词 cardsInCategory，每语种一次 listPublicArticles；同时修掉 ?page=N 按全量算页数、seo_only 只读分类两处同源 404；fix/b38-sitemap-category-200-only @794d5c7，主控复核含独立变异）  — _claude-code · Claude Opus 5.5_
+- `b3d68b2` 2026-10-07 合并(v0.5.10)：B-39 后台登录接入 Cloudflare Turnstile（开关 ADMIN_LOGIN_TURNSTILE_ENABLED 默认关闭、关闭时 /login 与 v0.5.9 逐字节一致；开启时站点密钥必填、服务端密钥只走条件性 Docker secret、失败一律拒绝、人机校验先于密码且不计入锁定；preflight/Compose 透传/TS 解析三处一致加派生契约测试；feat/b39-admin-turnstile @1330879，主控复核含反向变异）  — _claude-code · Claude Opus 5.5_
+- `1330879` 2026-10-07 测试(后台登录)：钉死 preprod.env 载入的开关会导出给 secrets-preflight 子进程  — _claude-code · Claude Sonnet 5_
+- `257fa17` 2026-10-07 测试(后台登录)：契约测试补齐 NODE_ENV 与类型标注，修复 tsc  — _claude-code · Claude Sonnet 5_
+- `9d6aebe` 2026-10-07 测试(后台登录)：契约测试里的类真实密钥样例改为运行时拼装，避免命中自身的"无真实密钥"扫描  — _claude-code · Claude Sonnet 5_
+- `ea19a7f` 2026-10-07 配置(后台登录)：Turnstile 配置三处一致——preflight / Compose 透传 / 条件性密钥（B-39）  — _claude-code · Claude Sonnet 5_
+- `e1a8293` 2026-10-07 功能(后台登录)：接入 Cloudflare Turnstile 人机验证核心与前端（B-39，默认关闭）  — _claude-code · Claude Sonnet 5_
+- `794d5c7` 2026-10-07 修复：站点地图分类网址只列分类页确实返回 200 的（B-38）  — _claude-code · Claude Sonnet 5_
+- `277685f` 2026-10-07 文档(ADR)：切换前置条件 ADR 补指向 B-37 书封分享卡片口径  — _claude-code · Claude Opus 5.5_
+- `4f97876` 2026-10-07 合并(v0.5.10)：B-37 阶段 0 书封前端兜底与分享卡片口径（书封加载失败显示占位、详情页首屏封面优先加载、图床预连接；书封作分享图改 summary 小卡且不声明尺寸，Owner 2026-10-07 单独批准；fix/b37-cover-stage0 @4544d9c，会话「海阅书封：图床直链 vs 本地化评估」施工复核）  — _claude-code · Claude Opus 5.5_
+- `48e55f2` 2026-10-07 文档：完成正式域名开放与后台认证手账收官  — _codex · GPT-6_
+- `2f8cfa9` 2026-10-07 文档：完成正式后台登录及二步验证记录核对  — _codex · GPT-6_
+- `70a5247` 2026-10-07 文档：登记正式开放手账读回及收尾验收状态  — _codex · GPT-6_
+- `c87793d` 2026-10-07 文档：登记海阅正式域名对外开放与B-38接受裁决  — _codex · GPT-6_
+- `4544d9c` 2026-10-07 文档(ADR)：书封继续直链上游图床，补三道保险，转存为触发式预案（B-37）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `52ff185` 2026-10-07 修复(SEO)：分享图按最终选中的图种类给卡片口径，书封用小图卡片且不声明尺寸（B-37 阶段 0）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `e551436` 2026-10-07 修复(公开站)：书封加载失败兜底、首屏封面优先级、轮播背景按需设置、图床预连接（B-37 阶段 0）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `5311e52` 2026-10-07 文档：登记正式切换最新手账读回与待裁决状态  — _codex · GPT-6_
+- `beb2864` 2026-10-07 文档：规范验收采样归档并记录证据推送  — _codex · GPT-6_
+- `27e8aa5` 2026-10-07 文档：登记正式域名补测与站点地图分类矛盾  — _codex · GPT-6_
+- `3093b2e` 2026-10-07 运维：同步限流观察未完成项及最新切换状态  — _codex · GPT-6_
+- `22fdd07` 2026-10-07 运维：记录分享图口径裁决及限流未观察到429  — _codex · GPT-6_
+- `f08c61d` 2026-10-07 运维：同步正式域名验收暂停状态至既有手账  — _codex · GPT-6_
+- `31bfeb5` 2026-10-07 运维：记录同版域名部署通过及分享图验收暂停  — _codex · GPT-6_
+- `029d41a` 2026-10-07 运维：记录正式证书诊断并准备严格交接重试  — _codex · GPT-6_
+- `29c3eec` 2026-10-07 运维：记录首次公网切换 TLS 失败及 nginx/env 回退  — _codex · GPT-6_
+- `a9b0941` 2026-10-07 运维：记录正式切换当天预检与备份，等待 Owner sudo 输入  — _codex · GPT-6_
+- `f962f90` 2026-10-07 运维：补齐切换前外部 HTTPS 页面压测证据  — _codex · GPT-6_
+- `62fc80f` 2026-10-07 文档：补记海阅 v0.5.9 Git 与 Notion 收官回读  — _codex · GPT-6_
+- `8a4a4da` 2026-10-07 文档：收官海阅 v0.5.9 预生产部署与完整验收  — _codex · GPT-6_
 - `42bc22c` 2026-10-07 文档：归档海阅 v0.5.9 重定基线后第一阶段门禁与发布身份  — _codex · GPT-6_
 
 ## v0.5.9

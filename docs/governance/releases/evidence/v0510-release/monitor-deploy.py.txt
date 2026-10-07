@@ -1,0 +1,93 @@
+DEPLOY_STARTED_AT=2026-10-07T17:10:30Z
+2026-10-07T17:10:30Z IMAGE=PASS anchor=descriptor
+2026-10-07T17:10:30Z PREPROD_SITE_MODE=public
+2026-10-07T17:10:30Z IMAGE=PASS anchor=descriptor
+2026-10-07T17:10:30Z PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+2026-10-07T17:10:30Z SECRET_CONSUMER_MATRIX=PASS count=15
+2026-10-07T17:10:34Z MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+2026-10-07T17:10:38Z SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+2026-10-07T17:10:38Z PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write open=catalog_write,promo_write,sitemap_write,auto_tag_write
+2026-10-07T17:10:38Z PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+2026-10-07T17:10:38Z PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+2026-10-07T17:10:38Z PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+2026-10-07T17:10:38Z PREPROD_PREFLIGHT=PASS
+2026-10-07T17:10:39Z MAINTENANCE=ON
+2026-10-07T17:10:39Z  Container cps-novel-scheduler-1 Stopping 
+2026-10-07T17:10:39Z  Container cps-novel-scheduler-1 Stopped 
+2026-10-07T17:10:39Z  Container cps-novel-worker-light-1 Stopping 
+2026-10-07T17:10:39Z  Container cps-novel-worker-1 Stopping 
+2026-10-07T17:10:40Z  Container cps-novel-worker-1 Stopped 
+2026-10-07T17:10:40Z  Container cps-novel-worker-light-1 Stopped 
+2026-10-07T17:10:40Z  Container cps-novel-web-1 Stopping 
+2026-10-07T17:10:40Z  Container cps-novel-web-1 Stopped 
+2026-10-07T17:10:41Z APP_RUNTIME=PASS image=cps-novel:0.5.10-7f95510 identity=verified
+2026-10-07T17:10:41Z  Container cps-novel-web-run-ef525088e4ef Creating 
+2026-10-07T17:10:41Z  Container cps-novel-web-run-ef525088e4ef Created 
+2026-10-07T17:10:43Z Prisma schema loaded from prisma/schema.prisma
+2026-10-07T17:10:43Z Datasource "db": PostgreSQL database "cps_novel", schema "public" at "postgres:5432"
+2026-10-07T17:10:44Z 
+2026-10-07T17:10:44Z 22 migrations found in prisma/migrations
+2026-10-07T17:10:44Z 
+2026-10-07T17:10:44Z 
+2026-10-07T17:10:44Z No pending migrations to apply.
+2026-10-07T17:10:44Z npm notice
+2026-10-07T17:10:44Z npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+2026-10-07T17:10:44Z npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+2026-10-07T17:10:44Z npm notice To update run: npm install -g npm@11.21.0
+2026-10-07T17:10:44Z npm notice
+2026-10-07T17:10:44Z DATABASE_MIGRATION=PASS
+2026-10-07T17:10:44Z DATABASE_GRANTS=PASS
+2026-10-07T17:10:44Z APP_RUNTIME=PASS image=cps-novel:0.5.10-7f95510 identity=verified
+2026-10-07T17:10:45Z  Container cps-novel-web-1 Recreate 
+2026-10-07T17:10:45Z  Container cps-novel-web-1 Recreated 
+2026-10-07T17:10:45Z  Container cps-novel-web-1 Starting 
+2026-10-07T17:10:45Z  Container cps-novel-web-1 Started 
+2026-10-07T17:10:45Z  Container cps-novel-web-1 Waiting 
+2026-10-07T17:10:51Z  Container cps-novel-web-1 Healthy 
+2026-10-07T17:10:51Z RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+2026-10-07T17:10:51Z RUNTIME_IMAGE=PASS services=web
+2026-10-07T17:10:51Z HEALTH_WAIT=PASS service=web health=healthy
+2026-10-07T17:10:51Z PREPROD_SITE_MODE=public
+2026-10-07T17:10:54Z  Container cps-novel-web-run-230e689ba2af Creating 
+2026-10-07T17:10:54Z  Container cps-novel-web-run-230e689ba2af Created 
+2026-10-07T17:10:56Z RELEASE_VERIFY=PASS
+2026-10-07T17:10:56Z APP_RUNTIME=PASS image=cps-novel:0.5.10-7f95510 identity=verified
+2026-10-07T17:10:57Z  Container cps-novel-worker-light-1 Recreate 
+2026-10-07T17:10:57Z  Container cps-novel-worker-1 Recreate 
+2026-10-07T17:10:57Z  Container cps-novel-worker-light-1 Recreated 
+2026-10-07T17:10:57Z  Container cps-novel-worker-1 Recreated 
+2026-10-07T17:10:57Z  Container cps-novel-worker-light-1 Starting 
+2026-10-07T17:10:57Z  Container cps-novel-worker-1 Starting 
+2026-10-07T17:10:57Z  Container cps-novel-worker-light-1 Started 
+2026-10-07T17:10:57Z  Container cps-novel-worker-1 Started 
+2026-10-07T17:10:57Z  Container cps-novel-worker-1 Waiting 
+2026-10-07T17:10:57Z  Container cps-novel-worker-light-1 Waiting 
+2026-10-07T17:11:02Z  Container cps-novel-worker-light-1 Healthy 
+2026-10-07T17:11:03Z  Container cps-novel-worker-1 Healthy 
+2026-10-07T17:11:03Z APP_RUNTIME=PASS image=cps-novel:0.5.10-7f95510 identity=verified
+2026-10-07T17:11:03Z  Container cps-novel-scheduler-1 Recreate 
+2026-10-07T17:11:03Z  Container cps-novel-scheduler-1 Recreated 
+2026-10-07T17:11:03Z  Container cps-novel-scheduler-1 Starting 
+2026-10-07T17:11:04Z  Container cps-novel-scheduler-1 Started 
+2026-10-07T17:11:04Z  Container cps-novel-scheduler-1 Waiting 
+2026-10-07T17:11:09Z  Container cps-novel-scheduler-1 Healthy 
+2026-10-07T17:11:09Z RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+2026-10-07T17:11:10Z RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+2026-10-07T17:11:10Z RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+2026-10-07T17:11:10Z RUNTIME_IMAGE=PASS services=worker worker-light scheduler
+2026-10-07T17:11:10Z HEALTH_WAIT=PASS service=worker health=healthy
+2026-10-07T17:11:10Z HEALTH_WAIT=PASS service=worker-light health=healthy
+2026-10-07T17:11:11Z HEALTH_WAIT=PASS service=scheduler health=healthy
+2026-10-07T17:11:11Z  Container cps-novel-backup-timer-1 Recreate 
+2026-10-07T17:11:22Z  Container cps-novel-backup-timer-1 Recreated 
+2026-10-07T17:11:22Z  Container cps-novel-backup-timer-1 Starting 
+2026-10-07T17:11:22Z  Container cps-novel-backup-timer-1 Started 
+2026-10-07T17:11:27Z BACKUP_TIMER=RUNNING container=7d05ea295f4c
+2026-10-07T17:11:27Z MAINTENANCE=OFF
+2026-10-07T17:11:27Z PREPROD_SITE_MODE=public
+2026-10-07T17:11:28Z RELEASE_VERIFY=PASS mode=anonymous_only
+2026-10-07T17:11:28Z RELEASE=PASS
+DEPLOY_FINISHED_AT=2026-10-07T17:11:28Z
+RELEASE_EXIT=0
+
+DEPLOY_LOG_COMPLETE=PASS

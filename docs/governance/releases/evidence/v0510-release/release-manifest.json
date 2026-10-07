@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "transport": "archive",
+  "approved_git_commit": "7f955106a82f8dff82568e305ea35f1a68b8c934",
+  "version": "0.5.10",
+  "image_tag": "cps-novel:0.5.10-7f95510",
+  "image_platform": "linux/amd64",
+  "image_revision": "7f955106a82f8dff82568e305ea35f1a68b8c934",
+  "archive_filename": "cps-novel-0.5.10-7f95510.tar.zst",
+  "archive_sha256": "546a81da9b0d42d2cd24604a4e933a87d5f6f4fbefc562e6adcc44ef210a43d3",
+  "oci": {
+    "target": {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:fb32a2f8e254bc3790b405b625337d31e6644407b3a467eea57e140570ebfc29",
+      "size": 3294
+    },
+    "platform_manifest": {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:fb32a2f8e254bc3790b405b625337d31e6644407b3a467eea57e140570ebfc29",
+      "size": 3294
+    },
+    "config": {
+      "mediaType": "application/vnd.oci.image.config.v1+json",
+      "digest": "sha256:fc972d88e44c96873601f4cfbea8dbca513055488e41979366d21d8628c67b37",
+      "size": 13664
+    }
+  },
+  "layer_count": 20,
+  "built_at": "2026-10-07T16:46:40Z",
+  "source_repository": "https://github.com/flightzxc/cps-novel",
+  "identityNote": "Identity = approved_git_commit + oci.platform_manifest.digest + oci.config.digest + archive_sha256. image_tag alone is NOT identity. Which digest a host reports depends on its image store; both are recorded here.",
+  "versionIdentityIssue": "git tag may differ from package.json version; commit and digests are authoritative"
+}

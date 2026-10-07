@@ -1,0 +1,46 @@
+DEPLOYED_HEARTBEAT_SQL_SHA256=2d6295743d6a9a70f57abf7f76e92ded67c760d53ecc86c0c7fb4c9679c544ee
+
+  SELECT max(heartbeat_at) AS last_heartbeat_at
+  FROM (
+    (SELECT heartbeat_at FROM channel_sync_task_item
+      WHERE heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1)
+    UNION ALL
+    (SELECT heartbeat_at FROM generic_task_item
+      WHERE heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1)
+  ) AS heartbeats
+
+Result  (cost=2.75..2.75 rows=1 width=8) (actual time=19.804..19.809 rows=1 loops=1)
+  Buffers: shared hit=163 dirtied=1
+  InitPlan 1 (returns $0)
+    ->  Limit  (cost=0.51..2.75 rows=1 width=8) (actual time=19.801..19.804 rows=0 loops=1)
+          Buffers: shared hit=163 dirtied=1
+          ->  Merge Append  (cost=0.51..4.98 rows=2 width=8) (actual time=19.800..19.803 rows=0 loops=1)
+                Sort Key: "*SELECT* 1".heartbeat_at DESC
+                Buffers: shared hit=163 dirtied=1
+                ->  Subquery Scan on "*SELECT* 1"  (cost=0.25..2.47 rows=1 width=8) (actual time=5.389..5.390 rows=0 loops=1)
+                      Filter: ("*SELECT* 1".heartbeat_at IS NOT NULL)
+                      Buffers: shared hit=20
+                      ->  Limit  (cost=0.25..2.46 rows=1 width=8) (actual time=5.388..5.389 rows=0 loops=1)
+                            Buffers: shared hit=20
+                            ->  Index Only Scan Backward using channel_sync_task_item_heartbeat_idx on channel_sync_task_item  (cost=0.25..2.46 rows=1 width=8) (actual time=5.388..5.388 rows=0 loops=1)
+                                  Heap Fetches: 0
+                                  Buffers: shared hit=20
+                ->  Subquery Scan on "*SELECT* 2"  (cost=0.25..2.47 rows=1 width=8) (actual time=14.409..14.410 rows=0 loops=1)
+                      Filter: ("*SELECT* 2".heartbeat_at IS NOT NULL)
+                      Buffers: shared hit=143 dirtied=1
+                      ->  Limit  (cost=0.25..2.46 rows=1 width=8) (actual time=14.408..14.408 rows=0 loops=1)
+                            Buffers: shared hit=143 dirtied=1
+                            ->  Index Only Scan Backward using generic_task_item_heartbeat_idx on generic_task_item  (cost=0.25..2.46 rows=1 width=8) (actual time=14.406..14.406 rows=0 loops=1)
+                                  Heap Fetches: 199
+                                  Buffers: shared hit=143 dirtied=1
+Planning:
+  Buffers: shared hit=329
+Planning Time: 1.508 ms
+Execution Time: 19.955 ms
+
+HEARTBEAT_EXPLAIN=PASS both_tables=backward_index_scan seq_scan=0 execution_ms=1.462
+{"sample": "warmup", "checked_at": "2026-10-07T17:12:18.207Z", "measured_at_epoch": 1791393138.160817, "http": 200, "time_total": 0.045531, "workerStatus": "ok", "expiredLocks": 0}
+{"sample": "sample1", "checked_at": "2026-10-07T17:12:28.257Z", "measured_at_epoch": 1791393148.2173975, "http": 200, "time_total": 0.034137, "workerStatus": "ok", "expiredLocks": 0}
+{"sample": "sample2", "checked_at": "2026-10-07T17:12:38.304Z", "measured_at_epoch": 1791393158.2638016, "http": 200, "time_total": 0.03646, "workerStatus": "ok", "expiredLocks": 0}
+{"sample": "sample3", "checked_at": "2026-10-07T17:12:48.347Z", "measured_at_epoch": 1791393168.310959, "http": 200, "time_total": 0.036472, "workerStatus": "ok", "expiredLocks": 0}
+WORKER_HEALTH_SAMPLES=PASS warmup=1 samples=3 interval_seconds=10

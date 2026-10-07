@@ -1,0 +1,601 @@
+{
+  "final": "7f955106a82f8dff82568e305ea35f1a68b8c934",
+  "tree": "6e3b5733ff0ee34cac9b5eca46c6f1c95356d504",
+  "status": "PASS",
+  "gates": [
+    {
+      "name": "source-map-js",
+      "command": [
+        "npm",
+        "ls",
+        "source-map-js",
+        "--all"
+      ],
+      "exit": 0,
+      "seconds": 0.39,
+      "log": "source-map-js.log",
+      "result": "PASS",
+      "versions": [
+        "1.2.2",
+        "1.2.2",
+        "1.2.2"
+      ]
+    },
+    {
+      "name": "audit",
+      "command": [
+        "npm",
+        "audit",
+        "--omit=dev",
+        "--json"
+      ],
+      "exit": 1,
+      "seconds": 2.559,
+      "log": "audit.log",
+      "result": "PASS",
+      "accepted_vulnerabilities": [
+        "@prisma/config",
+        "deepmerge-ts",
+        "effect",
+        "nanoid",
+        "prisma"
+      ]
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0,
+      "seconds": 12.312,
+      "log": "typecheck.log",
+      "result": "PASS"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "exit": 0,
+      "seconds": 10.923,
+      "log": "lint.log",
+      "result": "PASS"
+    },
+    {
+      "name": "full-test",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--maxWorkers=4",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/Users/chenweifeng/Documents/cps海阅/release-v0.5.10/.tmp/v0510-phase1/full-test.json"
+      ],
+      "exit": 0,
+      "seconds": 179.82,
+      "log": "full-test.log",
+      "result": "PASS",
+      "passed_tests": 8225,
+      "pending_tests": 517,
+      "passed_files": 528
+    },
+    {
+      "name": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit": 0,
+      "seconds": 20.476,
+      "log": "build.log",
+      "result": "PASS"
+    },
+    {
+      "name": "prisma-validate",
+      "command": [
+        "npx",
+        "prisma",
+        "validate"
+      ],
+      "exit": 0,
+      "seconds": 0.829,
+      "log": "prisma-validate.log",
+      "result": "PASS"
+    },
+    {
+      "name": "dictionary-static",
+      "command": [
+        "node",
+        "scripts/check-database-dictionary-drift.mjs",
+        "--static"
+      ],
+      "exit": 0,
+      "seconds": 0.042,
+      "log": "dictionary-static.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-add-admin-identity-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-add-admin-identity-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 4.224,
+      "log": "run-add-admin-identity-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-article-blog-rebind-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-article-blog-rebind-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 10.521,
+      "log": "run-article-blog-rebind-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-article-publish-batch-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-article-publish-batch-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 26.988,
+      "log": "run-article-publish-batch-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-article-template-version-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-article-template-version-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 6.133,
+      "log": "run-article-template-version-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-catalog-batch-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-catalog-batch-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 21.706,
+      "log": "run-catalog-batch-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-indexnow-sweep-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-indexnow-sweep-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 18.662,
+      "log": "run-indexnow-sweep-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-next-proxy-probe-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-next-proxy-probe-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 10.38,
+      "log": "run-next-proxy-probe-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-novel-article-decouple-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-novel-article-decouple-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 6.033,
+      "log": "run-novel-article-decouple-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-p1-05b-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p1-05b-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 352.889,
+      "log": "run-p1-05b-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-p1-06-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p1-06-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 337.338,
+      "log": "run-p1-06-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-p1-08b-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p1-08b-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 18.985,
+      "log": "run-p1-08b-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-p2-02b-article-template-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p2-02b-article-template-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 6.866,
+      "log": "run-p2-02b-article-template-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-p2-04-admin-content-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p2-04-admin-content-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 3.437,
+      "log": "run-p2-04-admin-content-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-phase-b-entity-fix-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-phase-b-entity-fix-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 6.004,
+      "log": "run-phase-b-entity-fix-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-phase-d-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-phase-d-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 19.446,
+      "log": "run-phase-d-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-phase-d-role-password-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-phase-d-role-password-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 11.471,
+      "log": "run-phase-d-role-password-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-preprod-db-contract-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-preprod-db-contract-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 9.356,
+      "log": "run-preprod-db-contract-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-preview-account-hold-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-preview-account-hold-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 3.641,
+      "log": "run-preview-account-hold-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-preview-opening-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-preview-opening-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 5.655,
+      "log": "run-preview-opening-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-promo-claim-batch-control-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-promo-claim-batch-control-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 5.365,
+      "log": "run-promo-claim-batch-control-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-promo-claim-release-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-promo-claim-release-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 5.148,
+      "log": "run-promo-claim-release-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-publication-preview-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-publication-preview-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 20.924,
+      "log": "run-publication-preview-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-sitemap-refresh-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-sitemap-refresh-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 31.843,
+      "log": "run-sitemap-refresh-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-tagging-auto-preview-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-tagging-auto-preview-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 21.086,
+      "log": "run-tagging-auto-preview-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-tagging-public-auto-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-tagging-public-auto-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 37.98,
+      "log": "run-tagging-public-auto-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-task-claim-control-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-task-claim-control-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 4.677,
+      "log": "run-task-claim-control-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-tkd-repair-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-tkd-repair-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 3.768,
+      "log": "run-tkd-repair-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-worker-health-index-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-worker-health-index-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 8.062,
+      "log": "run-worker-health-index-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-worker-light-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-worker-light-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 4.188,
+      "log": "run-worker-light-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-x2-postgres-hardening-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-x2-postgres-hardening-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 2.022,
+      "log": "run-x2-postgres-hardening-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-x6-site-setting-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-x6-site-setting-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 5.871,
+      "log": "run-x6-site-setting-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "run-x9-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-x9-postgres-verification.sh"
+      ],
+      "exit": 0,
+      "seconds": 10.07,
+      "log": "run-x9-postgres-verification.log",
+      "result": "PASS"
+    },
+    {
+      "name": "tagging-memory",
+      "command": [
+        "/bin/bash",
+        "scripts/measure-tagging-task-memory.sh"
+      ],
+      "exit": 0,
+      "seconds": 74.307,
+      "log": "tagging-memory.log",
+      "result": "PASS"
+    },
+    {
+      "name": "nginx-matrix",
+      "command": [
+        "/bin/bash",
+        "scripts/preproduction/verify-nginx-matrix.sh"
+      ],
+      "exit": 0,
+      "seconds": 52.575,
+      "log": "nginx-matrix.log",
+      "result": "PASS"
+    },
+    {
+      "name": "public-cutover-mutations",
+      "command": [
+        "node",
+        "scripts/preproduction/verify-public-cutover-mutations.mjs"
+      ],
+      "exit": 0,
+      "seconds": 6.715,
+      "log": "public-cutover-mutations.log",
+      "result": "PASS"
+    },
+    {
+      "name": "brand-image",
+      "command": [
+        "/bin/bash",
+        "scripts/preproduction/verify-brand-image.sh"
+      ],
+      "exit": 0,
+      "seconds": 930.329,
+      "log": "brand-image.log",
+      "result": "PASS"
+    },
+    {
+      "name": "compose",
+      "command": [
+        "/bin/bash",
+        "/Users/chenweifeng/Documents/cps海阅/release-v0.5.10/.tmp/v0510-phase1/compose-check.sh"
+      ],
+      "exit": 0,
+      "seconds": 0.579,
+      "log": "compose.log",
+      "result": "PASS"
+    },
+    {
+      "name": "audit-recheck",
+      "command": [
+        "npm",
+        "audit",
+        "--omit=dev",
+        "--json"
+      ],
+      "exit": 1,
+      "seconds": 6.678,
+      "log": "audit-recheck.log",
+      "result": "PASS",
+      "accepted_vulnerabilities": [
+        "@prisma/config",
+        "deepmerge-ts",
+        "effect",
+        "nanoid",
+        "prisma"
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "name": "run-p1-06-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p1-06-postgres-verification.sh"
+      ],
+      "exit": 1,
+      "seconds": 207.314,
+      "log": "run-p1-06-postgres-verification.attempt-1.log",
+      "result": "FAIL",
+      "reason": "run-p1-06-postgres-verification returned nonzero"
+    },
+    {
+      "name": "run-p1-06-postgres-verification",
+      "command": [
+        "/bin/bash",
+        "scripts/run-p1-06-postgres-verification.sh"
+      ],
+      "exit": 1,
+      "seconds": 169.093,
+      "log": "run-p1-06-postgres-verification.attempt-2.log",
+      "result": "FAIL",
+      "reason": "run-p1-06-postgres-verification returned nonzero"
+    },
+    {
+      "name": "brand-image",
+      "command": [
+        "/bin/bash",
+        "scripts/preproduction/verify-brand-image.sh"
+      ],
+      "exit": 137,
+      "seconds": 469.356,
+      "log": "brand-image.attempt-3.log",
+      "result": "FAIL",
+      "reason": "brand-image returned nonzero"
+    },
+    {
+      "name": "brand-image",
+      "command": [
+        "/bin/bash",
+        "scripts/preproduction/verify-brand-image.sh"
+      ],
+      "exit": null,
+      "seconds": null,
+      "log": "brand-image.attempt-4.log",
+      "result": "INTERRUPTED",
+      "reason": "user interrupted turn; build process ended before gate completion"
+    }
+  ]
+}

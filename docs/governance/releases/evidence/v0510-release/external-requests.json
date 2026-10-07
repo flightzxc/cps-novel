@@ -1,0 +1,141 @@
+[
+  {
+    "label": "baseline-romance",
+    "url": "https://pulsenovels.com/category/romance",
+    "http": 200,
+    "method": "GET"
+  },
+  {
+    "label": "login-off",
+    "url": "https://zbcwf.pulsenovels.com/login",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 1.138323"
+  },
+  {
+    "label": "en-novel",
+    "url": "https://pulsenovels.com/novel/the-castle-of-the-shadows-p27umbhgg",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.162012"
+  },
+  {
+    "label": "home",
+    "url": "https://pulsenovels.com/",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.628610"
+  },
+  {
+    "label": "ar",
+    "url": "https://pulsenovels.com/ar",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.231604"
+  },
+  {
+    "label": "ko-novel",
+    "url": "https://pulsenovels.com/ko/novel/%EC%9D%B4%ED%98%BC%ED%95%9C-%EB%82%98%EC%9D%98-%EC%95%84%EB%82%B4%EA%B0%80-%EB%A7%8C%EB%A0%99-%EC%9E%AC%EB%B2%8C%EC%9D%B4%EB%8B%A4-p6zcjcycn",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.326429"
+  },
+  {
+    "label": "en-tagged-novel",
+    "url": "https://pulsenovels.com/novel/14-days-to-love-p1hht62vp",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.370943"
+  },
+  {
+    "label": "category-head-1",
+    "url": "https://pulsenovels.com/category/female-audience",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.240546"
+  },
+  {
+    "label": "category-head-2",
+    "url": "https://pulsenovels.com/category/romance",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.122270"
+  },
+  {
+    "label": "category-head-3",
+    "url": "https://pulsenovels.com/category/romance?page=2",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.185939"
+  },
+  {
+    "label": "category-head-4",
+    "url": "https://pulsenovels.com/id/category/romance?page=3",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.467534"
+  },
+  {
+    "label": "category-head-5",
+    "url": "https://pulsenovels.com/th/category/romance?page=4",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 2.351829"
+  },
+  {
+    "label": "category-head-6",
+    "url": "https://pulsenovels.com/ru/category/female-audience?page=10",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.192661"
+  },
+  {
+    "label": "category-head-7",
+    "url": "https://pulsenovels.com/pt-BR/category/female-audience?page=3",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.115861"
+  },
+  {
+    "label": "category-head-8",
+    "url": "https://pulsenovels.com/fr/category/regret",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.461155"
+  },
+  {
+    "label": "category-head-9",
+    "url": "https://pulsenovels.com/fr/category/female-audience?page=7",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.239403"
+  },
+  {
+    "label": "category-head-10",
+    "url": "https://pulsenovels.com/ja/category/werewolf",
+    "method": "HEAD",
+    "curl_exit": 0,
+    "metrics": "200 1.448282"
+  },
+  {
+    "label": "category-page2",
+    "url": "https://pulsenovels.com/category/romance?page=2",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 1.906195"
+  },
+  {
+    "label": "browse-page2",
+    "url": "https://pulsenovels.com/browse?page=2",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.011146"
+  },
+  {
+    "label": "category-page1",
+    "url": "https://pulsenovels.com/category/romance",
+    "method": "GET",
+    "curl_exit": 0,
+    "metrics": "200 2.266218"
+  }
+]

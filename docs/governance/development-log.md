@@ -39,6 +39,15 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-08 01:23 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：海阅v0.5.10 PATCH正式站部署，仅haiyue-vps；2026-10-08 01:11:28 +0800原RELEASE=PASS/EXIT=0，维护48秒；自动验收PASS，Owner操作项目待确认。
+**背景**：2026-10-07正式开放后发现分类Sitemap404、详情分类死链、分页noindex与地图矛盾、阿语轮播空白、阅读设置误点推广链接；主控逐项独立复核并集成完整基线，本轮只升版验证与发布，不开发功能。
+**变更内容**：B-37 书封占位、首屏加载、书封分享小图卡片（fix/b37-cover-stage0@4544d9c）；B-39 后台登录 Turnstile，已合入但保持关闭（feat/b39-admin-turnstile@1330879）；B-38 分类站点地图仅列实际 200 页面（fix/b38-sitemap-category-200-only@794d5c7）；B-38b 详情与推荐分类链接收口（fix/b38b-category-links-200-only@9db8a79）；PN-03 阅读设置层级及面板内滚动（fix/pn03-reader-settings-layer@a4745dd）；PN-01/PN-08 分页可收录，无跨语种 hreflang（fix/pn01-pn08-pagination-seo-cps-parity@b4830d0）；PN-02 阿语轮播与根语言属性同步（fix/pn02-rtl-hero-document-lang@f4affab）；运营后台书目/标签搜索、模板 Key 与 15 语种书封 alt（fix/ops-admin-search-and-template-key@6476ba4）。第八项源运营2026-10-07《小说站问题反馈》；分类第2页404与B-38重复已修，批量列表怪书名是上游真书不是坏数据。Final `7f955106a82f8dff82568e305ea35f1a68b8c934` / tree `6e3b5733ff0ee34cac9b5eca46c6f1c95356d504`。
+**影响范围**：修复代码已在pulsenovels.com正式站生效；Turnstile已合入但关闭，启用待Owner申请Cloudflare密钥及单独授权。env仅两个版本变量、其它字节cmp相同；public nginx/所有业务开关/22迁移不变，postgres CID不变。没有新建/暂停/恢复领推广批次、保存模板或回滚。
+**验证方式**：第一阶段46门禁/32运行器PASS，528files8225tests，strictproxy1646/0findings，audit0critical及批准5high；原linux/amd64归档服务器独立SHA及OCI/Final校验通过。B两次READ ONLY暂停闸/文章发布在途0/22迁移checksums，备份restore-list、原迁移空操作grants回放、health/metadata/五应用/backup/worker四采样PASS。分享图/en-ko alt/阿语HTML/分页metadata与第一页13hreflang相同；第250本书分类2链接200、1纯文字。一次CLI审计Sitemap任务5d361608 completed/item success/errornull，18.887秒，35分片115163URL，小说28745/免费正文章节85964逐语种等于部署前，en分类1788→72，10不同分类HEAD200；本机20外部请求经代理。五应用错误0；postgres仅自写只读SQL辅助42P10一条，修正后通过，不混写成业务错误或原始0。
+**后续待办**：Owner登录2FA、阿语轮播/切English、手机设置重置、书目/标签筛选与模板Key只读待确认，不为验收保存模板。下一版v0.5.11 PN-06翻页到页脚前、PN-10焦点锁定、PN-03/PN-02遗留RTL及层级。annotated tag固定Final、原生成CHANGELOG/台账/本唯一条目已本地完成，Git推送回读及Notion同步回读进行中。回滚须Owner另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES并恢复本次env、旧口径刷新Sitemap，不回退迁移或nginx。
+
 ### 2026-10-07 03:02 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式部署 `v0.5.9`（PATCH），仅 haiyue-vps。原 RELEASE=PASS / EXIT=0，部署完成 2026-10-07 02:23:30 +0800 / 03:23:30 JST，耗时57秒。E / F / 5b / 5c / 5d 全部PASS。
