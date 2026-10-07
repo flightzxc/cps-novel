@@ -186,6 +186,7 @@ describe("4. startup: start-web.sh loads the secret only when the switch is exac
       cwd: root,
       encoding: "utf8",
       env: {
+        NODE_ENV: "test",
         PATH: `${bin}:${process.env.PATH}`,
         HOME: process.env.HOME,
         TRACKING_HASH_SALT: "salt",
@@ -409,10 +410,11 @@ describe.each(SITE_MODE_CASES)("6. $mode preflight.sh end to end (real script, n
   });
 
   it("explicitly off, and on with a valid site key, both clear the gate", async () => {
-    for (const overrides of [
+    const cases: Array<Record<string, string>> = [
       { [ENV.enabled]: "false" },
       { [ENV.enabled]: "true", [ENV.siteKey]: TEST_SITE_KEY },
-    ]) {
+    ];
+    for (const overrides of cases) {
       const r = await runPreflight(overrides);
       expect(r.stdout).toContain("PREPROD_PREFLIGHT=FAIL reason=git_commit");
     }
@@ -736,7 +738,7 @@ describe.skipIf(!dockerComposeOk)("8. rendered Compose: the switch really arrive
         {
           cwd: root,
           encoding: "utf8",
-          env: { PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile },
+          env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile },
         },
       );
       expect(result.status, result.stderr).toBe(0);
@@ -746,7 +748,8 @@ describe.skipIf(!dockerComposeOk)("8. rendered Compose: the switch really arrive
     const base = { ...RENDER_ENV, PREPROD_SHARED_ROOT: "/opt/cps-novel/shared" };
 
     it("switch absent or false -> /dev/null, nothing about the host file is required", async () => {
-      for (const extra of [{}, { [ENV.enabled]: "false" }, { [ENV.enabled]: "TRUE" }]) {
+      const extras: Array<Record<string, string>> = [{}, { [ENV.enabled]: "false" }, { [ENV.enabled]: "TRUE" }];
+      for (const extra of extras) {
         const rendered = await renderViaLib({ ...base, ...extra });
         expect(rendered.secrets![SECRET]!.file, JSON.stringify(extra)).toBe("/dev/null");
       }
@@ -772,7 +775,7 @@ describe.skipIf(!dockerComposeOk)("8. rendered Compose: the switch really arrive
         {
           cwd: root,
           encoding: "utf8",
-          env: { PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile, ADMIN_LOGIN_TURNSTILE_SECRET_SOURCE: "/etc/shadow" },
+          env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile, ADMIN_LOGIN_TURNSTILE_SECRET_SOURCE: "/etc/shadow" },
         },
       );
       expect(result.status, result.stderr).toBe(0);
