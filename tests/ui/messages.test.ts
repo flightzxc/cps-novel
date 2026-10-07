@@ -34,7 +34,8 @@ describe("loadMessages", () => {
   });
 
   it("interpolates dotted keys", () => {
-    expect(t(loadMessages("en"), "novel.coverAlt", "en", { title: "Lantern" })).toBe("Cover of Lantern");
+    // 书封 alt 只保留书名（Owner 2026-10-07）：不再带 "Cover of" 前缀。
+    expect(t(loadMessages("en"), "novel.coverAlt", "en", { title: "Lantern" })).toBe("Lantern");
     expect(t(loadMessages("en"), "home.slideStatus", "en", { n: 2, count: 4, title: "Lantern" })).toBe(
       "Work 2 of 4: Lantern",
     );

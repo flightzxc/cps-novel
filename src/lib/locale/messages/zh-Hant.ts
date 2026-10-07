@@ -62,7 +62,7 @@ const messages = {
     chapterCount: "共{count}章",
   },
   novel: {
-    coverAlt: "《{title}》封面",
+    coverAlt: "{title}",
     tagsLabel: "標籤",
     genreTags: "類型標籤",
     chapterCount: "共{count}章",

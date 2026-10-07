@@ -62,7 +62,7 @@ const messages = {
       "{count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
   },
   novel: {
-    coverAlt: "Okładka {title}",
+    coverAlt: "{title}",
     tagsLabel: "Tagi",
     genreTags: "Tagi gatunku",
     // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("pl") 实测；

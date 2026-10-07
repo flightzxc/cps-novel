@@ -63,7 +63,7 @@ const messages = {
     chapterCount: "{count} chương",
   },
   novel: {
-    coverAlt: "Ảnh bìa {title}",
+    coverAlt: "{title}",
     tagsLabel: "Thẻ",
     genreTags: "Thẻ thể loại",
     chapterCount: "{count} chương",
