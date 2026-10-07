@@ -1006,3 +1006,104 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 5. 清理时自动审批拒绝 `rm -f` 形式，理由为该命令形式不被允许；改用 Python 对指定 config 执行 unlink、对空目录执行 rmdir，已完成并确认文件及目录均不存在。没有因此留下凭据。
 
 证据提交使用中文说明及 `Agent: codex` / `Model: GPT-6` trailer；不合并。分支 HEAD 在交付回报给出，不在提交内写入自身哈希。
+
+
+## 切换当天（2026-10-07）：预检与逻辑备份通过，等待 Owner sudo
+
+本节为执行中的真实记录，**未对外开放，未安装 public nginx，未改域名 env，未同镜像发布，无回退**。分支 `ops/public-cutover-2026-10` 从 `ops/cutover-loadtest-2026-10 @f962f9002156b6ef6457a9dbd4030f866d8ee86b` 创建，仅文档提交和 push，不合并、不打 tag、不开发功能。Owner 已确认的前置条件调整见 [ADR](../adr/ADR-PUBLIC-CUTOVER-20261007-PREREQUISITES.md)。
+
+### 第 0～9 步状态
+
+| 步骤 | 时间 / 结果 |
+|---|---|
+| 0 只读预检与暂停门禁 | 2026-10-07 14:39:59 JST：完整 Final / health healthy / database 与 metadata passed；六容器 healthy，原 SQL `PUBLIC_CUTOVER_PAUSE_GATE=PASS`；无运行中领取批次，无 pending/processing 后台发布任务；22 迁移名称、SHA256、finished/rolled_back 与 Final 一致。当前无需暂停批次，第 9 步恢复跳过；进入写步骤前仍重新检查 |
+| 1 备份及身份 | 2026-10-07 14:41:57 JST：逻辑备份三件、pg_restore --list 和 sha256sum -c PASS；env 备份、四应用镜像及 postgres CID 已保存。整份 nginx 备份等待 Owner 在交互 SSH 中 sudo |
+| 2 维护与 env | 未执行；两个域名保持旧值，尚无域名 diff/public preflight |
+| 3 正式边缘 | 未安装；同版 renderer 的候选非空及拓扑检查 PASS，SHA256 `d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe`；`cutover_nginx_backup` 待安装器生成 |
+| 4 同镜像发布 | 未执行；没有本次 RELEASE=PASS 或发布后镜像/CID 对比 |
+| 5 外部验收 | 未执行正式域名验收/限流/worker 采样；en/ko/es 小说、英文章节和真实短码只读样本已准备，没有请求推广入口 |
+| 6 后台设置 | 只读现值 PulseNovel / `/brand/og-default.png` 已核对；Owner 新后台登录/二步验证待执行，IndexNow 三项不配置 |
+| 7 sitemap | 旧索引及全部 35 分片认证 GET 200，计数见下表；未入队新刷新，不用翌日兜底代替 |
+| 8 GSC | GSC 待做，由 Owner 操作 |
+| 9 恢复及收尾 | 本轮没有暂停批次，不恢复任何既有批次；监控平台状态待 Owner 提供。Notion 正式手账 fetch 成功，切换后的台账/开发日志及 Notion 同步尚未进行 |
+
+### 备份、身份与 env
+
+- 受控运行目录 `/opt/cps-novel/shared/cutover/20261007T053946Z`，目录 0700；包装目录 `/opt/cps-novel/shared/cutover-public-20261007`。
+- `cutover_manifest=/opt/cps-novel/shared/artifacts/staging/6af0b2e5c79db932c4754a43580eed3729bd0334.json`；物理 release `/opt/cps-novel/releases/6af0b2e5c79db932c4754a43580eed3729bd0334`。
+- 逻辑备份宿主机 `/opt/cps-novel/shared/backups/logical/public-cutover-20261007T053946Z.dump`；同目录 `.dump.sha256`、`.dump.metadata` 齐全。大小 681549422 bytes；SHA256 `27321aaaf79b6a4a3ea5feb6b81859ad5464524e5b77de5443fb9e6e0e0e461d`；原脚本 `LOGICAL_BACKUP=PASS`，独立目录读取和散列复核通过，backup-timer 未停止。
+- postgres CID `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`；web/worker/worker-light/scheduler 引用均 `cps-novel:0.5.9-6af0b2e`，实际锚点均 `sha256:faa2c75b7c6e00efbe20d65bee89e685556429f98d6901de79adf1d53318cb11`。
+- env 只保存受控备份，未打印全文；当前 `SITE_URL=https://www.bangbangji.cloud`、`ADMIN_CANONICAL_ORIGIN=https://zbcwf.bangbangji.cloud`，尚未修改。
+- 运行版 preflight：`PREPROD_SITE_MODE=preprod`、`PREPROD_PREFLIGHT=PASS`、secret consumer/access PASS；已批准写闸仍 catalog/promo/sitemap/auto_tag，未新增登记，IndexNow 四闸 false、delivery 不在 allowlist。
+
+### 当天数据库基线
+
+章节采用 v0.5.9 第二阶段 5c 的 SQL：已发布未软删文章关联小说，preview 未软删章节按 canonicalChapterNumber 取前 64 章，再要求正文 char_count>0。
+
+| 语种 | 已发布小说页 | 免费正文章节 |
+|---|---:|---:|
+| ar | 31 | 93 |
+| de | 843 | 2526 |
+| en | 12947 | 38599 |
+| es | 2671 | 8008 |
+| fr | 2447 | 7332 |
+| id | 1573 | 4719 |
+| ja | 383 | 1149 |
+| ko | 766 | 2298 |
+| pl | 40 | 120 |
+| pt-BR | 2312 | 6928 |
+| ru | 2957 | 8867 |
+| th | 932 | 2796 |
+| vi | 828 | 2484 |
+| zh-Hant | 15 | 45 |
+| 合计 | 28745 | 85964 |
+
+236 本已撤回零正文书状态为 `unpublished`，完整 ID/公开路径集合保存在受控 baseline.json，供刷新后排除检查。旧 sitemap 尚为撤回前 118537 个网址；不得将旧分片计数当作正式域名刷新验收。
+
+| 切换前分片 | 条目数 |
+|---|---:|
+| site_mainpage_en.xml | 1798 |
+| site_mainpage_es.xml | 302 |
+| site_mainpage_pt-BR.xml | 260 |
+| site_mainpage_id.xml | 189 |
+| site_mainpage_vi.xml | 92 |
+| site_mainpage_th.xml | 104 |
+| site_mainpage_ja.xml | 61 |
+| site_mainpage_ko.xml | 80 |
+| site_mainpage_zh-Hant.xml | 7 |
+| site_mainpage_ar.xml | 9 |
+| site_mainpage_fr.xml | 285 |
+| site_mainpage_de.xml | 113 |
+| site_mainpage_pl.xml | 2 |
+| site_mainpage_ru.xml | 290 |
+| site_novelpage_en.xml | 10000 |
+| site_novelpage_en_1.xml | 10000 |
+| site_novelpage_en_2.xml | 10000 |
+| site_novelpage_en_3.xml | 10000 |
+| site_novelpage_en_4.xml | 10000 |
+| site_novelpage_en_5.xml | 1782 |
+| site_novelpage_es.xml | 10000 |
+| site_novelpage_es_1.xml | 679 |
+| site_novelpage_pt-BR.xml | 9240 |
+| site_novelpage_id.xml | 6292 |
+| site_novelpage_vi.xml | 3312 |
+| site_novelpage_th.xml | 3728 |
+| site_novelpage_ja.xml | 1532 |
+| site_novelpage_ko.xml | 3064 |
+| site_novelpage_zh-Hant.xml | 60 |
+| site_novelpage_ar.xml | 124 |
+| site_novelpage_fr.xml | 9779 |
+| site_novelpage_de.xml | 3369 |
+| site_novelpage_pl.xml | 160 |
+| site_novelpage_ru.xml | 10000 |
+| site_novelpage_ru_1.xml | 1824 |
+| 合计（35 分片） | 118537 |
+
+### 包装修正、sudo 输入与偏离
+
+- 包装隔离检查 `WRAPPER_FIXTURES=PASS cases=11`，覆盖空候选、正常候选、公开健康/坏 JSON/身份错误/5xx/noindex 异常、错误后台 realm、worker 健康与过期锁/后三次全 failed。Bash 3.2 语法通过；断言显式退出，未使用独立 `[[ … ]]` 冒充退出门禁。
+- 首次候选检查器按错误的 server 序号判断 HTTPS 拒绝块，fixture 失败；改为匹配 default_server 块后重跑通过。样本查询首次误用推广状态 ready 而取不到记录；核对代码实际状态 fetched 后修正并重查。不修改 release 代码。
+- SSH 可用，但 `sudo -n true` 返回需要密码；工具明确禁止操作本机 Codex/Terminal 窗口，没有可交给 Owner 的工具终端输入通道。已提供 [Owner 交互命令单](PUBLIC_CUTOVER_OWNER_STEPS_2026-10-07.md)，由 Owner 在自己的终端输入密码，所有 sudo 放同一会话执行；不索取密码、不改 sudoers、不用 root。
+- 本机外部旧站经指定代理匿名 401、rehearsal/noindex。新域名 exit 60 的切换前差异按 Owner 已确认 ADR 接受，public 安装后不放宽 TLS。
+- 逻辑备份和候选先于需要 sudo 的整份 nginx 备份完成；两者都须在维护/env/安装前齐全。这是执行顺序偏离，不替代 nginx 备份。
+- 当前记录只证明准备结果，不宣称第 1～9 步全部完成。
