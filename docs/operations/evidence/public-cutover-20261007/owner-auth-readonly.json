@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-07T10:46:53.696017+00:00",
+  "sessions": [
+    {
+      "id": "8f12ce45-ff52-4304-8a8d-764f256ea10a",
+      "issued_at": "2026-10-07T10:43:01.828+00:00",
+      "last_seen_at": "2026-10-07T10:43:01.828+00:00",
+      "two_factor_completed_at": "2026-10-07T10:43:49.889+00:00",
+      "revoked_at": null,
+      "absolute_expires_at": "2026-10-08T10:43:01.828+00:00",
+      "version_matches": true,
+      "identity_status": "active",
+      "two_factor_enabled": true
+    }
+  ],
+  "challenges": [
+    {
+      "id": "d509f210-847a-4400-8eda-19bca4a61bf4",
+      "session_id": "8f12ce45-ff52-4304-8a8d-764f256ea10a",
+      "created_at": "2026-10-07T10:43:01.895+00:00",
+      "consumed_at": "2026-10-07T10:43:49.889+00:00",
+      "attempt_count": 0
+    }
+  ],
+  "auth_operation_audit": null,
+  "site_setting": {
+    "site_name": "PulseNovel",
+    "default_og_image": "/brand/og-default.png",
+    "indexnow_host_empty": true,
+    "indexnow_key_empty": true,
+    "indexnow_key_location_empty": true
+  }
+}

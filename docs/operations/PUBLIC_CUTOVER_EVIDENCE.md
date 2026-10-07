@@ -1471,3 +1471,27 @@ Git证据 `c87793d4db91d86c34eb24e5af9e9b4179ae9a8c` 已push，远端HEAD逐字�
 | 9 | 无暂停批次无需恢复；ops证据push远端核对、台账和同版开发日志开放登记、Notion同步读回已完成；未合并、不打新tag、不发新版本 |
 
 **是否开放：是，确认时间2026-10-07 19:39:17 JST，维护OFF；是否回退：成功public部署后未回退。** 应用后台2FA仍待Owner完成回报和实际记录核对，不能冒充已完成。
+
+
+## 2026-10-07 19:46 JST Owner后台登录与二步验证核对完成
+
+Owner回复“我登录了基本正常”，并提供v0.5.9后台渠道账户页截图。截图可确认已进入应用后台及展示版本，裁剪图本身不显示域名或二步验证动作；结合Owner在新后台登录的回报和同时间窗数据库记录核对，不用截图单独替代2FA证据。[Owner截图](evidence/public-cutover-20261007/owner-admin-v059.png)，SHA256 `3362f59dd96b4ad8021984e655403a2261e74478267a977e7643b13ac09fb5cb`。
+
+2026-10-07T10:46:53.696017Z READ ONLY事务读回：[登录/二步验证记录](evidence/public-cutover-20261007/owner-auth-readonly.json)。本次仅选非秘密字段，没有读取password/token/hash/密钥/恢复码。
+
+| 记录 | 真实读回 |
+|---|---|
+| admin_session | `8f12ce45-ff52-4304-8a8d-764f256ea10a`，issued_at=2026-10-07T10:43:01.828+00:00（19:43:01 JST） |
+| 会话二步验证完成 | two_factor_completed_at=2026-10-07T10:43:49.889+00:00（19:43:49 JST） |
+| 会话有效性 | identity_status=active、two_factor_enabled=true、version_matches=true、revoked_at=null，absolute_expires_at=2026-10-08T10:43:01.828+00:00 |
+| 同一会话challenge | `d509f210-847a-4400-8eda-19bca4a61bf4`，created_at=2026-10-07T10:43:01.895+00:00，consumed_at=2026-10-07T10:43:49.889+00:00，与会话完成时间一致，attempt_count=0 |
+| operation_audit登录/2FA事件 | 本时间窗查询0行（JSON null）；当前auth/login和completeTwoFactorChallenge实现写会话/challenge，不写该业务审计表。没有伪称存在operation_audit行；本次核对依据实际认证记录 |
+| 站点设置 | PulseNovel；相对默认图 `/brand/og-default.png`；IndexNow host/key/keyLocation全部空，PASS |
+
+**第6步：Owner应用登录及二步验证、对应认证记录读回PASS。** GSC和三条外部监控继续按Owner裁决记待做，不阻断；本次不新增领取批次、无暂停批次需恢复；不改代码、证书/DNS/NAS/X8/限流或其它写闸，不重复sitemap/短码/书封请求，HSTS不提级。
+
+### 最终第0～9步收官状态
+
+第0～5步保持既有PASS；第6步worker预热+三采样PASS、Owner登录/2FA及只读认证记录核对PASS；第7步一次刷新成功、35分片/118292 URL/22.522秒、14语种28745小说/85964正文及236撤回排除PASS，分类404登记“已知缺陷B-38，Owner接受开放”，随v0.5.10修复；第8步GSC/三监控待做（Owner明确延后）；第9步无批次需恢复、Git证据/台账/同版开发日志已push核远端、Notion开放状态已同步读回，后台完成核验收据随后同步。既有DEFERRED/WAIVED保留，不混写成PASS。
+
+**v0.5.9 于 2026-10-07 切换到正式域名 pulsenovels.com 对外开放；公开确认时间2026-10-07 19:39:17 JST（10:39:17.521832Z）。维护OFF；成功public部署后未回退；本次不发新版本或tag，ops分支不合并。**
