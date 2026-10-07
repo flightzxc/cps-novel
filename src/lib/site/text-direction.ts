@@ -11,8 +11,10 @@
  * shared helper nobody calls, a private copy inside one component, and a
  * third inline `lang === "ar" ? "rtl" : "ltr"` form in its root layout —
  * see this work order's §8.2 for the full account). `src/app/layout.tsx`
- * is the only caller here; if a second caller ever needs this, it must
- * import this function rather than re-deriving the rule.
+ * is the only SERVER-side caller; the client-side one is
+ * `src/features/public-ui/layout/DocumentLocaleSync.tsx` (PN-02, 2026-10-07),
+ * which re-applies `<html dir>` after a soft locale switch. Any further caller
+ * must import this function rather than re-deriving the rule.
  */
 export function getTextDirection(locale: string): "rtl" | "ltr" {
   return /^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr";
