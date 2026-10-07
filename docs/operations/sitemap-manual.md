@@ -69,3 +69,8 @@ Prisma 32,767 绑定变量上限；跑完会打印 `[sitemap-scale] ...` 行（�
 分类页只在各语种最新 `PUBLIC_LIST_CAP`（240）本里找书，站点地图改为每个语种调用一次页面自己的 `listPublicArticles`，
 再用页面同一个谓词在内存里求出"有书的分类 → 总页数"（`listPublicCategoryPageCounts`）；没有书的分类、以及超出页面总页数的
 `?page=N` 不再出现。`PUBLIC_LIST_CAP` 本身没有改（根治另案）。
+
+同一个脚本里的 B-38 第二部分用例（同一文件的第 7～9 条）覆盖站内链接：详情页的分类标签、推荐卡片的标签只有在分类页确实
+返回 200 时才带 `href`，其余渲染成没有链接的纯文字（`src/lib/site/category-links.ts`）。判定集合取页脚用的
+`listPublicCategories`（同一请求内页脚已经取过，新增 0 次查询），与 `listPublicCategoryPageCounts` 的键集合恒等，
+由默认 `npm test` 与本脚本里的真实库用例共同钉死。
