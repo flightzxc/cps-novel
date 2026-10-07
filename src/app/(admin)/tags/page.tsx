@@ -9,6 +9,7 @@ import { listAdminSourceLabels } from "@/server/admin-content";
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
 import { sessionView } from "../_lib/page-guard";
+import { blankParamToUndefined } from "../_lib/search-params";
 import { ContentCapabilityDenied } from "../novels/_components/content-states";
 import { ContentPagination } from "../novels/_components/content-pagination";
 import { requireContentPage } from "../novels/_lib/content-page-guard";
@@ -49,13 +50,22 @@ export default async function TagsPage({
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/tags", "content:view");
 
+  // "全部类型"（`<option value="">`）提交的是 `labelKind=`，语义是"不过滤"；服务层对
+  // 非空未登记值严格拒绝，所以空白值在页面边界还原成 `undefined`。非空非法值
+  // （`?labelKind=foo`）不在此放行，仍由服务层拒绝。
+  const filters = {
+    search: blankParamToUndefined(params.search),
+    labelKind: blankParamToUndefined(params.labelKind),
+    activity: blankParamToUndefined(params.activity),
+  };
+
   let page: AdminContentPageView<AdminSourceLabelView> | null = null;
   if (granted) {
     const result = await listAdminSourceLabels(prisma, {
       page: params.page ? Number(params.page) : undefined,
-      search: params.search,
-      labelKind: params.labelKind as never,
-      activity: params.activity as never,
+      search: filters.search,
+      labelKind: filters.labelKind as never,
+      activity: filters.activity as never,
     });
     page = projectAdminContentPage(result, projectAdminSourceLabel);
   }
@@ -63,7 +73,7 @@ export default async function TagsPage({
   // Mirrors the `<select name="activity" defaultValue={... ?? "current"}>` in
   // `TagFilters` — the same fallback, so the empty-state copy in `TagsTable`
   // never disagrees with what the filter bar shows as selected.
-  const activity: TagActivityFilter = (params.activity as TagActivityFilter | undefined) ?? "current";
+  const activity: TagActivityFilter = (filters.activity as TagActivityFilter | undefined) ?? "current";
 
   return (
     <AdminShell
@@ -77,9 +87,7 @@ export default async function TagsPage({
         <TagNavTabs current="labels" />
         {granted && page ? (
           <>
-            <TagFilters
-              values={{ search: params.search, labelKind: params.labelKind, activity: params.activity }}
-            />
+            <TagFilters values={filters} />
             <TagsTable labels={page.items} activity={activity} />
             <ContentPagination
               basePath="/tags"

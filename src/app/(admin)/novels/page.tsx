@@ -11,6 +11,7 @@ import { listAdminNovels } from "@/server/admin-content";
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
+import { blankParamToUndefined } from "../_lib/search-params";
 import { ContentCapabilityDenied } from "./_components/content-states";
 import { ContentPagination } from "./_components/content-pagination";
 import { NovelFilters } from "./_components/novel-filters";
@@ -50,14 +51,25 @@ export default async function NovelsPage({
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/novels", "content:view");
 
+  // 筛选栏的"全部状态""全部语种"提交的是 `status=` / `locale=`（存在但为空），语义
+  // 是"不过滤"。服务层对非空未登记值是严格拒绝的，所以空白值必须在这里还原成
+  // `undefined`；同一份规范化结果同时喂给列表查询和筛选栏回显，两者不会各说各话。
+  // `?status=foo` 这类非空非法值不在此放行，仍由服务层拒绝。
+  const filters = {
+    search: blankParamToUndefined(params.search),
+    status: blankParamToUndefined(params.status),
+    locale: blankParamToUndefined(params.locale),
+    labelId: blankParamToUndefined(params.labelId),
+  };
+
   let page: AdminContentPageView<AdminNovelListItemView> | null = null;
   if (granted) {
     const result = await listAdminNovels(prisma, {
       page: params.page ? Number(params.page) : undefined,
-      search: params.search,
-      status: params.status as never,
-      locale: params.locale,
-      labelId: params.labelId,
+      search: filters.search,
+      status: filters.status as never,
+      locale: filters.locale,
+      labelId: filters.labelId,
     });
     page = projectAdminContentPage(result, projectAdminNovelListItem);
   }
@@ -73,14 +85,7 @@ export default async function NovelsPage({
       <div className="space-y-6">
         {granted && page ? (
           <>
-            <NovelFilters
-              values={{
-                search: params.search,
-                status: params.status,
-                locale: params.locale,
-                labelId: params.labelId,
-              }}
-            />
+            <NovelFilters values={filters} />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <NovelsBatchPublish
