@@ -25,7 +25,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 原RELEASE=PASS/EXIT=0，维护01:10:39–01:11:27 +0800，48秒；health0.5.10/Final/metadata passed，五应用健康，postgres CID/22迁移/nginx public哈希不变。env仅两行版本，其余字节cmp一致；无业务开关变更。Turnstile已合入但关闭，secret=/dev/null、wc0。
 - 八项范围与来源见[正式发布记录](releases/v0.5.10-preproduction.md)。2026-10-07正式开放后的分类404/死链、分页SEO矛盾、阿语轮播、设置误触代码已在pulsenovels.com生效。运营反馈源2026-10-07《小说站问题反馈》；没有功能开发或新迁移/依赖/grants/nginx改动。
 - Sitemap任务5d361608完成，18.887秒，35分片/115163网址；14语种小说28745、免费正文章节85964与部署前SQL逐项一致，en分类1788→72；10个不同分类HEAD全200，外部经代理累计20次。第一页13hreflang不变；分页/分享/en-ko alt/阿语HTML/worker四样本通过。
-- Owner后台登录2FA、阿语浏览器切换、手机设置重置、后台搜索/只读模板Key待确认（未保存模板）；不阻断技术发布。Git annotated tag/原生成CHANGELOG、本台账和唯一正式开发日志已完成本地登记；推送与Notion回读收官进行中。
+- Owner后台登录2FA、阿语浏览器切换、手机设置重置、后台搜索/只读模板Key待确认（未保存模板）；不阻断技术发布。Git annotated tag/原生成CHANGELOG、本台账和唯一正式开发日志已完成本地登记；Git推送回读已完成，Notion同步并回读PASS（2026-10-07T17:28:41+00:00），规则/历史/模板保留。
 - v0.5.11：PN-06翻页位置、PN-10弹窗焦点、PN-03/PN-02遗留RTL/层级。无回滚授权，SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES须回滚时另批。
 
 ### v0.5.9 —— 已于2026-10-07切换正式域名对外开放；原预生产E/F/5b/5c/5d PASS

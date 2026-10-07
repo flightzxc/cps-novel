@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "page_id": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "readback_at": "2026-10-07T17:29:58+00:00",
+  "async_tasks": [
+    "task_26170d3866674d98b83c734dcb76d265",
+    "task_ad7a66c0acf24184acbfc9913385d7a9"
+  ],
+  "old_history_template_rules_exact": true,
+  "shard_rows_exact": 35,
+  "locale_rows_exact": 14,
+  "detailed_release_entries": 1,
+  "owner_checks": "pending_confirmed_by_owner",
+  "final_tree_archive_oci": "matched"
+}
