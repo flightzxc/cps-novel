@@ -103,7 +103,13 @@ export async function buildCategoryMetadata(
   if (!loaded) {
     return { title: getPublicT(locale)("meta.notFound"), robots: { index: false, follow: false } };
   }
-  return toNextMetadata(seoFor(locale, loaded, await hreflangLocalesFor(locale, loaded)));
+  // PN-08（2026-10-07）：第 2 页起模板不输出任何跨语种 hreflang（`alternates.languages`
+  // 为 `{}`，见 `seo-templates/category.ts`），所以不必再逐语种探测"该分类在其它语种是否
+  // 有内容"——那组重查询（B-38 记录）的结果只用来生成此前那组指向第 1 页的错误 hreflang。
+  // 第 1 页照常探测，hreflang 输出不变。
+  const hreflangLocales =
+    loaded.category.page >= 2 ? [locale] : await hreflangLocalesFor(locale, loaded);
+  return toNextMetadata(seoFor(locale, loaded, hreflangLocales));
 }
 
 export async function CategoryBody({

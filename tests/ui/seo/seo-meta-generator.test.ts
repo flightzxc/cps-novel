@@ -162,7 +162,9 @@ describe("generateSeoMeta", () => {
     }
   });
 
-  it("noindexes collection page 2", () => {
+  // PN-01（2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"）：第 2 页起不再 noindex。
+  // 旧断言 `{ index: false, follow: true }` 是误接 `shouldNoIndex`（CPS 废弃函数）的结果。
+  it("keeps collection page 2 indexable (no robots override) with a self canonical", () => {
     const seo = generateSeoMeta({
       entity: "collection",
       pageNumber: 2,
@@ -175,7 +177,7 @@ describe("generateSeoMeta", () => {
         defaultOgImage: "/og.png",
       },
     });
-    expect(seo.robots).toEqual({ index: false, follow: true });
+    expect(seo.robots).toBeUndefined();
     expect(seo.canonical).toBe(`${ORIGIN}/browse?page=2`);
   });
 });

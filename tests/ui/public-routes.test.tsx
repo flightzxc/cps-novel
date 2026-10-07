@@ -156,14 +156,17 @@ describe("public browse", () => {
     expect(container.querySelector('[data-testid="pagination"]')).toBeNull();
   });
 
-  it("noindexes page 2", async () => {
+  // PN-01（2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"）：第 2 页与第 1 页一样可收录
+  // （`paginatedRobots` 恒 undefined → `toNextMetadata` 落成 index,follow）。
+  // 旧断言 `{ index: false, follow: true }` 是误接 `shouldNoIndex`（CPS 废弃函数）的结果。
+  it("keeps page 2 indexable with a self canonical", async () => {
     loadBrowseNovels.mockResolvedValue(
       Array.from({ length: 21 }, (_, index) => ({ ...CARD, id: `biz-${index}`, href: `/novel/n${index}-pxx` })),
     );
     const metadata = await browseModule.generateMetadata({
       searchParams: Promise.resolve({ page: "2" }),
     });
-    expect(metadata.robots).toEqual({ index: false, follow: true });
+    expect(metadata.robots).toEqual({ index: true, follow: true });
     expect(metadata.alternates).toEqual(
       expect.objectContaining({ canonical: `${ORIGIN}/browse?page=2` }),
     );

@@ -1,8 +1,9 @@
 import { getHomeName } from "../breadcrumb-i18n";
-import { buildHreflangAlternates, generateItemListJsonLd, shouldNoIndex } from "../seo-utils";
+import { buildHreflangAlternates, generateItemListJsonLd } from "../seo-utils";
 import {
   buildLocaleCanonical,
   openGraphLocaleTag,
+  paginatedRobots,
   resolveShareImage,
   truncateDescription,
 } from "./_shared";
@@ -26,6 +27,18 @@ export interface CollectionSeoData {
   fallbackCoverUrl?: string | null;
 }
 
+/**
+ * 列表页（书库 `/browse`、博客列表 `/blog`）SEO 元数据。
+ *
+ * 分页页口径（PN-01 / PN-08，2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"），
+ * 与分类模板 `category.ts` 同一口径：
+ *  - 第 2 页起不再 noindex：`robots: paginatedRobots(pageNumber)`（恒 `undefined`，CPS
+ *    v8.7.2 `_shared.ts:43-47`）；canonical 仍是自身（带 `page=N`）。此前误接 `shouldNoIndex`
+ *    （CPS 里已无调用方的废弃函数）。
+ *  - 第 2 页起 `alternates.languages` 为空对象 `{}`：不输出任何跨语种 hreflang（含
+ *    x-default）。`buildHreflangAlternates` 不带页码，会让各语种都指向第 1 页——CPS 同款
+ *    缺陷，有意不照抄。第 1 页不变。
+ */
 export function buildCollectionSeoMeta(
   data: CollectionSeoData,
   pageNumber = 1,
@@ -67,6 +80,10 @@ export function buildCollectionSeoMeta(
     ],
   };
 
+  // 第 2 页起不输出任何跨语种 hreflang（含 x-default）。显式标注类型以保持返回类型不变。
+  const languages: Record<string, string> =
+    pageNumber >= 2 ? {} : buildHreflangAlternates(data.canonicalPath, locale);
+
   return {
     title,
     description,
@@ -88,9 +105,9 @@ export function buildCollectionSeoMeta(
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(data.canonicalPath, locale),
+      languages,
     },
-    robots: shouldNoIndex(pageNumber) ? { index: false, follow: true } : undefined,
+    robots: paginatedRobots(pageNumber),
     other: {
       "application/ld+json": JSON.stringify([itemListLd, breadcrumbLd]),
     },
