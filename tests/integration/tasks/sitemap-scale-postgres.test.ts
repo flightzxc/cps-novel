@@ -36,9 +36,11 @@ import {
 } from "@/lib/seo/sitemap";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { PUBLIC_LIST_CAP } from "@/lib/site/queries";
 import {
   applyBulkNoise,
   createChannelFixture,
+  oracleListedArticles,
   oracleVisibleArticles,
   oracleVisibleBlogArticles,
   seedBulkBlogArticles,
@@ -302,14 +304,18 @@ describe.skipIf(!enabled).sequential("sitemap scale on disposable PostgreSQL 16.
   }, 600_000);
 
   it("场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开两条 SQL 各一遍），首页 + 分类页条目与独立预期一致", async () => {
-    const visibleByCategory = new Map<string, number>();
-    for (const row of bigOracle.rows) {
+    // B-38：分类网址只列分类页会返回 200 的——页面只看最新 PUBLIC_LIST_CAP 本，所以每个分类的页数按"页面列表里的本数"算，
+    // 不再按全量（改前每个分类可达数百页的 `?page=N`，页面一律 404）。页面列表的独立预期见 `oracleListedArticles`。
+    const listedByCategory = new Map<string, number>();
+    for (const row of await oracleListedArticles(owner, BIG_LOCALE, PUBLIC_LIST_CAP)) {
       const slug = categories[ordinalOf(BIG_PREFIX, row.slug) % categories.length]!.slug;
-      visibleByCategory.set(slug, (visibleByCategory.get(slug) ?? 0) + 1);
+      listedByCategory.set(slug, (listedByCategory.get(slug) ?? 0) + 1);
     }
     const expectedLocs = [SITE];
     for (const category of categories) {
-      const pages = Math.max(1, Math.ceil((visibleByCategory.get(category.slug) ?? 0) / 20));
+      const listedCount = listedByCategory.get(category.slug) ?? 0;
+      if (listedCount === 0) continue;
+      const pages = Math.max(1, Math.ceil(listedCount / 20));
       for (let page = 1; page <= pages; page += 1) {
         expectedLocs.push(page === 1 ? `${SITE}/category/${category.slug}` : `${SITE}/category/${category.slug}?page=${page}`);
       }

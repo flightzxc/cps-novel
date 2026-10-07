@@ -22,8 +22,8 @@ import {
   listDistinctPublicTaxonomy,
   loadPublicTaxonomyByNovelIds,
 } from "@/lib/site/public-taxonomy";
+import { listPublicCategoryPageCounts } from "@/lib/site/category-queries";
 import {
-  BROWSE_PAGE_SIZE,
   PREVIEW_CHAPTER_TAKE,
   PUBLIC_PREVIEW_CHAPTER_WHERE,
 } from "@/lib/site/queries";
@@ -328,8 +328,19 @@ function buildNovelPageFiles(
 }
 
 /**
- * 分类页条目（并入 mainpage，见 `SITEMAP_TYPES` 注释）。判定与并入前的 categorypage 分片
- * 完全一致：只列该语种有公开内容、会返回 200 的分类页；lastmod 取法不变。
+ * 分类页条目（并入 mainpage，见 `SITEMAP_TYPES` 注释）。只列页面确实返回 200 的分类网址。
+ *
+ * 🔴 B-38：此前"有没有书"按该语种**全部**公开书目判定（`candidates`），而分类页
+ * （`getPublicCategoryPage`）只在 `listPublicArticles` 的最新 `PUBLIC_LIST_CAP`（240）本里过滤；
+ * en 有一万多本时，冷门分类在最新 240 本里一本都没有——站点地图列了 `/category/adventure`，
+ * 页面 `notFound()`。`?page=N` 同理：此前页数按全量算（每分类可达数百页），页面按截断后的
+ * 总页数判 404。现在**是否列、列几页**都改由 `listPublicCategoryPageCounts` 决定——它在每个语种里
+ * 只调用一次页面自己的 `listPublicArticles`，再沿用页面的 `cardsInCategory` / `paginateCards`
+ * 在内存里算出"有书的分类 slug → 总页数"，不另写第二份"分类下有没有书"的查询。
+ *
+ * 分类的排序、`lastmod` 的取法**不变**（仍按全量候选算：分类自身 `updatedAt` 与全部归属
+ * 候选文章 `updatedAt` 的最大值）、网址形状与 priority 也不变——本次改动的效果是删掉
+ * 页面是 404 的分类网址与超出页面总页数的 `?page=N`，保留下来的条目与改前逐字相同。
  */
 async function buildCategoryEntries(
   db: SitemapDb,
@@ -344,8 +355,14 @@ async function buildCategoryEntries(
   const categories = listDistinctPublicTaxonomy(tagsByNovel);
   if (categories.length === 0) return [];
 
+  // 页面认为"有书"的分类 → 总页数（每个语种一次 listPublicArticles，见函数注释）。
+  const listedPageCounts = await listPublicCategoryPageCounts(db, locale);
+
   const entries: SitemapEntry[] = [];
   for (const category of categories) {
+    // 页面会 404（该分类在最新 PUBLIC_LIST_CAP 本里没有书、或书只是 seo_only 不进列表）：不列。
+    const pageCount = listedPageCounts.get(category.slug);
+    if (pageCount === undefined) continue;
     const matching = candidates.filter((candidate) =>
       (tagsByNovel.get(candidate.novel.id) ?? []).some((tag) => tag.id === category.id));
     if (matching.length === 0) continue;
@@ -353,7 +370,6 @@ async function buildCategoryEntries(
       category.updatedAt,
       ...matching.map((candidate) => candidate.updatedAt),
     ]).toISOString();
-    const pageCount = Math.max(1, Math.ceil(matching.length / BROWSE_PAGE_SIZE));
     for (let page = 1; page <= pageCount; page += 1) {
       // 2026-09-30：分类页 URL 必须带该分片所属语种的前缀（`localePrefix`，与
       // 同文件 novelpage/blogpage/mainpage 三个家族一致，也与短剧站

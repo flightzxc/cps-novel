@@ -73,7 +73,7 @@ docker exec \
   -e PGUSER=migration_owner -e PGPASSWORD="$migration_password" \
   "$container_name" psql --no-psqlrc --file=/workspace/infra/postgres/grants.sql >/dev/null
 
-# 两个文件共用一个库、都会 TRUNCATE 整库（站点地图刷新一个，规模验收一个），所以必须 --no-file-parallelism 串行。
+# 三个文件共用一个库、都会 TRUNCATE 整库（站点地图刷新一个，规模验收一个，B-38 分类网址只列 200 一个），所以必须 --no-file-parallelism 串行。
 # 规模验收（sitemap-scale-postgres.test.ts）：单语种 3 万篇 + 组合外键 + 章节 + 分类，造数据与生成共约半分钟；
 # 它会把生成耗时和 Node 进程 RSS/heapUsed 峰值打印成 `[sitemap-scale] ...` 行。
 SITEMAP_REFRESH_DATABASE_TEST=1 \
@@ -83,13 +83,15 @@ SITEMAP_REFRESH_WORKER_DATABASE_URL="$worker_url" \
 npm exec vitest run -- --project node \
   tests/integration/tasks/sitemap-refresh-postgres.test.ts \
   tests/integration/tasks/sitemap-scale-postgres.test.ts \
+  tests/integration/tasks/sitemap-category-cap-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 # 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs SITEMAP_REFRESH "$secret_dir/integration-result.json" \
   tests/integration/tasks/sitemap-refresh-postgres.test.ts=13 \
-  tests/integration/tasks/sitemap-scale-postgres.test.ts=8; then
+  tests/integration/tasks/sitemap-scale-postgres.test.ts=8 \
+  tests/integration/tasks/sitemap-category-cap-postgres.test.ts=6; then
   exit 1
 fi
 

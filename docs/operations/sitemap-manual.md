@@ -64,3 +64,8 @@ npm run typecheck
 外加事故同款量级的 1.4 万篇语种，覆盖 2026-10-06 的 54001 `stack depth limit exceeded` 与
 Prisma 32,767 绑定变量上限；跑完会打印 `[sitemap-scale] ...` 行（生成耗时、进程 RSS / heapUsed 峰值）。
 站点地图按 id 游标分块读取文章（`SITEMAP_ARTICLE_LOAD_CHUNK_SIZE`，500）——这是正确性上限，不是性能旋钮，勿改回一次读完。
+
+脚本还跑 B-38 的 `sitemap-category-cap-postgres.test.ts`：mainpage 里的分类网址（含 `?page=N`）只列分类页确实返回 200 的。
+分类页只在各语种最新 `PUBLIC_LIST_CAP`（240）本里找书，站点地图改为每个语种调用一次页面自己的 `listPublicArticles`，
+再用页面同一个谓词在内存里求出"有书的分类 → 总页数"（`listPublicCategoryPageCounts`）；没有书的分类、以及超出页面总页数的
+`?page=N` 不再出现。`PUBLIC_LIST_CAP` 本身没有改（根治另案）。
