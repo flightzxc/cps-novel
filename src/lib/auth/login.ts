@@ -15,6 +15,17 @@ export async function authenticateAdminLogin(input: {
   sessions: SessionStore;
   attempts: LoginAttemptStore;
   now?: Date;
+  /**
+   * B-39: optional human-verification gate (Turnstile — see
+   * `./admin-login-turnstile.ts`). Runs after the lockout check and BEFORE any
+   * identity lookup or password work, and refuses by throwing. Because it
+   * throws before `recordFailedLogin` is reachable, a refused verification is
+   * never counted toward the 5-failure lockout (same as the short-drama site:
+   * the check carries no information about the credentials, and counting it
+   * would let an unverified bot lock a real administrator out by hammering the
+   * username). Absent -> the login is exactly what it was before this param.
+   */
+  verifyHuman?: () => Promise<void>;
 }): Promise<{ token: string; context: AdminAuthContext }> {
   const now = input.now ?? new Date();
   const limit = await getLoginRateLimitStatus(input.attempts, input.username, input.ip, now);
@@ -23,6 +34,7 @@ export async function authenticateAdminLogin(input: {
       retryAfterSeconds: String(Math.max(1, Math.ceil(limit.remainingMs / 1000))),
     });
   }
+  if (input.verifyHuman) await input.verifyHuman();
   const username = normalizeAdminUsername(input.username);
   const identity = await input.identities.findByNormalizedUsername(username);
   if (!identity || identity.status !== "active" || !verifyAdminPassword(input.password, identity.passwordHash)) {
