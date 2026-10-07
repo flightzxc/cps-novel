@@ -1128,3 +1128,15 @@ cps-novel-postgres-1|0.37%|3.193GiB / 15.62GiB|8.61GB / 78.8GB|721MB / 54.5GB|20
 - 自写 fetch 包装没有保存首次 curl stderr 或失败时证书元数据，导致仅知道 exit60，无法从保存证据区分具体 TLS 失败原因。已在本地修正后续错误文本留存并重跑 11 项隔离检查 PASS；不放宽证书验证或 curl60 门禁，未替换运行版代码，也未重新安装。
 - deploy 无权读取新证书公开 fullchain 元数据、nginx error.log 和系统 reload journal，sudo -n 需要密码。已上传只读诊断脚本 `tls-readonly-diagnostic.sh`，本地/远端 SHA256=`2f3183c8f39ce232e645ed22ca7a84281c7985b2c01e7004679682b5258ab8fb`，Bash 语法通过；只取公钥证书元数据、指定窗口的控制日志及两份配置备份哈希，不读取私钥、不安装或 reload。Owner 的交互命令见命令单。
 - 当前暂停在第 3 步失败后的诊断；保持维护。版本台账、正式开发日志和 Notion 尚未登记“正式开放”，GSC/监控保持待做。重跑或恢复旧站业务须先根据诊断确定处理方式，不重复执行原安装命令。
+
+
+### 15:29–15:32 JST：只读 TLS 诊断及包装修正版准备
+
+- Owner 已运行只读诊断，服务器留存 2026-10-07T06:29:18Z 的诊断日志，TLS_READONLY_DIAGNOSTIC=PASS。公开 fullchain 的 CN=pulsenovels.com；SAN=pulsenovels.com、www.pulsenovels.com、zbcwf.pulsenovels.com；颁发者 Let's Encrypt YE1；有效期 2026-10-05T04:14:21Z 至 2027-01-03T04:14:20Z；SHA256 指纹 `02:8E:A0:56:03:5E:C5:9F:1D:99:F6:2B:09:68:53:B1:E0:AB:1E:A9:46:20:A2:07:1F:EA:DB:6A:C6:EE:82:C3`。没有读取私钥。
+- reload journal 记录 15:22:04 和恢复的 15:22:06 均 signal process started/reloaded。过滤的 nginx 控制事件为空。日志不证明首次探测实际呈现的证书，也不证明当时新 worker 已接管；**根因仍未确证**。
+- 原安装备份 install.xzocFoFH/0.file 哈希=9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0；恢复前安全备份 install.nBoCCanA/0.file 哈希=d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe。证实候选已安装且所选恢复源正确。
+- 修正版只改变受控操作包装：安装前记录 nginx master/worker PID，安装后最多十轮等待旧 worker 全部退出、新 worker 出现，再执行原严格 HTTPS 就绪；master 改变、交接超时立即失败。没有修改运行版 renderer、证书、DNS 或容忍 curl60。失败时留存 curl stderr 和实际呈现的公开证书诊断。
+- 原 checks.py/owner-edge.sh 已按原哈希保存在远端 wrappers-first-attempt/；首次日志仍保留。修正版重试各自写入 attempts/<UTC>/，不覆盖第一次失败证据和初始 env/镜像/CID/逻辑备份。
+- 本地及远端 WRAPPER_FIXTURES=PASS cases=16，增加 curl60 必须失败、PID 完整交接/仍有旧 worker/master 改变/无 worker 检查；Bash 语法通过。修正版 checks.py SHA256=`154a81fe7095e0e820869e151db0fb4a2b295e9b84ac95abeec2c469acfc07e4`；owner-edge.sh SHA256=`9384ed4a260c24b92b672f17cf3b0776c595ea639910bb6614ed6bfc4d42b531`，本地/远端一致。
+- 15:32 JST 独立只读重验输出 RETRY_DATABASE_BASELINE=PASS、BASELINE=PASS published=28745 chapters=85964 withdrawn=236 shards=35。原暂停 SQL、22 迁移、站点设置、逐语种小说/章节和撤回记录与维护前基线一致；旧站匿名 503/维护/noindex、认证健康及新 Host 拒绝通过。因维护期间 sitemap 返回维护页，35 分片/118537 条明确继承维护前完整快照，不冒充新的 HTTP 分片核验。
+- 当时 nginx master=679455，worker=3160295,3160296,3160297,3160298；仅只读采集，没有安装或 reload。仍保持旧 env/rehearsal nginx/维护，未同镜像发布，未对外开放。下一动作是 Owner 在终端输入 sudo 执行已准备的修正版第 3 步；命令及哈希见 Owner 命令单。
