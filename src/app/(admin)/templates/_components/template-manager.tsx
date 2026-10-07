@@ -142,8 +142,14 @@ export function TemplateManager({ rows, canWrite }: { rows: readonly TemplateRow
     // `requireLocale` still rejects anything that isn't one, this just stops
     // pre-empting that with a silent-null fallback the server no longer accepts.
     const rawLocale = String(formData.get("locale") ?? "").trim();
+    // 编辑时 key 不可改，直接取被编辑模板自己的 key，**不读表单值**：浏览器构造
+    // FormData 时会跳过 disabled 控件，曾经输入框是 `disabled`，于是编辑任何已有模板
+    // 提交上去的 key 都是空串，被服务端当成 `template_key_invalid`。现在输入框改
+    // `readOnly`（会被提交），这里再取一次 `editing.templateKey`，两处各自成立——
+    // 以后谁再把输入框改回 disabled，编辑保存也不会再丢 key。
+    // 新建时才从表单读，行为不变。
     const template: ArticleTemplateWrite = {
-      templateKey: String(formData.get("templateKey") ?? ""),
+      templateKey: editing ? editing.templateKey : String(formData.get("templateKey") ?? ""),
       templateName: String(formData.get("templateName") ?? ""),
       locale: rawLocale,
       status: String(formData.get("status") ?? "draft") as ArticleTemplateStatus,
@@ -206,8 +212,8 @@ export function TemplateManager({ rows, canWrite }: { rows: readonly TemplateRow
                 name="templateKey"
                 defaultValue={editing?.templateKey}
                 required
-                disabled={Boolean(editing)}
-                className="mt-1 w-full rounded border p-2 disabled:bg-gray-100 disabled:text-gray-500"
+                readOnly={Boolean(editing)}
+                className="mt-1 w-full rounded border p-2 read-only:bg-gray-100 read-only:text-gray-500"
               />
             </label>
             <label className="text-sm">
