@@ -1,8 +1,19 @@
 /**
- * Direct semantic port of CPS v8.3.6 `seo-templates/category.ts`: category
- * canonical includes `?page=N`, page 2+ is noindex/follow, and JSON-LD is a
- * CollectionPage plus BreadcrumbList. PulseDrama constants are replaced by
- * SiteSetting inputs and Novel's registered locale/canonical helpers.
+ * Direct semantic port of CPS `seo-templates/category.ts` (v8.3.6 shape, `robots`
+ * aligned to v8.7.2): category canonical includes `?page=N`, page 2+ stays indexable
+ * (`robots` comes from `paginatedRobots`, which always returns `undefined`, exactly like
+ * CPS v8.7.2 `category.ts:93`), and JSON-LD is a CollectionPage plus BreadcrumbList.
+ * PulseDrama constants are replaced by SiteSetting inputs and Novel's registered
+ * locale/canonical helpers.
+ *
+ * 分页页口径（PN-01 / PN-08，2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"）：
+ *  - 第 2 页起不再 noindex：`robots: paginatedRobots(pageNumber)`（恒 `undefined`），
+ *    与 CPS v8.7.2 一致；此前误接 `shouldNoIndex`（CPS 里已无调用方的废弃函数）。
+ *  - 第 2 页起 `alternates.languages` 为空对象 `{}`，不输出任何跨语种 hreflang（含
+ *    x-default）；第 1 页不变。这是**有意偏离** CPS——CPS 的 `buildHreflangAlternates`
+ *    不带页码，第 2 页的各语种 hreflang 都指向第 1 页，是 CPS 的同款缺陷，不照抄。
+ *    canonical 仍是自身（带 `?page=N`）；`hreflangLocales` 在第 2 页起不再被使用，调用方
+ *    可以不做逐语种探测（见 `_pages/category.tsx` 的 `buildCategoryMetadata`）。
  *
  * TKD 对齐 CPS（Owner 2026-09-30 裁定，照 CPS v8.5.1 `category.ts:29-31`）：
  *  - `<title>` = 分类名 + （第 2 页起）本地化翻页后缀，不加 "novels" 之类的词；
@@ -19,10 +30,11 @@
  * 没有时用兜底句。JSON-LD 的 `name` 仍是纯分类名，不带翻页后缀。
  */
 import { getHomeName } from "../breadcrumb-i18n";
-import { buildHreflangAlternates, shouldNoIndex } from "../seo-utils";
+import { buildHreflangAlternates } from "../seo-utils";
 import {
   buildLocaleCanonical,
   openGraphLocaleTag,
+  paginatedRobots,
   resolveShareImage,
   truncateDescription,
 } from "./_shared";
@@ -110,6 +122,12 @@ export function buildCategorySeoMeta(
       { "@type": "ListItem", position: 2, name: data.name, item: buildLocaleCanonical(locale, `/category/${data.slug}`) },
     ],
   };
+  // 第 2 页起不输出任何跨语种 hreflang（含 x-default）：`buildHreflangAlternates` 不带页码，
+  // 会让各语种都指向第 1 页（PN-08）。显式标注类型以保持返回类型不变。
+  const languages: Record<string, string> =
+    pageNumber >= 2
+      ? {}
+      : buildHreflangAlternates(`/category/${data.slug}`, locale, data.hreflangLocales);
   return {
     title,
     description: description ?? "",
@@ -131,9 +149,9 @@ export function buildCategorySeoMeta(
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(`/category/${data.slug}`, locale, data.hreflangLocales),
+      languages,
     },
-    robots: shouldNoIndex(pageNumber) ? { index: false, follow: true } : undefined,
+    robots: paginatedRobots(pageNumber),
     other: { "application/ld+json": JSON.stringify([collectionLd, breadcrumbLd]) },
   };
 }

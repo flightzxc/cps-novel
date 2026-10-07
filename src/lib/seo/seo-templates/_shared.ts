@@ -183,7 +183,23 @@ export function resolveShareImage(input: ShareImageInput): ShareImage {
   };
 }
 
-/** Pagination pages are indexable by default; omit robots metadata. */
+/**
+ * Pagination pages are indexable by default; omit robots metadata.
+ *
+ * 分页页（第 2 页起）与第 1 页一样默认可收录：恒返回 `undefined`，由
+ * `toNextMetadata` 落成 `{ index: true, follow: true }`。
+ *
+ * 出处：CPS 生产 tag v8.7.2（peeled `c8c7d4ed66c42395a44811262afdb84bf29a8405`）
+ * `src/lib/seo-templates/_shared.ts:43-47`，函数体逐字一致。CPS 在 `ca29608`（2026-05-06，
+ * "remove pagination noindex"）与 `197bb69`（2026-05-28，"allow category and tag paginated
+ * pages to index"）把它从"第 2 页起 noindex"改成恒返回 `undefined`；CPS 分类、标签模板的
+ * `robots` 字段都调用它（`category.ts:93`、`tag.ts:94`）。
+ *
+ * 本项目分类模板（`category.ts`）与列表模板（`collection.ts`，书库与博客列表共用）的
+ * `robots` 字段都必须调用本函数，不得再接 `seo-utils.ts` 的 `shouldNoIndex`——那是 CPS 里
+ * 已无调用方的废弃函数（v8.7.2 `seo-utils.ts:140` 仅有定义），此前被误接进两个模板，使第 2
+ * 页起 noindex，与站点地图仍列出这些页的信号相矛盾（PN-01）。
+ */
 export function paginatedRobots(_pageNumber?: number) {
   void _pageNumber;
   return undefined;

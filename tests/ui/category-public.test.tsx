@@ -17,11 +17,14 @@ describe("public category SEO · CPS v8.3.6 semantic port", () => {
     delete process.env.SITE_URL;
   });
 
-  it("canonicalizes and noindexes page 2 while keeping follow", () => {
+  // PN-01（2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"）：第 2 页起不再 noindex。
+  // CPS v8.7.2 `category.ts:93` 的 `robots` 来自恒返回 undefined 的 `paginatedRobots`。
+  // 旧断言 `{ index: false, follow: true }` 是误接 `shouldNoIndex`（CPS 废弃函数）的结果。
+  it("canonicalizes page 2 to itself and keeps it indexable (no robots override)", () => {
     process.env.SITE_URL = "https://novel.example";
     const seo = buildCategorySeoMeta({ name: "Fantasy", slug: "fantasy", description: "Fantasy novels", siteName: "Novel", defaultOgImage: "/og.jpg", hreflangLocales: ["en"] }, 2, "en");
     expect(seo.canonical).toBe("https://novel.example/category/fantasy?page=2");
-    expect(seo.robots).toEqual({ index: false, follow: true });
+    expect(seo.robots).toBeUndefined();
     delete process.env.SITE_URL;
   });
 
