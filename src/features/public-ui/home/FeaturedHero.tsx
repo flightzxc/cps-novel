@@ -52,6 +52,21 @@ import { useT } from "@/lib/locale/messages/MessagesProvider";
  * 那种对所有图等比缩放、不改变彼此比值的全局乘法完全不同。放在 `blur` 之后
  * 效果减弱（模糊已经把极端像素摊平了一部分）。具体取值与调参依据见
  * `src/styles/globals.css` 的 `--novel-hero-cover-*` 一族注释。
+ *
+ * --- 首屏加载优先级（2026-10-07，B-37 阶段 0）----------------------------
+ * 封面是上游图床直链（250×350、约 18KB），数量虽小但**请求数**会拖首屏：
+ * 此前每一项轮播都无条件渲染 CSS `background-image`，页面一打开就把全部轮播
+ * 封面一次性请求出去，与真正首屏可见的那一张抢带宽与连接。现在：
+ *   - 前景封面只有**初始激活项**（轨道上首次渲染时居中的那个槽位）传 `priority`
+ *     （eager + fetchPriority high）；左右露头的邻居与其余项保持 lazy；
+ *   - 背景图（`image-fill` 的 `background-image`）首次渲染只给初始激活项设置。
+ *     其余项在「即将成为激活项」（当前项成为激活项满
+ *     `HERO_BACKGROUND_PRELOAD_DELAY_MS` 后预备下一项）或「已经成为激活项」时才
+ *     设置；**设过之后保留、不再移除**——切换是纯 opacity 淡入淡出，背景被摘掉再
+ *     挂回会让浏览器重新解码，淡入时闪一下。
+ *   - 未设背景图的项**仍然渲染外层与内层两层元素**（只是内层没有
+ *     `background-image`），所以「模糊氛围底必须拆成两层」的结构与各 `data-hero-*`
+ *     属性的语义都不受影响；变的只是内层的 inline style。
  */
 type HeroBackground =
   | { kind: "hero"; url: string }
@@ -71,6 +86,13 @@ function resolveHeroBackground(novel: NovelDetailView): HeroBackground {
 
 /** 自动播放间隔。hover / focus-within / 用户偏好减少动效时暂停。 */
 export const HERO_AUTOPLAY_MS = 7000;
+
+/**
+ * 当前项成为激活项多久之后，开始为**下一项**预备背景图。
+ * 取值要远小于 `HERO_AUTOPLAY_MS`：自动播放切过去之前，下一张背景（约 18KB）
+ * 必须已经请求完；同时要晚于首屏——不能和初始激活项的封面同一时刻发请求。
+ */
+export const HERO_BACKGROUND_PRELOAD_DELAY_MS = 2000;
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -109,6 +131,12 @@ export function FeaturedHero({
   const [paused, setPaused] = useState(false);
   const baseId = useId();
 
+  // 已经「设过背景图」的项（按 novel.id 记）。首次渲染只有初始激活项；之后只增不减，
+  // 见组件顶部「首屏加载优先级」。
+  const [armedIds, setArmedIds] = useState<ReadonlySet<string>>(
+    () => new Set(items[0] ? [items[0].novel.id] : []),
+  );
+
   // 用户偏好减少动效时不自动播放。要停的是定时器，不是过渡——光停过渡只会让
   // 内容无声无息地跳，比有动效更糟。用 useSyncExternalStore 订阅媒体查询，
   // 服务端快照恒为 false（服务端读不到用户偏好）。
@@ -127,6 +155,27 @@ export function FeaturedHero({
     },
     [count],
   );
+
+  // 当前项一旦成为激活项，就永久并入「已设背景」集合。写成渲染期的 state 调整
+  // （条件守卫，最多多渲染一次），而不是 effect 里 setState：这是「由当前下标派生」
+  // 的状态，不是对外部系统的同步。
+  const currentId = items[index]?.novel.id;
+  if (currentId !== undefined && !armedIds.has(currentId)) {
+    setArmedIds(new Set(armedIds).add(currentId));
+  }
+
+  // 「即将」成为激活项的那一项（下一项）：当前项稳定满一段时间后再预备它的背景，
+  // 这样首屏只发初始激活项的请求，又赶得上自动播放切换时的淡入。
+  const nextId = count > 1 ? items[(index + 1) % count]?.novel.id : undefined;
+  useEffect(() => {
+    if (nextId === undefined) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setArmedIds((prev) => (prev.has(nextId) ? prev : new Set(prev).add(nextId)));
+    }, HERO_BACKGROUND_PRELOAD_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [nextId]);
 
   useEffect(() => {
     if (paused || reducedMotion || count < 2) {
@@ -152,6 +201,8 @@ export function FeaturedHero({
    */
   const useLoop = count >= 3;
   const trackIndex = useLoop ? count + index : index;
+  /** 首次渲染时居中的槽位（index 恒为 0）：环形时落在中间那份的第 0 项。 */
+  const initialTrackIndex = useLoop ? count : 0;
 
   function onKeyDown(event: KeyboardEvent) {
     if (count < 2) {
@@ -215,7 +266,13 @@ export function FeaturedHero({
                     "[transform:scale(var(--novel-hero-cover-scale))]"
                   : "")
               }
-              style={{ backgroundImage: `url("${background.url}")` }}
+              // 只给「当前项或已设过背景的项」设 background-image：没设的项这一层照常
+              // 渲染（结构与 data-hero-* 不变），只是不触发图片请求。
+              style={
+                armedIds.has(item.novel.id) || i === index
+                  ? { backgroundImage: `url("${background.url}")` }
+                  : undefined
+              }
             />
           </div>
         );
@@ -308,6 +365,9 @@ export function FeaturedHero({
                   key={`slot-${slot}`}
                   item={item}
                   isCurrent={slot === trackIndex}
+                  // 只有「初始激活项」所在的槽位（环形时是中间那份的第 0 项，否则是
+                  // 第 0 槽）拿高优先级；左右露头的邻居与其余项保持 lazy。
+                  priority={slot === initialTrackIndex}
                   eyebrow={eyebrow}
                 />
               );
@@ -338,10 +398,13 @@ export function FeaturedHero({
 function BannerSlide({
   item,
   isCurrent,
+  priority,
   eyebrow,
 }: {
   item: FeaturedHeroItem;
   isCurrent: boolean;
+  /** 前景封面是否高优先级加载。只有初始激活项为 true。 */
+  priority: boolean;
   eyebrow?: string;
 }) {
   const t = useT();
@@ -389,6 +452,7 @@ function BannerSlide({
           src={novel.coverUrl}
           alt={t("novel.coverAlt", { title: novel.title })}
           sizeHint="(min-width: 768px) 268px, 110px"
+          priority={priority}
         />
       </a>
 

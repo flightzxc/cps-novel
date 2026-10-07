@@ -42,6 +42,7 @@ vi.mock("@/lib/site/category-queries", () => ({
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
+const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
 const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
@@ -102,6 +103,10 @@ beforeEach(() => {
   mockActiveLocales();
   loadPublicCategories.mockResolvedValue([]);
   loadHomeNovels.mockResolvedValue([CARD]);
+  // 真实 `loadHomeCarousel` 恒返回数组（没有主推项时是 []）。此前这里没给返回值，`HomeBody`
+  // 拿到 undefined 靠 `HomeScreen` 的默认参数兜住；B-37 起 `HomeBody` 要读 `featuredList[0]`
+  // 做封面预连接，夹具补成真实契约（空数组）而不是让页面代码去容忍 undefined。
+  loadHomeCarousel.mockResolvedValue([]);
 });
 
 afterEach(() => {

@@ -3,7 +3,7 @@ import {
   buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
-  resolveOgImage,
+  resolveShareImage,
   truncateDescription,
 } from "./_shared";
 
@@ -56,7 +56,8 @@ export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
   const name = data.name?.trim() || title;
   const description = truncateDescription(data.description);
   const canonical = buildCanonical(data.canonicalPath);
-  const ogImage = resolveOgImage(data.coverUrl, data.defaultOgImage);
+  // 书封优先、站点默认图兜底；卡片口径随最终选中的图种类走（见 `resolveShareImage`）。
+  const share = resolveShareImage({ coverUrl: data.coverUrl, defaultOgImage: data.defaultOgImage, alt: name });
   const ogLocale = openGraphLocaleTag(locale);
   const genres = data.genres ?? [];
 
@@ -66,7 +67,7 @@ export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
     name,
     description: data.description,
     url: canonical,
-    image: ogImage,
+    image: share.url,
     genre: genres,
     inLanguage: locale,
     ...(data.chapterCount ? { numberOfChapters: data.chapterCount } : {}),
@@ -94,13 +95,13 @@ export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
       url: canonical,
       siteName: data.siteName,
       locale: ogLocale,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: name }],
+      images: share.openGraphImages,
     },
     twitter: {
-      card: "summary_large_image" as const,
+      card: share.twitterCard,
       title,
       description,
-      images: [ogImage],
+      images: [share.url],
     },
     alternates: {
       canonical,

@@ -66,7 +66,9 @@ function seoFor(
       descriptionFallback: t("meta.categoryDescriptionFallback", { name }),
       pageSuffix: pageSuffixFor(loaded.category.page, t),
       siteName: loaded.settings.siteName,
-      defaultOgImage: loaded.settings.defaultOgImage || loaded.category.novels[0]?.coverUrl,
+      defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
+      // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
+      fallbackCoverUrl: loaded.category.novels[0]?.coverUrl ?? null,
       hreflangLocales,
     },
   });

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
+import { CoverPreconnect } from "@/components/CoverPreconnect";
 import {
   loadActiveLocales,
   loadArticleAccess,
@@ -190,6 +191,8 @@ export async function NovelBody({
   const faqJsonLd = novel.contentBody ? buildFaqJsonLd(novel.contentBody) : null;
   return (
     <>
+      {/* 本页主封面（上游图床直链）一定会加载：提前握手，B-37 阶段 0。 */}
+      <CoverPreconnect urls={[novel.coverUrl]} />
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
       {faqJsonLd ? <JsonLd json={JSON.stringify(faqJsonLd)} /> : null}
       <NovelDetailScreen

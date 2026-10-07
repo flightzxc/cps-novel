@@ -120,7 +120,9 @@ export async function buildBrowseMetadata(
       canonicalPath: loaded.category ? `/browse?category=${encodeURIComponent(loaded.category.slug)}` : "/browse",
       items: loaded.paged.novels.map((novel) => ({ name: novel.title, url: novel.href })),
       siteName: loaded.settings.siteName,
-      defaultOgImage: loaded.settings.defaultOgImage.trim() || loaded.paged.novels[0]?.coverUrl || null,
+      defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
+      // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
+      fallbackCoverUrl: loaded.paged.novels[0]?.coverUrl ?? null,
     },
   });
   return toNextMetadata(seo);
@@ -148,7 +150,9 @@ export async function BrowseBody({
       canonicalPath: loaded.category ? `/browse?category=${encodeURIComponent(loaded.category.slug)}` : "/browse",
       items: loaded.paged.novels.map((novel) => ({ name: novel.title, url: novel.href })),
       siteName: loaded.settings.siteName,
-      defaultOgImage: loaded.settings.defaultOgImage.trim() || loaded.paged.novels[0]?.coverUrl || null,
+      defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
+      // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
+      fallbackCoverUrl: loaded.paged.novels[0]?.coverUrl ?? null,
     },
   });
 

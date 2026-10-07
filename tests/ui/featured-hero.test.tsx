@@ -1,8 +1,12 @@
 import "./setup-cleanup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
-import { HERO_AUTOPLAY_MS } from "@/features/public-ui/home/FeaturedHero";
+import {
+  HERO_AUTOPLAY_MS,
+  HERO_BACKGROUND_PRELOAD_DELAY_MS,
+} from "@/features/public-ui/home/FeaturedHero";
 import type { NovelDetailView } from "@/features/public-ui/types";
 import {
   MOCK_FEATURED_LIST,
@@ -625,5 +629,214 @@ describe("页头在 Hero 上的形态", () => {
     expect(scrollListeners).toHaveLength(0);
 
     addSpy.mockRestore();
+  });
+});
+
+/**
+ * 首屏加载优先级（B-37 阶段 0）。
+ *
+ * 此前每一项轮播都无条件渲染 CSS `background-image`，首页一打开就把全部轮播封面
+ * 请求出去。现在首次渲染只有初始激活项设背景图；其余项在「即将」（当前项稳定
+ * `HERO_BACKGROUND_PRELOAD_DELAY_MS` 后预备下一项）或「已经」成为激活项时才设，
+ * 设过之后保留、不再移除（避免淡入时闪烁）。前景封面只有初始激活项 eager + 高优先级。
+ *
+ * 与既有用例的关系：上面「切换只改 opacity」「Hero 背景来源三档优先级」等用例断言的是
+ * 图层元素与 data-hero-* 属性，那一层现在仍然为每一项渲染（只是未设过背景的项内层没有
+ * background-image），所以它们不需要改；没有任何既有断言要求「所有项一开始就带背景」。
+ */
+describe("首屏加载优先级 · 轮播背景图只给当前项 / 即将成为当前项的下一项", () => {
+  const N = 5;
+  const urlOf = (i: number) => `https://img.example.test/cover/${i}.jpg`;
+
+  /** 全部走 https 假地址：断言读的是 inline style 的 background-image，不依赖 data URL 解析。 */
+  const NOVELS: NovelDetailView[] = Array.from({ length: N }, (_, i) => ({
+    id: `lazy-bg-${i}`,
+    title: `Lazy BG ${i}`,
+    description: "For lazy background tests only.",
+    locale: { code: "en", label: "English" },
+    totalChapterCount: 10,
+    tags: [],
+    previewChapters: [],
+    coverUrl: urlOf(i),
+  }));
+
+  function renderFive() {
+    return render(
+      <HomeScreen locale="en" featuredList={entries(NOVELS)} novels={MOCK_NOVEL_CARDS} />,
+    );
+  }
+
+  /** 每一项内层 image-fill 当前是否带 background-image，按轮播顺序。 */
+  function armed(container: HTMLElement): boolean[] {
+    return [...container.querySelectorAll<HTMLElement>('[data-hero-layer="image-fill"]')].map(
+      (el) => el.style.backgroundImage.includes("img.example.test"),
+    );
+  }
+
+  const tick = (ms: number) =>
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+
+  it("首次渲染：每一项仍有两层结构与 data-hero-* 属性，但只有初始激活项设了 background-image", () => {
+    const { container } = renderFive();
+
+    const outers = container.querySelectorAll('[data-hero-layer="image"]');
+    const fills = container.querySelectorAll('[data-hero-layer="image-fill"]');
+    expect(outers).toHaveLength(N);
+    expect(fills).toHaveLength(N);
+    // 两层结构：每个外层里恰有一个内层
+    outers.forEach((outer, i) => expect(outer.contains(fills[i])).toBe(true));
+    // data-hero-* 语义不变：只有第 0 项是 active，来源仍是 cover-atmosphere
+    expect([...outers].map((el) => el.getAttribute("data-hero-active"))).toEqual([
+      "true",
+      "false",
+      "false",
+      "false",
+      "false",
+    ]);
+    for (const outer of outers) {
+      expect(outer.getAttribute("data-hero-background")).toBe("cover-atmosphere");
+    }
+
+    expect(armed(container)).toEqual([true, false, false, false, false]);
+  });
+
+  it("服务端渲染的 HTML 里也只有 1 处 background-image（首屏不会请求其余封面背景）", () => {
+    const html = renderToStaticMarkup(
+      <HomeScreen locale="en" featuredList={entries(NOVELS)} novels={MOCK_NOVEL_CARDS} />,
+    );
+
+    const backgrounds = html.match(/background-image:url\(/g) ?? [];
+    expect(backgrounds).toHaveLength(1);
+    expect(html).toContain(urlOf(0));
+  });
+
+  it("切到下一项（点 dot）后，该项带上 background-image；其余未到的项仍然没有", () => {
+    const { container } = renderFive();
+
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 2" })[0]);
+
+    expect(armed(container)).toEqual([true, true, false, false, false]);
+  });
+
+  it("设过之后保留：切走再切回、切到别处，前面设过的背景都不会被摘掉", () => {
+    const { container } = renderFive();
+
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 2" })[0]);
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 4" })[0]);
+
+    // 第 0、1 项设过的保留，第 3 项刚成为激活项，第 2、4 项没到过
+    expect(armed(container)).toEqual([true, true, false, true, false]);
+  });
+
+  it("「即将」：当前项稳定一小段时间后，只预备下一项的背景（不是全部）", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderFive();
+      expect(armed(container)).toEqual([true, false, false, false, false]);
+
+      tick(HERO_BACKGROUND_PRELOAD_DELAY_MS - 1);
+      expect(armed(container)).toEqual([true, false, false, false, false]);
+
+      tick(1);
+      expect(armed(container)).toEqual([true, true, false, false, false]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("自动播放推进后，新的当前项早已预备好，且又开始预备再下一项", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderFive();
+
+      tick(HERO_AUTOPLAY_MS);
+      expect(
+        screen.getAllByRole("tab", { name: "Work 2" })[0].getAttribute("aria-selected"),
+      ).toBe("true");
+      // 第 1 项在切换前（2 秒时）已预备；第 2 项要等第 1 项稳定满延迟之后
+      expect(armed(container)).toEqual([true, true, false, false, false]);
+
+      tick(HERO_BACKGROUND_PRELOAD_DELAY_MS);
+      expect(armed(container)).toEqual([true, true, true, false, false]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("只有一本时没有「下一项」：不装预备定时器，背景只有它自己", () => {
+    const setTimeout = vi.spyOn(window, "setTimeout");
+    try {
+      const { container } = render(
+        <HomeScreen locale="en" featuredList={entries(NOVELS.slice(0, 1))} novels={MOCK_NOVEL_CARDS} />,
+      );
+      expect(armed(container)).toEqual([true]);
+      expect(
+        setTimeout.mock.calls.filter(([, ms]) => ms === HERO_BACKGROUND_PRELOAD_DELAY_MS),
+      ).toHaveLength(0);
+    } finally {
+      setTimeout.mockRestore();
+    }
+  });
+});
+
+describe("首屏加载优先级 · 前景封面只有初始激活项是高优先级", () => {
+  const N = 5;
+  const NOVELS: NovelDetailView[] = Array.from({ length: N }, (_, i) => ({
+    id: `priority-fg-${i}`,
+    title: `Priority FG ${i}`,
+    description: "For foreground priority tests only.",
+    locale: { code: "en", label: "English" },
+    totalChapterCount: 10,
+    tags: [],
+    previewChapters: [],
+    coverUrl: `https://img.example.test/fg/${i}.jpg`,
+  }));
+
+  function coverImgs(container: HTMLElement) {
+    return [...container.querySelectorAll<HTMLImageElement>('[data-testid="featured-hero-track"] img')];
+  }
+
+  it("环形（≥3 本）：当前项 eager + fetchpriority=high；左右露头的邻居保持 lazy", () => {
+    const { container } = render(
+      <HomeScreen locale="en" featuredList={entries(NOVELS)} novels={MOCK_NOVEL_CARDS} />,
+    );
+    const imgs = coverImgs(container);
+
+    // 5 本 → 只有当前项 ±1 渲染内容：左邻（最后一本）、当前、右邻
+    expect(imgs).toHaveLength(3);
+    const byLoading = imgs.map((img) => [img.getAttribute("src"), img.getAttribute("loading")]);
+    expect(byLoading).toEqual([
+      ["https://img.example.test/fg/4.jpg", "lazy"],
+      ["https://img.example.test/fg/0.jpg", "eager"],
+      ["https://img.example.test/fg/1.jpg", "lazy"],
+    ]);
+    const current = imgs[1];
+    expect(current.getAttribute("fetchpriority")).toBe("high");
+    for (const peek of [imgs[0], imgs[2]]) {
+      expect(peek.hasAttribute("fetchpriority")).toBe(false);
+    }
+  });
+
+  it("非环形（2 本）：初始项 eager，另一本 lazy", () => {
+    const { container } = render(
+      <HomeScreen locale="en" featuredList={entries(NOVELS.slice(0, 2))} novels={MOCK_NOVEL_CARDS} />,
+    );
+
+    expect(coverImgs(container).map((img) => img.getAttribute("loading"))).toEqual(["eager", "lazy"]);
+  });
+
+  it("切到下一项后，新的当前项的前景封面仍是 lazy——优先级只属于初始激活项", () => {
+    const { container } = render(
+      <HomeScreen locale="en" featuredList={entries(NOVELS)} novels={MOCK_NOVEL_CARDS} />,
+    );
+
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 2" })[0]);
+
+    const current = container.querySelector('[data-testid="featured-hero-banner"] img')!;
+    expect(current.getAttribute("src")).toBe("https://img.example.test/fg/1.jpg");
+    expect(current.getAttribute("loading")).toBe("lazy");
+    expect(current.hasAttribute("fetchpriority")).toBe(false);
   });
 });

@@ -23,7 +23,7 @@ import { buildHreflangAlternates, shouldNoIndex } from "../seo-utils";
 import {
   buildLocaleCanonical,
   openGraphLocaleTag,
-  resolveOgImage,
+  resolveShareImage,
   truncateDescription,
 } from "./_shared";
 
@@ -50,6 +50,11 @@ export interface CategorySeoData {
   pageSuffix?: string;
   siteName: string;
   defaultOgImage?: string | null;
+  /**
+   * 站点默认图缺失时的兜底：本分类列表第一本书的封面。不要合并进 `defaultOgImage`——模板需要
+   * 知道最终分享图是站点默认图还是书封，才能给出对应的卡片口径（B-37）。
+   */
+  fallbackCoverUrl?: string | null;
   /**
    * The locales in which this category page really returns 200 (has public
    * content) — `listCategoryPublicLocales` in `@/lib/site/category-locales`,
@@ -83,7 +88,13 @@ export function buildCategorySeoMeta(
   // 分类自己的描述 || 兜底句；meta、og、twitter 与 JSON-LD 共用这一个值（CPS 同）。
   const rawDescription = trimmedDescription || trimmedFallback;
   const description = rawDescription ? truncateDescription(rawDescription) : undefined;
-  const image = resolveOgImage(null, data.defaultOgImage);
+  // 站点默认图优先，书封只是默认图缺失时的兜底（与此前 `default || novels[0].coverUrl` 同序）。
+  const share = resolveShareImage({
+    coverUrl: data.fallbackCoverUrl,
+    defaultOgImage: data.defaultOgImage,
+    prefer: "default",
+    alt: data.name,
+  });
   const collectionLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -110,13 +121,13 @@ export function buildCategorySeoMeta(
       url: canonical,
       siteName: data.siteName,
       locale: openGraphLocaleTag(locale),
-      images: [{ url: image, width: 1200, height: 630, alt: data.name }],
+      images: share.openGraphImages,
     },
     twitter: {
-      card: "summary_large_image" as const,
+      card: share.twitterCard,
       title,
       ...(description ? { description } : {}),
-      images: [image],
+      images: [share.url],
     },
     alternates: {
       canonical,

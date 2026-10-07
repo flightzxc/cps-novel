@@ -3,7 +3,7 @@ import {
   buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
-  resolveOgImage,
+  resolveShareImage,
   truncateDescription,
 } from "./_shared";
 
@@ -40,7 +40,8 @@ export function buildChapterSeoMeta(data: ChapterSeoData, locale = "en") {
   const description = truncateDescription(data.description);
   const canonical = buildCanonical(data.canonicalPath);
   const novelCanonical = buildCanonical(data.novelCanonicalPath);
-  const ogImage = resolveOgImage(data.coverUrl, data.defaultOgImage);
+  // 与小说页同口径：书封优先、站点默认图兜底，卡片口径随最终选中的图种类走。
+  const share = resolveShareImage({ coverUrl: data.coverUrl, defaultOgImage: data.defaultOgImage, alt: name });
   const ogLocale = openGraphLocaleTag(locale);
 
   const bookLd = {
@@ -49,7 +50,7 @@ export function buildChapterSeoMeta(data: ChapterSeoData, locale = "en") {
     name,
     description: data.description,
     url: canonical,
-    image: ogImage,
+    image: share.url,
     inLanguage: locale,
   };
 
@@ -75,13 +76,13 @@ export function buildChapterSeoMeta(data: ChapterSeoData, locale = "en") {
       url: canonical,
       siteName: data.siteName,
       locale: ogLocale,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: name }],
+      images: share.openGraphImages,
     },
     twitter: {
-      card: "summary_large_image" as const,
+      card: share.twitterCard,
       title,
       description,
-      images: [ogImage],
+      images: [share.url],
     },
     alternates: {
       canonical,
