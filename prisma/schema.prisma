@@ -355,6 +355,7 @@ model Novel {
   carouselServing    HomeCarouselServing[]
   tagState           NovelTagState?
   canonicalTags      NovelCanonicalTag[]
+  effectiveTags      NovelEffectiveTag[]
   tagClassificationRuns TagClassificationRun[]
 
   @@index([status, updatedAt], map: "novel_status_updated_idx")
@@ -547,6 +548,7 @@ model CanonicalTag {
   keywords      CanonicalTagKeyword[]
   sourceMappings SourceLabelMapping[]
   novelTags      NovelCanonicalTag[]
+  effectiveNovelTags NovelEffectiveTag[]
 
   @@index([status, sortOrder, stableId], map: "canonical_tag_status_sort_idx")
   @@map("canonical_tag")
@@ -679,6 +681,36 @@ model NovelCanonicalTag {
   @@index([canonicalTagId, source], map: "novel_canonical_tag_tag_source_idx")
   @@index([classificationRunId], map: "novel_canonical_tag_run_idx")
   @@map("novel_canonical_tag")
+}
+
+/// B-38 (方案_B38根治_公开列表改数据库分页_v0.5.13_2026-10-09.md §4.3 / 附录 B)：
+/// 小说"生效分类归属"投影表，CPS `DramaEffectiveTag`（drama_effective_tag）平移。
+/// 每行 = "某本书属于某个启用中的分类"，由三套规则（人工快照 / 上游标签映射 / 自动标签）
+/// 现算出来再落表；前台列表、卡片标签、站点地图只读这张表。
+/// 🔴 派生数据，唯一真源是规则本身；**全仓库只有
+/// `src/server/tagging/effective-tag-projection.ts` 允许写这张表**（防漏登记用例
+/// `tests/backend/tagging/effective-tag-write-path-registry.test.ts` 钉住）。
+///   - provenance：manual | mapped | auto（同一分类映射与自动都有时记 mapped）；
+///   - score：仅 auto 行有值，取自 novel_canonical_tag.score；
+///   - rank：本书标签内的显示顺序，从 0 起（人工/映射段按分类排序号与 slug，自动段按分数降序与 stable_id）。
+/// 只存在于迁移 SQL 的物理约束（Prisma 表达不了 CHECK）：
+///   `novel_effective_tag_provenance_check` CHECK (provenance IN ('manual','mapped','auto'))
+///   `novel_effective_tag_rank_check`       CHECK (rank >= 0)
+model NovelEffectiveTag {
+  novelId        String   @map("novel_id") @db.Uuid
+  canonicalTagId String   @map("canonical_tag_id") @db.Uuid
+  provenance     String   @db.VarChar(16)
+  score          Int?
+  rank           Int
+  computedAt     DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  novel        Novel        @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade)
+
+  @@id([novelId, canonicalTagId], map: "novel_effective_tag_pkey")
+  @@index([canonicalTagId], map: "novel_effective_tag_tag_idx")
+  @@index([novelId, rank], map: "novel_effective_tag_rank_idx")
+  @@map("novel_effective_tag")
 }
 
 model PromoLink {
@@ -1123,6 +1155,11 @@ model ArticleTemplate {
   @@map("article_template")
 }
 
+/// B-38 公开列表排序用的部分索引只存在于迁移 SQL
+/// （`prisma/migrations/20261009120000_b38_novel_effective_tag/migration.sql`），Prisma 6.19 的
+/// `@@index` 不支持 where 子句，沿用本 schema 既有约定：
+///   `article_public_list_order_idx` (locale, published_at DESC, id)
+///     WHERE status = 'published' AND deleted_at IS NULL AND article_type = 'novel_article'
 model Article {
   id                String    @id @default(uuid()) @db.Uuid
   /// C-27: nullable since blog_article/listicle/guide have no Novel; non-null

@@ -19,7 +19,8 @@ describe("P2-06.5 static database governance", () => {
     // more (ArticleNovelRebindPreview/Batch/BatchItem, 49 -> 52).
     // Owner 2026-09-18 决策 2 added ChannelAccountHold (52 -> 53).
     // 收益看板 (20261008120000_revenue_account_level_dashboard) added four revenue_* models (53 -> 57).
-    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(57);
+    // B-38 (20261009120000_b38_novel_effective_tag) added NovelEffectiveTag (57 -> 58).
+    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(58);
   });
 
   it("keeps the migration structural and exact", () => {

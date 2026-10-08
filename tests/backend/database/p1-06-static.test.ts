@@ -180,8 +180,12 @@ describe("P1-06 database operations static contracts", () => {
     // revenue_raw_snapshot / revenue_daily_stat), 54 field records (6 + 21 + 17 +
     // 10 scalar columns) and 26 physical-object records (4 primary keys, 6 foreign
     // keys, 4 unique indexes, 4 plain indexes, 8 CHECKs) -- 1242 + 84 = 1326.
-    expect(records).toHaveLength(1326);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1326);
+    // B-38 (20261009120000_b38_novel_effective_tag) adds 15 records: 1 table (novel_effective_tag),
+    // 6 field records, 7 physical-object records on the new table (primary key, 2 foreign keys,
+    // 2 plain indexes, 2 CHECKs) plus the migration-only partial index
+    // article_public_list_order_idx on article -- 1326 + 15 = 1341.
+    expect(records).toHaveLength(1341);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1341);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

@@ -137,7 +137,10 @@ describe("收益看板迁移（静态）", () => {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
-    expect(names[names.length - 1]).toBe(MIGRATION);
+    // 它被加进来时是最后一条；之后新增的迁移（例如 B-38 的 20261009120000_b38_novel_effective_tag）
+    // 按时间戳排在它后面，所以这里钉的是"排在它之前所有既有迁移之后"，不再假定它永远是最后一条。
+    expect(names).toContain(MIGRATION);
+    expect(names.indexOf(MIGRATION)).toBe(names.indexOf("20261005100000_worker_health_partial_indexes") + 1);
   });
 });
 

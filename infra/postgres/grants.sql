@@ -547,6 +547,29 @@ GRANT SELECT (
 GRANT SELECT ON TABLE operation_audit TO scheduler_app;
 GRANT INSERT ON TABLE operation_audit TO scheduler_app;
 
+-- B-38 (方案_B38根治_公开列表改数据库分页_v0.5.13_2026-10-09.md 附录 A, 迁移
+-- 20261009120000_b38_novel_effective_tag): `novel_effective_tag` 是小说分类归属的派生投影，
+-- 全仓库只有 `src/server/tagging/effective-tag-projection.ts` 写它。该模块的重算/对账在
+-- "改动真源的同一个事务里"执行，所以**每个会改标签真源的角色都要有完整的读写删权限**：
+--   - web_app: 后台保存人工标签 / 退出人工模式（`mutateAdminNovelTags` ->
+--     `replaceManualTagSnapshot` / `exitManualTagMode`）、后台改映射
+--     （`mutateAdminSourceLabelMapping`）、后台停用/启用分类（`mutateAdminCanonicalTag`
+--     的 `set_status`）、后台创建小说（`materializeNovelFromSourceItem`）；全量对账与单本
+--     重算都会 DELETE 多余行、INSERT 缺失行、UPDATE 变化行。
+--   - worker_app: 自动打标写入（`tagging.auto_classify` -> `replaceAutoTagSnapshotInTransaction`）、
+--     批量创建小说（`novel.materialize.v1` 等 -> `materializeNovelFromSourceItemInTransaction`）、
+--     目录同步每页（`catalog_scan` -> `persistCatalogPage`）、站点地图刷新前的兜底全量对账
+--     （`sitemap_refresh`，由 worker-light 消费；worker-light 与 worker 同用 `P1_12_WORKER_DATABASE_URL`，
+--     即同一个 worker_app 角色，见 docker-compose.yml），以及运维命令
+--     `scripts/ops/effective-tag-projection.ts`（在 worker 层执行）。
+-- SELECT 与 INSERT/UPDATE 并列写出，原因同本文件上面的 RETURNING 说明：投影写入语句带
+-- `RETURNING`，且 `ON CONFLICT`/比对要读现有行。重算还会对涉及的 `novel` 行加
+-- `FOR NO KEY UPDATE`，这需要 `novel` 上的 UPDATE 权限——web_app、worker_app 在上面都已持有，
+-- 本步不新增 `novel` 权限。
+-- analyst_ro 只读；scheduler_app 不接触（调度器只管任务元数据，不读不写分类归属）。
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE novel_effective_tag TO web_app, worker_app;
+GRANT SELECT ON TABLE novel_effective_tag TO analyst_ro;
+
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_app, worker_app, scheduler_app;
 
 -- Future objects start closed. P1 grants must be revised explicitly when a
