@@ -88,7 +88,7 @@ export function ChapterListBody({
             <button
               type="button"
               onClick={() => setModalChapterNumber(number)}
-              className="flex w-full items-baseline gap-4 py-4 text-left text-novel-fg-subtle transition-colors hover:bg-novel-bg-elevated md:py-5"
+              className="flex w-full items-baseline gap-4 py-4 text-start text-novel-fg-subtle transition-colors hover:bg-novel-bg-elevated md:py-5"
               data-testid="locked-chapter-item"
             >
               <span className="flex w-14 shrink-0 items-center text-sm tabular-nums md:w-16">

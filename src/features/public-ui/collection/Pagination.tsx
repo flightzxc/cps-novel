@@ -53,7 +53,7 @@ export function Pagination({
           href={prevUrl}
           className="inline-flex items-center gap-1.5 rounded-novel-md border border-novel-border-strong bg-transparent px-5 py-2.5 text-sm font-medium text-novel-fg transition-colors hover:bg-novel-bg-raised"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4 rtl:-scale-x-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           {t("pagination.previous")}
@@ -72,7 +72,7 @@ export function Pagination({
           className="inline-flex items-center gap-1.5 rounded-novel-md border border-novel-border-strong bg-transparent px-5 py-2.5 text-sm font-medium text-novel-fg transition-colors hover:bg-novel-bg-raised"
         >
           {t("pagination.next")}
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4 rtl:-scale-x-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </Link>

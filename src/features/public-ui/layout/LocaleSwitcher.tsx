@@ -462,12 +462,17 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
         </svg>
       </button>
 
+      {/* 🔴 下拉面板与提示条用逻辑属性 end-0 贴触发器的「末端」：从右到左时触发器在
+          页头左侧，物理的 right-0 会让面板向左伸出视口。
+          层级 z-60 高于阅读设置面板（z-50，PN-03）：两者都不建立层叠上下文、同处根层叠
+          上下文，同为 z-50 时 DOM 靠后的面板会盖住页头里的菜单（桌面端两者可同时打开）。
+          面板对续读条（z-40）的优先级不变。 */}
       {isOpen ? (
         <div
           id={menuId}
           role="menu"
           aria-orientation="vertical"
-          className="absolute right-0 top-full z-50 mt-2 min-w-[10rem] rounded-novel-md border border-novel-border bg-novel-bg-raised p-1 shadow-lg"
+          className="absolute end-0 top-full z-60 mt-2 min-w-[10rem] rounded-novel-md border border-novel-border bg-novel-bg-raised p-1 shadow-lg"
         >
           {menuItems.map((item) => {
             const isCurrent = item === locale;
@@ -478,7 +483,7 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
                 aria-current={isCurrent ? "true" : undefined}
                 href={hrefForMenuItem(pathname ?? "/", item)}
                 onClick={(event) => void handleSwitchClick(event, item)}
-                className={`block w-full rounded-novel-sm px-3 py-2 text-left text-sm transition-colors ${
+                className={`block w-full rounded-novel-sm px-3 py-2 text-start text-sm transition-colors ${
                   isCurrent
                     ? "bg-novel-bg text-novel-primary"
                     : "text-novel-fg-muted hover:bg-novel-bg hover:text-novel-fg"
@@ -494,7 +499,7 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
       {toastMessage ? (
         <div
           role="status"
-          className="absolute right-0 top-full z-50 mt-2 w-64 rounded-novel-md border border-novel-border bg-novel-bg-raised px-3 py-2 text-xs text-novel-fg shadow-lg"
+          className="absolute end-0 top-full z-60 mt-2 w-64 rounded-novel-md border border-novel-border bg-novel-bg-raised px-3 py-2 text-xs text-novel-fg shadow-lg"
         >
           {toastMessage}
         </div>
