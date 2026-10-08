@@ -146,6 +146,9 @@ const messages = {
     genreDescription: "이 컬렉션에서 읽을 수 있는 작품입니다.",
     genreEmpty: "이 컬렉션에는 아직 작품이 없습니다.",
     categoryTitle: "{name} 소설",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 与 categoryTitle 同形："{name} 소설" 对名词和短语名都通顺（여성향 소설 / 미움에서 사랑으로 소설）。
+    categoryHeading: "{name} 소설",
     browseSeoDescription: "공개된 소설입니다.",
     categoryEmpty: "이 카테고리에는 아직 공개된 소설이 없습니다.",
   },

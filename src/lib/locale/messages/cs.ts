@@ -158,6 +158,9 @@ const messages = {
     genreDescription: "Díla, která si můžete v této kolekci přečíst.",
     genreEmpty: "V této kolekci zatím nejsou žádná díla.",
     categoryTitle: "Romány {name}",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "Romány {name}" 套短语名会变 "Romány Pro čtenářky"（句中大写），所以改成冒号隔开。
+    categoryHeading: "Romány: {name}",
     browseSeoDescription: "Publikované romány.",
     categoryEmpty: "V této kategorii zatím nejsou žádné publikované romány.",
   },

@@ -173,6 +173,13 @@ export const en = {
     // that is already visible elsewhere; reusing it here would change what
     // the category empty-state actually says.
     categoryTitle: "{name} novels",
+    // 运营 2026-10-08（Owner 确认范围含 H1/<title>/og·twitter 标题/面包屑）：前台分类页
+    // `/category/{slug}` 的标题 = 分类名 + Novels。只有 `{name}` 一个占位符；其它语种按自己的
+    // 词序译，分类名常常是短语（"Female Audience"/"From Hate to Love"）而不是名词，所以
+    // 译文必须对短语和名词都通顺。浏览页 `/browse?category=` 仍用上面的 `categoryTitle`
+    // （小写 novels，不在本次范围）。分类页的描述兜底句（`meta.categoryDescriptionFallback`）
+    // 仍用纯分类名——它自己已含 novels。
+    categoryHeading: "{name} Novels",
     browseSeoDescription: "Published novels.",
     categoryEmpty: "No published novels in this category.",
   },

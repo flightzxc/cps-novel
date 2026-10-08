@@ -144,6 +144,9 @@ const messages = {
     genreDescription: "您可以在此合輯中閱讀的作品。",
     genreEmpty: "此合輯目前尚無作品。",
     categoryTitle: "{name}小說",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 与 categoryTitle 同形：中文"短语 + 小說"本来就通顺（女性向小說 / 先婚後愛小說）。
+    categoryHeading: "{name}小說",
     browseSeoDescription: "已發布的小說。",
     categoryEmpty: "此分類目前尚無已發布的小說。",
   },
