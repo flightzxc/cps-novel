@@ -27,7 +27,11 @@ const mutations=[
  {name:'ready_old_worker_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'case "$title" in *"shutting down"*|"") ;; *) return 1 ;; esac',to:'case "$title" in *) ;; esac',cmd:'npm',args:[...installer,'-t','without being told to quit']},
  {name:'public_noindex',file:'scripts/preproduction/render-public-nginx.mjs',from:"PUBLIC_ROBOTS: live ? '' :",to:"PUBLIC_ROBOTS: live ? 'noindex, nofollow, noarchive' :",cmd:'/bin/bash',args:['scripts/preproduction/verify-nginx-matrix.sh','--mode','public']},
 ];
-for(const m of mutations){
+// Optional names run a subset (keeps one foreground command short); a subset
+// never prints the full-gate PASS line.
+const only=process.argv.slice(2);
+for(const name of only)if(!mutations.some(m=>m.name===name))throw Error(`unknown mutation: ${name}`);
+for(const m of mutations.filter(m=>!only.length||only.includes(m.name))){
  const original=readFileSync(m.file),source=original.toString();
  if(!source.includes(m.from))throw Error(`mutation anchor missing: ${m.name}`);
  let result;
@@ -46,4 +50,4 @@ for(const m of mutations){
  console.log(`MUTATION=PASS name=${m.name} exit=${result.status} restored=git_diff_quiet`);
 }
 execFileSync('git',['diff','--quiet']);
-console.log('PUBLIC_CUTOVER_MUTATIONS=PASS');
+console.log(only.length?`PUBLIC_CUTOVER_MUTATIONS=PARTIAL names=${only.join(',')}`:'PUBLIC_CUTOVER_MUTATIONS=PASS');
