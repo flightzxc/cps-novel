@@ -5,6 +5,7 @@ import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { paginatedRobots } from "@/lib/seo/seo-templates/_shared";
 import { buildCategorySeoMeta, type CategorySeoData } from "@/lib/seo/seo-templates/category";
 import { buildCollectionSeoMeta, type CollectionSeoData } from "@/lib/seo/seo-templates/collection";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { shouldNoIndex } from "@/lib/seo/seo-utils";
 
 /**
@@ -117,6 +118,10 @@ function collectionInput(canonicalPath: string, page: number): CollectionSeoData
     siteName: "PulseNovel",
     defaultOgImage: "/og.png",
     fallbackCoverUrl: "/c.jpg",
+    // PN-09：列表模板的 hreflang 现在只列活跃语种。金样来自 BASE（盲目枚举全部 15 个登记语种），
+    // 所以这里让 15 个语种都"有书"——这正是"非空语种、全部语种活跃"时输出必须与改前逐字一致的证明；
+    // 空语种/部分活跃的行为见 `tests/ui/seo/empty-locale-hidden.test.ts`。
+    activeLocales: SITE_LOCALES,
   };
 }
 
@@ -624,6 +629,8 @@ describe("目标 1 + 2：页面层元数据——书库页、博客列表页第 
     expect(page2.alternates?.canonical).toBe(`${ORIGIN}/browse?page=2`);
     expect(page2.alternates?.languages).toEqual({});
 
+    // PN-09：第 1 页 hreflang 只列活跃语种；15 个语种全部活跃时与改前（盲目枚举 15 个）逐字一致。
+    loadActiveLocales.mockResolvedValue([...SITE_LOCALES] as never);
     const page1 = await buildBrowseMetadata("en", Promise.resolve({}));
     expect(page1.robots).toEqual({ index: true, follow: true });
     expect(Object.keys(page1.alternates?.languages ?? {})).toHaveLength(16);
@@ -638,6 +645,8 @@ describe("目标 1 + 2：页面层元数据——书库页、博客列表页第 
     expect(page2.alternates?.canonical).toBe(`${ORIGIN}/ko/blog?page=2`);
     expect(page2.alternates?.languages).toEqual({});
 
+    // PN-09：同上，15 个语种全部活跃时与改前一致。
+    loadActiveLocales.mockResolvedValue([...SITE_LOCALES] as never);
     const page1 = await buildBlogListMetadata("ko", Promise.resolve({}));
     expect(Object.keys(page1.alternates?.languages ?? {})).toHaveLength(16);
   });

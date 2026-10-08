@@ -102,6 +102,7 @@ describe("generateSeoMeta", () => {
         siteName: "cps-novel",
         description: "Read overseas novels.",
         defaultOgImage: "/og.png",
+        activeLocales: ["en"],
       },
     });
     expect(seo.canonical).toBe(`${ORIGIN}/`);
@@ -175,6 +176,7 @@ describe("generateSeoMeta", () => {
         items: [{ name: "Lantern", url: "/novel/lantern-pabc" }],
         siteName: "cps-novel",
         defaultOgImage: "/og.png",
+        activeLocales: ["en"],
       },
     });
     expect(seo.robots).toBeUndefined();

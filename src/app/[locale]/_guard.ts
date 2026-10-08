@@ -21,9 +21,10 @@
  * was deleted this round (矩阵 #9 GAP 收口) — CPS's own routing layer never
  * had a second, narrower gate here; "is this locale worth showing content
  * for" is now the dynamic layer's question (`getActiveLocales()`), answered
- * at the data layer (empty listings, hidden LocaleSwitcher entry, empty
- * sitemap shard), never at the routing layer (a registered locale is never
- * a 404 for THIS reason alone).
+ * at the data layer (hidden LocaleSwitcher entry, no sitemap shard,
+ * `noindex,follow` and no hreflang on the locale's home/browse/blog-list pages
+ * — PN-09), never at the routing layer (a registered locale is never a 404
+ * for THIS reason alone: `/cs` with no books stays HTTP 200).
  *
  * A SECOND, structural rule still sits on top of the registration gate: the
  * default locale (`PUBLIC_SITE_LOCALE`, `en`) is deliberately EXCLUDED from

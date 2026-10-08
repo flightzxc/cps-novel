@@ -868,10 +868,22 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     });
 
     it("home shell no longer 404s for rawLocale=fr — it renders the same tree the bare/en shells render", async () => {
+      // PN-09：fr 要有书（在活跃语种集合里）才可收录；没有书的情形见下一条。
+      loadActiveLocales.mockResolvedValue(["en", "fr"]);
       const prefixed = await import("@/app/[locale]/page");
       const params = Promise.resolve({ locale: "fr" });
       const meta = await prefixed.generateMetadata({ params });
       expect(meta.robots).toEqual({ index: true, follow: true });
+      const tree = await prefixed.default({ params });
+      expect(tree).toBeTruthy();
+    });
+
+    it("PN-09：fr 没有书（不在活跃语种里）时首页照样不 404、照样渲染同一棵树，只是 noindex,follow——路由保持 200，不删不跳转", async () => {
+      loadActiveLocales.mockResolvedValue(["en"]);
+      const prefixed = await import("@/app/[locale]/page");
+      const params = Promise.resolve({ locale: "fr" });
+      const meta = await prefixed.generateMetadata({ params });
+      expect(meta.robots).toEqual({ index: false, follow: true });
       const tree = await prefixed.default({ params });
       expect(tree).toBeTruthy();
     });

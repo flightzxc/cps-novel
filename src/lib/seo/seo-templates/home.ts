@@ -1,4 +1,5 @@
-import { buildHreflangAlternates, generateWebSiteJsonLd } from "../seo-utils";
+import { buildActiveLocaleAlternates, emptyLocaleRobots } from "../empty-locale-seo";
+import { generateWebSiteJsonLd } from "../seo-utils";
 import { buildLocaleCanonical, openGraphLocaleTag, resolveShareImage, truncateDescription } from "./_shared";
 
 export interface HomeSeoData {
@@ -11,6 +12,12 @@ export interface HomeSeoData {
    * 模板需要知道最终分享图是站点默认图还是书封，才能给出对应的卡片口径（B-37）。
    */
   fallbackCoverUrl?: string | null;
+  /**
+   * 动态层活跃语种集合（`getActiveLocales()`，页面层 `loadActiveLocales()` 传入）。必填：
+   * 首页的 hreflang 只列活跃语种，当前语种不在集合里（= 空语种，PN-09）时输出 noindex 且不
+   * 声明 hreflang。不要传 `SITE_LOCALES`——那就是盲目枚举全部 15 个登记语种。
+   */
+  activeLocales: readonly string[];
 }
 
 export function buildHomeSeoMeta(data: HomeSeoData, locale = "en") {
@@ -48,9 +55,10 @@ export function buildHomeSeoMeta(data: HomeSeoData, locale = "en") {
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates("/", locale),
+      languages: buildActiveLocaleAlternates("/", locale, data.activeLocales),
     },
-    robots: undefined,
+    // 空语种（没有任何公开可见的已发布书）→ noindex,follow；否则不覆盖（落成 index,follow）。
+    robots: emptyLocaleRobots(locale, data.activeLocales),
     other: {
       "application/ld+json": JSON.stringify(websiteLd),
     },

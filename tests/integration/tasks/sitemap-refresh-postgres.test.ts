@@ -14,7 +14,10 @@ import {
   SITEMAP_REFRESH_TASK_TYPE,
   type TaskLease,
 } from "@/lib/tasks";
-import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
+import { createSitemapFamilyBuilder, SITEMAP_TYPES } from "@/lib/seo/sitemap";
+import { queryActiveLocales } from "@/lib/locale/active-locales";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
+import { buildHomeSeoMeta } from "@/lib/seo/seo-templates/home";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import { refreshStaticSitemap } from "@/lib/seo/sitemap-refresh-state";
 import { createSitemapRefreshHandler } from "../../../worker/handlers/sitemap-refresh";
@@ -58,6 +61,11 @@ async function publishedKoreanArticle(ordinal: number) {
 }
 
 async function publishedKoreanBook(ordinal: number) {
+  return publishedBook("ko", ordinal);
+}
+
+/** 一本已发布、推广链接就绪的书。`ko` 的产物与此前 `publishedKoreanBook` 逐项相同（slug、标题、网址）。 */
+async function publishedBook(locale: string, ordinal: number) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 10);
   const channel = await owner.channel.create({ data: { code: `sitemap-${suffix}`, name: "Sitemap fixture" } });
   const sourceApp = await owner.sourceApp.create({ data: { code: `sitemap-source-${suffix}`, name: "Sitemap source" } });
@@ -67,14 +75,14 @@ async function publishedKoreanBook(ordinal: number) {
   const account = await owner.channelAccount.create({ data: {
     channelId: channel.id, businessId: `sitemap-account-${suffix}`, accountName: "Sitemap account",
   } });
-  const slug = `sitemap-ko-${ordinal}-${suffix}`;
+  const slug = `sitemap-${locale}-${ordinal}-${suffix}`;
   const novel = await owner.novel.create({ data: {
-    businessId: `sitemap-book-${suffix}`, title: `Korean book ${ordinal}`, description: "Fixture",
-    locale: "ko", slug, status: "published",
+    businessId: `sitemap-book-${suffix}`, title: `${locale === "ko" ? "Korean" : locale} book ${ordinal}`, description: "Fixture",
+    locale, slug, status: "published",
   } });
   const sourceItem = await owner.novelSourceItem.create({ data: {
     channelAppId: channelApp.id, novelId: novel.id, externalBookId: `source-${suffix}`,
-    sourceLanguageCode: "ko", title: novel.title, description: "Fixture", status: "linked", rawPayload: {},
+    sourceLanguageCode: locale, title: novel.title, description: "Fixture", status: "linked", rawPayload: {},
   } });
   const promoLink = await owner.promoLink.create({ data: {
     novelId: novel.id, novelSourceItemId: sourceItem.id, channelAppId: channelApp.id,
@@ -83,11 +91,11 @@ async function publishedKoreanBook(ordinal: number) {
     webUrl: `https://promo.example/${suffix}`, status: "fetched",
   } });
   await owner.article.create({ data: {
-    novelId: novel.id, promoLinkId: promoLink.id, locale: "ko", slug,
+    novelId: novel.id, promoLinkId: promoLink.id, locale, slug,
     publicPageShortId: suffix, title: novel.title, body: "Fixture", status: "published",
     publishedAt: new Date(),
   } });
-  return { url: `https://sitemap-test.example/ko/novel/${slug}-p${suffix}`, novelId: novel.id };
+  return { url: `https://sitemap-test.example/${locale}/novel/${slug}-p${suffix}`, novelId: novel.id };
 }
 
 /** 运营 V2：给一本书加一章。`content: false` = 没有正文行（锁定/撤回章节的真实形态）。 */
@@ -398,6 +406,56 @@ describe.skipIf(!enabled).sequential("sitemap refresh on disposable PostgreSQL 1
     const index = await readFile(path.join(root, "current", "sitemap.xml"), "utf8");
     expect(index).not.toContain("_en.xml");
     expect(index).not.toContain("categorypage");
+  });
+
+  // PN-09（Owner 2026-10-08：没有书时连入口也隐藏）：同一个"空语种"定义在三处的真实落点必须一致。
+  // web_app（`getActiveLocales()` 在生产里的角色）读到的活跃语种、worker_app 生成的 mainpage 分片、
+  // 页面层按活跃语种得出的 robots，三者对"哪些语种是空的"给出同一个答案。
+  it("PN-09: web_app's active-locale set, worker_app's mainpage shards and the pages' robots agree on which locales are empty", async () => {
+    await publishedBook("ko", 1);
+    await publishedBook("ru", 1);
+    // de：有一本书，但小说已下架——不是"公开可见的已发布书"，所以 de 是空语种。
+    const unpublished = await publishedBook("de", 1);
+    await owner.novel.update({ where: { id: unpublished.novelId }, data: { status: "unpublished" } });
+
+    // 1) web_app 读到的活跃语种（en 恒含）。
+    const active = await queryActiveLocales(web, enabledEnv);
+    expect(active).toEqual(["en", "ko", "ru"]);
+
+    // 2) worker_app 生成的站点地图：逐语种逐家族。
+    const build = createSitemapFamilyBuilder(worker, enabledEnv);
+    const withMainpage: string[] = [];
+    for (const locale of SITE_LOCALES) {
+      for (const type of SITEMAP_TYPES) {
+        const files = await build({ type, locale });
+        if (type === "mainpage" && files.length > 0) withMainpage.push(locale);
+        if (!active.includes(locale)) {
+          // 空语种：任何家族都没有条目（包括首页）。
+          expect(files, `${type}/${locale}`).toEqual([]);
+        }
+      }
+    }
+    expect(withMainpage).toEqual(["ko", "ru"]);
+    // 站点地图列了首页 => 一定是活跃语种；活跃而没列的只可能是没书的 en（默认语种恒活跃）。
+    for (const locale of withMainpage) expect(active).toContain(locale);
+    expect(active.filter((locale) => !withMainpage.includes(locale))).toEqual(["en"]);
+
+    // 3) 页面层：同一份活跃语种 => 首页 robots。列在站点地图里的首页绝不是 noindex。
+    for (const locale of SITE_LOCALES) {
+      const meta = buildHomeSeoMeta(
+        { siteName: "Fixture", description: "d", defaultOgImage: "/og.png", activeLocales: active },
+        locale,
+      );
+      const noindex = meta.robots?.index === false;
+      expect(noindex, locale).toBe(!active.includes(locale));
+      if (withMainpage.includes(locale)) expect(noindex, `${locale} is in the sitemap`).toBe(false);
+      // 空语种的页面不声明 hreflang；非空语种的 hreflang 不含任何空语种。
+      const languageKeys = Object.keys(meta.alternates.languages);
+      if (noindex) expect(languageKeys, locale).toEqual([]);
+      else for (const empty of SITE_LOCALES.filter((candidate) => !active.includes(candidate))) {
+        expect(languageKeys, `${locale} hreflang`).not.toContain(empty);
+      }
+    }
   });
 
 });

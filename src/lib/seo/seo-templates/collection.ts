@@ -1,5 +1,6 @@
 import { getHomeName } from "../breadcrumb-i18n";
-import { buildHreflangAlternates, generateItemListJsonLd } from "../seo-utils";
+import { buildActiveLocaleAlternates, emptyLocaleRobots } from "../empty-locale-seo";
+import { generateItemListJsonLd } from "../seo-utils";
 import {
   buildLocaleCanonical,
   openGraphLocaleTag,
@@ -25,6 +26,12 @@ export interface CollectionSeoData {
    * 知道最终分享图是站点默认图还是书封，才能给出对应的卡片口径（B-37）。
    */
   fallbackCoverUrl?: string | null;
+  /**
+   * 动态层活跃语种集合（`getActiveLocales()`，页面层 `loadActiveLocales()` 传入）。必填：
+   * 第 1 页的 hreflang 只列活跃语种；当前语种不在集合里（= 空语种，PN-09）时输出 noindex
+   * 且不声明 hreflang。不要传 `SITE_LOCALES`——那就是盲目枚举全部 15 个登记语种。
+   */
+  activeLocales: readonly string[];
 }
 
 /**
@@ -38,6 +45,12 @@ export interface CollectionSeoData {
  *  - 第 2 页起 `alternates.languages` 为空对象 `{}`：不输出任何跨语种 hreflang（含
  *    x-default）。`buildHreflangAlternates` 不带页码，会让各语种都指向第 1 页——CPS 同款
  *    缺陷，有意不照抄。第 1 页不变。
+ *
+ * 空语种口径（PN-09，Owner 2026-10-08：没有书时连入口也隐藏）：当前语种不在
+ * `data.activeLocales`（动态层活跃语种）里时，`robots` 为 `{ index: false, follow: true }`、
+ * `alternates.languages` 为 `{}`（见 `../empty-locale-seo.ts`）。非空语种的 `robots` 与改前
+ * 一致（`paginatedRobots` → `undefined`），第 1 页 hreflang 只列活跃语种而不是全部 15 个
+ * 登记语种。
  */
 export function buildCollectionSeoMeta(
   data: CollectionSeoData,
@@ -80,9 +93,10 @@ export function buildCollectionSeoMeta(
     ],
   };
 
-  // 第 2 页起不输出任何跨语种 hreflang（含 x-default）。显式标注类型以保持返回类型不变。
+  // 第 2 页起不输出任何跨语种 hreflang（含 x-default）；空语种也不输出（见函数注释）。
+  // 显式标注类型以保持返回类型不变。
   const languages: Record<string, string> =
-    pageNumber >= 2 ? {} : buildHreflangAlternates(data.canonicalPath, locale);
+    pageNumber >= 2 ? {} : buildActiveLocaleAlternates(data.canonicalPath, locale, data.activeLocales);
 
   return {
     title,
@@ -107,7 +121,7 @@ export function buildCollectionSeoMeta(
       canonical,
       languages,
     },
-    robots: paginatedRobots(pageNumber),
+    robots: emptyLocaleRobots(locale, data.activeLocales) ?? paginatedRobots(pageNumber),
     other: {
       "application/ld+json": JSON.stringify([itemListLd, breadcrumbLd]),
     },

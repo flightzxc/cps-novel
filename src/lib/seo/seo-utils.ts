@@ -106,6 +106,13 @@ export function canonicalUrl(path: string) {
  * `buildNovelHreflangAlternates`), because blind enumeration there would
  * produce dead links for locales that have no sibling Article at all.
  *
+ * PN-09 (Owner 2026-10-08): the home / `/browse` / `/blog` templates no longer
+ * rely on this default — they pass the ACTIVE locale set (`getActiveLocales()`,
+ * via `empty-locale-seo.ts#buildActiveLocaleAlternates`), so an empty locale
+ * (no published book) is never advertised in hreflang, and an empty locale's own
+ * page declares none. The `SITE_LOCALES` default below is kept only for callers
+ * that explicitly want the whole registry; nothing in `src/` relies on it today.
+ *
  * L10N P4: enumerates `SITE_LOCALES` (the full 15-entry registry), matching
  * CPS's own `buildHreflangAlternates` equivalent
  * (`3a76877:src/lib/seo-utils.ts:132`, `for (const locale of

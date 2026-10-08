@@ -24,11 +24,19 @@ src/lib/locale/root-negotiation.ts   ← L10N P4 新增：根路径 Accept-Langu
 
 | 层 | 定义 | 住在哪 | 供谁读 |
 | --- | --- | --- | --- |
-| 静态层 | `SITE_LOCALES`（同步、常量、15 语） | `locale-canonical.ts` | 路由（`proxy.ts`/`[locale]/_guard.ts`）、sitemap 默认、IndexNow 资格、hreflang 枚举、后台语种下拉 |
+| 静态层 | `SITE_LOCALES`（同步、常量、15 语） | `locale-canonical.ts` | 路由（`proxy.ts`/`[locale]/_guard.ts`）、sitemap 默认、IndexNow 资格、后台语种下拉（首页/书库/博客列表的 hreflang 自 PN-09 起改读动态层，见下） |
 | 动态层 | `getActiveLocales()`（异步、按公开可见谓词族算出、⊆ 静态层、`en` 恒含） | `active-locales.ts` | 决策消费点只有一处：`SiteChrome.activeLocales` → `SiteHeader` → `LocaleSwitcher`；另有一处**仅限成本**的用法——分类页 hreflang 用它缩小要探测的候选语种（是否 200 仍由 `getPublicCategoryPage` 判定，见 `active-locales.ts` 尾注） |
 
 **CPS 用静态集的地方海阅不得换动态集，反之亦然**——两层各自的消费点边界见
 `docs/governance/port-registry.md` 的 L10N P4 小节 §1 清单①②。
+
+**唯一的有意偏离（PN-09，Owner 2026-10-08：没有书时连入口也隐藏）**：动态层同时是"空语种"的唯一定义
+——不在 `getActiveLocales()` 集合里的语种就是空语种（`empty-locale.ts` 的 `isEmptyLocale`，`en` 恒不算空）。
+空语种：语言菜单不列它（读者正在看的那个语种除外）、首页 / `/browse` / `/blog` 三个入口页输出
+`noindex, follow` 且不声明 hreflang、站点地图不出它的 mainpage / novelpage；其余语种这三个入口页的
+hreflang 只列活跃语种。路由不变——`/cs` 仍是 HTTP 200，只是 noindex；语种有了书之后自动恢复。
+消费点与理由见 `active-locales.ts` 模块头与 `docs/adr/ADR-PN09-EMPTY-LOCALE-HIDDEN.md`；不要再造第二份
+"这个语种有没有书"的查询。
 
 🔴 **全项目唯一的语种映射实现，两个文件合起来算一处。** 禁止在这两个文件之外的任何位置出现第二处语种映射硬编码——CPS 因语种映射散落四处，付过两次全库 normalize 的代价。`tests/ui/locale-canonical.test.ts`「没有第二张语种映射表」/「没有第二份 normalize 实现」两条扫描已把排除范围从单文件扩到这两个文件。
 

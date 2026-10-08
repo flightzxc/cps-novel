@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-import { useLocale, useT } from "@/lib/locale/messages/MessagesProvider";
+import { useLocale, useOptionalLocale, useT } from "@/lib/locale/messages/MessagesProvider";
 import {
   SITE_LOCALE_NATIVE_NAMES,
   SITE_LOCALES,
@@ -82,6 +82,13 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  * （`visible = new Set([locale])`），`en` 由动态层 `queryActiveLocales` 无条件
  * 种入（CPS `active.add("en")`），这里再兜一层，保证"英文入口始终可选"不依赖
  * 调用方传对。
+ *
+ * PN-09（Owner 2026-10-08：没有书时连入口也隐藏）：`activeLocales` 本来就只含"有书的语种"
+ * （空语种不在里面），所以菜单**不会列出任何空语种**——这一点不需要这里再做过滤，也不要在这里
+ * 另查一份"有没有书"。唯一的例外是读者当前正在看的语种：直接打开 `/cs` 这样的空语种时，
+ * 当前语种仍然排在菜单里并标 `aria-current`，免得触发按钮上的语种名在菜单里找不到；其它空语种
+ * 一概不列。全站只有英文有书（`activeLocales` 只剩 `["en"]`）而读者恰好在空语种页面时，
+ * 菜单依然渲染（English + 当前语种），让读者有路回到英文。
  */
 
 // Native self-names ("Français", "日本語", …) live in `locale-canonical.ts`
@@ -291,15 +298,23 @@ async function lookupNovelSibling(slugParam: string, target: SiteLocale): Promis
 }
 
 export function LocaleSwitcher({ activeLocales = [] }: { activeLocales?: readonly SiteLocale[] }) {
-  // Deliberately checked BEFORE any hook runs (see the file-level comment on
-  // why: `usePathname()` needs real App Router context, which existing
-  // tests that render `SiteHeader`/`SiteShell` do not provide — and don't
-  // need to, since callers that don't care about the switcher pass no
-  // `activeLocales` prop, defaulting to `[]`). Safe under the rules of hooks
-  // because this early return does not change between renders of the same
-  // mounted instance: `activeLocales` is a prop, stable for the component's
-  // whole lifetime the same way the old module-level constant was.
-  if (activeLocales.length <= 1) return null;
+  // Deliberately decided BEFORE any hook that needs App Router context runs (see the
+  // file-level comment on why: `usePathname()` needs real App Router context, which existing
+  // tests that render `SiteHeader`/`SiteShell` do not provide — and don't need to, since
+  // callers that don't care about the switcher pass no `activeLocales` prop, defaulting to
+  // `[]`). `useOptionalLocale()` is a plain `useContext` that returns `null` without a
+  // provider, so calling it first neither needs that context nor breaks the rules of hooks:
+  // the early return below does not change between renders of the same mounted instance
+  // (both inputs are stable for the component's whole lifetime).
+  const currentLocale = useOptionalLocale();
+  if (activeLocales.length === 0) return null;
+  // PN-09：菜单条目 = activeLocales ∪ {当前语种} ∪ {en}（见文件头）。用户直接打开了空语种
+  // （如 /cs）而全站只有英文有书时，activeLocales 只有 ["en"]——此时仍要显示菜单
+  // （[English, 当前语种]），否则这位读者连回英文的入口都没有。当前语种本身就在集合里、
+  // 或没有 provider（取不到当前语种）时，沿用原规则：集合不足两项就不渲染。
+  const distinct = new Set<SiteLocale>(activeLocales);
+  if (currentLocale) distinct.add(currentLocale);
+  if (distinct.size <= 1) return null;
   return <LocaleSwitcherMenu selectable={activeLocales} />;
 }
 
