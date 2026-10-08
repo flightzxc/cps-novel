@@ -149,9 +149,11 @@ const messages = {
     allWorksEmpty: "Chưa có tác phẩm nào công khai.",
     genreDescription: "Các tác phẩm bạn có thể đọc trong bộ sưu tập này.",
     genreEmpty: "Chưa có tác phẩm nào trong bộ sưu tập này.",
-    categoryTitle: "Tiểu thuyết {name}",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "Tiểu thuyết {name}" 套短语型分类名会不通顺）。
+    categoryTitle: "Tiểu thuyết: {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "Tiểu thuyết {name}" 套短语名会变 "Tiểu thuyết Dành cho nữ"，所以改成冒号隔开。
+    // 旧 categoryTitle "Tiểu thuyết {name}" 套短语名会变 "Tiểu thuyết Dành cho nữ"，所以改成冒号隔开。
     categoryHeading: "Tiểu thuyết: {name}",
     browseSeoDescription: "Tiểu thuyết đã xuất bản.",
     categoryEmpty: "Chưa có tiểu thuyết nào được xuất bản trong danh mục này.",
@@ -206,7 +208,8 @@ const messages = {
     siteDescription: "Khám phá tiểu thuyết và bắt đầu đọc chương miễn phí.",
     homeTitleFallback: "PulseNovel - Khám phá tiểu thuyết và đọc sách miễn phí",
     pageSuffix: " - Trang {page}",
-    categoryDescriptionFallback: "Khám phá tiểu thuyết {name} trên PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "Khám phá tiểu thuyết {name} trên PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "Khám phá tiểu thuyết thuộc danh mục “{name}” trên PulseNovel.",
   },
 } satisfies LocaleMessages;
 

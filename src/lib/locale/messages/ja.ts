@@ -147,9 +147,11 @@ const messages = {
     allWorksEmpty: "まだ公開されている作品がありません。",
     genreDescription: "このコレクションで読める作品です。",
     genreEmpty: "このコレクションにはまだ作品がありません。",
-    categoryTitle: "{name}の小説",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "{name}の小説" 套短语型分类名会不通顺）。
+    categoryTitle: "「{name}」の小説",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "{name}の小説" 套动词结尾的分类名会不通（"全員から愛されるの小説"），所以用「」把分类名括起来，对名词和短语都成立。
+    // 旧 categoryTitle "{name}の小説" 套动词结尾的分类名会不通（"全員から愛されるの小説"），所以用「」把分类名括起来，对名词和短语都成立。
     categoryHeading: "「{name}」の小説",
     browseSeoDescription: "公開中の小説。",
     categoryEmpty: "このカテゴリーにはまだ公開中の小説がありません。",
@@ -202,7 +204,8 @@ const messages = {
     siteDescription: "小説を見つけて、無料の章から読み始めよう。",
     homeTitleFallback: "PulseNovel - 小説を見つけて無料で読もう",
     pageSuffix: " - {page}ページ",
-    categoryDescriptionFallback: "PulseNovelで{name}の小説を見つけよう。",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "PulseNovelで{name}の小説を見つけよう。" 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "PulseNovelで「{name}」の小説を見つけよう。",
   },
 } satisfies LocaleMessages;
 

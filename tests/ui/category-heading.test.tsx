@@ -16,7 +16,10 @@ import type { NovelCardView } from "@/features/public-ui/types";
  *     非英语语种不是英文 "Novels"，并且对"分类名是短语"的语种带分隔符（见下方注释）；
  *  2. 页面层：H1、`<title>`、og/twitter 标题、CollectionPage.name、面包屑第 2 项是同一个值，
  *     且描述兜底句仍用**纯分类名**（否则会变 "Discover Romance Novels novels…"）；
- *  3. 范围守卫：浏览页 `/browse?category=` 仍用 `collection.categoryTitle`，不在本次范围。
+ *  3. 范围守卫：浏览页 `/browse?category=` 仍用 `collection.categoryTitle`（en 不动）；
+ *  4. Owner 2026-10-08 追加：非英语语种的 `collection.categoryTitle`（只用于 /browse?category= 标题）
+ *     与 `collection.categoryHeading` 同值，`meta.categoryDescriptionFallback` 在短语型分类名下
+ *     也要通顺——用该语种的引号把分类名隔开；en 两个键一字不动。
  *
  * 标题/描述的逐条文案断言（第 2 页后缀、ja 后缀本地化等）在
  * `tests/ui/seo/category-title-description.test.ts`。
@@ -278,5 +281,97 @@ describe("范围守卫：浏览页 /browse?category= 不在本次范围，仍用
     const tree = await BrowseBody({ locale: "en", searchParams: Promise.resolve({ category: "fantasy" }) });
     render(tree);
     expect(screen.getByRole("heading", { level: 1 }).textContent).not.toContain("Novels");
+  });
+});
+
+/**
+ * Owner 2026-10-08 追加：`meta.categoryDescriptionFallback`（分类页无自身描述时的 meta description /
+ * og / twitter / CollectionPage 描述，调用方传纯分类名）与 `collection.categoryTitle`（/browse?category= 标题）
+ * 在短语型分类名下不通顺——es "Descubre novelas de Para lectoras en PulseNovel."、de "Entdecke Für
+ * Leserinnen-Romane auf PulseNovel."、fr "Découvrez des romans Public féminin sur PulseNovel."、
+ * pl "…z kategorii Od nienawiści do miłości na PulseNovel."（分类名与后文连成一片）。
+ * 只改了 es/pt-BR/id/vi/ja/ar/fr/de/pl/cs；th/ko/zh-Hant/ru 判断为已通顺，保持原值。
+ */
+const NON_EN = SITE_LOCALES.filter((locale) => locale !== "en");
+
+/** 本次改写的语种：描述兜底句里分类名两侧的引号（与该语种习惯一致；ja 与 categoryHeading 同为「」）。 */
+const REWRITTEN_DESCRIPTION_QUOTES: ReadonlyArray<readonly [SiteLocale, string, string]> = [
+  ["es", "«", "»"],
+  ["pt-BR", "“", "”"],
+  ["id", "“", "”"],
+  ["vi", "“", "”"],
+  ["ja", "「", "」"],
+  ["ar", "«", "»"],
+  ["fr", "« ", " »"],
+  ["de", "„", "“"],
+  ["pl", "„", "”"],
+  ["cs", "„", "“"],
+];
+
+function descriptionOf(locale: SiteLocale, name: string): string {
+  return getPublicT(locale)("meta.categoryDescriptionFallback", { name });
+}
+
+describe("追加：meta.categoryDescriptionFallback / collection.categoryTitle", () => {
+  it("en 两个键逐字等于原值（en 没被动）", () => {
+    expect(en.collection.categoryTitle).toBe("{name} novels");
+    expect(en.meta.categoryDescriptionFallback).toBe("Discover {name} novels on PulseNovel.");
+  });
+
+  it.each(SITE_LOCALES)("%s：两个键占位符只有 {name}，不含 # 与 plural，描述是带品牌名的单句", (locale) => {
+    const catalog = CATALOGS[locale] as { collection: { categoryTitle: string }; meta: { categoryDescriptionFallback: string } };
+    for (const text of [catalog.collection.categoryTitle, catalog.meta.categoryDescriptionFallback]) {
+      expect(Array.from(text.matchAll(/\{([^}]*)\}/g), (m) => m[1])).toEqual(["name"]);
+      expect(text).not.toContain("#");
+      expect(text).not.toMatch(/plural/i);
+      expect(text.trim()).toBe(text);
+    }
+    const description = catalog.meta.categoryDescriptionFallback;
+    expect(description).toContain("PulseNovel");
+    // 单句：句末标点（若有）至多一个，且只出现在末尾（th 无句末标点惯例）。
+    const terminators = Array.from(description.matchAll(/[.!?。！？]/g)).map((m) => m.index!);
+    expect(terminators.length).toBeLessThanOrEqual(1);
+    if (terminators.length === 1) expect(terminators[0]).toBe(description.length - 1);
+  });
+
+  it.each(NON_EN)("%s：collection.categoryTitle 与 collection.categoryHeading 同值（防以后只改一边）", (locale) => {
+    const collection = (CATALOGS[locale] as { collection: { categoryTitle: string; categoryHeading: string } }).collection;
+    expect(collection.categoryTitle).toBe(collection.categoryHeading);
+  });
+
+  it.each(REWRITTEN_DESCRIPTION_QUOTES)("%s：描述兜底句套短语型分类名后，分类名两侧有引号分隔", (locale, open, close) => {
+    for (const [slug, names] of Object.entries(REAL_NAMES)) {
+      const name = names[OVERLAY_COLUMNS.indexOf(locale)]!;
+      const description = descriptionOf(locale, name);
+      expect(description, `${locale}/${slug}`).toContain(`${open}${name}${close}`);
+      // 描述里分类名只出现一次，且句子仍含品牌名。
+      expect(description.split(name).length - 1, `${locale}/${slug}`).toBe(1);
+      expect(description, `${locale}/${slug}`).toContain("PulseNovel");
+      expect(description, `${locale}/${slug}`).not.toContain("{");
+    }
+  });
+
+  it("ja 以动词结尾的分类名（全員から愛される 等）：标题与描述都把它括在「」里，不拼成 '全員から愛されるの小説'", () => {
+    for (const name of ["全員から愛される", "ゆっくり恋に落ちる", "夫を取り戻す"]) {
+      const t = getPublicT("ja");
+      expect(t("collection.categoryTitle", { name })).toBe(`「${name}」の小説`);
+      expect(t("collection.categoryHeading", { name })).toBe(`「${name}」の小説`);
+      expect(t("meta.categoryDescriptionFallback", { name })).toBe(`PulseNovelで「${name}」の小説を見つけよう。`);
+    }
+  });
+
+  it("th / ko / zh-Hant / ru 判断为已通顺，描述兜底句保持原值", () => {
+    expect(descriptionOf("th", "แฟนตาซี")).toBe("ค้นพบนิยายแฟนตาซีบน PulseNovel");
+    expect(descriptionOf("ko", "판타지")).toBe("PulseNovel에서 판타지 소설을 만나보세요.");
+    expect(descriptionOf("zh-Hant", "奇幻")).toBe("在PulseNovel探索奇幻小說。");
+    expect(descriptionOf("ru", "Фэнтези")).toBe("Открывайте романы в категории «Фэнтези» на PulseNovel.");
+  });
+
+  it("/browse?category= 的 <title>：非英语语种与分类页 H1 是同一个形式（ja/de/fr）", async () => {
+    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Fantasy", "fantasy"));
+    for (const locale of ["ja", "de", "fr"] as const) {
+      const metadata = await buildBrowseMetadata(locale, Promise.resolve({ category: "fantasy" }));
+      expect(titleOf(metadata), locale).toBe(headingOf(locale, "Fantasy"));
+    }
   });
 });
