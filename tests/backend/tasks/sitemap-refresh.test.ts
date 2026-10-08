@@ -36,6 +36,9 @@ function transactionDb(activeId?: string, activeStatus: "pending" | "processing"
   return tx;
 }
 
+/** B-38：这些既有用例关心的是站点地图本身；兜底对账用无操作替身，免得对 `{}` 假库真去跑一遍再刷出错误日志。 */
+const noReconcile = vi.fn().mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 });
+
 function state(task: SitemapRefreshState["task"], active: SitemapRefreshState["active"] = null): SitemapRefreshState {
   return {
     rootDir: "/tmp/sitemaps",
@@ -161,6 +164,7 @@ describe("Sitemap refresh worker handler", () => {
   it("keeps filesystem generation off while the independent Worker write gate is closed", async () => {
     const refresh = vi.fn();
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: enabledEnv,
       refresh,
@@ -184,6 +188,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "success", runId: manifest.runId, manifest }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -205,6 +210,7 @@ describe("Sitemap refresh worker handler", () => {
     });
     const releaseLock = vi.fn();
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -224,6 +230,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "running" }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -259,6 +266,7 @@ describe("Sitemap refresh worker handler", () => {
       });
     const releaseLock = vi.fn().mockResolvedValue(undefined);
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -280,6 +288,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "failed", runId: "failed-run", errorSummary: "render failed" }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      reconcileEffectiveTags: noReconcile,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -292,9 +301,136 @@ describe("Sitemap refresh worker handler", () => {
   });
 
   it("registers sitemap_refresh as a GenericTask handler", () => {
-    const registry = createSitemapRefreshWorkerHandlers({} as never, { buildFamily: vi.fn() });
+    const registry = createSitemapRefreshWorkerHandlers({} as never, { buildFamily: vi.fn(), reconcileEffectiveTags: noReconcile });
     expect(registry[SITEMAP_REFRESH_TASK_TYPE]).toMatchObject({ family: "generic", maxAttempts: 3 });
     expect(createWorkerHandlers({} as never)[SITEMAP_REFRESH_TASK_TYPE])
       .toMatchObject({ family: "generic", maxAttempts: 3 });
+  });
+});
+
+describe("Sitemap refresh worker handler · B-38 构建前兜底对账分类归属表", () => {
+  const manifest = {
+    runId: "run-success",
+    releaseName: "run-success",
+    rootDir: "/tmp/sitemaps",
+    releaseDir: "/tmp/sitemaps/releases/run-success",
+    generatedAt: "2026-08-18T00:00:00.000Z",
+    promotedAt: "2026-08-18T00:00:01.000Z",
+    durationMs: 1_000,
+    fileCount: 3,
+    urlCount: 42,
+    sitemapFiles: ["sitemap/site_mainpage_en.xml"],
+  };
+  const success = {
+    ok: true,
+    status: "success" as const,
+    message: "ok",
+    state: state({ status: "success", runId: manifest.runId, manifest }, manifest),
+  };
+  const quietLog = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
+
+  it("先对账、后构建：对账在 refresh（站点地图生成）之前，且用的是 worker 自己的 db", async () => {
+    const order: string[] = [];
+    const db = { marker: "worker-db" };
+    const reconcile = vi.fn(async (received: unknown) => {
+      order.push("reconcile");
+      expect(received).toBe(db);
+      return { inserted: 0, updated: 0, deleted: 0 };
+    });
+    const refresh = vi.fn(async () => { order.push("refresh"); return success; });
+    const outcome = await createSitemapRefreshHandler(db as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, reconcileEffectiveTags: reconcile, reconcileLog: quietLog(),
+    })(context());
+    expect(order).toEqual(["reconcile", "refresh"]);
+    expect(outcome.status).toBe("success");
+  });
+
+  it("稳定状态 0/0/0 → 一行 info 结构化日志，含 inserted/updated/deleted/ms", async () => {
+    const log = quietLog();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+      reconcileEffectiveTags: vi.fn().mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 }), reconcileLog: log,
+    })(context());
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(log.error).not.toHaveBeenCalled();
+    const event = JSON.parse(log.info.mock.calls[0]![0] as string);
+    expect(event).toMatchObject({ schemaVersion: 1, event: "effective_tag_reconcile", level: "info", inserted: 0, updated: 0, deleted: 0 });
+    expect(Number.isInteger(event.ms) && event.ms >= 0).toBe(true);
+  });
+
+  it("对账改了行 → 升级成 warn（提示有漏掉的写入点或发生过并发），计数照实记录", async () => {
+    const log = quietLog();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+      reconcileEffectiveTags: vi.fn().mockResolvedValue({ inserted: 2, updated: 0, deleted: 1 }), reconcileLog: log,
+    })(context());
+    expect(log.info).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.warn.mock.calls[0]![0] as string)).toMatchObject({
+      event: "effective_tag_reconcile", level: "warn", inserted: 2, updated: 0, deleted: 1,
+    });
+  });
+
+  it("对账抛错 → 只记错误日志，站点地图照常构建并成功，不中断", async () => {
+    const log = quietLog();
+    const refresh = vi.fn().mockResolvedValue(success);
+    const outcome = await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh,
+      reconcileEffectiveTags: vi.fn().mockRejectedValue(new Error("deadlock detected")), reconcileLog: log,
+    })(context());
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(outcome).toMatchObject({ status: "success", result: { urlCount: 42 } });
+    expect(log.error).toHaveBeenCalledTimes(1);
+    const event = JSON.parse(log.error.mock.calls[0]![0] as string);
+    expect(event).toMatchObject({ schemaVersion: 1, event: "effective_tag_reconcile_failed", level: "error" });
+    expect(event.error.message).toContain("deadlock detected");
+  });
+
+  it("功能开关 / 写闸关闭时一律不对账（没有任何写入）", async () => {
+    const reconcile = vi.fn();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: enabledEnv, refresh: vi.fn(), reconcileEffectiveTags: reconcile,
+    })(context());
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: {} as NodeJS.ProcessEnv, refresh: vi.fn(), reconcileEffectiveTags: reconcile,
+    })(context());
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it("每次任务执行只对账一次（即使遇到过期文件锁、重试一次生成）", async () => {
+    const now = new Date("2026-08-18T01:00:00.000Z");
+    const refresh = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: "running", message: "running",
+        state: state({ status: "running", runId: "stale-run", startedAt: new Date(now.valueOf() - SITEMAP_FILE_LOCK_STALE_MS - 1).toISOString() }),
+      })
+      .mockResolvedValueOnce(success);
+    const reconcile = vi.fn().mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 });
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, releaseLock: vi.fn().mockResolvedValue(undefined),
+      now: () => now, rootDir: "/tmp/sitemaps", reconcileEffectiveTags: reconcile, reconcileLog: quietLog(),
+    })(context());
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it("生产默认走真实对账：没有注入替身时，处理器在 worker 的 db 上开事务、先拿独占咨询锁、再比对写入", async () => {
+    const seen: string[] = [];
+    const tx = {
+      $queryRaw: vi.fn(async (statement: { sql: string }) => {
+        seen.push(statement.sql.includes("pg_advisory_xact_lock(") ? "lock_exclusive" : statement.sql.includes("INSERT INTO novel_effective_tag") ? "apply" : "other");
+        return statement.sql.includes("INSERT INTO novel_effective_tag") ? [{ inserted: 0, updated: 0, deleted: 0 }] : [];
+      }),
+    };
+    const db = { $transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) => callback(tx)) };
+    const log = quietLog();
+    const refresh = vi.fn(async () => { seen.push("refresh"); return success; });
+    await createSitemapRefreshHandler(db as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, reconcileLog: log,
+    })(context());
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(["lock_exclusive", "apply", "refresh"]);
+    expect(JSON.parse(log.info.mock.calls[0]![0] as string)).toMatchObject({ event: "effective_tag_reconcile", inserted: 0 });
   });
 });

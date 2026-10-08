@@ -132,6 +132,14 @@ export class FakeContentCreationDb {
   readonly previewChapterCounts = new Map<string, number>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
+  /**
+   * B-38：`refreshEffectiveTagsForNovels`（src/server/tagging/effective-tag-projection.ts）发出的原生 SQL。
+   * 它走 `tx.$queryRaw(Prisma.sql...)`（单个 Sql 对象，不是模板字符串数组），和下面 `generate` 用的
+   * 模板字符串形态的 `novel.lockForUpdate` 区分开；记录在 `calls` 里的名字是 `effectiveTag.*`。
+   */
+  readonly effectiveTagRefreshNovelIds: string[][] = [];
+  /** 让下一次投影重算的"比对写入"语句抛这个错（用来证明重算失败会把整个创建事务一起回滚）。 */
+  effectiveTagApplyError: Error | null = null;
   lastSourceItemFindFirstArgs: { where: { id: string }; select?: Record<string, boolean> } | null = null;
 
   /** How many consecutive `novel.create` calls should throw a `business_id` P2002 before succeeding. */
@@ -575,6 +583,8 @@ export class FakeContentCreationDb {
         },
       },
       $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+        const projection = this.recognizeEffectiveTagSql(_strings);
+        if (projection) return projection;
         this.calls.push("novel.lockForUpdate");
         const novelId = values.find((value): value is string => typeof value === "string");
         const novel = novelId ? this.novels.get(novelId) : undefined;
@@ -594,8 +604,12 @@ export class FakeContentCreationDb {
         const previousLog = this.undoLog;
         this.undoLog = [];
         const thisLog = this.undoLog;
+        // 真实 Prisma 的事务客户端上没有 `$transaction`（运行时闸 refreshEffectiveTagsForNovels 靠这一点
+        // 区分"事务客户端"和"完整 PrismaClient"），所以事务回调拿到的对象也不能有它。
+        const tx = { ...client } as Partial<FakeClient>;
+        delete tx.$transaction;
         try {
-          const result = await callback(client);
+          const result = await callback(tx as FakeClient);
           this.undoLog = previousLog;
           return result;
         } catch (error) {
@@ -606,6 +620,30 @@ export class FakeContentCreationDb {
       },
     };
     return client;
+  }
+
+  /**
+   * 认出投影重算发出的 SQL 并给出替身结果；认不出（返回 undefined）就交回原有的 `$queryRaw` 行为。
+   * 投影的三条语句：共享咨询锁、`novel` 行锁（FOR NO KEY UPDATE）、带三个计数的比对写入。
+   */
+  private recognizeEffectiveTagSql(statement: unknown): unknown[] | undefined {
+    const sql = (statement as { sql?: unknown }).sql;
+    if (typeof sql !== "string") return undefined;
+    if (sql.includes("pg_advisory_xact_lock_shared")) {
+      this.calls.push("effectiveTag.lockShared");
+      return [];
+    }
+    if (sql.includes("FOR NO KEY UPDATE") && sql.includes("FROM novel n")) {
+      this.calls.push("effectiveTag.lockNovels");
+      this.effectiveTagRefreshNovelIds.push((statement as { values: string[] }).values.slice());
+      return [];
+    }
+    if (sql.includes("novel_effective_tag")) {
+      this.calls.push("effectiveTag.apply");
+      if (this.effectiveTagApplyError) throw this.effectiveTagApplyError;
+      return [{ inserted: 0, updated: 0, deleted: 0 }];
+    }
+    return undefined;
   }
 
   private readonly client: FakeClient = this.buildClient();

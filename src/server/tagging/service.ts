@@ -16,6 +16,11 @@ import {
   isTaggingEnabled,
 } from "@/lib/flags/feature-flags";
 
+import {
+  lockEffectiveTagProjectionShared,
+  refreshEffectiveTagsForNovels,
+} from "./effective-tag-projection";
+
 type Db = PrismaClient;
 
 interface EffectiveTagRow {
@@ -296,6 +301,8 @@ export async function replaceManualTagSnapshot(input: ReplaceManualTagSnapshotIn
       if (prior.action !== "tag.manual.replace") throw new TaggingError("IDEMPOTENCY_CONFLICT");
       return replayResult(auditPayload(prior), payloadFingerprint);
     }
+    // B-38：先拿投影咨询锁（共享）、后拿 `novel` 行锁——与全量对账的锁顺序一致，见 effective-tag-projection.ts 文件头。
+    await lockEffectiveTagProjectionShared(tx);
     const state = await lockNovelAndState(tx, input.novelId);
     if (state.revision !== input.expectedRevision) throw new TaggingError("REVISION_CONFLICT");
     await assertActiveTags(tx, canonicalTagIds);
@@ -314,6 +321,8 @@ export async function replaceManualTagSnapshot(input: ReplaceManualTagSnapshotIn
     }
     const revision = state.revision + 1n;
     await tx.novelTagState.update({ where: { novelId: input.novelId }, data: { mode: "manual", revision } });
+    // B-38：真源（人工快照 + 标签状态）已写完，同一事务里重算这本书的分类归属（只写差异）。
+    await refreshEffectiveTagsForNovels(tx, [input.novelId]);
     const afterSnapshot = { payloadFingerprint, mode: "manual", revision: revision.toString(), skipped: false, currentAutoRunId: state.current_auto_run_id };
     await tx.operationAudit.create({ data: {
       actorType: input.actor.type,
@@ -346,12 +355,15 @@ export async function exitManualTagMode(input: ExitManualTagModeInput): Promise<
       if (prior.action !== "tag.manual.exit") throw new TaggingError("IDEMPOTENCY_CONFLICT");
       return replayResult(auditPayload(prior), payloadFingerprint);
     }
+    await lockEffectiveTagProjectionShared(tx);
     const state = await lockNovelAndState(tx, input.novelId);
     if (state.revision !== input.expectedRevision) throw new TaggingError("REVISION_CONFLICT");
     if (state.mode !== "manual") throw new TaggingError("DATA_INVARIANT_VIOLATION", "Novel is not in manual Tag mode");
     await tx.novelCanonicalTag.deleteMany({ where: { novelId: input.novelId, source: "manual" } });
     const revision = state.revision + 1n;
     await tx.novelTagState.update({ where: { novelId: input.novelId }, data: { mode: "automatic", revision } });
+    // B-38：退出人工模式后这本书回到"映射 + 自动"规则，同一事务里重算（只写差异）。
+    await refreshEffectiveTagsForNovels(tx, [input.novelId]);
     const afterSnapshot = { payloadFingerprint, mode: "automatic", revision: revision.toString(), skipped: false, currentAutoRunId: state.current_auto_run_id };
     await tx.operationAudit.create({ data: {
       actorType: input.actor.type,
@@ -399,10 +411,16 @@ export async function replaceAutoTagSnapshotInTransaction(
     const summary = auditPayload({ afterSnapshot: prior.resultSummary });
     if (summary.mutationFingerprint !== payloadFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
     const state = await tx.novelTagState.findUnique({ where: { novelId: input.novelId } });
+    // B-38：重放分支也对账这本书（便宜，稳定状态零写入），保证"提交过的自动打标"与归属表不会长期分叉。
+    await refreshEffectiveTagsForNovels(tx, [input.novelId]);
     return { mode: state?.mode === "manual" ? "manual" : "automatic", revision: state?.revision ?? 0n, replayed: true, skipped: false, currentAutoRunId: prior.id };
   }
+  // B-38：先拿投影咨询锁（共享）、后拿 `novel` 行锁，见 effective-tag-projection.ts 文件头。
+  await lockEffectiveTagProjectionShared(tx);
   const state = await lockNovelAndState(tx, input.novelId);
   if (state.mode === "manual") {
+    // 人工模式下自动打标被跳过，真源没动；仍重算一次（零写入），与重放分支同一理由。
+    await refreshEffectiveTagsForNovels(tx, [input.novelId]);
     return { mode: "manual", revision: state.revision, replayed: false, skipped: true, currentAutoRunId: state.current_auto_run_id };
   }
   await assertActiveTags(tx, tags.map((tag) => tag.canonicalTagId));
@@ -435,6 +453,8 @@ export async function replaceAutoTagSnapshotInTransaction(
     })) });
   }
   await tx.novelTagState.update({ where: { novelId: input.novelId }, data: { currentAutoRunId: run.id } });
+  // B-38：新一次自动打标已成为"当前这次"，同一事务里重算这本书的分类归属（只写差异）。
+  await refreshEffectiveTagsForNovels(tx, [input.novelId]);
   await tx.operationAudit.create({ data: {
     actorType: "worker",
     action: "tag.auto.replace",

@@ -15,9 +15,14 @@ import {
 } from "../../src/lib/seo/sitemap";
 import {
   createHandlerRegistry,
+  sanitizePersistedTaskError,
   SITEMAP_REFRESH_TASK_TYPE,
   type TaskHandler,
 } from "../../src/lib/tasks";
+import {
+  reconcileAllEffectiveTags,
+  type EffectiveTagChangeSummary,
+} from "../../src/server/tagging/effective-tag-projection";
 
 export const SITEMAP_FILE_LOCK_STALE_MS = 35 * 60 * 1_000;
 
@@ -28,6 +33,8 @@ export type SitemapRefreshPayload = Readonly<{
 
 type Refresh = typeof refreshStaticSitemap;
 type ReleaseLock = typeof releaseSitemapGenerationLock;
+type ReconcileEffectiveTags = (db: PrismaClient) => Promise<EffectiveTagChangeSummary>;
+type ReconcileLog = Pick<Console, "info" | "warn" | "error">;
 
 export type SitemapRefreshHandlerDependencies = Readonly<{
   rootDir?: string;
@@ -36,6 +43,12 @@ export type SitemapRefreshHandlerDependencies = Readonly<{
   buildFamily?: BuildSitemapFamily;
   refresh?: Refresh;
   releaseLock?: ReleaseLock;
+  /**
+   * B-38：构建站点地图之前先对账一次分类归属表（独立事务、只写差异）。生产默认走真实对账
+   * （`reconcileAllEffectiveTags`）；单元测试注入替身。
+   */
+  reconcileEffectiveTags?: ReconcileEffectiveTags;
+  reconcileLog?: ReconcileLog;
 }>;
 
 export function parseSitemapRefreshPayload(value: unknown): SitemapRefreshPayload {
@@ -92,6 +105,48 @@ function lockFailure(code: string, message: string) {
   };
 }
 
+/**
+ * 站点地图刷新前的兜底对账（方案 §4.3「兜底」）。CPS 自己的教训是"靠穷举写入路径来保证一致本身就是
+ * 错的"，所以除了每个写入点同事务重算，再加一道与写入路径无关的全量对账。结果落一行结构化日志：
+ * 稳定状态应为 0/0/0；不为 0 说明有漏掉的写入点或发生过并发，看日志即可发现（级别升到 warn）。
+ *
+ * 🔴 失败只记错误日志、**不中断**站点地图构建：归属表偏旧最坏是某些书在分类页里多/少，站点地图
+ * 照常按当前表内容生成；而让站点地图因为一个兜底步骤整体失败，代价更大。
+ */
+async function reconcileEffectiveTagsBeforeSitemap(
+  db: PrismaClient,
+  reconcile: ReconcileEffectiveTags,
+  log: ReconcileLog,
+): Promise<void> {
+  const startedAt = performance.now();
+  try {
+    const summary = await reconcile(db);
+    const ms = Math.round(performance.now() - startedAt);
+    const changed = summary.inserted + summary.updated + summary.deleted > 0;
+    (changed ? log.warn : log.info).call(log, JSON.stringify({
+      schemaVersion: 1,
+      event: "effective_tag_reconcile",
+      level: changed ? "warn" : "info",
+      inserted: summary.inserted,
+      updated: summary.updated,
+      deleted: summary.deleted,
+      ms,
+    }));
+  } catch (error) {
+    try {
+      log.error(JSON.stringify({
+        schemaVersion: 1,
+        event: "effective_tag_reconcile_failed",
+        level: "error",
+        ms: Math.round(performance.now() - startedAt),
+        error: sanitizePersistedTaskError(error, "effective_tag_reconcile_failed"),
+      }));
+    } catch {
+      // 日志也写不出就算了，站点地图构建不受影响。
+    }
+  }
+}
+
 export function createSitemapRefreshHandler(
   db: PrismaClient,
   dependencies: SitemapRefreshHandlerDependencies = {},
@@ -100,6 +155,8 @@ export function createSitemapRefreshHandler(
   const releaseLock = dependencies.releaseLock ?? releaseSitemapGenerationLock;
   const now = dependencies.now ?? (() => new Date());
   const env = dependencies.env ?? process.env;
+  const reconcileEffectiveTags = dependencies.reconcileEffectiveTags ?? reconcileAllEffectiveTags;
+  const reconcileLog = dependencies.reconcileLog ?? console;
 
   return async ({ lease, heartbeat }) => {
     if (!isSitemapAutoRefreshEnabled(env)) {
@@ -116,6 +173,7 @@ export function createSitemapRefreshHandler(
     }
     const payload = parseSitemapRefreshPayload(lease.payload);
     await heartbeat();
+    await reconcileEffectiveTagsBeforeSitemap(db, reconcileEffectiveTags, reconcileLog);
     const buildFamily = dependencies.buildFamily ?? createSitemapFamilyBuilder(db);
 
     const refreshOnce = () => refresh({

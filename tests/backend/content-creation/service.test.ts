@@ -681,3 +681,58 @@ describe("materializeNovelFromSourceItem — input validation", () => {
     ).rejects.toBeInstanceOf(ContentCreationInputError);
   });
 });
+
+describe("materializeNovelFromSourceItem — B-38 分类归属重算（novel_effective_tag）", () => {
+  const apply = (fake: FakeContentCreationDb, novelSourceItemId: string, requestId: string) =>
+    materializeNovelFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId,
+    });
+
+  it("绑定书目之后、写审计之前，在同一个事务里对新书做一次重算", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Effective Tag Refresh Story" });
+
+    const result = await apply(fake, sourceItem.id, "req-b38-refresh");
+    if (result.outcome !== "created") throw new Error("expected created");
+
+    expect(fake.effectiveTagRefreshNovelIds).toEqual([[result.novelId]]);
+    const order = ["novelSourceItem.updateMany", "effectiveTag.lockShared", "effectiveTag.lockNovels", "effectiveTag.apply", "operationAudit.create"]
+      .map((name) => fake.calls.indexOf(name));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("重算失败 → 整个创建事务回滚：没有新书、书目仍未绑定、没有审计", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Effective Tag Refresh Failure" });
+    fake.effectiveTagApplyError = new Error("effective tag apply failed");
+
+    await expect(apply(fake, sourceItem.id, "req-b38-refresh-fail")).rejects.toThrow("effective tag apply failed");
+
+    expect(fake.novels.size).toBe(0);
+    expect(fake.sourceItems.get(sourceItem.id)).toMatchObject({ novelId: null, status: "pending" });
+    expect(fake.audits).toHaveLength(0);
+  });
+
+  it("dry_run 与 already_exists 重放都不发起重算（没有真源改动）", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Effective Tag No Refresh" });
+
+    await materializeNovelFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "dry_run",
+      actor: ADMIN_ACTOR,
+      requestId: "req-b38-dry",
+    });
+    expect(fake.effectiveTagRefreshNovelIds).toEqual([]);
+
+    await apply(fake, sourceItem.id, "req-b38-first");
+    expect(fake.effectiveTagRefreshNovelIds).toHaveLength(1);
+    const repeat = await apply(fake, sourceItem.id, "req-b38-repeat");
+    expect(repeat.outcome).toBe("already_exists");
+    expect(fake.effectiveTagRefreshNovelIds).toHaveLength(1);
+  });
+});
