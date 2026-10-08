@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "readbackAt": "2026-10-08T17:03:49.589Z",
+  "ownerStatement": "验收通过了",
+  "currentSnapshotUpdated": true,
+  "versionRowUpdated": true,
+  "releaseHandbookUpdated": true,
+  "singleDevelopmentLogMirrorUpdated": true,
+  "unrelatedContentBytePreserved": true,
+  "normalization": "Notion removed one blank line between inserted supplement and following heading",
+  "articleGeneration71BookComparison": "待运营生成后核对",
+  "immutableFinal": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+  "acceptanceCommit": "9f2adf1"
+}
