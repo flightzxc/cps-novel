@@ -106,7 +106,7 @@ export function ReaderSettingsPanel({
         // （控件一个都不能被裁在屏外）、overscroll-contain（滚到头不带动背后的正文）；
         // 底部内边距叠加安全区。桌面端把这几项复位，保持原有的锚定面板形态。
         "fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-novel-lg border-t border-novel-border bg-novel-bg-elevated p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] " +
-        "md:absolute md:inset-x-auto md:top-full md:right-0 md:bottom-auto md:mt-2 md:max-h-none md:w-[22rem] md:overflow-visible md:overscroll-auto md:rounded-novel-lg md:border md:pb-5"
+        "md:absolute md:inset-x-auto md:top-full md:end-0 md:bottom-auto md:mt-2 md:max-h-none md:w-[22rem] md:overflow-visible md:overscroll-auto md:rounded-novel-lg md:border md:pb-5"
       }
     >
       <div className="flex items-center justify-between">

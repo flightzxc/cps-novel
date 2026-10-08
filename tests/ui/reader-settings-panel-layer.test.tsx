@@ -88,8 +88,9 @@ describe("阅读设置面板 · 矮屏滚动与安全区契约（PN-03）", () =
     expect(panel.classList.contains("md:max-h-none")).toBe(true);
     expect(panel.classList.contains("md:overflow-visible")).toBe(true);
     expect(panel.classList.contains("md:overscroll-auto")).toBe(true);
-    // 桌面位置不改：仍是按钮下方、右对齐、定宽。
-    for (const token of ["md:top-full", "md:right-0", "md:bottom-auto", "md:mt-2", "md:w-[22rem]"]) {
+    // 桌面位置不改：仍是按钮下方、贴按钮末端、定宽。末端用逻辑类 md:end-0（从左到右时
+    // 与原先的 md:right-0 计算值相同；从右到左时跟着按钮走，见 rtl-logical-direction.test.tsx）。
+    for (const token of ["md:top-full", "md:end-0", "md:bottom-auto", "md:mt-2", "md:w-[22rem]"]) {
       expect(panel.classList.contains(token), token).toBe(true);
     }
   });

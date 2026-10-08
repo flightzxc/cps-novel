@@ -282,12 +282,15 @@ export function FeaturedHero({
         );
       })}
 
-      {/* 左向压黑：结构改向后不再承担正文对比度（正文在不透明 banner 上），
-          只剩「让左侧氛围不与 banner 抢注意力」这一个作用。 */}
+      {/* 起始侧压黑：结构改向后不再承担正文对比度（正文在不透明 banner 上），
+          只剩「让起始侧氛围不与 banner 抢注意力」这一个作用。
+          🔴 token 里的渐变是物理的 `to right`：从右到左时用 rtl: 变体把整层水平镜像
+          （-scale-x-100），压黑落到右侧（= 起始侧）。色标只有 token 里这一份，不另写
+          一套 `to left`，两边不会漂移；从左到右时变体不生效，渲染与改前一致。 */}
       <div
         aria-hidden="true"
         data-hero-layer="scrim-x"
-        className="pointer-events-none absolute inset-0 -z-20 bg-[image:var(--novel-hero-scrim-x)]"
+        className="pointer-events-none absolute inset-0 -z-20 bg-[image:var(--novel-hero-scrim-x)] rtl:-scale-x-100"
       />
 
       {/* 纵向压黑：页头叠在 Hero 上仍可读 + 底部并入页面底色 */}
