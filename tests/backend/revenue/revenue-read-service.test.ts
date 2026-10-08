@@ -166,9 +166,9 @@ function makeDb(options: {
     channelApp: { findMany: vi.fn(async () => apps) },
     revenueSyncScope: { findUnique: vi.fn(async () => ("scope" in options ? options.scope : { id: SCOPE_ID })) },
     revenueDailyStat: { findMany: vi.fn(async () => options.stats ?? []) },
-    revenueSyncBatch: { findMany: batchFindMany, findFirst: vi.fn(async (..._args: any[]) => options.lastSuccess ?? null) },
+    revenueSyncBatch: { findMany: batchFindMany, findFirst: vi.fn<(...args: any[]) => Promise<any>>(async () => options.lastSuccess ?? null) },
     genericTask: { findFirst: vi.fn(async () => options.activeTask ?? null) },
-    channelAccountCredential: { findMany: vi.fn(async (..._args: any[]) => options.credentials ?? []) },
+    channelAccountCredential: { findMany: vi.fn<(...args: any[]) => Promise<any>>(async () => options.credentials ?? []) },
   };
 }
 const asPrisma = (db: unknown) => db as PrismaClient;

@@ -25,21 +25,21 @@ function makeDb(options: {
 } = {}) {
   const apps = options.apps ?? [app(APP_ID, [{ id: ACCOUNT_ID, accountName: "chenweifeng@qq.com" }])];
   const tx = {
-    genericTask: { create: vi.fn(async (..._args: any[]) => ({})) },
-    operationAudit: { create: vi.fn(async (..._args: any[]) => ({})) },
+    genericTask: { create: vi.fn<(...args: any[]) => Promise<any>>(async () => ({})) },
+    operationAudit: { create: vi.fn<(...args: any[]) => Promise<any>>(async () => ({})) },
   };
-  if (options.createError) tx.genericTask.create = vi.fn(async (..._args: any[]) => { throw options.createError; });
+  if (options.createError) tx.genericTask.create = vi.fn<(...args: any[]) => Promise<any>>(async () => { throw options.createError; });
   let tokenLookups = 0;
   const db = {
-    channelApp: { findMany: vi.fn(async (..._args: any[]) => apps) },
+    channelApp: { findMany: vi.fn<(...args: any[]) => Promise<any>>(async () => apps) },
     genericTask: {
-      findUnique: vi.fn(async (..._args: any[]) => {
+      findUnique: vi.fn<(...args: any[]) => Promise<any>>(async () => {
         tokenLookups += 1;
         return tokenLookups === 1 ? (options.byToken ?? null) : (options.byTokenAfterConflict ?? options.byToken ?? null);
       }),
-      findFirst: vi.fn(async (..._args: any[]) => options.active ?? null),
+      findFirst: vi.fn<(...args: any[]) => Promise<any>>(async () => options.active ?? null),
     },
-    $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<unknown>, ..._args: any[]) => callback(tx)),
+    $transaction: vi.fn<(callback: (client: typeof tx) => Promise<unknown>, ...args: any[]) => Promise<unknown>>(async (callback) => callback(tx)),
   };
   return { db, tx };
 }
