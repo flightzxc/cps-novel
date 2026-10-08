@@ -21,14 +21,20 @@ container_name="cps-novel-b38-effective-tag-pg16-${run_id}"
 database_name="cps_novel_b38_${run_id//-/_}"
 secret_dir="$(mktemp -d "${TMPDIR:-/tmp}/cps-novel-b38-effective-tag-secrets.XXXXXX")"
 cleanup_complete="no"
+verification_passed="no"
 
 cleanup() {
+  local status=$?
   docker rm -f "$container_name" >/dev/null 2>&1 || true
   rm -rf "$secret_dir"
   if ! docker ps -a --format '{{.Names}}' | grep -Fx "$container_name" >/dev/null 2>&1; then
     cleanup_complete="yes"
   fi
   echo "B38_DISPOSABLE_DATABASE_CLEANED=${cleanup_complete}"
+  # 最后一行：只有所有断言都过、且一次性库已清理，才打印 PASS（失败时这一行绝不出现）
+  if [ "$status" -eq 0 ] && [ "$verification_passed" = "yes" ] && [ "$cleanup_complete" = "yes" ]; then
+    echo "B38_EFFECTIVE_TAG_POSTGRES_VERIFICATION=PASS"
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -82,7 +88,15 @@ worker_url="postgresql://worker_app:${worker_password}@127.0.0.1:${host_port}/${
 scheduler_url="postgresql://scheduler_app:${scheduler_password}@127.0.0.1:${host_port}/${database_name}?schema=public"
 analyst_url="postgresql://analyst_ro:${analyst_password}@127.0.0.1:${host_port}/${database_name}?schema=public"
 
+expected_migrations="$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
 DATABASE_URL="$owner_url" npm exec prisma migrate deploy
+applied_migrations="$(docker exec -e PGPASSWORD="$migration_password" "$container_name" psql --no-psqlrc -h 127.0.0.1 -U migration_owner -d "$database_name" -Atqc \
+  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL' | tr -d '[:space:]')"
+if [ "$applied_migrations" != "$expected_migrations" ]; then
+  echo "B38_MIGRATION_COUNT=FAIL applied=${applied_migrations} expected=${expected_migrations}" >&2
+  exit 1
+fi
+echo "B38_MIGRATION_COUNT=PASS applied=${applied_migrations}"
 docker exec \
   -e PGHOST=127.0.0.1 -e PGPORT=5432 -e PGDATABASE="$database_name" \
   -e PGUSER=migration_owner -e PGPASSWORD="$migration_password" \
@@ -121,4 +135,4 @@ NODE
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs
 
 echo "B38_DICTIONARY_DRIFT=0"
-echo "B38_EFFECTIVE_TAG_POSTGRES_VERIFICATION=PASS"
+verification_passed="yes"
