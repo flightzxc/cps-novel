@@ -50,6 +50,12 @@ import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 import { holdChannelAccountForPreview, isAccountLevelPreviewFailure } from "./preview-account-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
 import { logUpstreamCallObservation } from "../observability/upstream-call-log";
+import { logPreviewReadFailure } from "../observability/preview-read-failure-log";
+import {
+  previewReadFailureOutcome,
+  type PreviewReadFailureContext,
+  type PreviewReadFailureLogEvent,
+} from "../observability/preview-read-failure";
 
 export interface MoboreaderCatalogPayload {
   pageIndex: number;
@@ -1163,6 +1169,12 @@ export interface MoboreaderHandlerDependencies {
   adapter?: MoboreaderReadAdapter;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
+  /**
+   * B-36: receives one content-free report per failed Preview upstream read
+   * (`worker/observability/preview-read-failure.ts`). Defaults to the production
+   * stderr JSON sink; tests inject a collector. Never changes the outcome.
+   */
+  onPreviewReadFailure?: (event: PreviewReadFailureLogEvent) => void;
 }
 
 /**
@@ -1595,6 +1607,7 @@ export function createMoboreaderPreviewHandler(
     upstreamRateLimitPolicy: upstreamRateLimitPolicyFromEnv(env),
     onUpstreamObservation: logUpstreamCallObservation,
   });
+  const onPreviewReadFailure = dependencies.onPreviewReadFailure ?? logPreviewReadFailure;
   return async ({ lease, mode, signal }) => {
     if (!isNovelCatalogSyncEnabled(env)) {
       return { status: "failed", error: { code: "feature_disabled", message: "Preview refresh feature is disabled" } };
@@ -1641,22 +1654,49 @@ export function createMoboreaderPreviewHandler(
         },
       };
     }
+    // B-36: both catches below used to be a bare `catch {}` that discarded the
+    // adapter's error, so 34 books that failed deterministically on 2026-10-07
+    // (HTTP 200 from both endpoints — i.e. our own response validation
+    // rejecting them) left no trace of *which* rule fired. They now record a
+    // content-free category via `previewReadFailureOutcome`; the top-level
+    // `code`, `message`, `failed` status and the retry policy (none: the
+    // registration's `maxAttempts` is 1) are exactly what they were.
+    const failureContext: PreviewReadFailureContext = {
+      taskId: lease.taskId,
+      itemId: lease.itemId,
+      mode,
+      attempt: lease.attemptCount,
+      novelId: scope.novelId,
+      novelSourceItemId: scope.novelSourceItemId,
+      seriesId: scope.requests.chapters.seriesId,
+      dataId: scope.requests.material.dataId,
+      agencyId: scope.requests.material.agencyId,
+      language: scope.requests.chapters.language,
+    };
     try {
       await adapter.fetchBookMaterial(scope.requests.material, scope.token, signal);
-    } catch {
-      return {
-        status: "failed",
-        error: { code: "upstream_material_read_failed", message: "MoboReader material read failed" },
-      };
+    } catch (error) {
+      return previewReadFailureOutcome({
+        error,
+        stage: "getbydataid",
+        code: "upstream_material_read_failed",
+        message: "MoboReader material read failed",
+        context: failureContext,
+        sink: onPreviewReadFailure,
+      });
     }
     let preview;
     try {
       preview = await adapter.fetchPreviewChapters(scope.requests.chapters, scope.token, signal);
-    } catch {
-      return {
-        status: "failed",
-        error: { code: "upstream_preview_read_failed", message: "MoboReader Preview read failed" },
-      };
+    } catch (error) {
+      return previewReadFailureOutcome({
+        error,
+        stage: "getchapterinfo",
+        code: "upstream_preview_read_failed",
+        message: "MoboReader Preview read failed",
+        context: failureContext,
+        sink: onPreviewReadFailure,
+      });
     }
     if (preview.chapterList.length === 0) {
       return {

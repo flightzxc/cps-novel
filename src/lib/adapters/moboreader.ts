@@ -13,6 +13,10 @@ import {
   type MoboreaderRateGate,
 } from "./moboreader-rate-limit";
 import {
+  receivedKindOf,
+  type MoboreaderFailureDiagnostic,
+} from "./moboreader-failure-diagnostic";
+import {
   NOOP_UPSTREAM_OBSERVATION,
   NO_GATEWAY_OBSERVATION_HEADERS,
   extractGatewayObservationHeaders,
@@ -165,6 +169,17 @@ export class MoboreaderAdapterError extends Error {
      * it cannot leak credentials, titles, or response bodies into logs.
      */
     readonly detail: string | null = null,
+    /**
+     * B-36: which validation rejected the response, as members of the closed
+     * vocabulary in `./moboreader-failure-diagnostic.ts` plus numbers (row
+     * position, string length). Deliberately NOT folded into `message`, so every
+     * existing assertion on the error text is unaffected; read by
+     * `worker/observability/preview-read-failure.ts`, which re-validates each field
+     * before it is persisted or logged. `null` for the codes that already say
+     * everything (`transport_error`, `request_timeout`, `upstream_http_error`)
+     * and for the not-yet-instrumented `malformed_payload` sites.
+     */
+    readonly diagnostic: MoboreaderFailureDiagnostic | null = null,
   ) {
     super(`MoboReader read failed: ${code}${status === null ? "" : ` (${status})`}${detail ? ` — ${detail}` : ""}`);
     this.name = "MoboreaderAdapterError";
@@ -260,7 +275,25 @@ function describeReceivedShape(value: unknown): string {
   return `typeof ${typeof value}`;
 }
 
-function requiredIdentifier(field: string, value: unknown): string {
+/**
+ * Throws the one error every parse rejection uses — `malformed_payload`, never
+ * retryable — optionally annotated with a B-36 diagnostic. Exists so each
+ * rejection site names *which* validation fired without changing the thrown
+ * class, code, `retryable` flag or (when `detail` is omitted) message.
+ */
+function malformed(diagnostic: MoboreaderFailureDiagnostic, detail: string | null = null): never {
+  throw new MoboreaderAdapterError("malformed_payload", false, null, detail, diagnostic);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredIdentifier(
+  field: string,
+  value: unknown,
+  diagnostic?: Omit<MoboreaderFailureDiagnostic, "receivedType">,
+): string {
   const identifier = optionalIdentifier(value);
   if (identifier === null) {
     throw new MoboreaderAdapterError(
@@ -268,6 +301,7 @@ function requiredIdentifier(field: string, value: unknown): string {
       false,
       null,
       `${field}: expected a non-empty string or a finite number, received ${describeReceivedShape(value)}`,
+      diagnostic ? { ...diagnostic, receivedType: receivedKindOf(value) } : null,
     );
   }
   return identifier;
@@ -355,8 +389,10 @@ export function toApprovedRawEvidence(value: unknown): RawEvidence {
 }
 
 function responseData(value: unknown): Record<string, unknown> {
-  const envelope = record(value);
-  return record(envelope.data);
+  if (!isPlainRecord(value)) malformed({ kind: "envelope_not_object", receivedType: receivedKindOf(value) });
+  const data = value.data;
+  if (!isPlainRecord(data)) malformed({ kind: "data_not_object", receivedType: receivedKindOf(data) });
+  return data;
 }
 
 function nonBlankPromoString(value: unknown): string | null {
@@ -451,7 +487,12 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
 
 export function parseBookMaterialResponse(value: unknown): BookMaterialResponse {
   const data = responseData(value);
-  const item = Array.isArray(data.list) && data.list.length > 0 ? record(data.list[0]) : data;
+  let item: Record<string, unknown> = data;
+  if (Array.isArray(data.list) && data.list.length > 0) {
+    const first: unknown = data.list[0];
+    if (!isPlainRecord(first)) malformed({ kind: "material_item_not_object", receivedType: receivedKindOf(first) });
+    item = first;
+  }
   return {
     dataId: optionalIdentifier(item.dataId ?? item.id),
     seriesId: optionalIdentifier(item.seriesId),
@@ -464,30 +505,73 @@ export function parseBookMaterialResponse(value: unknown): BookMaterialResponse 
 
 export function parsePreviewChaptersResponse(value: unknown): PreviewChaptersResponse {
   const data = responseData(value);
-  if (!Array.isArray(data.chapterList)) throw new MoboreaderAdapterError("malformed_payload", false);
-  const chapterList = data.chapterList.map((value): MoboreaderPreviewChapter => {
-    const row = record(value);
-    const i = integer(row.i);
-    if (i < 1) throw new MoboreaderAdapterError("malformed_payload", false);
-    return {
-      i,
-      chapterID: requiredIdentifier("chapterID", row.chapterID),
-      chapterName: optionalString(row.chapterName),
-      chapterShowName: optionalString(row.chapterShowName),
-      chapterContent: requiredString(row.chapterContent),
-    };
+  const rawChapterList: unknown = data.chapterList;
+  if (!Array.isArray(rawChapterList)) {
+    malformed({ kind: "chapter_list_not_array", receivedType: receivedKindOf(rawChapterList) });
+  }
+  const chapterCount = rawChapterList.length;
+  // Same checks, in the same order, as before B-36 — each one now names itself.
+  // `chapterIndex` is the row's position, `chapterOrdinal`/`chapterId` the row's
+  // own (already validated) identity: where the book is bad, not what it says.
+  const chapterList = rawChapterList.map((rawRow: unknown, chapterIndex): MoboreaderPreviewChapter => {
+    if (!isPlainRecord(rawRow)) {
+      malformed({ kind: "chapter_row_not_object", receivedType: receivedKindOf(rawRow), chapterIndex, chapterCount });
+    }
+    const row = rawRow;
+    const rawOrdinal: unknown = row.i;
+    if (!Number.isSafeInteger(rawOrdinal) || (rawOrdinal as number) < 0) {
+      malformed({ kind: "chapter_ordinal_invalid", receivedType: receivedKindOf(rawOrdinal), chapterIndex, chapterCount });
+    }
+    const i = rawOrdinal as number;
+    if (i < 1) malformed({ kind: "chapter_ordinal_below_one", chapterIndex, chapterOrdinal: i, chapterCount });
+    const chapterID = requiredIdentifier("chapterID", row.chapterID, {
+      kind: "chapter_id_invalid",
+      chapterIndex,
+      chapterOrdinal: i,
+      chapterCount,
+    });
+    const chapterName = optionalString(row.chapterName);
+    const chapterShowName = optionalString(row.chapterShowName);
+    const rawContent: unknown = row.chapterContent;
+    if (typeof rawContent !== "string" || !rawContent.trim()) {
+      malformed({
+        kind: "chapter_content_invalid",
+        receivedType: receivedKindOf(rawContent),
+        ...(typeof rawContent === "string" ? { valueLength: rawContent.length } : {}),
+        chapterIndex,
+        chapterOrdinal: i,
+        chapterId: chapterID,
+        chapterCount,
+      });
+    }
+    return { i, chapterID, chapterName, chapterShowName, chapterContent: rawContent };
   });
   const identities = new Set<string>();
-  for (const chapter of chapterList) {
+  for (const [chapterIndex, chapter] of chapterList.entries()) {
     const identity = `${chapter.i}\n${chapter.chapterID}`;
-    if (identities.has(identity)) throw new MoboreaderAdapterError("malformed_payload", false);
+    if (identities.has(identity)) {
+      malformed({
+        kind: "chapter_identity_duplicate",
+        chapterIndex,
+        chapterOrdinal: chapter.i,
+        chapterId: chapter.chapterID,
+        chapterCount,
+      });
+    }
     identities.add(identity);
   }
-  return {
-    bookId: requiredIdentifier("bookId", data.bookId),
-    currentLanguage: requiredString(typeof data.currentLanguage === "number" ? String(data.currentLanguage) : data.currentLanguage),
-    chapterList,
-  };
+  const bookId = requiredIdentifier("bookId", data.bookId, { kind: "book_id_invalid", chapterCount });
+  const rawLanguage: unknown = data.currentLanguage;
+  const currentLanguage = typeof rawLanguage === "number" ? String(rawLanguage) : rawLanguage;
+  if (typeof currentLanguage !== "string" || !currentLanguage.trim()) {
+    malformed({
+      kind: "current_language_invalid",
+      receivedType: receivedKindOf(rawLanguage),
+      ...(typeof rawLanguage === "string" ? { valueLength: rawLanguage.length } : {}),
+      chapterCount,
+    });
+  }
+  return { bookId, currentLanguage, chapterList };
 }
 
 function retryAfterMs(response: Response): number | null {
@@ -636,7 +720,7 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
             remainingBeforeDispatch,
             gatewayHeaders,
           }));
-          throw new MoboreaderAdapterError("malformed_payload", false, response.status);
+          throw new MoboreaderAdapterError("malformed_payload", false, response.status, null, { kind: "body_not_json" });
         }
       } catch (error) {
         if (error instanceof MoboreaderAdapterError) throw error;
@@ -793,7 +877,7 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
         try {
           return await response.json();
         } catch {
-          throw new MoboreaderAdapterError("malformed_payload", false, response.status);
+          throw new MoboreaderAdapterError("malformed_payload", false, response.status, null, { kind: "body_not_json" });
         }
       }
 
