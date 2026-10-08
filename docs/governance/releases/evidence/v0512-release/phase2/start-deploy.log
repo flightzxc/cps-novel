@@ -1,0 +1,2 @@
+DEPLOY_PID=521819
+DEPLOY_LOG=/opt/cps-novel/logs/release-v0.5.12-84af0d7.log

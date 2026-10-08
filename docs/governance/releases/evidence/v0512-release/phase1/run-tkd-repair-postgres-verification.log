@@ -1,0 +1,14 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+ ✓ |node| tests/integration/article-templates/tkd-repair-postgres.test.ts (17 tests) 382ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  01:03:13
+   Duration  695ms (transform 111ms, setup 0ms, collect 153ms, tests 382ms, environment 0ms, prepare 31ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-tkd-repair-secrets.Mv6AMA/integration-result.json
+TKD_REPAIR_INTEGRATION=PASS passed=17 skipped=0 filtered=false
+TKD_REPAIR_POSTGRES_VERIFICATION=PASS
+TKD_REPAIR_DISPOSABLE_DATABASE_CLEANED=yes

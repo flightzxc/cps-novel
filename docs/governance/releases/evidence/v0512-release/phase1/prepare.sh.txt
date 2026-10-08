@@ -1,0 +1,24 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+cd /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+export PATH="$PWD/.tmp/v0512-phase1/toolchain/bin:$PATH"
+evidence="$PWD/.tmp/v0512-phase1"
+lock=/Users/chenweifeng/Documents/cps海阅/.heavy-test.lock
+until mkdir "$lock" 2>/dev/null; do sleep 15; done
+printf '%s\n' release-v0.5.12 > "$lock/owner"
+cleanup() { local rc=$?; if [ "$(cat "$lock/owner" 2>/dev/null)" = release-v0.5.12 ]; then rm -f "$lock/owner"; rmdir "$lock"; fi; echo "PREPARE_EXIT=$rc"; }
+trap cleanup EXIT
+while ! sysctl -n vm.loadavg | awk '{exit !(($2+0)<=8)}'; do echo "LOAD_WAIT $(sysctl -n vm.loadavg)"; sleep 15; done
+[ "$(git rev-parse HEAD)" = 2763eeddcb3aeaa0719bdeab0ba12a4c669c6e28 ]
+[ -z "$(git status --porcelain=v1)" ]
+[ "$(node --version)" = v20.20.2 ]
+[ "$(npm --version)" = 11.6.2 ]
+[ ! -L node_modules ]
+npm ci > "$evidence/npm-ci.log" 2>&1
+npx prisma generate > "$evidence/prisma-generate.log" 2>&1
+node -p "require('next/package.json').version" | tee "$evidence/next-version.log"
+[ "$(cat "$evidence/next-version.log")" = 16.3.8 ]
+npm ls source-map-js --all > "$evidence/source-map-js.log"
+[ -z "$(git status --porcelain=v1)" ]
+echo PREPARE=PASS

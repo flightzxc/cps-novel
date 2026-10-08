@@ -1,0 +1,301 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.86kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 167B done
+#3 DONE 0.0s
+
+#4 [dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 8.83MB 0.1s done
+#5 DONE 0.1s
+
+#6 [dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#6 CACHED
+
+#7 [dependencies 2/8] WORKDIR /app
+#7 CACHED
+
+#8 [dependencies 4/8] RUN npm install --global npm@11.6.2
+#8 CACHED
+
+#9 [dependencies 5/8] COPY package.json package-lock.json ./
+#9 DONE 0.1s
+
+#10 [dependencies 6/8] RUN npm ci
+#10 4.905 npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+#10 253.3 
+#10 253.3 added 533 packages, and audited 534 packages in 4m
+#10 253.3 
+#10 253.3 175 packages are looking for funding
+#10 253.3   run `npm fund` for details
+#10 253.4 
+#10 253.4 15 vulnerabilities (1 moderate, 12 high, 2 critical)
+#10 253.4 
+#10 253.4 To address issues that do not require attention, run:
+#10 253.4   npm audit fix
+#10 253.4 
+#10 253.4 To address all issues (including breaking changes), run:
+#10 253.4   npm audit fix --force
+#10 253.4 
+#10 253.4 Run `npm audit` for details.
+#10 253.4 npm notice
+#10 253.4 npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+#10 253.4 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+#10 253.4 npm notice To update run: npm install -g npm@11.21.0
+#10 253.4 npm notice
+#10 DONE 253.5s
+
+#11 [dependencies 7/8] COPY prisma ./prisma
+#11 DONE 0.0s
+
+#12 [dependencies 8/8] RUN npx --no-install prisma generate
+#12 1.844 Prisma schema loaded from prisma/schema.prisma
+#12 2.728 
+#12 2.728 ✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 394ms
+#12 2.728 
+#12 2.728 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#12 2.728 
+#12 2.728 Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+#12 2.728 
+#12 DONE 2.8s
+
+#13 [builder 1/2] COPY . .
+#13 DONE 0.1s
+
+#14 [builder 2/2] RUN npm run build
+#14 0.581 
+#14 0.581 > cps-novel@0.5.12 build
+#14 0.581 > next build
+#14 0.581 
+#14 1.178 ▲ Next.js 16.3.8 (Turbopack)
+#14 1.407 ✓ Running next.config.ts took 228ms
+#14 1.420 
+#14 1.492   Creating an optimized production build ...
+#14 10.31 ✓ Compiled successfully in 8.6s
+#14 10.32   Running TypeScript ...
+#14 37.41   Finished TypeScript in 27.1s ...
+#14 37.41   Collecting page data using 17 workers ...
+#14 39.11   Generating static pages using 17 workers (0/22) ...
+#14 39.17   Generating static pages using 17 workers (5/22) 
+#14 39.32   Generating static pages using 17 workers (10/22) 
+#14 39.32   Generating static pages using 17 workers (16/22) 
+#14 39.70 ✓ Generating static pages using 17 workers (22/22) in 587ms
+#14 39.70 Turbopack build encountered 1 warning:
+#14 39.70 ./src/lib/credentials/keyring.ts:26:13
+#14 39.70 Warning: Dynamic filesystem access causes tracing of the whole project
+#14 39.70   [90m24 |[0m   [36mlet[0m value: string;
+#14 39.70   [90m25 |[0m   [36mtry[0m {
+#14 39.70 [33m[1m>[0m [90m26 |[0m     value = readFileSync(filePath, [32m"utf8"[0m).trim();
+#14 39.70   [90m   |[0m             [33m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+#14 39.70   [90m27 |[0m   } [36mcatch[0m {
+#14 39.70   [90m28 |[0m     [36mthrow[0m [36mnew[0m [33mError[0m([32m`[0m${fileVariable[32m} must reference a readable secret file`[0m);
+#14 39.70   [90m29 |[0m   }
+#14 39.70 
+#14 39.70 Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+#14 39.70 This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+#14 39.70 This can slow down deployments or lead to failures when size limits are exceeded.
+#14 39.70 To resolve this, you can
+#14 39.70 - make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+#14 39.70 - only use them in development, or
+#14 39.70 - opt out by adding an ignore comment to the highlighted call: fs.readFileSync(/*turbopackIgnore: true*/ ...), or
+#14 39.70 - remove them.
+#14 39.70 
+#14 39.70 Import traces:
+#14 39.70   #1 [App Route]:
+#14 39.70     ./src/lib/credentials/keyring.ts
+#14 39.70     ./src/lib/credentials/web-ingress-crypto.ts
+#14 39.70     ./src/server/credentials/service.ts
+#14 39.70     ./src/app/api/admin/credentials/metadata/route.ts
+#14 39.70 
+#14 39.70   #2 [App Route]:
+#14 39.70     ./src/lib/credentials/keyring.ts
+#14 39.70     ./src/lib/credentials/keyring.ts
+#14 39.70     ./src/lib/credentials/web-ingress-crypto.ts
+#14 39.70     ./src/server/credentials/service.ts
+#14 39.70     ./src/app/api/admin/credential-tasks/status/route.ts
+#14 39.70 
+#14 39.70   #3 [Server Component]:
+#14 39.70     ./src/lib/credentials/keyring.ts
+#14 39.70     ./src/lib/credentials/web-ingress-crypto.ts
+#14 39.70     ./src/server/credentials/service.ts
+#14 39.70     ./src/server/credentials/index.ts
+#14 39.70     ./src/app/api/admin/_lib/registry.ts
+#14 39.70     ./src/app/api/admin/_lib/deps.ts
+#14 39.70     ./src/app/(admin)/tags/mappings/page.tsx
+#14 39.70 
+#14 39.70 
+#14 39.70   Finalizing page optimization ...
+#14 41.15 
+#14 41.16 Route (app)
+#14 41.16 ┌ ƒ /
+#14 41.16 ├ ƒ /_not-found
+#14 41.16 ├ ƒ /[locale]
+#14 41.16 ├ ƒ /[locale]/blog
+#14 41.16 ├ ƒ /[locale]/blog/[slug]
+#14 41.16 ├ ƒ /[locale]/browse
+#14 41.16 ├ ƒ /[locale]/category/[slug]
+#14 41.16 ├ ƒ /[locale]/novel/[slugParam]
+#14 41.16 ├ ƒ /[locale]/novel/[slugParam]/chapter/[chapterNumber]
+#14 41.16 ├ ƒ /api/admin/canonical-tags
+#14 41.16 ├ ƒ /api/admin/channel-accounts
+#14 41.16 ├ ƒ /api/admin/credential-tasks/status
+#14 41.16 ├ ƒ /api/admin/credentials/metadata
+#14 41.16 ├ ƒ /api/admin/novels
+#14 41.16 ├ ƒ /api/admin/novels/chapters
+#14 41.16 ├ ƒ /api/admin/novels/chapters/content
+#14 41.16 ├ ƒ /api/admin/novels/detail
+#14 41.16 ├ ƒ /api/admin/novels/tags
+#14 41.16 ├ ƒ /api/admin/promo-links
+#14 41.16 ├ ƒ /api/admin/site-settings
+#14 41.16 ├ ƒ /api/admin/sitemap
+#14 41.16 ├ ƒ /api/admin/tag-mappings
+#14 41.16 ├ ƒ /api/admin/tags
+#14 41.16 ├ ƒ /api/admin/tasks
+#14 41.16 ├ ƒ /api/admin/tasks/abort
+#14 41.16 ├ ƒ /api/admin/tasks/detail
+#14 41.16 ├ ƒ /api/admin/tasks/items
+#14 41.16 ├ ƒ /api/admin/tasks/manual-reviews
+#14 41.16 ├ ƒ /api/admin/tasks/manual-reviews/resolve
+#14 41.16 ├ ƒ /api/admin/tasks/pause
+#14 41.16 ├ ƒ /api/admin/tasks/progress
+#14 41.16 ├ ƒ /api/admin/tasks/promo-claim-batch/abort
+#14 41.16 ├ ƒ /api/admin/tasks/promo-claim-batch/pause
+#14 41.16 ├ ƒ /api/admin/tasks/promo-claim-batch/reapprove
+#14 41.16 ├ ƒ /api/admin/tasks/promo-claim-batch/resume
+#14 41.16 ├ ƒ /api/admin/tasks/resume
+#14 41.16 ├ ƒ /api/admin/tasks/retry-catalog-finalize
+#14 41.16 ├ ƒ /api/admin/tasks/retry-failed
+#14 41.16 ├ ƒ /api/health
+#14 41.16 ├ ƒ /api/health/backup
+#14 41.16 ├ ƒ /api/health/worker
+#14 41.16 ├ ƒ /api/novel-locale-check
+#14 41.16 ├ ○ /apple-icon
+#14 41.16 ├ ƒ /articles
+#14 41.16 ├ ƒ /articles/[articleId]
+#14 41.16 ├ ƒ /articles/batch-generate
+#14 41.16 ├ ƒ /articles/batch-novel-rebind
+#14 41.16 ├ ƒ /articles/generate
+#14 41.16 ├ ƒ /articles/new-blog
+#14 41.16 ├ ƒ /blog
+#14 41.16 ├ ƒ /blog/[slug]
+#14 41.16 ├ ƒ /browse
+#14 41.16 ├ ƒ /catalog-sync
+#14 41.16 ├ ƒ /categories
+#14 41.16 ├ ƒ /category/[slug]
+#14 41.16 ├ ƒ /channel-accounts
+#14 41.16 ├ ƒ /dev-preview
+#14 41.16 ├ ƒ /dev-preview/chapter/[chapterNumber]
+#14 41.16 ├ ƒ /dev-preview/collection
+#14 41.16 ├ ƒ /dev-preview/collection-empty
+#14 41.16 ├ ƒ /dev-preview/home
+#14 41.16 ├ ƒ /dev-preview/home-fallback
+#14 41.16 ├ ƒ /dev-preview/home-hero-plain
+#14 41.16 ├ ƒ /dev-preview/home-one
+#14 41.16 ├ ƒ /dev-preview/home-two
+#14 41.16 ├ ƒ /dev-preview/novel
+#14 41.16 ├ ƒ /dev-preview/novel-sparse
+#14 41.16 ├ ƒ /dev-preview/status/error
+#14 41.16 ├ ƒ /dev-preview/status/global-error
+#14 41.16 ├ ƒ /dev-preview/status/not-found
+#14 41.16 ├ ƒ /dev-preview/takedown
+#14 41.16 ├ ƒ /dev-preview/unavailable
+#14 41.16 ├ ƒ /go/[code]
+#14 41.16 ├ ƒ /home-carousel
+#14 41.16 ├ ○ /icon
+#14 41.16 ├ ƒ /indexnow-key.txt
+#14 41.16 ├ ƒ /login
+#14 41.16 ├ ƒ /novel/[slugParam]
+#14 41.16 ├ ƒ /novel/[slugParam]/chapter/[chapterNumber]
+#14 41.16 ├ ƒ /novels
+#14 41.16 ├ ƒ /novels/[novelId]
+#14 41.16 ├ ƒ /novels/[novelId]/chapters/[chapterId]
+#14 41.16 ├ ƒ /promo-links
+#14 41.16 ├ ƒ /revenue
+#14 41.16 ├ ƒ /robots.txt
+#14 41.16 ├ ƒ /settings
+#14 41.16 ├ ƒ /settings/security
+#14 41.16 ├ ƒ /sitemap.xml
+#14 41.16 ├ ƒ /sitemap/[fileName]
+#14 41.16 ├ ƒ /tags
+#14 41.16 ├ ƒ /tags/canonical
+#14 41.16 ├ ƒ /tags/mappings
+#14 41.16 ├ ƒ /tasks
+#14 41.16 ├ ƒ /tasks/[id]
+#14 41.16 ├ ƒ /templates
+#14 41.16 ├ ƒ /two-factor/challenge
+#14 41.16 └ ƒ /two-factor/setup
+#14 41.16 
+#14 41.16 
+#14 41.16 ƒ Proxy (Middleware)
+#14 41.16 
+#14 41.16 ○  (Static)   prerendered as static content
+#14 41.16 ƒ  (Dynamic)  server-rendered on demand
+#14 41.16 
+#14 DONE 41.4s
+
+#15 [runner  3/17] RUN apk add --no-cache bash libc6-compat openssl     && npm install --global npm@11.6.2 tsx@4.21.0
+#15 CACHED
+
+#16 [runner  4/17] RUN addgroup --system --gid 1001 nodejs     && adduser --system --uid 1001 --ingroup nodejs nextjs     && mkdir -p /app/runtime/static-sitemaps     && chown -R nextjs:nodejs /app/runtime
+#16 CACHED
+
+#17 [runner  5/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#17 DONE 0.3s
+
+#18 [runner  6/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#18 DONE 0.0s
+
+#19 [runner  7/17] COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+#19 DONE 0.0s
+
+#20 [runner  8/17] COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+#20 DONE 1.2s
+
+#21 [runner  9/17] COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
+#21 DONE 0.0s
+
+#22 [runner 10/17] COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+#22 DONE 0.0s
+
+#23 [runner 11/17] COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+#23 DONE 0.1s
+
+#24 [runner 12/17] COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
+#24 DONE 0.0s
+
+#25 [runner 13/17] COPY --from=builder --chown=nextjs:nodejs /app/scheduler ./scheduler
+#25 DONE 0.0s
+
+#26 [runner 14/17] COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+#26 DONE 0.0s
+
+#27 [runner 15/17] COPY --from=builder --chown=nextjs:nodejs /app/infra ./infra
+#27 DONE 0.0s
+
+#28 [runner 16/17] COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+#28 DONE 0.0s
+
+#29 [runner 17/17] RUN set -eu;     test -n "0.5.12";     test -n "v0.5.12";     test "0.5.12" != "latest";     test "$(node -p 'require("./package.json").version')" = "0.5.12";     echo "84af0d7ef5ef36b06fa9783c114fe831adab4e13" | grep -Eq '^[0-9a-f]{40}$';     node -e 'if (!Number.isFinite(Date.parse(process.argv[1]))) process.exit(1)' "2026-10-08T16:06:54Z";     printf '{"version":"%s","commit":"%s","builtAt":"%s"}\n'       "0.5.12" "84af0d7ef5ef36b06fa9783c114fe831adab4e13" "2026-10-08T16:06:54Z" > /app/.build-metadata.json;     chmod 0444 /app/.build-metadata.json
+#29 DONE 0.5s
+
+#30 exporting to image
+#30 exporting layers
+#30 exporting layers 1.4s done
+#30 writing image sha256:26bcb1b6f11fd2caaad73dcfa03a4dab60ad99d09ca7951a759a45ce10f381f2
+#30 writing image sha256:26bcb1b6f11fd2caaad73dcfa03a4dab60ad99d09ca7951a759a45ce10f381f2 done
+#30 naming to docker.io/library/cps-novel:cutover-local-84af0d7 done
+#30 DONE 1.4s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/h1vm2wtppu4jld724eylvruku
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+curl: (52) Empty reply from server
+BRAND_IMAGE=PASS image=cps-novel:cutover-local-84af0d7 status=200 content_type=image/png sha256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb

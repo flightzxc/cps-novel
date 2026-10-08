@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+cd /opt/cps-novel/releases/84af0d7ef5ef36b06fa9783c114fe831adab4e13
+export GIT_COMMIT=84af0d7ef5ef36b06fa9783c114fe831adab4e13 CPS_NOVEL_APP_IMAGE=cps-novel:0.5.12-84af0d7 PREPROD_RELEASE_MANIFEST=/opt/cps-novel/shared/artifacts/staging/84af0d7ef5ef36b06fa9783c114fe831adab4e13.json
+source scripts/preproduction/lib.sh
+preprod_load_env
+scripts/preproduction/preflight.sh </dev/null
+echo 'CURL_CONFIG_PATH_AVAILABLE='
+printf '%s\n' "$PREPROD_CURL_CONFIG"

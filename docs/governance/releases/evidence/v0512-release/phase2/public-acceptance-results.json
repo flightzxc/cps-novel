@@ -1,0 +1,59 @@
+{
+  "naver": {
+    "label": "naver",
+    "path": "/naver07aa70d2794ed3e5288b204fb467ee18.html",
+    "http": 200,
+    "seconds": 1.191678,
+    "bytes": 67,
+    "sha256": "80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431",
+    "redirects": 0
+  },
+  "en-category-page2": {
+    "label": "en-category-page2",
+    "path": "/category/female-audience?page=2",
+    "http": 200,
+    "seconds": 5.06657,
+    "h1": "Female Audience Novels",
+    "title": "Female Audience Novels - Page 2 | PulseNovel",
+    "description": "Discover Female Audience novels on PulseNovel.",
+    "works": [
+      189
+    ],
+    "pagination": "Previous 2 / 10 Next"
+  },
+  "ko-category": {
+    "label": "ko-category",
+    "path": "/ko/category/female-audience",
+    "http": 200,
+    "seconds": 3.496121,
+    "h1": "소설: 여성향",
+    "title": "소설: 여성향 | PulseNovel",
+    "description": "PulseNovel에서 ‘여성향’ 카테고리의 소설을 만나보세요.",
+    "works": [],
+    "pagination": "1 / 12 다음"
+  },
+  "es-category": {
+    "label": "es-category",
+    "path": "/es/category/female-audience",
+    "http": 200,
+    "seconds": 3.240747,
+    "h1": "Novelas: Para lectoras",
+    "title": "Novelas: Para lectoras | PulseNovel",
+    "description": "Descubre novelas de la categoría «Para lectoras» en PulseNovel.",
+    "works": [],
+    "pagination": "1 / 12 Siguiente"
+  },
+  "browse-page2": {
+    "label": "browse-page2",
+    "path": "/browse?page=2",
+    "http": 200,
+    "seconds": 3.537887,
+    "h1": "All works",
+    "title": "All works - Page 2 | PulseNovel",
+    "description": "Published novels.",
+    "works": [
+      240
+    ],
+    "pagination": "Previous 2 / 12 Next"
+  }
+}

@@ -1,0 +1,14 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+ ✓ |node| tests/integration/tasks/promo-claim-batch-control-postgres.test.ts (25 tests) 1580ms
+
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+   Start at  01:01:02
+   Duration  2.11s (transform 252ms, setup 0ms, collect 378ms, tests 1.58s, environment 0ms, prepare 33ms)
+
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+PROMO_CLAIM_BATCH_CONTROL_DICTIONARY_DRIFT=0
+PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
+PROMO_CLAIM_BATCH_CONTROL_DISPOSABLE_DATABASE_CLEANED=yes

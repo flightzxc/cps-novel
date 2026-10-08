@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+final=84af0d7ef5ef36b06fa9783c114fe831adab4e13
+log=/opt/cps-novel/logs/release-v0.5.12-84af0d7.log
+cd "/opt/cps-novel/releases/$final"
+if test -e "$log"; then echo "DEPLOY_LOG_EXISTS=$log"; exit 65; fi
+APPROVED_GIT_COMMIT="$final" PREPROD_APPROVED_MIGRATION=YES setsid nohup bash -c 'date -u +DEPLOY_STARTED_AT=%Y-%m-%dT%H:%M:%SZ; scripts/preproduction/release.sh deploy --manifest /opt/cps-novel/shared/artifacts/staging/84af0d7ef5ef36b06fa9783c114fe831adab4e13.json 2>&1 | while IFS= read -r release_line; do printf "%s %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$release_line"; done; release_rc=${PIPESTATUS[0]}; date -u +DEPLOY_FINISHED_AT=%Y-%m-%dT%H:%M:%SZ; echo RELEASE_EXIT=$release_rc; exit "$release_rc"' </dev/null >"$log" 2>&1 &
+echo "DEPLOY_PID=$!"
+echo "DEPLOY_LOG=$log"

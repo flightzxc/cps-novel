@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+umask 077
+source scripts/lib/p1-12-local-env.sh
+prepare_p1_12_local_environment
+export X8_BACKUP_DIR="$PWD/.tmp/v0512-phase1/compose-fixtures/backups"
+export X8_BASE_BACKUP_DIR="$PWD/.tmp/v0512-phase1/compose-fixtures/base-backups"
+export X8_TLS_DIR="$PWD/.tmp/v0512-phase1/compose-fixtures/tls"
+export X8_NGINX_RUNTIME_DIR="$PWD/.tmp/v0512-phase1/compose-fixtures/nginx"
+export X8_BACKUP_PGPASS_FILE="$PWD/.tmp/v0512-phase1/compose-fixtures/backup.pgpass"
+mkdir -p "$X8_BACKUP_DIR" "$X8_BASE_BACKUP_DIR" "$X8_TLS_DIR" "$X8_NGINX_RUNTIME_DIR"
+touch "$X8_BACKUP_PGPASS_FILE"
+docker compose -f docker-compose.yml config --format json > .tmp/v0512-phase1/compose-local.json
+docker compose -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json > .tmp/v0512-phase1/compose-x8.json
+docker compose -f docker-compose.yml -f infra/preproduction/docker-compose.yml config --format json > .tmp/v0512-phase1/compose-preprod.json
+for scope in local x8 preprod; do
+ case "$scope" in
+  local)
+   docker compose --project-directory "$PWD" -f "$PWD/.tmp/v0512-phase1/compose-baseline/docker-compose.yml" config --format json > ".tmp/v0512-phase1/compose-$scope-baseline.json";;
+  x8)
+   docker compose --project-directory "$PWD" -f "$PWD/.tmp/v0512-phase1/compose-baseline/docker-compose.yml" -f "$PWD/.tmp/v0512-phase1/compose-baseline/infra/production-like/docker-compose.yml" config --format json > ".tmp/v0512-phase1/compose-$scope-baseline.json";;
+  preprod)
+   docker compose --project-directory "$PWD" -f "$PWD/.tmp/v0512-phase1/compose-baseline/docker-compose.yml" -f "$PWD/.tmp/v0512-phase1/compose-baseline/infra/preproduction/docker-compose.yml" config --format json > ".tmp/v0512-phase1/compose-$scope-baseline.json";;
+ esac
+done
+python3 .tmp/v0512-phase1/check-compose.py

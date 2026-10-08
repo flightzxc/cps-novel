@@ -1,0 +1,23 @@
+REVENUE_DASHBOARD_MIGRATION_DIFF=0
+REVENUE_DASHBOARD_GRANTS_REPLAY_1=PASS
+REVENUE_DASHBOARD_GRANTS_REPLAY_2=PASS
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+stderr | tests/integration/revenue/revenue-dashboard-postgres.test.ts > 收益看板 · 真实 PostgreSQL（worker_app 写、web_app 读与入队） > 失败路径：也在 protectedWrite 里（以 worker_app）落一条脱敏的 failed 批次 > 经真实 processOneWorkerCycle：失败条目也能终态化（任务 failed）并留下 failed 批次
+{"family":"generic","taskType":"changdu.revenue_sync.v1","taskId":"e604197b-3a53-410b-ba08-7f2fb84f625c","itemId":"7e3c7d21-2163-4b81-82b4-d6530b56c255","workerId":"revenue-worker-test","errorKind":"credential_not_star_scope","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:01:35.806Z"}
+
+ ✓ |node| tests/integration/revenue/revenue-dashboard-postgres.test.ts (24 tests) 1112ms
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  01:01:34
+   Duration  1.59s (transform 246ms, setup 0ms, collect 365ms, tests 1.11s, environment 0ms, prepare 28ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-revenue-dashboard-secrets.TChyWt/integration-result.json
+  tests/integration/revenue/revenue-dashboard-postgres.test.ts passed=24 skipped=0
+REVENUE_DASHBOARD_INTEGRATION=PASS files=1 passed=24 skipped=0
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+REVENUE_DASHBOARD_DICTIONARY_DRIFT=0
+REVENUE_DASHBOARD_POSTGRES_VERIFICATION=PASS
+REVENUE_DASHBOARD_DISPOSABLE_DATABASE_CLEANED=yes

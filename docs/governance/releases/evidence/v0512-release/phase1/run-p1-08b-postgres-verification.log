@@ -1,0 +1,164 @@
+Prisma schema loaded from prisma/schema.prisma
+The schema at prisma/schema.prisma is valid 🚀
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 183ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_p1_06_p1_07_p1_08b_20261009005942_47240", schema "public" at "127.0.0.1:65447"
+
+23 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_p1_06_p1_07_p1_08b_20261009005942_47240", schema "public" at "127.0.0.1:65447"
+
+23 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+No difference detected.
+
+No difference detected.
+
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+ ✓ |node| tests/integration/database/p1-06-postgres.test.ts (7 tests) 112ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  00:59:50
+   Duration  321ms (transform 24ms, setup 0ms, collect 29ms, tests 112ms, environment 0ms, prepare 36ms)
+
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+P1_07_INDEX_PLANS={"channel_sync_task_item":{"pending":["channel_sync_task_item_pending_global_idx","channel_sync_active_scope_uidx"],"expired":["channel_sync_task_item_expired_lease_idx","channel_sync_type_status_created_idx"]},"generic_task_item":{"pending":["generic_task_item_pending_global_idx","generic_task_active_scope_uidx"],"expired":["generic_task_item_expired_lease_idx","generic_task_origin_key"]}}
+ ✓ |node| tests/integration/tasks/p1-07-postgres.test.ts (28 tests) 6506ms
+   ✓ P1-07 PostgreSQL 16 runtime > serializes same-parent recompute before taking a fresh aggregate snapshot  371ms
+   ✓ P1-07 PostgreSQL 16 runtime > recovers after a real worker child process is killed and restarted  1053ms
+   ✓ P1-07 PostgreSQL 16 runtime > bounds an abort-ignoring handler and fences its late result  367ms
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  00:59:51
+   Duration  6.98s (transform 165ms, setup 0ms, collect 232ms, tests 6.51s, environment 0ms, prepare 29ms)
+
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+ ✓ |node| tests/integration/auth/p1-08b-postgres-auth.test.ts (8 tests) 728ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  00:59:58
+   Duration  1.04s (transform 93ms, setup 0ms, collect 135ms, tests 728ms, environment 0ms, prepare 39ms)
+
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+stderr | tests/integration/credentials/p1-08b-credential-worker.test.ts > P1-08B Credential Worker > allows one concurrent payload and explicitly conflicts the mismatched retry
+[db-retry] {"op":"credentials.addOrReplaceCredential","attempt":1,"delay":520,"error":"P2010: Invalid `prisma.$queryRaw()` invocation: Raw query failed. Code: `40001`. Message: `could not serialize access due to concurrent update`","itemId":"08000000-0000-4000-8000-000000000002","idempotencyKey":"08d7fc6e-3657-4cc7-bd86-7aa095aee10e"}
+
+stderr | tests/integration/credentials/p1-08b-credential-worker.test.ts > P1-08B Credential Worker > never reactivates superseded credentials
+{"family":"generic","taskType":"credential.validate.v1","taskId":"1ab6a4bb-9aa1-4f1d-a3c1-55b0d4bc1e7c","itemId":"a4e615ed-ca2d-4319-8ae6-e80f2702c440","workerId":"p108b-worker","errorKind":"credential_validation_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:02.428Z"}
+
+stderr | tests/integration/credentials/p1-08b-credential-worker.test.ts > P1-08B Credential Worker > returns account_inactive and prevents ambiguous active rows at the database boundary
+{"family":"generic","taskType":"credential.validate.v1","taskId":"4215c2f4-ebb8-472f-b07b-8df12518fce8","itemId":"934a4f12-9f4d-4027-bce6-0d762f0b67f5","workerId":"p108b-worker","errorKind":"account_inactive","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:02.601Z"}
+
+ ✓ |node| tests/integration/credentials/p1-08b-credential-worker.test.ts (16 tests) 1976ms
+   ✓ P1-08B Credential Worker > allows one concurrent payload and explicitly conflicts the mismatched retry  622ms
+
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Start at  01:00:00
+   Duration  2.40s (transform 173ms, setup 0ms, collect 254ms, tests 1.98s, environment 0ms, prepare 33ms)
+
+POSTGRES_VERSION=16.14 (Debian 16.14-1.pgdg13+1)
+MIGRATION_DEPLOY=PASS
+MIGRATION_REAPPLY=PASS
+SCHEMA_DIFF=PASS
+P1_06_REGRESSION=PASS
+P1_07_REGRESSION=PASS
+P1_08B_POSTGRES_VERIFICATION=PASS
+DISPOSABLE_DATABASE_CLEANED=yes

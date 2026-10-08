@@ -1,0 +1,13 @@
+{
+  "worktreeCreation": "Desktop tool returned Not a git repository at parent cwd; used git worktree add from exact baseline into planned independent path.",
+  "operationsHostsConnected": false,
+  "deploymentPerformed": false,
+  "wrapperCorrections": [
+    {
+      "step": "compose baseline comparison",
+      "cause": "macOS Bash 3.2 set -u treats an empty array expansion as unbound variable.",
+      "fix": "Use explicit Compose invocation for each of the three baseline stacks.",
+      "evidence": "compose-attempt1.log and gate-summary.tsv"
+    }
+  ]
+}

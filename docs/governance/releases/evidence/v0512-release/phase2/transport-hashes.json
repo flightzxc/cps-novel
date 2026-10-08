@@ -1,0 +1,20 @@
+[
+  {
+    "name": "cps-novel-0.5.12-84af0d7.tar.zst",
+    "sha256": "ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca",
+    "bytes": 331715760,
+    "path": "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.12/.tmp/preproduction-archive/cps-novel-0.5.12-84af0d7.tar.zst"
+  },
+  {
+    "name": "84af0d7ef5ef36b06fa9783c114fe831adab4e13.json",
+    "sha256": "a441e1242dbb66729dbc1a9a463ae41c608d576d8e5089c05c15077d18a6488a",
+    "bytes": 1520,
+    "path": "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.12/.tmp/preproduction-archive/84af0d7ef5ef36b06fa9783c114fe831adab4e13.json"
+  },
+  {
+    "name": "cps-novel-v0.5.12.bundle",
+    "sha256": "5162e2485dea411835a5e241453e0095ca74d888fbd2f5e8f8e6d945687169c3",
+    "bytes": 819134,
+    "path": "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.12/.tmp/v0512-phase2/cps-novel-v0.5.12.bundle"
+  }
+]

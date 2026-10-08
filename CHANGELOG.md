@@ -3,7 +3,27 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-08 · 共 1174 个 commit
+生成时间：2026-10-08 · 共 1191 个 commit
+
+## v0.5.12
+
+- `84af0d7` 2026-10-09 发布：准备海阅 v0.5.12 六文件版本身份  — _codex · GPT-6_
+- `2763eed` 2026-10-09 合并：v0.5.12 分类页文案按第三方验收改 ru/th/ko/zh-Hant 共 10 条  — _海阅上线主控 · claude-opus-5-5_
+- `e8fa978` 2026-10-09 fix(i18n): 分类页文案按第三方验收逐字替换 ru/th/ko/zh-Hant 共 10 条  — _claude-code · Claude Sonnet 5.5_
+- `89bbb83` 2026-10-08 合并：v0.5.12 分类名为短语时，描述兜底句与浏览页标题的 10 语译文改通顺  — _海阅上线主控 · claude-opus-5-5_
+- `82c87c0` 2026-10-08 fix(i18n): 分类名是短语时，描述兜底句与浏览页标题的 10 个语种译文改通顺  — _claude-code · Claude Sonnet 5.5_
+- `203a5a6` 2026-10-08 合并：v0.5.12 Next.js 16.3.8 安全升级、Naver 站点验证文件、任务中心「畅读收益同步」中文名  — _海阅上线主控 · claude-opus-5-5_
+- `c379da2` 2026-10-08 合并：v0.5.12 文章网址名过短时追加本地化词  — _海阅上线主控 · claude-opus-5-5_
+- `fa4cecf` 2026-10-08 修复(文章生成)：网址名过短时追加该语种的本地化词，不再 slug_unhealthy 拒绝  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `c111eb2` 2026-10-08 修复：任务中心补「畅读收益同步」中文类型名  — _v0512-small-items-sonnet · claude-sonnet-5-5_
+- `c89fce2` 2026-10-08 新增：Naver 站点验证文件  — _v0512-small-items-sonnet · claude-sonnet-5-5_
+- `f4e641b` 2026-10-08 依赖：Next.js 升到 16.3.8（修 GHSA-cjq9-62q9-8jv4 等）  — _v0512-small-items-sonnet · claude-sonnet-5-5_
+- `87bfb79` 2026-10-08 合并：v0.5.12 分类页运营需求（标题加 Novels、作品数改可浏览总数）  — _海阅上线主控 · claude-opus-5-5_
+- `0ceac1d` 2026-10-08 fix(collection): 分类页与 /browse 标题下的作品数改为可浏览总数  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `b5532d2` 2026-10-08 feat(category): 前台分类页 H1/标题/分享标题/面包屑 = 分类名 + Novels  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `8c19f67` 2026-10-08 feat(i18n): 新增 collection.categoryHeading（15 语），供前台分类页标题用  — _claude-code · Claude Sonnet 5.5_
+- `274b990` 2026-10-08 发版：补齐 v0.5.11 Git 与 Notion 回读收据  — _codex · GPT-6_
+- `47b89f3` 2026-10-08 发版：登记海阅 v0.5.11 正式站部署与受限验收  — _codex · GPT-6_
 
 ## v0.5.11
 

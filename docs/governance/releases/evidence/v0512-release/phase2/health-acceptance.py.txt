@@ -1,0 +1,26 @@
+from pathlib import Path
+import subprocess,json,time
+p=Path('.tmp/v0512-phase2')
+rows=[]
+if (p/'health-requests.json').exists():rows=json.loads((p/'health-requests.json').read_text())
+def fetch(path,label):
+    body=p/(label+'.json')
+    origin='https://pulsenovels.com' if path=='/api/health' else 'https://zbcwf.pulsenovels.com'
+    output=subprocess.check_output(['curl','--config',str(p/'curl-auth.conf'),'--proxy','http://127.0.0.1:7899','--silent','--show-error','--max-time','30','--output',str(body),'--write-out','%{http_code} %{time_total}',origin+path],text=True).strip().split()
+    d=json.loads(body.read_text())
+    row={'label':label,'path':path,'http':int(output[0]),'seconds':float(output[1])}
+    rows.append(row)
+    assert len(rows)<=5,'HEALTH_REQUEST_BUDGET_EXCEEDED'
+    (p/'health-requests.json').write_text(json.dumps(rows,indent=2)+'\n')
+    assert row['http']==200,(label,row['http'])
+    return d,row
+d,r=fetch('/api/health','health')
+assert d['ok'] and d['build']['version']=='0.5.12' and d['build']['commit']=='84af0d7ef5ef36b06fa9783c114fe831adab4e13'
+assert d['metadataConsistency']['status']=='passed' and d['database']['status']=='passed'
+print('HEALTH_IDENTITY=PASS '+json.dumps(d),flush=True)
+for label in ['worker-warmup','worker-sample1','worker-sample2','worker-sample3']:
+    if label!='worker-warmup':time.sleep(10)
+    d,r=fetch('/api/health/worker',label)
+    assert d['workerStatus']=='ok' and d['expiredLocks']==0
+    print(json.dumps({**r,'workerStatus':d['workerStatus'],'expiredLocks':d['expiredLocks']}),flush=True)
+print('WORKER_HEALTH_SAMPLES=PASS warmup=1 samples=3 interval_seconds=10')

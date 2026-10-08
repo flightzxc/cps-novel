@@ -1,0 +1,8 @@
+{
+  "kind": "handoff-versus-Dockerfile contradiction",
+  "handoffClaim": "vitest and tinypool are development dependencies that do not enter the image.",
+  "observed": "Final image contains vitest 3.2.7 and tinypool 1.1.1; Dockerfile:53 copies the complete builder node_modules into runner.",
+  "evidence": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/v0512-phase1/archive-runtime-dependencies-detail.json",
+  "action": "Stopped and reported; no Dockerfile or dependency changes, no deployment. Requires Owner correction or decision before treating phase 1 as unconditionally accepted.",
+  "auditScope": "Required npm audit --omit=dev remains PASS: 0 critical, exact five high. Full audit reports two critical. Package presence does not establish runtime exploitability."
+}

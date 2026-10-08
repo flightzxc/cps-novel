@@ -1,0 +1,26 @@
+[en-category-page2] /category/female-audience?page=2
+<h1 class="font-novel-serif text-3xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-[2.5rem]">Female Audience Novels</h1>
+<title>Female Audience Novels - Page 2 | PulseNovel</title>
+<meta name="description" content="Discover Female Audience novels on PulseNovel."/>
+works fragment: em]">Female Audience Novels</h1><p class="mt-4 text-sm text-novel-fg-subtle tabular-nums">189 works</p></header><div class="pt-10 md:pt-14"><ul class="grid list-none gap-x-4 p-0 md:gap-x-7 md:gap-y-10 lg:grid-cols-5 grid-cols-2 sm:grid-cols
+pagination text: 2 / 10
+
+[ko-category] /ko/category/female-audience
+<h1 class="font-novel-serif text-3xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-[2.5rem]">소설: 여성향</h1>
+<title>소설: 여성향 | PulseNovel</title>
+<meta name="description" content="PulseNovel에서 ‘여성향’ 카테고리의 소설을 만나보세요."/>
+pagination text: 1 / 12
+
+[es-category] /es/category/female-audience
+<h1 class="font-novel-serif text-3xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-[2.5rem]">Novelas: Para lectoras</h1>
+<title>Novelas: Para lectoras | PulseNovel</title>
+<meta name="description" content="Descubre novelas de la categoría «Para lectoras» en PulseNovel."/>
+pagination text: 1 / 12
+
+[browse-page2] /browse?page=2
+<h1 class="font-novel-serif text-3xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-[2.5rem]">All works</h1>
+<title>All works - Page 2 | PulseNovel</title>
+<meta name="description" content="Published novels."/>
+works fragment: currently available to read.</p><p class="mt-4 text-sm text-novel-fg-subtle tabular-nums">240 works</p></header><div class="pt-10 md:pt-14"><ul class="grid list-none gap-x-4 p-0 md:gap-x-7 md:gap-y-10 lg:grid-cols-5 grid-cols-2 sm:grid-cols
+pagination text: 2 / 12
+

@@ -1,0 +1,1 @@
+Direct transfer deliberately interrupted with SIGINT after degrading to about 0.2 MB/s. Preserve rsync partial file and resume through the successfully probed local HTTP proxy. No services or env changed.

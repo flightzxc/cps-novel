@@ -1,0 +1,3 @@
+COMPOSE_CONTRACT=PASS scope=local added_variables=0 removed_variables=0
+COMPOSE_CONTRACT=PASS scope=x8 added_variables=0 removed_variables=0
+COMPOSE_CONTRACT=PASS scope=preprod added_variables=0 removed_variables=0

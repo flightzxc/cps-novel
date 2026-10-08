@@ -1,0 +1,19 @@
+import json
+from pathlib import Path
+p=Path('.tmp/v0512-phase1')
+for scope in ['local','x8','preprod']:
+ d=json.loads((p/f'compose-{scope}.json').read_text())
+ b=json.loads((p/f'compose-{scope}-baseline.json').read_text())
+ assert set(d['services'])==set(b['services']),scope
+ for service,s in d['services'].items():
+  current=set(s.get('environment',{}));baseline=set(b['services'][service].get('environment',{}))
+  assert current==baseline,(scope,service,current-baseline,baseline-current)
+ for k in ['web','worker','worker-light','scheduler']:
+  e=d['services'][k].get('environment',{})
+  for n in ['REVENUE_VIEW_ROLES','REVENUE_VIEW_USER_IDS']:
+   if k=='web':assert e.get(n)==('super_admin' if n.endswith('ROLES') else ''),(scope,k,n)
+   else:assert n not in e,(scope,k,n)
+  for n in ['FEATURE_INDEXNOW_OUTBOX','INDEXNOW_OUTBOX_ALLOW_WRITE']:
+   if k=='scheduler':assert n not in e,(scope,k,n)
+   else:assert str(e.get(n)).lower()=='false',(scope,k,n)
+ print('COMPOSE_CONTRACT=PASS scope='+scope+' added_variables=0 removed_variables=0')

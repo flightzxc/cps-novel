@@ -1,0 +1,136 @@
+Prisma schema loaded from prisma/schema.prisma
+The schema at prisma/schema.prisma is valid 🚀
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 171ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "p1_07_p1_13_phase_d_010019_48313_1805", schema "public" at "127.0.0.1:49357"
+
+23 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+POSTGRES_VERSION=16.14 (Debian 16.14-1.pgdg13+1)
+TEST_DB_ISOLATION=UNIQUE_DATABASE_PER_RUN name=p1_07_p1_13_phase_d_010019_48313_1805 port=49357
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+P1_07_INDEX_PLANS={"channel_sync_task_item":{"pending":["channel_sync_task_item_pending_global_idx","channel_sync_active_scope_uidx"],"expired":["channel_sync_task_item_expired_lease_idx","channel_sync_type_status_created_idx"]},"generic_task_item":{"pending":["generic_task_item_pending_global_idx","generic_task_active_scope_uidx"],"expired":["generic_task_item_expired_lease_idx","generic_task_origin_key"]}}
+ ✓ |node| tests/integration/tasks/p1-07-postgres.test.ts (28 tests) 4271ms
+   ✓ P1-07 PostgreSQL 16 runtime > recovers after a real worker child process is killed and restarted  439ms
+ ✓ |node| tests/integration/tasks/catalog-finalize-postgres.test.ts (8 tests) 940ms
+ ✓ |node| tests/integration/tasks/p1-13-postgres-acceptance.test.ts (6 tests) 741ms
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > blocks finalize before Preview staging when the feature gate closes
+{"family":"generic","taskType":"catalog_scan","taskId":"c206c04d-a192-46db-905d-be54d431fcca","itemId":"11b5c0bd-6cfc-4bc9-9e42-1831fc64e71d","workerId":"p2-05-worker","errorKind":"feature_disabled","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:33.313Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > blocks finalize before Preview staging when the write gate closes
+{"family":"generic","taskType":"catalog_scan","taskId":"66c4da53-9794-435e-9e5c-86f9fe2cfd7d","itemId":"412a2ac7-4e7f-4c4c-a8e4-b37d9ae91498","workerId":"p2-05-worker","errorKind":"write_disabled","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:33.461Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > keeps successful positive facts after later partial failure and skips incomplete snapshots
+{"family":"generic","taskType":"catalog_scan","taskId":"a8382d7d-f0ef-48bb-9a14-43dde7c6e3be","itemId":"b187e039-a2bc-4ab8-83d0-5659c47bde7c","workerId":"p2-05-worker","errorKind":"upstream_error","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:35.284Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > records upstream_error and does not continue later catalog pages
+{"family":"generic","taskType":"catalog_scan","taskId":"a30d783f-5e75-4dc7-9eaf-32534c2432a6","itemId":"a7bd40b2-5ea3-4ac8-8980-d8263a329804","workerId":"p2-05-worker","errorKind":"upstream_error","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:36.662Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (getbydataid)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"2b0d01f3-4fac-4c62-8a42-bf588e5c6cee","itemId":"ca81f98d-f121-4a1b-81b6-3a093774f5b2","workerId":"preview-one-e5485ff9-34bb-48fb-a321-3dec8fffc56e","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:37.298Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (getchapterinfo)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"3501e45b-ad29-4c09-b505-86fd19b4a103","itemId":"4c89d6e5-952f-4601-aa9f-912bf751e7ce","workerId":"preview-one-0c8dd043-2e9d-4bd5-ad91-5c865e26e270","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:37.500Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (source_app_excluded)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"1bbda81e-46d2-47d2-ad04-9fe33b414272","itemId":"4f66baf7-aa26-4eff-9a3c-ee4e68089b8e","workerId":"preview-one-ef2f868d-0175-4d31-83bd-b93b4cbe39be","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:37.689Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (channel_inactive)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"3dcf6e63-03b4-4dd0-a6fd-95a9c26aa9ed","itemId":"fb1393a5-140f-42c0-bd08-ed0fbe033552","workerId":"preview-one-a8af0c60-0c49-46af-a4d5-bb61209e6f7c","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:37.860Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (account_disabled)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"aba0bc52-5d7c-4cf5-a788-46fe5a1a9be4","itemId":"99838066-2f7d-4410-9ff1-cc31b7fb7a48","workerId":"preview-one-e2f1f378-8689-49a1-871d-cc266788c465","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T16:00:38.035Z"}
+
+ ✓ |node| tests/integration/tasks/p2-05-postgres.test.ts (41 tests) 7369ms
+
+ Test Files  4 passed (4)
+      Tests  83 passed (83)
+   Start at  01:00:23
+   Duration  14.94s (transform 292ms, setup 0ms, collect 530ms, tests 13.32s, environment 0ms, prepare 93ms)
+
+PHASE_D_PG_GATED_TESTS=PASS
+PHASE_D_POSTGRES_CLEANUP=PASS

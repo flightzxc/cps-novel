@@ -1,0 +1,13 @@
+{
+  "next": "16.3.8",
+  "vitest": {
+    "path": "/app/node_modules/vitest/package.json",
+    "version": "3.2.7",
+    "entry": "/app/node_modules/vitest/index.cjs"
+  },
+  "tinypool": {
+    "path": "/app/node_modules/tinypool/package.json",
+    "version": "1.1.1",
+    "entry": "/app/node_modules/tinypool/dist/index.js"
+  }
+}

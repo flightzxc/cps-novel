@@ -1,0 +1,32 @@
+[
+  {
+    "label": "naver",
+    "path": "/naver07aa70d2794ed3e5288b204fb467ee18.html",
+    "http": 200,
+    "seconds": 1.191678
+  },
+  {
+    "label": "en-category-page2",
+    "path": "/category/female-audience?page=2",
+    "http": 200,
+    "seconds": 5.06657
+  },
+  {
+    "label": "ko-category",
+    "path": "/ko/category/female-audience",
+    "http": 200,
+    "seconds": 3.496121
+  },
+  {
+    "label": "es-category",
+    "path": "/es/category/female-audience",
+    "http": 200,
+    "seconds": 3.240747
+  },
+  {
+    "label": "browse-page2",
+    "path": "/browse?page=2",
+    "http": 200,
+    "seconds": 3.537887
+  }
+]

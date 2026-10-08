@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "final": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+  "tree": "0367259156c20d30d2db02026c87827a4914bc97",
+  "runners": 33,
+  "gates": 45,
+  "fullTestCounters": {
+    "numTotalTestSuites": 2342,
+    "numPassedTestSuites": 2341,
+    "numPendingTestSuites": 1,
+    "numTotalTests": 9818,
+    "numPassedTests": 9269,
+    "numFailedTests": 0,
+    "numPendingTests": 549
+  },
+  "fullTestLogSummary": [
+    "\n Test Files  558 passed | 45 skipped (603)",
+    "      Tests  9269 passed | 549 skipped (9818)"
+  ],
+  "expectedPassedTests": 9269,
+  "passedCountMatchesHandoff": true,
+  "migrations": 23,
+  "x9Tables": 57,
+  "naverProbes": 6,
+  "proxyProbes": 1742,
+  "cpsReferenceUnchanged": true
+}

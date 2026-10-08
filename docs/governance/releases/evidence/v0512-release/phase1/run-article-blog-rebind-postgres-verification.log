@@ -1,0 +1,659 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 6. 🔴 EXPLAIN 确认 (locale, title_normalized) 索引被用上（目标集扫描的真实查询形状）
+[C-30B plan] destination lookup:
+Index Scan using novel_locale_title_normalized_idx on novel  (cost=0.28..16.13 rows=3 width=79)
+  Index Cond: (((locale)::text = 'en-US'::text) AND ((title_normalized)::text = ANY ('{"c30b batch book 1","c30b batch book 2"}'::text[])))
+  Filter: (deleted_at IS NULL)
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 1+3. 200 条批次跑到终态，复合 FK 与已发布 CHECK 全程不被违反（写入本身即证明）
+[C-30B timing] preview=37ms apply(200 items)=1554ms (7.8ms/item)
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 1+3. 200 条批次跑到终态，复合 FK 与已发布 CHECK 全程不被违反（写入本身即证明）
+[C-30B timing] per-item claim→terminal: {"items":200,"min_ms":4,"p50_ms":6,"avg_ms":5.8,"p95_ms":8,"max_ms":13,"sum_ms":1158}
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=1 wall=22ms budget=24000ms ratio=0.09% status=processing applied=1
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=2 wall=13ms budget=24000ms ratio=0.05% status=processing applied=2
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=3 wall=14ms budget=24000ms ratio=0.06% status=processing applied=3
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=4 wall=15ms budget=24000ms ratio=0.06% status=processing applied=4
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=5 wall=16ms budget=24000ms ratio=0.07% status=processing applied=5
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=6 wall=13ms budget=24000ms ratio=0.05% status=processing applied=6
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=7 wall=12ms budget=24000ms ratio=0.05% status=processing applied=7
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=8 wall=14ms budget=24000ms ratio=0.06% status=processing applied=8
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=9 wall=14ms budget=24000ms ratio=0.06% status=processing applied=9
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=10 wall=16ms budget=24000ms ratio=0.07% status=processing applied=10
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=11 wall=15ms budget=24000ms ratio=0.06% status=processing applied=11
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=12 wall=14ms budget=24000ms ratio=0.06% status=processing applied=12
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=13 wall=11ms budget=24000ms ratio=0.05% status=processing applied=13
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=14 wall=11ms budget=24000ms ratio=0.05% status=processing applied=14
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=15 wall=18ms budget=24000ms ratio=0.07% status=processing applied=15
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=16 wall=17ms budget=24000ms ratio=0.07% status=processing applied=16
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=17 wall=14ms budget=24000ms ratio=0.06% status=processing applied=17
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=18 wall=14ms budget=24000ms ratio=0.06% status=processing applied=18
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=19 wall=14ms budget=24000ms ratio=0.06% status=processing applied=19
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=20 wall=14ms budget=24000ms ratio=0.06% status=processing applied=20
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=21 wall=14ms budget=24000ms ratio=0.06% status=processing applied=21
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=22 wall=13ms budget=24000ms ratio=0.05% status=processing applied=22
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=23 wall=12ms budget=24000ms ratio=0.05% status=processing applied=23
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=24 wall=14ms budget=24000ms ratio=0.06% status=processing applied=24
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=25 wall=12ms budget=24000ms ratio=0.05% status=processing applied=25
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=26 wall=15ms budget=24000ms ratio=0.06% status=processing applied=26
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=27 wall=13ms budget=24000ms ratio=0.05% status=processing applied=27
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=28 wall=14ms budget=24000ms ratio=0.06% status=processing applied=28
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=29 wall=14ms budget=24000ms ratio=0.06% status=processing applied=29
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=30 wall=14ms budget=24000ms ratio=0.06% status=processing applied=30
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=31 wall=14ms budget=24000ms ratio=0.06% status=processing applied=31
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=32 wall=12ms budget=24000ms ratio=0.05% status=processing applied=32
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=33 wall=12ms budget=24000ms ratio=0.05% status=processing applied=33
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=34 wall=12ms budget=24000ms ratio=0.05% status=processing applied=34
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=35 wall=15ms budget=24000ms ratio=0.06% status=processing applied=35
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=36 wall=14ms budget=24000ms ratio=0.06% status=processing applied=36
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=37 wall=14ms budget=24000ms ratio=0.06% status=processing applied=37
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=38 wall=15ms budget=24000ms ratio=0.06% status=processing applied=38
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=39 wall=14ms budget=24000ms ratio=0.06% status=processing applied=39
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=40 wall=18ms budget=24000ms ratio=0.07% status=processing applied=40
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=41 wall=12ms budget=24000ms ratio=0.05% status=processing applied=41
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=42 wall=13ms budget=24000ms ratio=0.05% status=processing applied=42
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=43 wall=13ms budget=24000ms ratio=0.05% status=processing applied=43
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=44 wall=15ms budget=24000ms ratio=0.06% status=processing applied=44
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=45 wall=14ms budget=24000ms ratio=0.06% status=processing applied=45
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=46 wall=14ms budget=24000ms ratio=0.06% status=processing applied=46
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=47 wall=12ms budget=24000ms ratio=0.05% status=processing applied=47
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=48 wall=15ms budget=24000ms ratio=0.06% status=processing applied=48
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=49 wall=15ms budget=24000ms ratio=0.06% status=processing applied=49
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=50 wall=12ms budget=24000ms ratio=0.05% status=processing applied=50
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=51 wall=14ms budget=24000ms ratio=0.06% status=processing applied=51
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=52 wall=13ms budget=24000ms ratio=0.05% status=processing applied=52
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=53 wall=12ms budget=24000ms ratio=0.05% status=processing applied=53
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=54 wall=17ms budget=24000ms ratio=0.07% status=processing applied=54
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=55 wall=12ms budget=24000ms ratio=0.05% status=processing applied=55
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=56 wall=12ms budget=24000ms ratio=0.05% status=processing applied=56
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=57 wall=12ms budget=24000ms ratio=0.05% status=processing applied=57
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=58 wall=13ms budget=24000ms ratio=0.05% status=processing applied=58
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=59 wall=17ms budget=24000ms ratio=0.07% status=processing applied=59
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=60 wall=13ms budget=24000ms ratio=0.05% status=processing applied=60
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=61 wall=13ms budget=24000ms ratio=0.05% status=processing applied=61
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=62 wall=15ms budget=24000ms ratio=0.06% status=processing applied=62
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=63 wall=11ms budget=24000ms ratio=0.05% status=processing applied=63
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=64 wall=14ms budget=24000ms ratio=0.06% status=processing applied=64
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=65 wall=12ms budget=24000ms ratio=0.05% status=processing applied=65
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=66 wall=15ms budget=24000ms ratio=0.06% status=processing applied=66
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=67 wall=12ms budget=24000ms ratio=0.05% status=processing applied=67
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=68 wall=16ms budget=24000ms ratio=0.07% status=processing applied=68
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=69 wall=13ms budget=24000ms ratio=0.05% status=processing applied=69
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=70 wall=11ms budget=24000ms ratio=0.05% status=processing applied=70
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=71 wall=12ms budget=24000ms ratio=0.05% status=processing applied=71
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=72 wall=15ms budget=24000ms ratio=0.06% status=processing applied=72
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=73 wall=11ms budget=24000ms ratio=0.05% status=processing applied=73
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=74 wall=14ms budget=24000ms ratio=0.06% status=processing applied=74
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=75 wall=13ms budget=24000ms ratio=0.05% status=processing applied=75
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=76 wall=13ms budget=24000ms ratio=0.05% status=processing applied=76
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=77 wall=11ms budget=24000ms ratio=0.05% status=processing applied=77
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=78 wall=13ms budget=24000ms ratio=0.05% status=processing applied=78
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=79 wall=14ms budget=24000ms ratio=0.06% status=processing applied=79
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=80 wall=15ms budget=24000ms ratio=0.06% status=processing applied=80
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=81 wall=14ms budget=24000ms ratio=0.06% status=processing applied=81
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=82 wall=14ms budget=24000ms ratio=0.06% status=processing applied=82
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=83 wall=14ms budget=24000ms ratio=0.06% status=processing applied=83
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=84 wall=14ms budget=24000ms ratio=0.06% status=processing applied=84
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=85 wall=14ms budget=24000ms ratio=0.06% status=processing applied=85
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=86 wall=12ms budget=24000ms ratio=0.05% status=processing applied=86
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=87 wall=16ms budget=24000ms ratio=0.07% status=processing applied=87
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=88 wall=14ms budget=24000ms ratio=0.06% status=processing applied=88
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=89 wall=13ms budget=24000ms ratio=0.05% status=processing applied=89
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=90 wall=14ms budget=24000ms ratio=0.06% status=processing applied=90
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=91 wall=19ms budget=24000ms ratio=0.08% status=processing applied=91
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=92 wall=16ms budget=24000ms ratio=0.07% status=processing applied=92
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=93 wall=17ms budget=24000ms ratio=0.07% status=processing applied=93
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=94 wall=15ms budget=24000ms ratio=0.06% status=processing applied=94
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=95 wall=18ms budget=24000ms ratio=0.07% status=processing applied=95
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=96 wall=14ms budget=24000ms ratio=0.06% status=processing applied=96
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=97 wall=14ms budget=24000ms ratio=0.06% status=processing applied=97
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=98 wall=11ms budget=24000ms ratio=0.05% status=processing applied=98
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=99 wall=15ms budget=24000ms ratio=0.06% status=processing applied=99
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=100 wall=14ms budget=24000ms ratio=0.06% status=processing applied=100
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=101 wall=14ms budget=24000ms ratio=0.06% status=processing applied=101
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=102 wall=14ms budget=24000ms ratio=0.06% status=processing applied=102
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=103 wall=15ms budget=24000ms ratio=0.06% status=processing applied=103
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=104 wall=12ms budget=24000ms ratio=0.05% status=processing applied=104
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=105 wall=14ms budget=24000ms ratio=0.06% status=processing applied=105
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=106 wall=16ms budget=24000ms ratio=0.07% status=processing applied=106
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=107 wall=14ms budget=24000ms ratio=0.06% status=processing applied=107
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=108 wall=15ms budget=24000ms ratio=0.06% status=processing applied=108
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=109 wall=13ms budget=24000ms ratio=0.05% status=processing applied=109
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=110 wall=12ms budget=24000ms ratio=0.05% status=processing applied=110
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=111 wall=13ms budget=24000ms ratio=0.05% status=processing applied=111
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=112 wall=12ms budget=24000ms ratio=0.05% status=processing applied=112
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=113 wall=13ms budget=24000ms ratio=0.05% status=processing applied=113
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=114 wall=13ms budget=24000ms ratio=0.05% status=processing applied=114
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=115 wall=12ms budget=24000ms ratio=0.05% status=processing applied=115
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=116 wall=14ms budget=24000ms ratio=0.06% status=processing applied=116
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=117 wall=16ms budget=24000ms ratio=0.07% status=processing applied=117
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=118 wall=15ms budget=24000ms ratio=0.06% status=processing applied=118
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=119 wall=15ms budget=24000ms ratio=0.06% status=processing applied=119
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=120 wall=15ms budget=24000ms ratio=0.06% status=processing applied=120
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=121 wall=16ms budget=24000ms ratio=0.07% status=processing applied=121
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=122 wall=12ms budget=24000ms ratio=0.05% status=processing applied=122
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=123 wall=14ms budget=24000ms ratio=0.06% status=processing applied=123
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=124 wall=13ms budget=24000ms ratio=0.05% status=processing applied=124
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=125 wall=12ms budget=24000ms ratio=0.05% status=processing applied=125
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=126 wall=17ms budget=24000ms ratio=0.07% status=processing applied=126
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=127 wall=12ms budget=24000ms ratio=0.05% status=processing applied=127
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=128 wall=12ms budget=24000ms ratio=0.05% status=processing applied=128
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=129 wall=12ms budget=24000ms ratio=0.05% status=processing applied=129
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=130 wall=14ms budget=24000ms ratio=0.06% status=processing applied=130
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=131 wall=15ms budget=24000ms ratio=0.06% status=processing applied=131
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=132 wall=15ms budget=24000ms ratio=0.06% status=processing applied=132
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=133 wall=12ms budget=24000ms ratio=0.05% status=processing applied=133
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=134 wall=17ms budget=24000ms ratio=0.07% status=processing applied=134
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=135 wall=12ms budget=24000ms ratio=0.05% status=processing applied=135
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=136 wall=14ms budget=24000ms ratio=0.06% status=processing applied=136
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=137 wall=13ms budget=24000ms ratio=0.05% status=processing applied=137
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=138 wall=16ms budget=24000ms ratio=0.07% status=processing applied=138
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=139 wall=15ms budget=24000ms ratio=0.06% status=processing applied=139
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=140 wall=13ms budget=24000ms ratio=0.05% status=processing applied=140
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=141 wall=14ms budget=24000ms ratio=0.06% status=processing applied=141
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=142 wall=14ms budget=24000ms ratio=0.06% status=processing applied=142
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=143 wall=14ms budget=24000ms ratio=0.06% status=processing applied=143
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=144 wall=14ms budget=24000ms ratio=0.06% status=processing applied=144
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=145 wall=13ms budget=24000ms ratio=0.05% status=processing applied=145
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=146 wall=14ms budget=24000ms ratio=0.06% status=processing applied=146
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=147 wall=14ms budget=24000ms ratio=0.06% status=processing applied=147
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=148 wall=11ms budget=24000ms ratio=0.05% status=processing applied=148
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=149 wall=12ms budget=24000ms ratio=0.05% status=processing applied=149
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=150 wall=17ms budget=24000ms ratio=0.07% status=processing applied=150
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=151 wall=13ms budget=24000ms ratio=0.05% status=processing applied=151
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=152 wall=13ms budget=24000ms ratio=0.05% status=processing applied=152
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=153 wall=14ms budget=24000ms ratio=0.06% status=processing applied=153
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=154 wall=12ms budget=24000ms ratio=0.05% status=processing applied=154
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=155 wall=12ms budget=24000ms ratio=0.05% status=processing applied=155
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=156 wall=12ms budget=24000ms ratio=0.05% status=processing applied=156
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=157 wall=15ms budget=24000ms ratio=0.06% status=processing applied=157
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=158 wall=15ms budget=24000ms ratio=0.06% status=processing applied=158
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=159 wall=14ms budget=24000ms ratio=0.06% status=processing applied=159
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=160 wall=16ms budget=24000ms ratio=0.07% status=processing applied=160
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=161 wall=14ms budget=24000ms ratio=0.06% status=processing applied=161
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=162 wall=16ms budget=24000ms ratio=0.07% status=processing applied=162
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=163 wall=15ms budget=24000ms ratio=0.06% status=processing applied=163
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=164 wall=13ms budget=24000ms ratio=0.05% status=processing applied=164
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=165 wall=18ms budget=24000ms ratio=0.07% status=processing applied=165
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=166 wall=15ms budget=24000ms ratio=0.06% status=processing applied=166
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=167 wall=15ms budget=24000ms ratio=0.06% status=processing applied=167
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=168 wall=15ms budget=24000ms ratio=0.06% status=processing applied=168
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=169 wall=14ms budget=24000ms ratio=0.06% status=processing applied=169
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=170 wall=13ms budget=24000ms ratio=0.05% status=processing applied=170
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=171 wall=12ms budget=24000ms ratio=0.05% status=processing applied=171
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=172 wall=14ms budget=24000ms ratio=0.06% status=processing applied=172
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=173 wall=12ms budget=24000ms ratio=0.05% status=processing applied=173
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=174 wall=12ms budget=24000ms ratio=0.05% status=processing applied=174
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=175 wall=15ms budget=24000ms ratio=0.06% status=processing applied=175
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=176 wall=14ms budget=24000ms ratio=0.06% status=processing applied=176
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=177 wall=16ms budget=24000ms ratio=0.07% status=processing applied=177
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=178 wall=15ms budget=24000ms ratio=0.06% status=processing applied=178
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=179 wall=14ms budget=24000ms ratio=0.06% status=processing applied=179
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=180 wall=13ms budget=24000ms ratio=0.05% status=processing applied=180
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=181 wall=13ms budget=24000ms ratio=0.05% status=processing applied=181
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=182 wall=12ms budget=24000ms ratio=0.05% status=processing applied=182
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=183 wall=12ms budget=24000ms ratio=0.05% status=processing applied=183
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=184 wall=14ms budget=24000ms ratio=0.06% status=processing applied=184
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=185 wall=14ms budget=24000ms ratio=0.06% status=processing applied=185
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=186 wall=16ms budget=24000ms ratio=0.07% status=processing applied=186
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=187 wall=11ms budget=24000ms ratio=0.05% status=processing applied=187
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=188 wall=11ms budget=24000ms ratio=0.05% status=processing applied=188
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=189 wall=13ms budget=24000ms ratio=0.05% status=processing applied=189
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=190 wall=12ms budget=24000ms ratio=0.05% status=processing applied=190
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=191 wall=14ms budget=24000ms ratio=0.06% status=processing applied=191
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=192 wall=13ms budget=24000ms ratio=0.05% status=processing applied=192
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=193 wall=12ms budget=24000ms ratio=0.05% status=processing applied=193
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=194 wall=12ms budget=24000ms ratio=0.05% status=processing applied=194
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=195 wall=16ms budget=24000ms ratio=0.07% status=processing applied=195
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=196 wall=13ms budget=24000ms ratio=0.05% status=processing applied=196
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=197 wall=11ms budget=24000ms ratio=0.05% status=processing applied=197
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=198 wall=13ms budget=24000ms ratio=0.05% status=processing applied=198
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=199 wall=12ms budget=24000ms ratio=0.05% status=processing applied=199
+
+stdout | tests/integration/article-rebind/batch-200.test.ts > C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次
+[C-30B W-2 timing] round=200 wall=13ms budget=24000ms ratio=0.05% status=completed applied=200
+
+ ✓ |node| tests/integration/article-rebind/batch-200.test.ts (5 tests) 6383ms
+   ✓ C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 1+3. 200 条批次跑到终态，复合 FK 与已发布 CHECK 全程不被违反（写入本身即证明）  1598ms
+   ✓ C-30B (施工工单 单 2 主验收): 200 条批量换绑 — 真实 PostgreSQL > 7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次  3766ms
+ ✓ |node| tests/integration/article-rebind/two-field-atomic.test.ts (4 tests) 79ms
+ ✓ |node| tests/integration/database/c27-blog-article-postgres.test.ts (11 tests) 62ms
+ ✓ |node| tests/integration/database/c28-blog-article-postgres.test.ts (3 tests) 89ms
+ ✓ |node| tests/integration/database/c29-blog-public-postgres.test.ts (5 tests) 91ms
+stderr | tests/integration/publish-gate/batch-publish-postgres.test.ts > batch publish · real Postgres (audit unique index in force) > Case 5: a genuine unique violation from another constraint is reported, never smuggled through as success
+[publish-gate] batch publish aborted {
+  batchRequestId: '30888995-7614-4a9a-b6dd-2fc549fdc474',
+  articleId: 'd8cb9cfc-14ac-4c5f-9b34-946b2af23a2b',
+  processedCount: 1,
+  remainingCount: 0,
+  errorKind: 'PrismaClientKnownRequestError:P2002:request_id,action'
+}
+
+stderr | tests/integration/publish-gate/batch-publish-postgres.test.ts > batch publish · real Postgres (audit unique index in force) > Case 4: after a mid-batch abort, committed items stay committed and untouched items are reported as not processed
+[publish-gate] batch publish aborted {
+  batchRequestId: 'f912949e-3146-441a-9003-09ef4a93004c',
+  articleId: '6eef4b87-0ffe-4958-bfc3-126626b26a3d',
+  processedCount: 1,
+  remainingCount: 2,
+  errorKind: 'PrismaClientKnownRequestError:P2002:request_id,action'
+}
+
+ ✓ |node| tests/integration/publish-gate/batch-publish-postgres.test.ts (16 tests) 623ms
+
+ Test Files  6 passed (6)
+      Tests  44 passed (44)
+   Start at  00:46:07
+   Duration  8.45s (transform 249ms, setup 0ms, collect 552ms, tests 7.33s, environment 1ms, prepare 133ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-article-blog-rebind-secrets.3SgGxZ/integration-result.json
+  tests/integration/database/c27-blog-article-postgres.test.ts passed=11 skipped=0
+  tests/integration/database/c28-blog-article-postgres.test.ts passed=3 skipped=0
+  tests/integration/database/c29-blog-public-postgres.test.ts passed=5 skipped=0
+  tests/integration/article-rebind/two-field-atomic.test.ts passed=4 skipped=0
+  tests/integration/article-rebind/batch-200.test.ts passed=5 skipped=0
+  tests/integration/publish-gate/batch-publish-postgres.test.ts passed=16 skipped=0
+ARTICLE_BLOG_REBIND_INTEGRATION=PASS files=6 passed=44 skipped=0
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+ARTICLE_BLOG_REBIND_DICTIONARY_DRIFT=0
+ARTICLE_BLOG_REBIND_POSTGRES_VERIFICATION=PASS
+ARTICLE_BLOG_REBIND_DISPOSABLE_DATABASE_CLEANED=yes

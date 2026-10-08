@@ -1,0 +1,20 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+
+stdout | tests/integration/tasks/worker-light-postgres.test.ts > WO5 real roles, schedule isolation and worker load > light refresh completes in one 1000 ms polling interval behind 20000 claim items
+WO5_PRESSURE wait_ms=12 execution_ms=35 total_ms=47 poll_ms=1000 remaining=19999 upstream_calls=1
+
+ ✓ |node| tests/integration/tasks/worker-light-postgres.test.ts (12 tests) 764ms
+   ✓ WO5 real roles, schedule isolation and worker load > light refresh completes in one 1000 ms polling interval behind 20000 claim items  519ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  01:03:25
+   Duration  1.13s (transform 129ms, setup 0ms, collect 202ms, tests 764ms, environment 0ms, prepare 36ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-wo5-secrets.anzBbi/integration-result.json
+WO5_INTEGRATION=PASS passed=12 skipped=0
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+WO5_DICTIONARY_DRIFT=0
+WO5_POSTGRES_VERIFICATION=PASS
+WO5_DISPOSABLE_DATABASE_CLEANED=yes

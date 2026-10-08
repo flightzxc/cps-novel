@@ -1,0 +1,49 @@
+cps-novel-0.5.12-84af0d7.tar.zst: OK
+ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca  cps-novel-0.5.12-84af0d7.tar.zst
+cps-novel-v0.5.12.bundle: OK
+84af0d7ef5ef36b06fa9783c114fe831adab4e13.json: OK
+Cloning into '/opt/cps-novel/releases/84af0d7ef5ef36b06fa9783c114fe831adab4e13'...
+done.
+Note: switching to 'eb40756416b186ca4b293ff57e24026af78cf4f9'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Updating files:  16% (334/2054)Updating files:  17% (350/2054)Updating files:  18% (370/2054)Updating files:  19% (391/2054)Updating files:  20% (411/2054)Updating files:  21% (432/2054)Updating files:  22% (452/2054)Updating files:  23% (473/2054)Updating files:  24% (493/2054)Updating files:  25% (514/2054)Updating files:  26% (535/2054)Updating files:  27% (555/2054)Updating files:  28% (576/2054)Updating files:  29% (596/2054)Updating files:  30% (617/2054)Updating files:  31% (637/2054)Updating files:  32% (658/2054)Updating files:  33% (678/2054)Updating files:  34% (699/2054)Updating files:  35% (719/2054)Updating files:  36% (740/2054)Updating files:  37% (760/2054)Updating files:  38% (781/2054)Updating files:  39% (802/2054)Updating files:  40% (822/2054)Updating files:  41% (843/2054)Updating files:  42% (863/2054)Updating files:  43% (884/2054)Updating files:  44% (904/2054)Updating files:  45% (925/2054)Updating files:  46% (945/2054)Updating files:  47% (966/2054)Updating files:  48% (986/2054)Updating files:  49% (1007/2054)Updating files:  50% (1027/2054)Updating files:  51% (1048/2054)Updating files:  52% (1069/2054)Updating files:  53% (1089/2054)Updating files:  54% (1110/2054)Updating files:  55% (1130/2054)Updating files:  56% (1151/2054)Updating files:  57% (1171/2054)Updating files:  58% (1192/2054)Updating files:  59% (1212/2054)Updating files:  60% (1233/2054)Updating files:  61% (1253/2054)Updating files:  62% (1274/2054)Updating files:  63% (1295/2054)Updating files:  64% (1315/2054)Updating files:  65% (1336/2054)Updating files:  66% (1356/2054)Updating files:  67% (1377/2054)Updating files:  68% (1397/2054)Updating files:  69% (1418/2054)Updating files:  70% (1438/2054)Updating files:  71% (1459/2054)Updating files:  72% (1479/2054)Updating files:  73% (1500/2054)Updating files:  74% (1520/2054)Updating files:  75% (1541/2054)Updating files:  76% (1562/2054)Updating files:  77% (1582/2054)Updating files:  78% (1603/2054)Updating files:  79% (1623/2054)Updating files:  80% (1644/2054)Updating files:  81% (1664/2054)Updating files:  82% (1685/2054)Updating files:  83% (1705/2054)Updating files:  84% (1726/2054)Updating files:  85% (1746/2054)Updating files:  86% (1767/2054)Updating files:  86% (1781/2054)Updating files:  87% (1787/2054)Updating files:  88% (1808/2054)Updating files:  89% (1829/2054)Updating files:  90% (1849/2054)Updating files:  91% (1870/2054)Updating files:  92% (1890/2054)Updating files:  93% (1911/2054)Updating files:  94% (1931/2054)Updating files:  95% (1952/2054)Updating files:  96% (1972/2054)Updating files:  97% (1993/2054)Updating files:  98% (2013/2054)Updating files:  99% (2034/2054)Updating files: 100% (2054/2054)Updating files: 100% (2054/2054), done.
+From /opt/cps-novel/shared/artifacts/staging/cps-novel-v0.5.12.bundle
+ * branch                release/v0.5.12-2026-10-09 -> FETCH_HEAD
+Previous HEAD position was eb4075641 发布：准备海阅 v0.5.11 六文件版本身份
+HEAD is now at 84af0d7ef 发布：准备海阅 v0.5.12 六文件版本身份
+CODE_FINAL_TREE_CLEAN=PASS
+IDENTITY=PASS
+  target            sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9 (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9
+  config            sha256:518051a0776be67b6cfa66db860fbf75a7962b292aad318c8061a7061cd90169
+  platform          linux/amd64
+  revision          84af0d7ef5ef36b06fa9783c114fe831adab4e13
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=84af0d7ef5ef36b06fa9783c114fe831adab4e13
+  archive_sha256=ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca
+  image_tag=cps-novel:0.5.12-84af0d7
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.5.12-84af0d7
+  target             =sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9
+  platform_manifest  =sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9
+  config             =sha256:518051a0776be67b6cfa66db860fbf75a7962b292aad318c8061a7061cd90169
+  platform           =linux/amd64
+  revision           =84af0d7ef5ef36b06fa9783c114fe831adab4e13

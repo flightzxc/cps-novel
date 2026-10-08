@@ -1,0 +1,48 @@
+from pathlib import Path
+import subprocess,json,hashlib,re
+final='84af0d7ef5ef36b06fa9783c114fe831adab4e13'
+log=Path('/opt/cps-novel/logs/release-v0.5.12-84af0d7.log').read_text()
+assert 'RELEASE_EXIT=0' in log and 'RELEASE=PASS' in log,'DEPLOY_NOT_PASS'
+since=re.search(r'DEPLOY_STARTED_AT=(\S+)',log)[1]
+assert str(Path('/opt/cps-novel/current').resolve())=='/opt/cps-novel/releases/'+final
+assert subprocess.check_output(['git','-C','/opt/cps-novel/current','rev-parse','HEAD^{tree}']).decode().strip()=='0367259156c20d30d2db02026c87827a4914bc97'
+assert not subprocess.check_output(['git','-C','/opt/cps-novel/current','status','--porcelain=v1'])
+assert subprocess.check_output(['docker','inspect','cps-novel-postgres-1','--format','{{.Id}}']).decode().strip()=='691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e'
+for name in ['web','worker','worker-light','scheduler','backup-timer','postgres']:
+ c='cps-novel-'+name+'-1';d=json.loads(subprocess.check_output(['docker','inspect',c]))[0]
+ s=subprocess.check_output(['docker','logs','--since',since,c],stderr=subprocess.STDOUT,text=True)
+ errors=[x for x in s.splitlines() if re.search(r'"level"\s*:\s*"(?:error|fatal)"|\bERROR:|\bFATAL:|Unhandled|uncaught exception',x,re.I)]
+ secrets=re.findall(r'Bearer\s+[A-Za-z0-9._-]{12,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|"(?:token|authorization)"\s*:\s*"[^"\s]{8,}"',s,re.I)
+ row={'service':name,'id':d['Id'],'state':d['State']['Status'],'health':d['State'].get('Health',{}).get('Status'),'error_lines':len(errors),'permission_denied':s.lower().count('permission denied'),'credential_leak_patterns':len(secrets)}
+ print(json.dumps(row),flush=True)
+ assert row['state']=='running' and row['health']=='healthy' and not errors and row['permission_denied']==0 and not secrets,'POST_SERVICE_GATE_FAIL='+name
+ if name in ['worker','worker-light']:
+  events=[json.loads(x) for x in s.splitlines() if x.startswith('{') and '"event":"worker_task_allowlist"' in x]
+  assert events,'MISSING_ALLOWLIST_STARTUP_LOG='+name
+  for event in events:
+   print('STARTUP_ALLOWLIST='+json.dumps({'service':name,**event}))
+   assert not event['invalid']
+   assert ('changdu.revenue_sync.v1' in event['effective'])==(name=='worker')
+ if name in ['web','worker','worker-light']:
+  env=dict(x.split('=',1) for x in d['Config']['Env'])
+  assert env.get('FEATURE_INDEXNOW_OUTBOX')=='false' and env.get('INDEXNOW_OUTBOX_ALLOW_WRITE')=='false'
+  print('INDEXNOW_OFF=PASS service='+name)
+web_roles=subprocess.check_output(['docker','exec','cps-novel-web-1','printenv','REVENUE_VIEW_ROLES'],text=True).strip();assert web_roles=='super_admin';print('REVENUE_VIEW_ROLES='+web_roles)
+sql="""BEGIN READ ONLY;
+SELECT json_build_object('finished',(SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL),'unfinished',(SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL),'rolled_back',(SELECT count(*) FROM _prisma_migrations WHERE rolled_back_at IS NOT NULL),'new_migration_ms',(SELECT extract(epoch FROM finished_at-started_at)*1000 FROM _prisma_migrations WHERE migration_name='20261008120000_revenue_account_level_dashboard'),'tables',json_build_array(to_regclass('public.revenue_sync_scope'),to_regclass('public.revenue_sync_batch'),to_regclass('public.revenue_raw_snapshot'),to_regclass('public.revenue_daily_stat')),'worker_insert',has_table_privilege('worker_app','revenue_daily_stat','INSERT'),'web_insert',has_table_privilege('web_app','revenue_daily_stat','INSERT'),'web_select',has_table_privilege('web_app','revenue_daily_stat','SELECT'),'scheduler_select',has_table_privilege('scheduler_app','revenue_daily_stat','SELECT'));
+COMMIT;"""
+out=subprocess.check_output(['docker','exec','cps-novel-postgres-1','psql','--no-psqlrc','-v','ON_ERROR_STOP=1','-U','postgres','-d','cps_novel','-Atqc',sql],text=True)
+print('POST_DB='+out.strip());db=json.loads(out)
+assert db['finished']==23 and db['unfinished']==0 and db['rolled_back']==0
+assert all(db['tables']) and db['worker_insert'] and not db['web_insert'] and db['web_select'] and not db['scheduler_select']
+paths=sorted(set([Path('/etc/nginx/nginx.conf'),*Path('/etc/nginx/sites-enabled').glob('*'),*Path('/etc/nginx/conf.d').glob('*.conf')]))
+hashes={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in paths}
+print('POST_NGINX_HASHES='+json.dumps(hashes))
+assert hashes=={'/etc/nginx/conf.d/cps-novel-preprod.conf': 'd2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe', '/etc/nginx/nginx.conf': 'ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e'},'NGINX_HASHES_CHANGED'
+assert not Path('/opt/cps-novel/shared/maintenance/enabled').exists()
+print('POST_CHECK=PASS')
+
+next_version=subprocess.check_output(['docker','exec','cps-novel-web-1','node','-p',"require('next/package.json').version"],text=True).strip()
+assert next_version=='16.3.8',next_version
+print('WEB_NEXT_VERSION='+next_version)
+print('BACKUP_TIMER=RUNNING')

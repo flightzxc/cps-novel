@@ -1,0 +1,67 @@
+{
+  "proxy": "http://127.0.0.1:7899",
+  "total": 10,
+  "categoryRequests": 3,
+  "requests": [
+    {
+      "label": "health",
+      "path": "/api/health",
+      "http": 200,
+      "seconds": 2.474469
+    },
+    {
+      "label": "worker-warmup",
+      "path": "/api/health/worker",
+      "http": 200,
+      "seconds": 2.579195
+    },
+    {
+      "label": "worker-sample1",
+      "path": "/api/health/worker",
+      "http": 200,
+      "seconds": 1.697511
+    },
+    {
+      "label": "worker-sample2",
+      "path": "/api/health/worker",
+      "http": 200,
+      "seconds": 1.851399
+    },
+    {
+      "label": "worker-sample3",
+      "path": "/api/health/worker",
+      "http": 200,
+      "seconds": 2.348694
+    },
+    {
+      "label": "naver",
+      "path": "/naver07aa70d2794ed3e5288b204fb467ee18.html",
+      "http": 200,
+      "seconds": 1.191678
+    },
+    {
+      "label": "en-category-page2",
+      "path": "/category/female-audience?page=2",
+      "http": 200,
+      "seconds": 5.06657
+    },
+    {
+      "label": "ko-category",
+      "path": "/ko/category/female-audience",
+      "http": 200,
+      "seconds": 3.496121
+    },
+    {
+      "label": "es-category",
+      "path": "/es/category/female-audience",
+      "http": 200,
+      "seconds": 3.240747
+    },
+    {
+      "label": "browse-page2",
+      "path": "/browse?page=2",
+      "http": 200,
+      "seconds": 3.537887
+    }
+  ]
+}

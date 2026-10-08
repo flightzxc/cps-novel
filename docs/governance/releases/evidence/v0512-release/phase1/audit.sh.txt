@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+p="$PWD/.tmp/v0512-phase1"
+rc=0
+npm audit --omit=dev --json > "$p/audit-production.json" || rc=$?
+[ "$rc" -le 1 ] || exit "$rc"
+python3 "$p/check-audit.py" production
+rc=0
+npm audit --json > "$p/audit-full.json" || rc=$?
+[ "$rc" -le 1 ] || exit "$rc"
+python3 "$p/check-audit.py" full

@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+cd /Users/chenweifeng/Documents/cps海阅/release-v0.5.12
+export PATH="$PWD/.tmp/v0512-phase1/toolchain/bin:$PATH"
+evidence="$PWD/.tmp/v0512-phase1"
+lock=/Users/chenweifeng/Documents/cps海阅/.heavy-test.lock
+until mkdir "$lock" 2>/dev/null; do sleep 15; done
+printf '%s\n' release-v0.5.12 > "$lock/owner"
+cleanup() { local rc=$?; if [ "$(cat "$lock/owner" 2>/dev/null)" = release-v0.5.12 ]; then rm -f "$lock/owner"; rmdir "$lock"; fi; echo "ARCHIVE_EXIT=$rc"; }
+trap cleanup EXIT
+while ! sysctl -n vm.loadavg | awk '{exit !(($2+0)<=8)}'; do echo "LOAD_WAIT $(sysctl -n vm.loadavg)"; sleep 15; done
+[ "$(git rev-parse HEAD)" = 84af0d7ef5ef36b06fa9783c114fe831adab4e13 ]
+[ -z "$(git status --porcelain=v1)" ]
+docker system df | tee "$evidence/docker-df-before-archive.log"
+df -h . | tee "$evidence/disk-before-archive.log"
+[ "$(df -k . | awk 'NR==2 {print $4+0}')" -gt 20971520 ]
+echo ARCHIVE_BUILD_START
+APPROVED_GIT_COMMIT=84af0d7ef5ef36b06fa9783c114fe831adab4e13 RELEASE_TARGET_PLATFORM=linux/amd64 /bin/bash scripts/preproduction/build-release-archive.sh > "$evidence/archive-build.log" 2>&1
+manifest="$PWD/.tmp/preproduction-archive/84af0d7ef5ef36b06fa9783c114fe831adab4e13.json"
+archive="$PWD/.tmp/preproduction-archive/cps-novel-0.5.12-84af0d7.tar.zst"
+python3 - "$archive" <<'PY'
+import hashlib,sys
+from pathlib import Path
+h=hashlib.sha256()
+with open(sys.argv[1],'rb') as f:
+ for block in iter(lambda:f.read(4*1024*1024),b''):h.update(block)
+Path('.tmp/v0512-phase1/archive-independent-sha256.txt').write_text(h.hexdigest()+'\n')
+print('INDEPENDENT_ARCHIVE_SHA256='+h.hexdigest())
+PY
+expected_sha="$(cat "$evidence/archive-independent-sha256.txt")"
+/bin/bash scripts/preproduction/verify-release-archive.sh --manifest "$manifest" --expected-archive-sha256 "$expected_sha" --approved-commit 84af0d7ef5ef36b06fa9783c114fe831adab4e13 --load > "$evidence/archive-verify.log" 2>&1
+[ -z "$(git status --porcelain=v1)" ]
+tail -n 12 "$evidence/archive-build.log"
+tail -n 15 "$evidence/archive-verify.log"
+echo ARCHIVE_ALL=PASS

@@ -1,0 +1,175 @@
+{
+  "stage": 1,
+  "status": "Required gates, GitHub push and archive verification PASS; stopped on handoff/Dockerfile contradiction",
+  "completedAtJST": "2026-10-09T01:14:50.467846+09:00",
+  "worktree": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12",
+  "branch": "release/v0.5.12-2026-10-09",
+  "baseline": "2763eeddcb3aeaa0719bdeab0ba12a4c669c6e28",
+  "gitHubFinal": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+  "tree": "0367259156c20d30d2db02026c87827a4914bc97",
+  "gateAcceptance": {
+    "result": "PASS",
+    "final": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+    "tree": "0367259156c20d30d2db02026c87827a4914bc97",
+    "runners": 33,
+    "gates": 45,
+    "fullTestCounters": {
+      "numTotalTestSuites": 2342,
+      "numPassedTestSuites": 2341,
+      "numPendingTestSuites": 1,
+      "numTotalTests": 9818,
+      "numPassedTests": 9269,
+      "numFailedTests": 0,
+      "numPendingTests": 549
+    },
+    "fullTestLogSummary": [
+      "\n Test Files  558 passed | 45 skipped (603)",
+      "      Tests  9269 passed | 549 skipped (9818)"
+    ],
+    "expectedPassedTests": 9269,
+    "passedCountMatchesHandoff": true,
+    "migrations": 23,
+    "x9Tables": 57,
+    "naverProbes": 6,
+    "proxyProbes": 1742,
+    "cpsReferenceUnchanged": true
+  },
+  "audit": {
+    "productionCounts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 5,
+      "critical": 0,
+      "total": 5
+    },
+    "productionHighPackages": [
+      "@prisma/config",
+      "deepmerge-ts",
+      "effect",
+      "nanoid",
+      "prisma"
+    ],
+    "fullCounts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 12,
+      "critical": 2,
+      "total": 15
+    },
+    "fullCriticalPackages": [
+      "tinypool",
+      "vitest"
+    ],
+    "fullHighPackages": [
+      "@next/eslint-plugin-next",
+      "@prisma/config",
+      "brace-expansion",
+      "braces",
+      "deepmerge-ts",
+      "effect",
+      "eslint-config-next",
+      "fast-glob",
+      "js-yaml",
+      "micromatch",
+      "nanoid",
+      "prisma"
+    ]
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 19
+  },
+  "node": "20.20.2",
+  "npm": "11.6.2",
+  "next": "16.3.8",
+  "sourceMapJs": "all 1.2.2",
+  "archive": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/preproduction-archive/cps-novel-0.5.12-84af0d7.tar.zst",
+    "bytes": 331715760,
+    "sha256": "ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca",
+    "manifestPath": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/preproduction-archive/84af0d7ef5ef36b06fa9783c114fe831adab4e13.json",
+    "manifest": {
+      "schemaVersion": 2,
+      "transport": "archive",
+      "approved_git_commit": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+      "version": "0.5.12",
+      "image_tag": "cps-novel:0.5.12-84af0d7",
+      "image_platform": "linux/amd64",
+      "image_revision": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+      "archive_filename": "cps-novel-0.5.12-84af0d7.tar.zst",
+      "archive_sha256": "ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca",
+      "oci": {
+        "target": {
+          "mediaType": "application/vnd.oci.image.manifest.v1+json",
+          "digest": "sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9",
+          "size": 3294
+        },
+        "platform_manifest": {
+          "mediaType": "application/vnd.oci.image.manifest.v1+json",
+          "digest": "sha256:810823c98c29a7073aaad250e32b4bcd6304a0105c041b9c1808de5e4d474de9",
+          "size": 3294
+        },
+        "config": {
+          "mediaType": "application/vnd.oci.image.config.v1+json",
+          "digest": "sha256:518051a0776be67b6cfa66db860fbf75a7962b292aad318c8061a7061cd90169",
+          "size": 13674
+        }
+      },
+      "layer_count": 20,
+      "built_at": "2026-10-08T16:06:31Z",
+      "source_repository": "https://github.com/flightzxc/cps-novel",
+      "identityNote": "Identity = approved_git_commit + oci.platform_manifest.digest + oci.config.digest + archive_sha256. image_tag alone is NOT identity. Which digest a host reports depends on its image store; both are recorded here.",
+      "versionIdentityIssue": "git tag may differ from package.json version; commit and digests are authoritative"
+    },
+    "verification": "VERIFY_OFFLINE=PASS / VERIFY=PASS --load; anchor=config_id",
+    "runtimeDependencies": {
+      "next": "16.3.8",
+      "vitest": {
+        "path": "/app/node_modules/vitest/package.json",
+        "version": "3.2.7",
+        "entry": "/app/node_modules/vitest/index.cjs"
+      },
+      "tinypool": {
+        "path": "/app/node_modules/tinypool/package.json",
+        "version": "1.1.1",
+        "entry": "/app/node_modules/tinypool/dist/index.js"
+      }
+    }
+  },
+  "rawLogs": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/v0512-phase1",
+  "notes": {
+    "worktreeCreation": "Desktop tool returned Not a git repository at parent cwd; used git worktree add from exact baseline into planned independent path.",
+    "operationsHostsConnected": false,
+    "deploymentPerformed": false,
+    "wrapperCorrections": [
+      {
+        "step": "compose baseline comparison",
+        "cause": "macOS Bash 3.2 set -u treats an empty array expansion as unbound variable.",
+        "fix": "Use explicit Compose invocation for each of the three baseline stacks.",
+        "evidence": "compose-attempt1.log and gate-summary.tsv"
+      }
+    ]
+  },
+  "blockingDifference": {
+    "kind": "handoff-versus-Dockerfile contradiction",
+    "handoffClaim": "vitest and tinypool are development dependencies that do not enter the image.",
+    "observed": "Final image contains vitest 3.2.7 and tinypool 1.1.1; Dockerfile:53 copies the complete builder node_modules into runner.",
+    "evidence": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/v0512-phase1/archive-runtime-dependencies-detail.json",
+    "action": "Stopped and reported; no Dockerfile or dependency changes, no deployment. Requires Owner correction or decision before treating phase 1 as unconditionally accepted.",
+    "auditScope": "Required npm audit --omit=dev remains PASS: 0 critical, exact five high. Full audit reports two critical. Package presence does not establish runtime exploitability."
+  },
+  "governance": {
+    "sixFileVersionBump": "completed, committed, pushed; GitHub SHA readback PASS",
+    "versionRegistry": "preparation entry completed; not deployed",
+    "annotatedTag": "deferred until phase 2 deployment acceptance",
+    "generatedChangelog": "deferred until phase 2 deployment acceptance",
+    "releaseDevelopmentLog": "deferred until phase 2 deployment acceptance",
+    "notionCloseout": "deferred until phase 2 deployment acceptance"
+  },
+  "operationsHostsConnected": false,
+  "deploymentPerformed": false,
+  "heavyLockReleased": true,
+  "worktreeClean": true
+}

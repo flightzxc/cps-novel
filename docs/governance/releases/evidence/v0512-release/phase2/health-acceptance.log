@@ -1,0 +1,6 @@
+HEALTH_IDENTITY=PASS {"ok": true, "status": "healthy", "build": {"version": "0.5.12", "commit": "84af0d7ef5ef36b06fa9783c114fe831adab4e13", "builtAt": "2026-10-08T16:06:31Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.12", "commit": "84af0d7ef5ef36b06fa9783c114fe831adab4e13"}}, "database": {"status": "passed", "reason": null, "durationMs": 2}, "reasons": []}
+{"label": "worker-warmup", "path": "/api/health/worker", "http": 200, "seconds": 2.579195, "workerStatus": "ok", "expiredLocks": 0}
+{"label": "worker-sample1", "path": "/api/health/worker", "http": 200, "seconds": 1.697511, "workerStatus": "ok", "expiredLocks": 0}
+{"label": "worker-sample2", "path": "/api/health/worker", "http": 200, "seconds": 1.851399, "workerStatus": "ok", "expiredLocks": 0}
+{"label": "worker-sample3", "path": "/api/health/worker", "http": 200, "seconds": 2.348694, "workerStatus": "ok", "expiredLocks": 0}
+WORKER_HEALTH_SAMPLES=PASS warmup=1 samples=3 interval_seconds=10

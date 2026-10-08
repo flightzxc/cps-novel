@@ -1,0 +1,51 @@
+from pathlib import Path
+from html.parser import HTMLParser
+from html import unescape
+import hashlib,json,re,subprocess,time
+p=Path('.tmp/v0512-phase2');rows=[]
+class Parse(HTMLParser):
+ def __init__(self):super().__init__(convert_charrefs=True);self.stack=[];self.h1=[];self.title=[];self.meta={};self.text=[];self.pagination=[]
+ def handle_starttag(self,tag,attrs):
+  a=dict(attrs)
+  if tag=='meta':self.meta[a.get('name',a.get('property',''))]=a.get('content','')
+  if tag not in ['meta','link','img','input','br','hr','source','wbr']:self.stack.append((tag,a))
+ def handle_endtag(self,tag):
+  for i in range(len(self.stack)-1,-1,-1):
+   if self.stack[i][0]==tag:self.stack=self.stack[:i];break
+ def handle_data(self,data):
+  if any(t in ['script','style'] for t,a in self.stack):return
+  self.text.append(data)
+  if any(t=='h1' for t,a in self.stack):self.h1.append(data)
+  if any(t=='title' for t,a in self.stack):self.title.append(data)
+  if any(a.get('data-testid')=='pagination' for t,a in self.stack):self.pagination.append(data)
+def fetch(path,label):
+ assert len(rows)<10,'PUBLIC_REQUEST_BUDGET_EXCEEDED'
+ body=p/(label+'.html');headers=p/(label+'.headers')
+ out=subprocess.check_output(['curl','--proxy','http://127.0.0.1:7899','--silent','--show-error','--max-time','45','--max-redirs','0','--dump-header',str(headers),'--output',str(body),'--write-out','%{http_code} %{time_total}','https://pulsenovels.com'+path],text=True).split()
+ row={'label':label,'path':path,'http':int(out[0]),'seconds':float(out[1])};rows.append(row);(p/'public-requests.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2)+'\n')
+ return row,body,headers
+results={}
+r,b,h=fetch('/naver07aa70d2794ed3e5288b204fb467ee18.html','naver')
+assert r['http']==200 and not re.search(r'^Location:',h.read_text(),re.M|re.I),r
+body=b.read_bytes();sha=hashlib.sha256(body).hexdigest()
+assert len(body)==67 and sha=='80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431'
+results['naver']={**r,'bytes':len(body),'sha256':sha,'redirects':0}
+print('NAVER_VERIFICATION=PASS '+json.dumps(results['naver']),flush=True)
+for path,label in [('/category/female-audience?page=2','en-category-page2'),('/ko/category/female-audience','ko-category'),('/es/category/female-audience','es-category'),('/browse?page=2','browse-page2')]:
+ r,b,h=fetch(path,label)
+ parser=Parse();parser.feed(b.read_text());text=' '.join(parser.text);text=re.sub(r'\s+',' ',text)
+ works=re.findall(r'([0-9][0-9,]*)\s+works\b',text)
+ result={**r,'h1':''.join(parser.h1).strip(),'title':''.join(parser.title).strip(),'description':parser.meta.get('description'),'works':[int(x.replace(',','')) for x in works],'pagination':re.sub(r'\s+',' ',' '.join(parser.pagination)).strip()}
+ results[label]=result;(p/'public-acceptance-results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n');print(json.dumps(result,ensure_ascii=False),flush=True)
+ assert r['http']==200,(label,r['http'])
+ if label=='en-category-page2':
+  assert result['h1']=='Female Audience Novels' and result['title']=='Female Audience Novels - Page 2 | PulseNovel',result
+  assert result['description']=='Discover Female Audience novels on PulseNovel.',result
+  assert result['works'] and result['works'][0]>20,result
+  page=re.search(r'2\s*/\s*([0-9]+)',result['pagination']);assert page,result
+  n=result['works'][0];m=int(page[1]);assert (m-1)*20<n<=m*20,result
+ if label=='es-category':assert result['description']=='Descubre novelas de la categoría «Para lectoras» en PulseNovel.',result
+ if label=='ko-category':assert result['h1']=='소설: 여성향',result
+ if label=='browse-page2':assert result['works'] and result['works'][0]>20,result
+ time.sleep(1)
+print('PUBLIC_ACCEPTANCE=PASS requests='+str(len(rows)),flush=True)

@@ -1,0 +1,58 @@
+B21_SEEDING es=7918 fr=7367 en=43431 desc_median_chars=700
+SEED={"command":"seed","locale":"es","novels":7918,"avgDescriptionChars":895}
+SEED={"command":"seed","locale":"fr","novels":7367,"avgDescriptionChars":890}
+SEED={"command":"seed","locale":"en","novels":43431,"avgDescriptionChars":905}
+NOVELS_BY_LOCALE=en:43431,es:7918,fr:7367
+DB_SIZE_MB=177
+COMPARE={"command":"compare","locale":"es","lifecycle":"initialize_missing","equal":true,"items":5430,"legacyItemsFingerprint":"d6af756776908eed533041b6b6bb04caf03ae2dd6381057989bc0818567b6bc2","currentItemsFingerprint":"d6af756776908eed533041b6b6bb04caf03ae2dd6381057989bc0818567b6bc2","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+COMPARE={"command":"compare","locale":"es","lifecycle":"reclassify_existing","equal":true,"items":7747,"legacyItemsFingerprint":"b17f5cc188b4a0dc84c27d3c0c3922fcd98bbace6c833bc3c367649081689674","currentItemsFingerprint":"b17f5cc188b4a0dc84c27d3c0c3922fcd98bbace6c833bc3c367649081689674","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+COMPARE={"command":"compare","locale":"fr","lifecycle":"initialize_missing","equal":true,"items":5000,"legacyItemsFingerprint":"5876f727170e6cdfc7fc468448bb2316f796ce800f3f24bffb74c4bf47c95002","currentItemsFingerprint":"5876f727170e6cdfc7fc468448bb2316f796ce800f3f24bffb74c4bf47c95002","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+COMPARE={"command":"compare","locale":"fr","lifecycle":"reclassify_existing","equal":true,"items":7225,"legacyItemsFingerprint":"beea9013bedcbbec5188abcd3a1ea42d90684b8ecf6c7e6b4d88797b13b755d8","currentItemsFingerprint":"beea9013bedcbbec5188abcd3a1ea42d90684b8ecf6c7e6b4d88797b13b755d8","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+COMPARE={"command":"compare","locale":"en","lifecycle":"initialize_missing","equal":true,"items":29659,"legacyItemsFingerprint":"50a5355c2583a3947b953302d56ef52b54400bb611a289c898988977c87f4188","currentItemsFingerprint":"50a5355c2583a3947b953302d56ef52b54400bb611a289c898988977c87f4188","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+COMPARE={"command":"compare","locale":"en","lifecycle":"reclassify_existing","equal":true,"items":42595,"legacyItemsFingerprint":"60ee28a099a74933c52517e35b115e10403fa19957711c298fe86ab9314f08b2","currentItemsFingerprint":"60ee28a099a74933c52517e35b115e10403fa19957711c298fe86ab9314f08b2","legacyDerivationViolations":0,"currentDerivationViolations":0,"taskRowsEqual":true,"auditEqual":true}
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"legacy","locale":"es","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"d5a3153a-0ec7-43dc-9bcc-3f55563f4a4f","taskStatus":"pending","eligibleCount":7747},"startRssMiB":90.6,"peakRssMiB":639.5,"sampledPeakRssMiB":639.5,"endRssMiB":630,"heapPeakMiB":45.5,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":786}
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"legacy","locale":"fr","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"13d80b94-03b5-4fee-9aa0-0c04128fdea6","taskStatus":"pending","eligibleCount":7225},"startRssMiB":90.9,"peakRssMiB":605.9,"sampledPeakRssMiB":605.9,"endRssMiB":605.9,"heapPeakMiB":48.3,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":704}
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"legacy","locale":"en","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"5e956434-682e-4349-a6df-9f3d4e656866","taskStatus":"pending","eligibleCount":42595},"startRssMiB":91.7,"peakRssMiB":2657.4,"sampledPeakRssMiB":2657.4,"endRssMiB":2657.4,"heapPeakMiB":180.4,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":3960}
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"current","locale":"es","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"bf9cc367-cb79-4c4d-a4e1-a5a9f350235a","taskStatus":"pending","eligibleCount":7747},"startRssMiB":90.5,"peakRssMiB":188.2,"sampledPeakRssMiB":188.2,"endRssMiB":188.2,"heapPeakMiB":43.2,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":711}
+PEAK_RSS_MIB impl=current locale=es peak=188.2 limit=1024
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"current","locale":"fr","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"493f97e9-0830-4f66-81f4-39bc902b7f06","taskStatus":"pending","eligibleCount":7225},"startRssMiB":90.9,"peakRssMiB":186.5,"sampledPeakRssMiB":185,"endRssMiB":182.5,"heapPeakMiB":40.5,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":682}
+PEAK_RSS_MIB impl=current locale=fr peak=186.5 limit=1024
+NOTICE:  truncate cascades to table "generic_task_item"
+NOTICE:  truncate cascades to table "cron_run"
+NOTICE:  truncate cascades to table "revenue_sync_batch"
+NOTICE:  truncate cascades to table "revenue_raw_snapshot"
+NOTICE:  truncate cascades to table "revenue_daily_stat"
+MEASURE={"command":"measure","impl":"current","locale":"en","lifecycle":"reclassify_existing","result":{"status":"enqueued","taskId":"d505a880-4598-49d6-912f-e3c5d3c0cb7a","taskStatus":"pending","eligibleCount":42595},"startRssMiB":90.9,"peakRssMiB":242.9,"sampledPeakRssMiB":242.6,"endRssMiB":210.7,"heapPeakMiB":96.6,"externalPeakMiB":3.8,"arrayBuffersPeakMiB":0,"elapsedMs":4291}
+PEAK_RSS_MIB impl=current locale=en peak=242.9 limit=1024
+B21_MEASUREMENT=PASS
+B21_DISPOSABLE_DATABASE_CLEANED=yes

@@ -1,0 +1,18 @@
+2026-10-08T16:40:03Z npm notice
+2026-10-08T16:40:03Z DATABASE_MIGRATION=PASS
+2026-10-08T16:40:04Z DATABASE_GRANTS=PASS
+2026-10-08T16:40:04Z APP_RUNTIME=PASS image=cps-novel:0.5.12-84af0d7 identity=verified
+2026-10-08T16:40:05Z  Container cps-novel-web-1 Recreate 
+2026-10-08T16:40:05Z  Container cps-novel-web-1 Recreated 
+2026-10-08T16:40:05Z  Container cps-novel-web-1 Starting 
+2026-10-08T16:40:05Z  Container cps-novel-web-1 Started 
+2026-10-08T16:40:05Z  Container cps-novel-web-1 Waiting 
+2026-10-08T16:40:11Z  Container cps-novel-web-1 Healthy 
+2026-10-08T16:40:11Z RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+2026-10-08T16:40:11Z RUNTIME_IMAGE=PASS services=web
+2026-10-08T16:40:11Z HEALTH_WAIT=PASS service=web health=healthy
+2026-10-08T16:40:11Z PREPROD_SITE_MODE=public
+2026-10-08T16:40:14Z  Container cps-novel-web-run-4dd27a5036e3 Creating 
+2026-10-08T16:40:14Z  Container cps-novel-web-run-4dd27a5036e3 Created 
+2026-10-08T16:40:16Z RELEASE_VERIFY=PASS
+2026-10-08T16:40:16Z APP_RUNTIME=PASS image=cps-novel:0.5.12-84af0d7 identity=verified

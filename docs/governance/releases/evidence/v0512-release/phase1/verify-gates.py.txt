@@ -1,0 +1,37 @@
+from pathlib import Path
+import hashlib,json,re,subprocess
+p=Path('.tmp/v0512-phase1')
+rows=[line.split('\t') for line in (p/'gate-summary.tsv').read_text().splitlines()]
+passed={r[0] for r in rows if r[2]=='0'}
+runners=[x.stem for x in Path('scripts').glob('run-*-verification.sh') if x.name!='run-p1-12-runtime-verification.sh']
+assert len(runners)==33,len(runners)
+required=['dependency-audit','typecheck','lint','full-tests','build','prisma-validate','dictionary-static','b21','nginx-matrix','public-cutover-mutations','compose','brand-image']
+assert set(runners+required)<=passed,set(runners+required)-passed
+full=(p/'full-tests.log').read_text();a=json.loads((p/'full-tests.json').read_text())
+assert a['success'] and a['numFailedTests']==0 and a['numFailedTestSuites']==0
+assert not re.search(r'(?:Unhandled Errors|Unhandled Rejection|Uncaught Exception)\s*[─⎯\n]',full)
+markers={'run-next-proxy-probe-verification':'NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0','b21':'B21_MEASUREMENT=PASS','nginx-matrix':'NGINX_MATRIX_ALL=PASS','public-cutover-mutations':'PUBLIC_CUTOVER_MUTATIONS=PASS','brand-image':'BRAND_IMAGE=PASS','run-preprod-db-contract-verification':'PREPROD_DB_CONTRACT=PASS'}
+for name,marker in markers.items():
+ assert marker in (p/(name+'.log')).read_text(),(name,marker)
+proxy=(p/'run-next-proxy-probe-verification.log').read_text()
+assert len(re.findall(r'^NAVER_VERIFICATION_FILE ok ',proxy,re.M))==6
+x9=(p/'run-x9-postgres-verification.log').read_text()
+assert len(re.findall(r'^X9_MIGRATION_\S+=PASS migrations=23 tables=57$',x9,re.M))==2
+for runner in runners:
+ s=(p/(runner+'.log')).read_text();assert '=PASS' in s,runner
+ for line in s.splitlines():
+  if '_INTEGRATION=PASS' in line and 'skipped=' in line:assert re.search(r'\bskipped=0(?:\s|$)',line),(runner,line)
+assert len(list(Path('prisma/migrations').glob('*/migration.sql')))==23
+assert not subprocess.check_output(['git','diff','eb40756','--','prisma','docs/governance/database-schema-dictionary.jsonl','infra/postgres/grants.sql','infra/nginx','docker-compose.yml','infra/production-like/docker-compose.yml','infra/preproduction/docker-compose.yml'])
+naver=Path('public/naver07aa70d2794ed3e5288b204fb467ee18.html').read_bytes()
+assert len(naver)==67 and hashlib.sha256(naver).hexdigest()=='80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431'
+head=subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
+assert head=='84af0d7ef5ef36b06fa9783c114fe831adab4e13'
+assert not subprocess.check_output(['git','status','--porcelain=v1'])
+before=json.loads((p/'cps-reference-before.json').read_text())
+for repo,expected in before.items():
+ now={'head':subprocess.check_output(['git','-C',repo,'rev-parse','HEAD']).decode(),'status':subprocess.check_output(['git','-C',repo,'status','--porcelain=v1']).decode()}
+ assert now==expected,repo
+out={'result':'PASS','final':head,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}']).decode().strip(),'runners':33,'gates':len(passed),'fullTestCounters':{k:a[k] for k in ['numTotalTestSuites','numPassedTestSuites','numPendingTestSuites','numTotalTests','numPassedTests','numFailedTests','numPendingTests']},'fullTestLogSummary':re.findall(r'^\s*(?:Test Files|Tests)\s+.*$',full,re.M),'expectedPassedTests':9269,'passedCountMatchesHandoff':a['numPassedTests']==9269,'migrations':23,'x9Tables':57,'naverProbes':6,'proxyProbes':1742,'cpsReferenceUnchanged':True}
+(p/'gate-acceptance.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+print(json.dumps(out,ensure_ascii=False,indent=2))

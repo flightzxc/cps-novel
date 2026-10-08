@@ -1,0 +1,813 @@
+{
+  "name": "release-v0512",
+  "networks": {
+    "runtime": {
+      "name": "cps_novel_runtime",
+      "ipam": {
+        "config": [
+          {
+            "subnet": "172.18.0.0/16"
+          }
+        ]
+      }
+    }
+  },
+  "secrets": {
+    "admin_login_turnstile_secret_key": {
+      "name": "release-v0512_admin_login_turnstile_secret_key",
+      "file": "/dev/null"
+    },
+    "analyst_ro_password": {
+      "name": "release-v0512_analyst_ro_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/analyst_ro.password"
+    },
+    "backup_role_password": {
+      "name": "release-v0512_backup_role_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/backup_role.password"
+    },
+    "backup_role_pgpass": {
+      "name": "release-v0512_backup_role_pgpass",
+      "file": "/opt/cps-novel/shared/secrets/backup_role.pgpass"
+    },
+    "channel_credential_encryption_key_v1": {
+      "name": "release-v0512_channel_credential_encryption_key_v1",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/credential-v1.key"
+    },
+    "channel_credential_fingerprint_key": {
+      "name": "release-v0512_channel_credential_fingerprint_key",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/credential-fingerprint.key"
+    },
+    "migration_owner_password": {
+      "name": "release-v0512_migration_owner_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/migration_owner.password"
+    },
+    "postgres_admin_password": {
+      "name": "release-v0512_postgres_admin_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/postgres_admin.password"
+    },
+    "scheduler_app_password": {
+      "name": "release-v0512_scheduler_app_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/scheduler_app.password"
+    },
+    "totp_encryption_key": {
+      "name": "release-v0512_totp_encryption_key",
+      "file": "/opt/cps-novel/shared/secrets/totp_encryption_key"
+    },
+    "tracking_hash_salt": {
+      "name": "release-v0512_tracking_hash_salt",
+      "file": "/opt/cps-novel/shared/secrets/tracking_hash_salt"
+    },
+    "web_app_password": {
+      "name": "release-v0512_web_app_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/web_app.password"
+    },
+    "worker_app_password": {
+      "name": "release-v0512_worker_app_password",
+      "file": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/.tmp/p1-12-runtime/secrets/worker_app.password"
+    }
+  },
+  "services": {
+    "backup-timer": {
+      "command": [
+        "/bin/bash",
+        "/opt/cps-novel-preprod/backup-loop.sh"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "PGDATABASE": "cps_novel",
+        "PGHOST": "postgres",
+        "PGPASSFILE": "/run/secrets/backup_role_pgpass",
+        "PGPORT": "5432",
+        "PGUSER": "backup_role",
+        "PREPROD_BACKUP_INTERVAL_SECONDS": "86400",
+        "PREPROD_BASE_BACKUP_MIN_AGE_SECONDS": "604800",
+        "PREPROD_LOGICAL_RETENTION_DAYS": "14"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "find /var/lib/cps-novel/backups/last-success.json -mmin -1560 | grep -q ."
+        ],
+        "timeout": "10s",
+        "interval": "5m0s",
+        "retries": 3,
+        "start_period": "1h0m0s"
+      },
+      "image": "postgres:16.14",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "runtime": null
+      },
+      "restart": "unless-stopped",
+      "secrets": [
+        {
+          "source": "backup_role_pgpass",
+          "target": "/run/secrets/backup_role_pgpass"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/preproduction/backup-loop.sh",
+          "target": "/opt/cps-novel-preprod/backup-loop.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/scripts/db/backup-logical.sh",
+          "target": "/app/scripts/db/backup-logical.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/scripts/db/backup-physical-base.sh",
+          "target": "/app/scripts/db/backup-physical-base.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/scripts/db/verify-physical-base.sh",
+          "target": "/app/scripts/db/verify-physical-base.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/scripts/db/wal-retention.sh",
+          "target": "/app/scripts/db/wal-retention.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/opt/cps-novel/shared/backups",
+          "target": "/var/lib/cps-novel/backups",
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/opt/cps-novel/shared/wal-archive",
+          "target": "/var/lib/postgresql/wal-archive",
+          "bind": {}
+        }
+      ]
+    },
+    "postgres": {
+      "command": [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "listen_addresses=*"
+      ],
+      "entrypoint": [
+        "/bin/bash",
+        "/opt/cps-novel-preprod/postgres-entrypoint.sh"
+      ],
+      "environment": {
+        "P1_06_WAL_ARCHIVE_DIR": "/var/lib/postgresql/wal-archive",
+        "P1_12_ANALYST_RO_PASSWORD_FILE": "/run/secrets/analyst_ro_password",
+        "P1_12_BACKUP_ROLE_PASSWORD_FILE": "/run/secrets/backup_role_password",
+        "P1_12_MIGRATION_OWNER_PASSWORD_FILE": "/run/secrets/migration_owner_password",
+        "P1_12_SCHEDULER_APP_PASSWORD_FILE": "/run/secrets/scheduler_app_password",
+        "P1_12_WEB_APP_PASSWORD_FILE": "/run/secrets/web_app_password",
+        "P1_12_WORKER_APP_PASSWORD_FILE": "/run/secrets/worker_app_password",
+        "POSTGRES_DB": "cps_novel",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/postgres_admin_password",
+        "POSTGRES_USER": "postgres",
+        "X8_RUNTIME_SUBNET": "172.18.0.0/16"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d cps_novel"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 20,
+        "start_period": "10s"
+      },
+      "image": "postgres:16.14",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "runtime": null
+      },
+      "restart": "unless-stopped",
+      "secrets": [
+        {
+          "source": "postgres_admin_password",
+          "target": "/run/secrets/postgres_admin_password"
+        },
+        {
+          "source": "migration_owner_password",
+          "target": "/run/secrets/migration_owner_password"
+        },
+        {
+          "source": "web_app_password",
+          "target": "/run/secrets/web_app_password"
+        },
+        {
+          "source": "worker_app_password",
+          "target": "/run/secrets/worker_app_password"
+        },
+        {
+          "source": "scheduler_app_password",
+          "target": "/run/secrets/scheduler_app_password"
+        },
+        {
+          "source": "analyst_ro_password",
+          "target": "/run/secrets/analyst_ro_password"
+        },
+        {
+          "source": "backup_role_password",
+          "target": "/run/secrets/backup_role_password"
+        }
+      ],
+      "shm_size": "1073741824",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "postgres_data",
+          "target": "/var/lib/postgresql/data",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/postgres/init-roles.sh",
+          "target": "/docker-entrypoint-initdb.d/10-p1-12-roles.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/postgres/hba-replication-rule.sh",
+          "target": "/docker-entrypoint-initdb.d/hba-replication-rule.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/postgres/roles.sql",
+          "target": "/opt/cps-novel-postgres/roles.sql",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/opt/cps-novel/shared/wal-archive",
+          "target": "/var/lib/postgresql/wal-archive",
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/opt/cps-novel/shared/backups/base",
+          "target": "/var/lib/postgresql/base-backups",
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/postgres/pitr/postgresql.conf.example",
+          "target": "/etc/postgresql/postgresql.conf",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/infra/preproduction/postgres-entrypoint.sh",
+          "target": "/opt/cps-novel-preprod/postgres-entrypoint.sh",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.12/scripts/db/archive-wal.sh",
+          "target": "/app/scripts/db/archive-wal.sh",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "scheduler": {
+      "command": [
+        "bash",
+        "scripts/run-scheduler-loop.sh"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "APP_VERSION": "0.5.12",
+        "DATABASE_URL": "postgresql://scheduler_app:f33a13d89351297307acadb6559cb79457772a5c608f463e@postgres:5432/cps_novel?schema=public",
+        "FEATURE_INDEXNOW_DELIVERY": "false",
+        "FEATURE_PROMO_LINK_CLAIM": "false",
+        "GIT_COMMIT": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+        "INDEXNOW_DELIVERY_ALLOW_WRITE": "false",
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=384",
+        "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES": "1440",
+        "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES": "30",
+        "PROMO_CLAIM_LIFECYCLE_V1_ENABLED": "false",
+        "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES": "10",
+        "PROMO_CLAIM_SHARD_SIZE_MAX": "1000",
+        "PROMO_CLAIM_SHARD_SIZE_MIN": "50",
+        "PROMO_CLAIM_SHARD_WINDOW_MINUTES": "90",
+        "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
+        "SCHEDULER_INTERVAL_SECONDS": "60",
+        "SITE_URL": "http://127.0.0.1:3000",
+        "TZ": "Asia/Tokyo"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "node -e 'const value=require(\"node:fs\").readFileSync(\"/proc/1/cmdline\",\"utf8\");if(!value.includes(\"run-scheduler-loop.sh\"))process.exit(1)'"
+        ],
+        "timeout": "5s",
+        "interval": "15s",
+        "retries": 3,
+        "start_period": "10s"
+      },
+      "image": "cps-novel:0.5.12-84af0d7",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "mem_limit": "536870912",
+      "networks": {
+        "runtime": null
+      },
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "user": "1001:1001"
+    },
+    "web": {
+      "command": [
+        "bash",
+        "scripts/start-web.sh"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "ADMIN_CANONICAL_ORIGIN": "http://127.0.0.1:3000",
+        "ADMIN_LOGIN_TURNSTILE_ENABLED": "false",
+        "ADMIN_LOGIN_TURNSTILE_SECRET_KEY": "",
+        "ADMIN_LOGIN_TURNSTILE_SECRET_KEY_FILE": "/run/secrets/admin_login_turnstile_secret_key",
+        "ADMIN_LOGIN_TURNSTILE_SITE_KEY": "",
+        "ADMIN_TWO_FACTOR_ENFORCEMENT": "true",
+        "APP_VERSION": "0.5.12",
+        "ARTICLE_BLOG_ALLOW_WRITE": "false",
+        "ARTICLE_NOVEL_REBIND_ALLOW_WRITE": "false",
+        "AUTO_WRITE_AUTHORIZED": "NO",
+        "BACKUP_OUTPUT_DIR": "/var/lib/cps-novel/backups/logical",
+        "BACKUP_STATUS_FILE": "/var/lib/cps-novel/backups/last-success.json",
+        "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION": "1",
+        "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE": "/run/secrets/channel_credential_encryption_key_v1",
+        "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE": "/run/secrets/channel_credential_fingerprint_key",
+        "CONTENT_PUBLISH_ROLES": "super_admin",
+        "CONTENT_PUBLISH_USER_IDS": "",
+        "CONTENT_READ_ROLES": "super_admin",
+        "CONTENT_READ_USER_IDS": "",
+        "CONTENT_VIEW_ROLES": "super_admin",
+        "CONTENT_VIEW_USER_IDS": "",
+        "CREDENTIAL_MANAGE_ROLES": "super_admin",
+        "CREDENTIAL_MANAGE_USER_IDS": "",
+        "DATABASE_URL": "postgresql://web_app:dcd5f64966e4228f57204a3353edc6ea4ac70be04cef8bf2@postgres:5432/cps_novel?schema=public",
+        "FEATURE_ARTICLE_BLOG": "false",
+        "FEATURE_ARTICLE_NOVEL_REBIND": "false",
+        "FEATURE_ARTICLE_SEO_VISIBILITY": "false",
+        "FEATURE_INDEXNOW_OUTBOX": "false",
+        "FEATURE_NOVEL_CATALOG_SYNC": "false",
+        "FEATURE_NOVEL_TAG_AUTO": "false",
+        "FEATURE_P2_06_5_TAGGING": "false",
+        "FEATURE_P2_06_5_TAG_ADMIN_WRITE": "false",
+        "FEATURE_PROMO_LINK_CLAIM": "false",
+        "FEATURE_SITEMAP_AUTO_REFRESH": "false",
+        "GIT_COMMIT": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+        "HOSTNAME": "0.0.0.0",
+        "INDEXNOW_OUTBOX_ALLOW_WRITE": "false",
+        "MOBOREADER_CATALOG_SAFETY_MAX_PAGES": "2000",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES": "moboreader",
+        "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE": "20",
+        "NEXT_PUBLIC_BUILD_VERSION": "v0.5.12",
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=1536",
+        "NOVEL_CATALOG_SYNC_ALLOW_WRITE": "false",
+        "PORT": "3000",
+        "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES": "1440",
+        "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES": "30",
+        "PROMO_CLAIM_LIFECYCLE_V1_ENABLED": "false",
+        "PROMO_CLAIM_ROLES": "",
+        "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES": "10",
+        "PROMO_CLAIM_SHARD_SIZE_MAX": "1000",
+        "PROMO_CLAIM_SHARD_SIZE_MIN": "50",
+        "PROMO_CLAIM_SHARD_WINDOW_MINUTES": "90",
+        "PROMO_CLAIM_USER_IDS": "",
+        "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
+        "PUBLIC_TRACKING_WRITE_DISABLED": "1",
+        "REVENUE_VIEW_ROLES": "super_admin",
+        "REVENUE_VIEW_USER_IDS": "",
+        "SETTINGS_MANAGE_ROLES": "super_admin",
+        "SETTINGS_MANAGE_USER_IDS": "",
+        "SITEMAP_AUTO_REFRESH_ALLOW_WRITE": "false",
+        "SITEMAP_STATIC_DIR": "/app/runtime/static-sitemaps",
+        "SITE_URL": "http://127.0.0.1:3000",
+        "TASK_MANAGE_ROLES": "super_admin",
+        "TASK_MANAGE_USER_IDS": "",
+        "TOTP_ENCRYPTION_KEY": "",
+        "TOTP_ENCRYPTION_KEY_FILE": "/run/secrets/totp_encryption_key",
+        "TRACKING_HASH_SALT": "",
+        "TRACKING_HASH_SALT_FILE": "/run/secrets/tracking_hash_salt",
+        "TZ": "Asia/Tokyo"
+      },
+      "group_add": [
+        "1000"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/health \u003e/dev/null 2\u003e\u00261 || exit 1"
+        ],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 6,
+        "start_period": "20s"
+      },
+      "image": "cps-novel:0.5.12-84af0d7",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "mem_limit": "2147483648",
+      "networks": {
+        "runtime": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 3000,
+          "published": "3000",
+          "protocol": "tcp"
+        }
+      ],
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "secrets": [
+        {
+          "source": "channel_credential_encryption_key_v1",
+          "target": "/run/secrets/channel_credential_encryption_key_v1"
+        },
+        {
+          "source": "channel_credential_fingerprint_key",
+          "target": "/run/secrets/channel_credential_fingerprint_key"
+        },
+        {
+          "source": "tracking_hash_salt",
+          "target": "/run/secrets/tracking_hash_salt"
+        },
+        {
+          "source": "totp_encryption_key",
+          "target": "/run/secrets/totp_encryption_key"
+        },
+        {
+          "source": "admin_login_turnstile_secret_key",
+          "target": "/run/secrets/admin_login_turnstile_secret_key"
+        }
+      ],
+      "user": "1001:1001",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "sitemap_static",
+          "target": "/app/runtime/static-sitemaps",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/opt/cps-novel/shared/backups",
+          "target": "/var/lib/cps-novel/backups",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "worker": {
+      "command": [
+        "bash",
+        "scripts/start-worker.sh"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "APP_VERSION": "0.5.12",
+        "AUTO_WRITE_AUTHORIZED": "NO",
+        "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION": "1",
+        "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE": "/run/secrets/channel_credential_encryption_key_v1",
+        "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE": "/run/secrets/channel_credential_fingerprint_key",
+        "DATABASE_URL": "postgresql://worker_app:7eeceabd4181dc864be256ca3072bae493e018b2b76b9c4b@postgres:5432/cps_novel?schema=public",
+        "FEATURE_ARTICLE_BLOG": "false",
+        "FEATURE_ARTICLE_SEO_VISIBILITY": "false",
+        "FEATURE_INDEXNOW_DELIVERY": "false",
+        "FEATURE_INDEXNOW_OUTBOX": "false",
+        "FEATURE_NOVEL_CATALOG_SYNC": "false",
+        "FEATURE_NOVEL_TAG_AUTO": "false",
+        "FEATURE_P2_06_5_TAGGING": "false",
+        "FEATURE_P2_06_5_TAG_ADMIN_WRITE": "false",
+        "FEATURE_PROMO_LINK_CLAIM": "false",
+        "FEATURE_SITEMAP_AUTO_REFRESH": "false",
+        "GIT_COMMIT": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+        "INDEXNOW_DELIVERY_ALLOW_WRITE": "false",
+        "INDEXNOW_OUTBOX_ALLOW_WRITE": "false",
+        "MOBOREADER_CATALOG_SAFETY_MAX_PAGES": "2000",
+        "MOBOREADER_PREVIEW_CHUNK_SIZE": "25",
+        "MOBOREADER_PREVIEW_CONCURRENCY": "2",
+        "MOBOREADER_PREVIEW_FRESHNESS_MS": "86400000",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES": "moboreader",
+        "MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST": "",
+        "MOBOREADER_PREVIEW_TIMEOUT_MS": "20000",
+        "MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS": "250",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS": "1100",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE": "1200",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC": "1200",
+        "MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED": "false",
+        "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS": "60000",
+        "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE": "20",
+        "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE": "12",
+        "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC": "8",
+        "MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS": "900000",
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=1536",
+        "NOVEL_CATALOG_SYNC_ALLOW_WRITE": "false",
+        "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES": "1440",
+        "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES": "30",
+        "PROMO_CLAIM_LIFECYCLE_V1_ENABLED": "false",
+        "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES": "10",
+        "PROMO_CLAIM_SHARD_SIZE_MAX": "1000",
+        "PROMO_CLAIM_SHARD_SIZE_MIN": "50",
+        "PROMO_CLAIM_SHARD_WINDOW_MINUTES": "90",
+        "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
+        "PROMO_LINK_CLAIM_READBACK_ATTEMPTS": "3",
+        "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS": "2000",
+        "SITEMAP_AUTO_REFRESH_ALLOW_WRITE": "false",
+        "SITEMAP_STATIC_DIR": "/app/runtime/static-sitemaps",
+        "SITE_URL": "http://127.0.0.1:3000",
+        "TZ": "Asia/Tokyo",
+        "WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS": "1800",
+        "WORKER_FAILURE_WEBHOOK_TIMEOUT_MS": "5000",
+        "WORKER_FAILURE_WEBHOOK_URL": "",
+        "WORKER_ID": "compose-worker",
+        "WORKER_LANE": "main",
+        "WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS": "30000",
+        "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,batch.materialize.v1,content.create.v1,promo_link.claim.v1,changdu.revenue_sync.v1"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "node -e 'const value=require(\"node:fs\").readFileSync(\"/proc/1/cmdline\",\"utf8\");if(!value.includes(\"worker/index.ts\"))process.exit(1)'"
+        ],
+        "timeout": "5s",
+        "interval": "15s",
+        "retries": 3,
+        "start_period": "10s"
+      },
+      "image": "cps-novel:0.5.12-84af0d7",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "mem_limit": "2147483648",
+      "networks": {
+        "runtime": null
+      },
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "secrets": [
+        {
+          "source": "channel_credential_encryption_key_v1",
+          "target": "/run/secrets/channel_credential_encryption_key_v1"
+        },
+        {
+          "source": "channel_credential_fingerprint_key",
+          "target": "/run/secrets/channel_credential_fingerprint_key"
+        }
+      ],
+      "stop_grace_period": "45s",
+      "user": "1001:1001",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "sitemap_static",
+          "target": "/app/runtime/static-sitemaps",
+          "volume": {}
+        }
+      ]
+    },
+    "worker-light": {
+      "command": [
+        "bash",
+        "scripts/start-worker.sh"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "APP_VERSION": "0.5.12",
+        "AUTO_WRITE_AUTHORIZED": "NO",
+        "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION": "1",
+        "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE": "/run/secrets/channel_credential_encryption_key_v1",
+        "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE": "/run/secrets/channel_credential_fingerprint_key",
+        "DATABASE_URL": "postgresql://worker_app:7eeceabd4181dc864be256ca3072bae493e018b2b76b9c4b@postgres:5432/cps_novel?schema=public",
+        "FEATURE_ARTICLE_BLOG": "false",
+        "FEATURE_ARTICLE_SEO_VISIBILITY": "false",
+        "FEATURE_INDEXNOW_DELIVERY": "false",
+        "FEATURE_INDEXNOW_OUTBOX": "false",
+        "FEATURE_NOVEL_CATALOG_SYNC": "false",
+        "FEATURE_NOVEL_TAG_AUTO": "false",
+        "FEATURE_P2_06_5_TAGGING": "false",
+        "FEATURE_P2_06_5_TAG_ADMIN_WRITE": "false",
+        "FEATURE_PROMO_LINK_CLAIM": "false",
+        "FEATURE_SITEMAP_AUTO_REFRESH": "false",
+        "GIT_COMMIT": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+        "INDEXNOW_DELIVERY_ALLOW_WRITE": "false",
+        "INDEXNOW_OUTBOX_ALLOW_WRITE": "false",
+        "MOBOREADER_CATALOG_SAFETY_MAX_PAGES": "2000",
+        "MOBOREADER_PREVIEW_CHUNK_SIZE": "25",
+        "MOBOREADER_PREVIEW_CONCURRENCY": "2",
+        "MOBOREADER_PREVIEW_FRESHNESS_MS": "86400000",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES": "moboreader",
+        "MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST": "",
+        "MOBOREADER_PREVIEW_TIMEOUT_MS": "20000",
+        "MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS": "250",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS": "1100",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE": "1200",
+        "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC": "1200",
+        "MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED": "false",
+        "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS": "60000",
+        "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE": "20",
+        "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE": "12",
+        "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC": "8",
+        "MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS": "900000",
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=768",
+        "NOVEL_CATALOG_SYNC_ALLOW_WRITE": "false",
+        "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES": "1440",
+        "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES": "30",
+        "PROMO_CLAIM_LIFECYCLE_V1_ENABLED": "false",
+        "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES": "10",
+        "PROMO_CLAIM_SHARD_SIZE_MAX": "1000",
+        "PROMO_CLAIM_SHARD_SIZE_MIN": "50",
+        "PROMO_CLAIM_SHARD_WINDOW_MINUTES": "90",
+        "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
+        "PROMO_LINK_CLAIM_READBACK_ATTEMPTS": "3",
+        "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS": "2000",
+        "SITEMAP_AUTO_REFRESH_ALLOW_WRITE": "false",
+        "SITEMAP_STATIC_DIR": "/app/runtime/static-sitemaps",
+        "SITE_URL": "http://127.0.0.1:3000",
+        "TZ": "Asia/Tokyo",
+        "WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS": "1800",
+        "WORKER_FAILURE_WEBHOOK_TIMEOUT_MS": "5000",
+        "WORKER_FAILURE_WEBHOOK_URL": "",
+        "WORKER_ID": "compose-worker-light",
+        "WORKER_LANE": "light",
+        "WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS": "30000",
+        "WORKER_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "node -e 'const value=require(\"node:fs\").readFileSync(\"/proc/1/cmdline\",\"utf8\");if(!value.includes(\"worker/index.ts\"))process.exit(1)'"
+        ],
+        "timeout": "5s",
+        "interval": "15s",
+        "retries": 3,
+        "start_period": "10s"
+      },
+      "image": "cps-novel:0.5.12-84af0d7",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "mem_limit": "1073741824",
+      "networks": {
+        "runtime": null
+      },
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "secrets": [
+        {
+          "source": "channel_credential_encryption_key_v1",
+          "target": "/run/secrets/channel_credential_encryption_key_v1"
+        },
+        {
+          "source": "channel_credential_fingerprint_key",
+          "target": "/run/secrets/channel_credential_fingerprint_key"
+        }
+      ],
+      "stop_grace_period": "45s",
+      "user": "1001:1001",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "sitemap_static",
+          "target": "/app/runtime/static-sitemaps",
+          "volume": {}
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "postgres_data": {
+      "name": "cps_novel_postgres_data"
+    },
+    "sitemap_static": {
+      "name": "cps_novel_sitemap_static"
+    }
+  },
+  "x-app-runtime": {
+    "build": {
+      "args": {
+        "APP_VERSION": "0.5.12",
+        "BUILD_DATE": "2026-10-08T16:06:31Z",
+        "GIT_COMMIT": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+        "NEXT_PUBLIC_BUILD_VERSION": "v0.5.12",
+        "NODE_BASE_IMAGE": "node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293"
+      },
+      "context": "."
+    },
+    "depends_on": {
+      "postgres": {
+        "condition": "service_healthy"
+      }
+    },
+    "image": "cps-novel:0.5.12-84af0d7",
+    "logging": {
+      "driver": "json-file",
+      "options": {
+        "max-file": "3",
+        "max-size": "10m"
+      }
+    },
+    "networks": [
+      "runtime"
+    ],
+    "restart": "unless-stopped",
+    "user": "1001:1001"
+  },
+  "x-json-logging": {
+    "driver": "json-file",
+    "options": {
+      "max-file": "3",
+      "max-size": "10m"
+    }
+  }
+}

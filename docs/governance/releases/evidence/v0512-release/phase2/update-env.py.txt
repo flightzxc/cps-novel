@@ -1,0 +1,31 @@
+from pathlib import Path
+import hashlib,datetime,os,shutil,difflib,subprocess,tempfile
+p=Path('/opt/cps-novel/shared/env/preprod.env');before=p.read_bytes()
+if hashlib.sha256(before).hexdigest()!='9151af405e540f697ad40f7fed1dd428275f4dd0ce5e1acf45d71c176374e328':raise SystemExit('ENV_PRECONDITION_SHA_MISMATCH')
+changes={b'APP_VERSION=0.5.11\n':b'APP_VERSION=0.5.12\n',b'NEXT_PUBLIC_BUILD_VERSION=v0.5.11\n':b'NEXT_PUBLIC_BUILD_VERSION=v0.5.12\n'}
+for old in changes:
+ if before.count(old)!=1:raise SystemExit('ENV_PRECONDITION_MISMATCH='+old.split(b'=')[0].decode())
+env={x.split(b'=',1)[0]:x.split(b'=',1)[1] for x in before.splitlines() if b'=' in x and not x.startswith(b'#')}
+assert env[b'WORKER_TASK_ALLOWLIST'].endswith(b',changdu.revenue_sync.v1'),'MAIN_ALLOWLIST_MISMATCH_STOP'
+after=before
+for old,new in changes.items():after=after.replace(old,new)
+removed=[x for x in difflib.ndiff(before.decode().splitlines(),after.decode().splitlines()) if x.startswith('- ')]
+added=[x for x in difflib.ndiff(before.decode().splitlines(),after.decode().splitlines()) if x.startswith('+ ')]
+assert len(removed)==2 and len(added)==2,'ENV_DIFF_NOT_TWO_LINES'
+backup=p.with_name(p.name+'.bak-v0512-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
+temp=p.with_name(p.name+'.tmp-v0512-'+str(os.getpid()))
+assert not backup.exists() and not temp.exists()
+shutil.copy2(p,backup);assert backup.read_bytes()==before
+try:
+ fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+ with os.fdopen(fd,'wb') as f:f.write(after);f.flush();os.fsync(f.fileno())
+ os.replace(temp,p)
+finally:temp.unlink(missing_ok=True)
+assert p.read_bytes()==after and backup.read_bytes()==before
+print('ENV_BACKUP='+str(backup));print('ENV_BEFORE_SHA256='+hashlib.sha256(before).hexdigest());print('ENV_AFTER_SHA256='+hashlib.sha256(after).hexdigest())
+print(''.join(difflib.unified_diff(before.decode().splitlines(True),after.decode().splitlines(True),fromfile=str(backup),tofile=str(p),n=0)),end='')
+with tempfile.TemporaryDirectory() as td:
+ a=Path(td)/'before';b=Path(td)/'after'
+ def strip_versions(data):return b''.join(x for x in data.splitlines(keepends=True) if not x.startswith((b'APP_VERSION=',b'NEXT_PUBLIC_BUILD_VERSION=')))
+ a.write_bytes(strip_versions(before));b.write_bytes(strip_versions(p.read_bytes()));subprocess.run(['cmp',str(a),str(b)],check=True)
+print('ENV_ONLY_TWO_AUTHORIZED_LINES_CHANGED=PASS ENV_OTHER_BYTES_CMP=PASS WORKER_ALLOWLISTS_UNCHANGED=PASS')

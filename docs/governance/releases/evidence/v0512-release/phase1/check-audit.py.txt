@@ -1,0 +1,12 @@
+import json,sys
+from pathlib import Path
+mode=sys.argv[1];p=Path('.tmp/v0512-phase1')
+a=json.loads((p/('audit-production.json' if mode=='production' else 'audit-full.json')).read_text())
+assert 'error' not in a,a.get('error')
+v=a['metadata']['vulnerabilities']
+high=sorted(k for k,x in a['vulnerabilities'].items() if x['severity']=='high')
+critical=sorted(k for k,x in a['vulnerabilities'].items() if x['severity']=='critical')
+if mode=='production':
+ assert v['critical']==0 and v['high']==5,(v,high,critical)
+ assert high==sorted(['@prisma/config','deepmerge-ts','effect','nanoid','prisma']),high
+print(json.dumps({'mode':mode,'counts':v,'highPackages':high,'criticalPackages':critical},ensure_ascii=False))

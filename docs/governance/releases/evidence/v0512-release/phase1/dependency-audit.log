@@ -1,0 +1,2 @@
+{"mode": "production", "counts": {"info": 0, "low": 0, "moderate": 0, "high": 5, "critical": 0, "total": 5}, "highPackages": ["@prisma/config", "deepmerge-ts", "effect", "nanoid", "prisma"], "criticalPackages": []}
+{"mode": "full", "counts": {"info": 0, "low": 0, "moderate": 1, "high": 12, "critical": 2, "total": 15}, "highPackages": ["@next/eslint-plugin-next", "@prisma/config", "brace-expansion", "braces", "deepmerge-ts", "effect", "eslint-config-next", "fast-glob", "js-yaml", "micromatch", "nanoid", "prisma"], "criticalPackages": ["tinypool", "vitest"]}
