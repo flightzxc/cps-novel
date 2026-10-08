@@ -1,0 +1,557 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.11
+
+stderr | tests/integration/tagging/p2-06-5-postgres.test.ts > P2-06.5 isolated PostgreSQL foundation > runs scoped dry-run/apply tasks idempotently and fails closed on stale/manual/gate states
+{"family":"generic","taskType":"tagging.auto_classify","taskId":"93947be5-0c42-421a-b306-c639bd9cdc90","itemId":"6b032927-c802-497e-a4c8-81b968c55731","workerId":"tag-denied-worker","errorKind":"auto_write_not_authorized","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:48:06.704Z"}
+
+ ✓ |node| tests/integration/tagging/p2-06-5-postgres.test.ts (15 tests) 586ms
+stderr | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > worker commit hook waits for whole child, ignores already-existing results, and isolates enqueue failure
+[tagging-initialize] {
+  context: '5ee80a37-73c0-4992-875d-013a5a6ac858',
+  status: 'failed',
+  error: 'queue unavailable'
+}
+
+stdout | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > records isolated 25-book classification throughput for the future approval checklist
+WO7_THROUGHPUT novels=25 locale=en fixture_keywords=1 enqueue_ms=13.17 classify_ms=627.77 books_per_second=39.82
+
+stdout | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics
+WO7_EXPLAIN stats=channel-app-missing-stats auto=false novels=80000 label_links=1760000 targets=25
+Unique  (cost=369.69..369.74 rows=2 width=1066) (actual time=5.539..5.549 rows=25 loops=1)
+  Buffers: shared hit=6004 read=581 written=563
+  CTE target_source_item
+    ->  Bitmap Heap Scan on novel_source_item nsi  (cost=110.69..202.96 rows=25 width=99) (actual time=0.041..0.149 rows=25 loops=1)
+          Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+          Filter: ((deleted_at IS NULL) AND (raw_language_scope IS NOT NULL) AND ((status)::text = 'linked'::text))
+          Heap Blocks: exact=25
+          Buffers: shared hit=80 read=20 written=2
+          ->  Bitmap Index Scan on novel_source_novel_idx  (cost=0.00..110.62 rows=25 width=0) (actual time=0.029..0.029 rows=25 loops=1)
+                Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Buffers: shared hit=72 read=3
+  ->  Sort  (cost=166.73..166.74 rows=2 width=1066) (actual time=5.538..5.544 rows=25 loops=1)
+        Sort Key: ct.sort_order, ct.slug, nct.novel_id, ct.id, requested.display_name, en.display_name, zh.display_name, ct.updated_at
+        Sort Method: quicksort  Memory: 27kB
+        Buffers: shared hit=6004 read=581 written=563
+        ->  Nested Loop Left Join  (cost=142.52..166.72 rows=2 width=1066) (actual time=5.508..5.527 rows=25 loops=1)
+              Join Filter: (zh.canonical_tag_id = ct.id)
+              Buffers: shared hit=6001 read=581 written=563
+              ->  Nested Loop Left Join  (cost=142.38..158.53 rows=2 width=728) (actual time=5.497..5.511 rows=25 loops=1)
+                    Join Filter: (en.canonical_tag_id = ct.id)
+                    Buffers: shared hit=6000 read=580 written=562
+                    ->  Nested Loop Left Join  (cost=142.23..150.33 rows=2 width=390) (actual time=5.487..5.498 rows=25 loops=1)
+                          Join Filter: (requested.canonical_tag_id = ct.id)
+                          Buffers: shared hit=5999 read=580 written=562
+                          ->  Merge Join  (cost=142.09..142.14 rows=2 width=52) (actual time=5.476..5.483 rows=25 loops=1)
+                                Merge Cond: (nct.canonical_tag_id = ct.id)
+                                Buffers: shared hit=5999 read=579 written=561
+                                ->  Sort  (cost=140.98..140.99 rows=2 width=32) (actual time=5.462..5.467 rows=25 loops=1)
+                                      Sort Key: nct.canonical_tag_id
+                                      Sort Method: quicksort  Memory: 26kB
+                                      Buffers: shared hit=5998 read=579 written=561
+                                      ->  Unique  (cost=140.96..140.97 rows=2 width=32) (actual time=5.413..5.461 rows=25 loops=1)
+                                            Buffers: shared hit=5998 read=579 written=561
+                                            ->  Sort  (cost=140.96..140.96 rows=2 width=32) (actual time=5.412..5.432 rows=550 loops=1)
+                                                  Sort Key: nct.novel_id, nct.canonical_tag_id
+                                                  Sort Method: quicksort  Memory: 55kB
+                                                  Buffers: shared hit=5998 read=579 written=561
+                                                  ->  Append  (cost=0.71..140.95 rows=2 width=32) (actual time=0.649..5.321 rows=550 loops=1)
+                                                        Buffers: shared hit=5998 read=579 written=561
+                                                        ->  Nested Loop  (cost=0.71..120.77 rows=1 width=32) (actual time=0.018..0.019 rows=0 loops=1)
+                                                              Join Filter: (nct.novel_id = nts.novel_id)
+                                                              Buffers: shared hit=75
+                                                              ->  Index Scan using novel_canonical_tag_novel_source_idx on novel_canonical_tag nct  (cost=0.42..114.70 rows=1 width=32) (actual time=0.018..0.018 rows=0 loops=1)
+                                                                    Index Cond: ((novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[])) AND ((source)::text = 'manual'::text))
+                                                                    Buffers: shared hit=75
+                                                              ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts  (cost=0.29..6.06 rows=1 width=16) (never executed)
+                                                                    Index Cond: ((mode)::text = 'manual'::text)
+                                                        ->  Nested Loop Anti Join  (cost=1.88..20.17 rows=1 width=32) (actual time=0.630..5.267 rows=550 loops=1)
+                                                              Join Filter: (nts_1.novel_id = tsi.novel_id)
+                                                              Rows Removed by Join Filter: 550
+                                                              Buffers: shared hit=5923 read=579 written=561
+                                                              ->  Nested Loop  (cost=1.58..14.10 rows=1 width=32) (actual time=0.611..4.787 rows=550 loops=1)
+                                                                    Buffers: shared hit=4272 read=579 written=561
+                                                                    ->  Nested Loop  (cost=1.16..5.65 rows=1 width=64) (actual time=0.203..1.544 rows=600 loops=1)
+                                                                          Join Filter: (ca.id = sl.channel_app_id)
+                                                                          Buffers: shared hit=2478 read=23 written=5
+                                                                          ->  Nested Loop  (cost=1.02..4.48 rows=1 width=112) (actual time=0.193..0.544 rows=600 loops=1)
+                                                                                Join Filter: (ca.id = tsi.channel_app_id)
+                                                                                Buffers: shared hit=1279 read=22 written=4
+                                                                                ->  Hash Join  (cost=0.88..2.31 rows=1 width=96) (actual time=0.170..0.241 rows=600 loops=1)
+                                                                                      Hash Cond: ((slm.channel_app_id = tsi.channel_app_id) AND (slm.raw_language_scope = (tsi.raw_language_scope)::text))
+                                                                                      Buffers: shared hit=81 read=20 written=2
+                                                                                      ->  Seq Scan on source_label_mapping slm  (cost=0.00..1.24 rows=24 width=99) (actual time=0.004..0.008 rows=24 loops=1)
+                                                                                            Filter: (active IS TRUE)
+                                                                                            Buffers: shared hit=1
+                                                                                      ->  Hash  (cost=0.50..0.50 rows=25 width=80) (actual time=0.161..0.162 rows=25 loops=1)
+                                                                                            Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                                                            Buffers: shared hit=80 read=20 written=2
+                                                                                            ->  CTE Scan on target_source_item tsi  (cost=0.00..0.50 rows=25 width=80) (actual time=0.043..0.156 rows=25 loops=1)
+                                                                                                  Buffers: shared hit=80 read=20 written=2
+                                                                                ->  Index Scan using channel_app_pkey on channel_app ca  (cost=0.14..2.17 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=600)
+                                                                                      Index Cond: (id = slm.channel_app_id)
+                                                                                      Filter: ((status)::text = 'active'::text)
+                                                                                      Buffers: shared hit=1198 read=2 written=2
+                                                                          ->  Index Scan using source_label_identity_key on source_label sl  (cost=0.14..1.15 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=600)
+                                                                                Index Cond: ((channel_app_id = slm.channel_app_id) AND ((label_kind)::text = 'series_type'::text))
+                                                                                Filter: ((external_label_value)::text = slm.raw_token)
+                                                                                Rows Removed by Filter: 11
+                                                                                Buffers: shared hit=1199 read=1 written=1
+                                                                    ->  Index Scan using novel_source_label_key on novel_source_item_label nsil  (cost=0.43..8.45 rows=1 width=32) (actual time=0.005..0.005 rows=1 loops=600)
+                                                                          Index Cond: ((novel_source_item_id = tsi.id) AND (source_label_id = sl.id))
+                                                                          Filter: (active IS TRUE)
+                                                                          Buffers: shared hit=1794 read=556 written=556
+                                                              ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts_1  (cost=0.29..6.06 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=550)
+                                                                    Index Cond: ((mode)::text = 'manual'::text)
+                                                                    Buffers: shared hit=1651
+                                ->  Sort  (cost=1.10..1.11 rows=4 width=36) (actual time=0.011..0.011 rows=2 loops=1)
+                                      Sort Key: ct.id
+                                      Sort Method: quicksort  Memory: 25kB
+                                      Buffers: shared hit=1
+                                      ->  Seq Scan on canonical_tag ct  (cost=0.00..1.06 rows=4 width=36) (actual time=0.006..0.007 rows=4 loops=1)
+                                            Filter: ((status)::text = 'active'::text)
+                                            Rows Removed by Filter: 1
+                                            Buffers: shared hit=1
+                          ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=0 loops=25)
+                                Buffers: shared read=1 written=1
+                                ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation requested  (cost=0.14..8.16 rows=1 width=354) (actual time=0.009..0.009 rows=0 loops=1)
+                                      Index Cond: ((locale)::text = 'en'::text)
+                                      Buffers: shared read=1 written=1
+                    ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=0 loops=25)
+                          Buffers: shared hit=1
+                          ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation en  (cost=0.14..8.16 rows=1 width=354) (actual time=0.008..0.008 rows=0 loops=1)
+                                Index Cond: ((locale)::text = 'en'::text)
+                                Buffers: shared hit=1
+              ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=1 loops=25)
+                    Buffers: shared hit=1 read=1 written=1
+                    ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation zh  (cost=0.14..8.16 rows=1 width=354) (actual time=0.009..0.009 rows=1 loops=1)
+                          Index Cond: ((locale)::text = 'zh'::text)
+                          Buffers: shared hit=1 read=1 written=1
+Planning:
+  Buffers: shared hit=389 read=30
+Planning Time: 1.993 ms
+Execution Time: 5.657 ms
+WO7_EXPLAIN_END
+
+stdout | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics
+WO7_EXPLAIN stats=channel-app-missing-stats auto=true novels=80000 label_links=1760000 targets=25
+Sort  (cost=780.51..780.52 rows=2 width=1146) (actual time=3.307..3.314 rows=50 loops=1)
+  Sort Key: membership.source_rank, (CASE WHEN (membership.source_rank = 0) THEN ct.sort_order ELSE NULL::integer END), (CASE WHEN (membership.source_rank = 0) THEN ct.slug ELSE NULL::character varying END), (CASE WHEN (membership.source_rank = 1) THEN membership.score ELSE NULL::double precision END) DESC, (CASE WHEN (membership.source_rank = 1) THEN ct.stable_id ELSE NULL::character varying END), membership.novel_id
+  Sort Method: quicksort  Memory: 30kB
+  Buffers: shared hit=6781
+  CTE target_source_item
+    ->  Bitmap Heap Scan on novel_source_item nsi  (cost=110.69..202.96 rows=25 width=99) (actual time=0.023..0.041 rows=25 loops=1)
+          Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+          Filter: ((deleted_at IS NULL) AND (raw_language_scope IS NOT NULL) AND ((status)::text = 'linked'::text))
+          Heap Blocks: exact=25
+          Buffers: shared hit=100
+          ->  Bitmap Index Scan on novel_source_novel_idx  (cost=0.00..110.62 rows=25 width=0) (actual time=0.018..0.018 rows=25 loops=1)
+                Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Buffers: shared hit=75
+  CTE base_membership
+    ->  Unique  (cost=140.96..140.98 rows=2 width=44) (actual time=2.804..2.857 rows=25 loops=1)
+          Buffers: shared hit=6576
+          ->  Sort  (cost=140.96..140.96 rows=2 width=44) (actual time=2.804..2.824 rows=550 loops=1)
+                Sort Key: nct.novel_id, nct.canonical_tag_id, (0), (NULL::double precision)
+                Sort Method: quicksort  Memory: 59kB
+                Buffers: shared hit=6576
+                ->  Append  (cost=0.71..140.95 rows=2 width=44) (actual time=0.259..2.711 rows=550 loops=1)
+                      Buffers: shared hit=6576
+                      ->  Nested Loop  (cost=0.71..120.77 rows=1 width=44) (actual time=0.014..0.014 rows=0 loops=1)
+                            Join Filter: (nct.novel_id = nts.novel_id)
+                            Buffers: shared hit=75
+                            ->  Index Scan using novel_canonical_tag_novel_source_idx on novel_canonical_tag nct  (cost=0.42..114.70 rows=1 width=32) (actual time=0.014..0.014 rows=0 loops=1)
+                                  Index Cond: ((novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[])) AND ((source)::text = 'manual'::text))
+                                  Buffers: shared hit=75
+                            ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts  (cost=0.29..6.06 rows=1 width=16) (never executed)
+                                  Index Cond: ((mode)::text = 'manual'::text)
+                      ->  Nested Loop Anti Join  (cost=1.88..20.17 rows=1 width=44) (actual time=0.245..2.666 rows=550 loops=1)
+                            Join Filter: (nts_1.novel_id = tsi.novel_id)
+                            Rows Removed by Join Filter: 550
+                            Buffers: shared hit=6501
+                            ->  Nested Loop  (cost=1.58..14.10 rows=1 width=32) (actual time=0.240..2.240 rows=550 loops=1)
+                                  Buffers: shared hit=4851
+                                  ->  Nested Loop  (cost=1.16..5.65 rows=1 width=64) (actual time=0.075..1.366 rows=600 loops=1)
+                                        Join Filter: (ca.id = sl.channel_app_id)
+                                        Buffers: shared hit=2501
+                                        ->  Nested Loop  (cost=1.02..4.48 rows=1 width=112) (actual time=0.072..0.406 rows=600 loops=1)
+                                              Join Filter: (ca.id = tsi.channel_app_id)
+                                              Buffers: shared hit=1301
+                                              ->  Hash Join  (cost=0.88..2.31 rows=1 width=96) (actual time=0.060..0.118 rows=600 loops=1)
+                                                    Hash Cond: ((slm.channel_app_id = tsi.channel_app_id) AND (slm.raw_language_scope = (tsi.raw_language_scope)::text))
+                                                    Buffers: shared hit=101
+                                                    ->  Seq Scan on source_label_mapping slm  (cost=0.00..1.24 rows=24 width=99) (actual time=0.002..0.005 rows=24 loops=1)
+                                                          Filter: (active IS TRUE)
+                                                          Buffers: shared hit=1
+                                                    ->  Hash  (cost=0.50..0.50 rows=25 width=80) (actual time=0.052..0.052 rows=25 loops=1)
+                                                          Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                          Buffers: shared hit=100
+                                                          ->  CTE Scan on target_source_item tsi  (cost=0.00..0.50 rows=25 width=80) (actual time=0.024..0.047 rows=25 loops=1)
+                                                                Buffers: shared hit=100
+                                              ->  Index Scan using channel_app_pkey on channel_app ca  (cost=0.14..2.17 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=600)
+                                                    Index Cond: (id = slm.channel_app_id)
+                                                    Filter: ((status)::text = 'active'::text)
+                                                    Buffers: shared hit=1200
+                                        ->  Index Scan using source_label_identity_key on source_label sl  (cost=0.14..1.15 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=600)
+                                              Index Cond: ((channel_app_id = slm.channel_app_id) AND ((label_kind)::text = 'series_type'::text))
+                                              Filter: ((external_label_value)::text = slm.raw_token)
+                                              Rows Removed by Filter: 11
+                                              Buffers: shared hit=1200
+                                  ->  Index Scan using novel_source_label_key on novel_source_item_label nsil  (cost=0.43..8.45 rows=1 width=32) (actual time=0.001..0.001 rows=1 loops=600)
+                                        Index Cond: ((novel_source_item_id = tsi.id) AND (source_label_id = sl.id))
+                                        Filter: (active IS TRUE)
+                                        Buffers: shared hit=2350
+                            ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts_1  (cost=0.29..6.06 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=550)
+                                  Index Cond: ((mode)::text = 'manual'::text)
+                                  Buffers: shared hit=1650
+  CTE auto_membership
+    ->  Nested Loop  (cost=111.11..410.46 rows=1 width=40) (actual time=0.034..0.268 rows=25 loops=1)
+          Buffers: shared hit=200
+          ->  Bitmap Heap Scan on novel_tag_state nts_2  (cost=110.69..199.21 rows=25 width=32) (actual time=0.019..0.085 rows=25 loops=1)
+                Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Filter: ((mode)::text = 'automatic'::text)
+                Heap Blocks: exact=25
+                Buffers: shared hit=100
+                ->  Bitmap Index Scan on novel_tag_state_pkey  (cost=0.00..110.62 rows=25 width=0) (actual time=0.016..0.016 rows=25 loops=1)
+                      Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                      Buffers: shared hit=75
+          ->  Index Scan using novel_canonical_tag_run_idx on novel_canonical_tag nct_1  (cost=0.42..8.44 rows=1 width=52) (actual time=0.007..0.007 rows=1 loops=25)
+                Index Cond: (classification_run_id = nts_2.current_auto_run_id)
+                Filter: (((source)::text = 'auto'::text) AND (nts_2.novel_id = novel_id))
+                Buffers: shared hit=100
+  ->  Nested Loop Left Join  (cost=0.43..26.10 rows=2 width=1146) (actual time=2.837..3.275 rows=50 loops=1)
+        Join Filter: (zh.canonical_tag_id = ct.id)
+        Rows Removed by Join Filter: 25
+        Buffers: shared hit=6781
+        ->  Nested Loop  (cost=0.29..17.89 rows=2 width=748) (actual time=2.815..3.241 rows=50 loops=1)
+              Join Filter: (ct.id = membership.canonical_tag_id)
+              Rows Removed by Join Filter: 150
+              Buffers: shared hit=6779
+              ->  Nested Loop Left Join  (cost=0.29..17.51 rows=4 width=720) (actual time=0.009..0.012 rows=4 loops=1)
+                    Join Filter: (en.canonical_tag_id = ct.id)
+                    Buffers: shared hit=3
+                    ->  Nested Loop Left Join  (cost=0.14..9.29 rows=4 width=382) (actual time=0.007..0.009 rows=4 loops=1)
+                          Join Filter: (requested.canonical_tag_id = ct.id)
+                          Buffers: shared hit=2
+                          ->  Seq Scan on canonical_tag ct  (cost=0.00..1.06 rows=4 width=44) (actual time=0.003..0.004 rows=4 loops=1)
+                                Filter: ((status)::text = 'active'::text)
+                                Rows Removed by Filter: 1
+                                Buffers: shared hit=1
+                          ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=4)
+                                Buffers: shared hit=1
+                                ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation requested  (cost=0.14..8.16 rows=1 width=354) (actual time=0.003..0.003 rows=0 loops=1)
+                                      Index Cond: ((locale)::text = 'en'::text)
+                                      Buffers: shared hit=1
+                    ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=0 loops=4)
+                          Buffers: shared hit=1
+                          ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation en  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=1)
+                                Index Cond: ((locale)::text = 'en'::text)
+                                Buffers: shared hit=1
+              ->  Materialize  (cost=0.00..0.20 rows=3 width=44) (actual time=0.702..0.804 rows=50 loops=4)
+                    Buffers: shared hit=6776
+                    ->  Subquery Scan on membership  (cost=0.00..0.19 rows=3 width=44) (actual time=2.805..3.203 rows=50 loops=1)
+                          Buffers: shared hit=6776
+                          ->  Append  (cost=0.00..0.16 rows=3 width=44) (actual time=2.805..3.198 rows=50 loops=1)
+                                Buffers: shared hit=6776
+                                ->  CTE Scan on base_membership  (cost=0.00..0.04 rows=2 width=44) (actual time=2.805..2.858 rows=25 loops=1)
+                                      Buffers: shared hit=6576
+                                ->  Subquery Scan on "*SELECT* 2"  (cost=0.00..0.10 rows=1 width=44) (actual time=0.039..0.337 rows=25 loops=1)
+                                      Buffers: shared hit=200
+                                      ->  Nested Loop Anti Join  (cost=0.00..0.09 rows=1 width=40) (actual time=0.038..0.334 rows=25 loops=1)
+                                            Join Filter: ((mapped.novel_id = automatic.novel_id) AND (mapped.canonical_tag_id = automatic.canonical_tag_id))
+                                            Rows Removed by Join Filter: 625
+                                            Buffers: shared hit=200
+                                            ->  CTE Scan on auto_membership automatic  (cost=0.00..0.02 rows=1 width=40) (actual time=0.034..0.273 rows=25 loops=1)
+                                                  Buffers: shared hit=200
+                                            ->  CTE Scan on base_membership mapped  (cost=0.00..0.04 rows=2 width=32) (actual time=0.000..0.001 rows=25 loops=25)
+        ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=1 loops=50)
+              Buffers: shared hit=2
+              ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation zh  (cost=0.14..8.16 rows=1 width=354) (actual time=0.018..0.018 rows=1 loops=1)
+                    Index Cond: ((locale)::text = 'zh'::text)
+                    Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=61
+Planning Time: 1.514 ms
+Execution Time: 3.393 ms
+WO7_EXPLAIN_END
+
+stdout | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics
+WO7_EXPLAIN stats=all-analyzed auto=false novels=80000 label_links=1760000 targets=25
+Unique  (cost=368.17..368.22 rows=2 width=1066) (actual time=2.759..2.768 rows=25 loops=1)
+  Buffers: shared hit=6581
+  CTE target_source_item
+    ->  Bitmap Heap Scan on novel_source_item nsi  (cost=110.69..202.96 rows=25 width=99) (actual time=0.018..0.035 rows=25 loops=1)
+          Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+          Filter: ((deleted_at IS NULL) AND (raw_language_scope IS NOT NULL) AND ((status)::text = 'linked'::text))
+          Heap Blocks: exact=25
+          Buffers: shared hit=100
+          ->  Bitmap Index Scan on novel_source_novel_idx  (cost=0.00..110.62 rows=25 width=0) (actual time=0.015..0.015 rows=25 loops=1)
+                Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Buffers: shared hit=75
+  ->  Sort  (cost=165.21..165.22 rows=2 width=1066) (actual time=2.759..2.763 rows=25 loops=1)
+        Sort Key: ct.sort_order, ct.slug, nct.novel_id, ct.id, requested.display_name, en.display_name, zh.display_name, ct.updated_at
+        Sort Method: quicksort  Memory: 27kB
+        Buffers: shared hit=6581
+        ->  Nested Loop Left Join  (cost=141.00..165.20 rows=2 width=1066) (actual time=2.738..2.755 rows=25 loops=1)
+              Join Filter: (zh.canonical_tag_id = ct.id)
+              Buffers: shared hit=6581
+              ->  Nested Loop Left Join  (cost=140.86..157.01 rows=2 width=728) (actual time=2.734..2.747 rows=25 loops=1)
+                    Join Filter: (en.canonical_tag_id = ct.id)
+                    Buffers: shared hit=6579
+                    ->  Nested Loop Left Join  (cost=140.71..148.81 rows=2 width=390) (actual time=2.733..2.742 rows=25 loops=1)
+                          Join Filter: (requested.canonical_tag_id = ct.id)
+                          Buffers: shared hit=6578
+                          ->  Merge Join  (cost=140.57..140.62 rows=2 width=52) (actual time=2.731..2.736 rows=25 loops=1)
+                                Merge Cond: (nct.canonical_tag_id = ct.id)
+                                Buffers: shared hit=6577
+                                ->  Sort  (cost=139.46..139.47 rows=2 width=32) (actual time=2.721..2.724 rows=25 loops=1)
+                                      Sort Key: nct.canonical_tag_id
+                                      Sort Method: quicksort  Memory: 26kB
+                                      Buffers: shared hit=6576
+                                      ->  Unique  (cost=139.44..139.45 rows=2 width=32) (actual time=2.652..2.720 rows=25 loops=1)
+                                            Buffers: shared hit=6576
+                                            ->  Sort  (cost=139.44..139.44 rows=2 width=32) (actual time=2.652..2.672 rows=550 loops=1)
+                                                  Sort Key: nct.novel_id, nct.canonical_tag_id
+                                                  Sort Method: quicksort  Memory: 55kB
+                                                  Buffers: shared hit=6576
+                                                  ->  Append  (cost=0.71..139.43 rows=2 width=32) (actual time=0.211..2.589 rows=550 loops=1)
+                                                        Buffers: shared hit=6576
+                                                        ->  Nested Loop  (cost=0.71..120.77 rows=1 width=32) (actual time=0.015..0.015 rows=0 loops=1)
+                                                              Join Filter: (nct.novel_id = nts.novel_id)
+                                                              Buffers: shared hit=75
+                                                              ->  Index Scan using novel_canonical_tag_novel_source_idx on novel_canonical_tag nct  (cost=0.42..114.70 rows=1 width=32) (actual time=0.015..0.015 rows=0 loops=1)
+                                                                    Index Cond: ((novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[])) AND ((source)::text = 'manual'::text))
+                                                                    Buffers: shared hit=75
+                                                              ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts  (cost=0.29..6.06 rows=1 width=16) (never executed)
+                                                                    Index Cond: ((mode)::text = 'manual'::text)
+                                                        ->  Nested Loop Anti Join  (cost=1.86..18.65 rows=1 width=32) (actual time=0.196..2.543 rows=550 loops=1)
+                                                              Join Filter: (nts_1.novel_id = tsi.novel_id)
+                                                              Rows Removed by Join Filter: 550
+                                                              Buffers: shared hit=6501
+                                                              ->  Nested Loop  (cost=1.56..12.58 rows=1 width=32) (actual time=0.193..2.127 rows=550 loops=1)
+                                                                    Buffers: shared hit=4851
+                                                                    ->  Nested Loop  (cost=1.14..4.13 rows=1 width=64) (actual time=0.052..1.323 rows=600 loops=1)
+                                                                          Join Filter: (ca.id = sl.channel_app_id)
+                                                                          Buffers: shared hit=2501
+                                                                          ->  Nested Loop  (cost=1.00..2.96 rows=1 width=112) (actual time=0.050..0.361 rows=600 loops=1)
+                                                                                Join Filter: (ca.id = tsi.channel_app_id)
+                                                                                Buffers: shared hit=1301
+                                                                                ->  Hash Join  (cost=0.88..2.31 rows=1 width=96) (actual time=0.047..0.103 rows=600 loops=1)
+                                                                                      Hash Cond: ((slm.channel_app_id = tsi.channel_app_id) AND (slm.raw_language_scope = (tsi.raw_language_scope)::text))
+                                                                                      Buffers: shared hit=101
+                                                                                      ->  Seq Scan on source_label_mapping slm  (cost=0.00..1.24 rows=24 width=99) (actual time=0.002..0.005 rows=24 loops=1)
+                                                                                            Filter: (active IS TRUE)
+                                                                                            Buffers: shared hit=1
+                                                                                      ->  Hash  (cost=0.50..0.50 rows=25 width=80) (actual time=0.043..0.043 rows=25 loops=1)
+                                                                                            Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                                                            Buffers: shared hit=100
+                                                                                            ->  CTE Scan on target_source_item tsi  (cost=0.00..0.50 rows=25 width=80) (actual time=0.019..0.040 rows=25 loops=1)
+                                                                                                  Buffers: shared hit=100
+                                                                                ->  Index Scan using channel_app_pkey on channel_app ca  (cost=0.12..0.64 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=600)
+                                                                                      Index Cond: (id = slm.channel_app_id)
+                                                                                      Filter: ((status)::text = 'active'::text)
+                                                                                      Buffers: shared hit=1200
+                                                                          ->  Index Scan using source_label_identity_key on source_label sl  (cost=0.14..1.15 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=600)
+                                                                                Index Cond: ((channel_app_id = slm.channel_app_id) AND ((label_kind)::text = 'series_type'::text))
+                                                                                Filter: ((external_label_value)::text = slm.raw_token)
+                                                                                Rows Removed by Filter: 11
+                                                                                Buffers: shared hit=1200
+                                                                    ->  Index Scan using novel_source_label_key on novel_source_item_label nsil  (cost=0.43..8.45 rows=1 width=32) (actual time=0.001..0.001 rows=1 loops=600)
+                                                                          Index Cond: ((novel_source_item_id = tsi.id) AND (source_label_id = sl.id))
+                                                                          Filter: (active IS TRUE)
+                                                                          Buffers: shared hit=2350
+                                                              ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts_1  (cost=0.29..6.06 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=550)
+                                                                    Index Cond: ((mode)::text = 'manual'::text)
+                                                                    Buffers: shared hit=1650
+                                ->  Sort  (cost=1.10..1.11 rows=4 width=36) (actual time=0.007..0.007 rows=2 loops=1)
+                                      Sort Key: ct.id
+                                      Sort Method: quicksort  Memory: 25kB
+                                      Buffers: shared hit=1
+                                      ->  Seq Scan on canonical_tag ct  (cost=0.00..1.06 rows=4 width=36) (actual time=0.003..0.003 rows=4 loops=1)
+                                            Filter: ((status)::text = 'active'::text)
+                                            Rows Removed by Filter: 1
+                                            Buffers: shared hit=1
+                          ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=0 loops=25)
+                                Buffers: shared hit=1
+                                ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation requested  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=1)
+                                      Index Cond: ((locale)::text = 'en'::text)
+                                      Buffers: shared hit=1
+                    ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=0 loops=25)
+                          Buffers: shared hit=1
+                          ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation en  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=1)
+                                Index Cond: ((locale)::text = 'en'::text)
+                                Buffers: shared hit=1
+              ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=1 loops=25)
+                    Buffers: shared hit=2
+                    ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation zh  (cost=0.14..8.16 rows=1 width=354) (actual time=0.002..0.002 rows=1 loops=1)
+                          Index Cond: ((locale)::text = 'zh'::text)
+                          Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=72 read=6 written=6
+Planning Time: 1.298 ms
+Execution Time: 2.808 ms
+WO7_EXPLAIN_END
+
+stdout | tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics
+WO7_EXPLAIN stats=all-analyzed auto=true novels=80000 label_links=1760000 targets=25
+Sort  (cost=778.99..779.00 rows=2 width=1146) (actual time=2.945..2.950 rows=50 loops=1)
+  Sort Key: membership.source_rank, (CASE WHEN (membership.source_rank = 0) THEN ct.sort_order ELSE NULL::integer END), (CASE WHEN (membership.source_rank = 0) THEN ct.slug ELSE NULL::character varying END), (CASE WHEN (membership.source_rank = 1) THEN membership.score ELSE NULL::double precision END) DESC, (CASE WHEN (membership.source_rank = 1) THEN ct.stable_id ELSE NULL::character varying END), membership.novel_id
+  Sort Method: quicksort  Memory: 30kB
+  Buffers: shared hit=6781
+  CTE target_source_item
+    ->  Bitmap Heap Scan on novel_source_item nsi  (cost=110.69..202.96 rows=25 width=99) (actual time=0.019..0.032 rows=25 loops=1)
+          Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+          Filter: ((deleted_at IS NULL) AND (raw_language_scope IS NOT NULL) AND ((status)::text = 'linked'::text))
+          Heap Blocks: exact=25
+          Buffers: shared hit=100
+          ->  Bitmap Index Scan on novel_source_novel_idx  (cost=0.00..110.62 rows=25 width=0) (actual time=0.016..0.016 rows=25 loops=1)
+                Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Buffers: shared hit=75
+  CTE base_membership
+    ->  Unique  (cost=139.44..139.46 rows=2 width=44) (actual time=2.625..2.677 rows=25 loops=1)
+          Buffers: shared hit=6576
+          ->  Sort  (cost=139.44..139.44 rows=2 width=44) (actual time=2.625..2.644 rows=550 loops=1)
+                Sort Key: nct.novel_id, nct.canonical_tag_id, (0), (NULL::double precision)
+                Sort Method: quicksort  Memory: 59kB
+                Buffers: shared hit=6576
+                ->  Append  (cost=0.71..139.43 rows=2 width=44) (actual time=0.197..2.540 rows=550 loops=1)
+                      Buffers: shared hit=6576
+                      ->  Nested Loop  (cost=0.71..120.77 rows=1 width=44) (actual time=0.013..0.014 rows=0 loops=1)
+                            Join Filter: (nct.novel_id = nts.novel_id)
+                            Buffers: shared hit=75
+                            ->  Index Scan using novel_canonical_tag_novel_source_idx on novel_canonical_tag nct  (cost=0.42..114.70 rows=1 width=32) (actual time=0.013..0.013 rows=0 loops=1)
+                                  Index Cond: ((novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[])) AND ((source)::text = 'manual'::text))
+                                  Buffers: shared hit=75
+                            ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts  (cost=0.29..6.06 rows=1 width=16) (never executed)
+                                  Index Cond: ((mode)::text = 'manual'::text)
+                      ->  Nested Loop Anti Join  (cost=1.86..18.65 rows=1 width=44) (actual time=0.184..2.497 rows=550 loops=1)
+                            Join Filter: (nts_1.novel_id = tsi.novel_id)
+                            Rows Removed by Join Filter: 550
+                            Buffers: shared hit=6501
+                            ->  Nested Loop  (cost=1.56..12.58 rows=1 width=32) (actual time=0.182..2.075 rows=550 loops=1)
+                                  Buffers: shared hit=4851
+                                  ->  Nested Loop  (cost=1.14..4.13 rows=1 width=64) (actual time=0.051..1.346 rows=600 loops=1)
+                                        Join Filter: (ca.id = sl.channel_app_id)
+                                        Buffers: shared hit=2501
+                                        ->  Nested Loop  (cost=1.00..2.96 rows=1 width=112) (actual time=0.049..0.366 rows=600 loops=1)
+                                              Join Filter: (ca.id = tsi.channel_app_id)
+                                              Buffers: shared hit=1301
+                                              ->  Hash Join  (cost=0.88..2.31 rows=1 width=96) (actual time=0.047..0.104 rows=600 loops=1)
+                                                    Hash Cond: ((slm.channel_app_id = tsi.channel_app_id) AND (slm.raw_language_scope = (tsi.raw_language_scope)::text))
+                                                    Buffers: shared hit=101
+                                                    ->  Seq Scan on source_label_mapping slm  (cost=0.00..1.24 rows=24 width=99) (actual time=0.001..0.004 rows=24 loops=1)
+                                                          Filter: (active IS TRUE)
+                                                          Buffers: shared hit=1
+                                                    ->  Hash  (cost=0.50..0.50 rows=25 width=80) (actual time=0.042..0.042 rows=25 loops=1)
+                                                          Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                          Buffers: shared hit=100
+                                                          ->  CTE Scan on target_source_item tsi  (cost=0.00..0.50 rows=25 width=80) (actual time=0.019..0.036 rows=25 loops=1)
+                                                                Buffers: shared hit=100
+                                              ->  Index Scan using channel_app_pkey on channel_app ca  (cost=0.12..0.64 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=600)
+                                                    Index Cond: (id = slm.channel_app_id)
+                                                    Filter: ((status)::text = 'active'::text)
+                                                    Buffers: shared hit=1200
+                                        ->  Index Scan using source_label_identity_key on source_label sl  (cost=0.14..1.15 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=600)
+                                              Index Cond: ((channel_app_id = slm.channel_app_id) AND ((label_kind)::text = 'series_type'::text))
+                                              Filter: ((external_label_value)::text = slm.raw_token)
+                                              Rows Removed by Filter: 11
+                                              Buffers: shared hit=1200
+                                  ->  Index Scan using novel_source_label_key on novel_source_item_label nsil  (cost=0.43..8.45 rows=1 width=32) (actual time=0.001..0.001 rows=1 loops=600)
+                                        Index Cond: ((novel_source_item_id = tsi.id) AND (source_label_id = sl.id))
+                                        Filter: (active IS TRUE)
+                                        Buffers: shared hit=2350
+                            ->  Index Scan using novel_tag_state_mode_updated_idx on novel_tag_state nts_1  (cost=0.29..6.06 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=550)
+                                  Index Cond: ((mode)::text = 'manual'::text)
+                                  Buffers: shared hit=1650
+  CTE auto_membership
+    ->  Nested Loop  (cost=111.11..410.46 rows=1 width=40) (actual time=0.022..0.114 rows=25 loops=1)
+          Buffers: shared hit=200
+          ->  Bitmap Heap Scan on novel_tag_state nts_2  (cost=110.69..199.21 rows=25 width=32) (actual time=0.017..0.042 rows=25 loops=1)
+                Recheck Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                Filter: ((mode)::text = 'automatic'::text)
+                Heap Blocks: exact=25
+                Buffers: shared hit=100
+                ->  Bitmap Index Scan on novel_tag_state_pkey  (cost=0.00..110.62 rows=25 width=0) (actual time=0.014..0.014 rows=25 loops=1)
+                      Index Cond: (novel_id = ANY ('{0000125f-ed5d-999b-0232-518040fcf514,00004792-0593-9045-a05a-2af6446a04cd,00011898-899f-6414-d7b7-c0ad55cfd860,00014c8c-98fe-1b24-423e-a4f97cdfe1b2,0002a02c-8b48-cc2e-888f-1a82f6ebf79d,00031fe5-d86d-d53b-9a1e-ec7a5cee8b33,0004fdef-626a-97b5-364a-cbe29b0747d9,00051785-8a0d-0a22-2453-a2a01a18fadd,000624a1-ed8b-88d5-a536-f585beca6990,00067a86-0dcb-338a-9c51-4369736fbb12,00077504-5783-fe2d-b991-c7ad75b13dc9,00080a34-2e57-fefe-3bf5-51b904705c51,000976f7-ed7c-f359-e8e2-b2579a1f4361,000a4e37-2de5-0018-9b9f-75344d66114e,000ac05b-a0ce-fee8-c972-bb4d4068ab5f,000bacc7-deae-4d96-5694-a228989a06ef,000bbf27-1a03-89eb-cf9a-ca63498f4fb0,000bfb0d-4dc2-ba19-6293-e97a51b6cfd1,000cda37-6cb5-8f90-4ed5-b26a023b3c1c,000eb9aa-4931-f4ae-1d98-2af009e4805f,0010c626-04e2-45e6-44da-671a9d0c1984,00116efb-cdeb-fdbf-6f29-731bc95a6632,001251fc-3883-031b-c3d7-bf0eba0c04af,00131b88-f44c-5310-842f-d21082c64644,0013bcc9-123f-2654-15c7-8a53617dd3a1}'::uuid[]))
+                      Buffers: shared hit=75
+          ->  Index Scan using novel_canonical_tag_run_idx on novel_canonical_tag nct_1  (cost=0.42..8.44 rows=1 width=52) (actual time=0.003..0.003 rows=1 loops=25)
+                Index Cond: (classification_run_id = nts_2.current_auto_run_id)
+                Filter: (((source)::text = 'auto'::text) AND (nts_2.novel_id = novel_id))
+                Buffers: shared hit=100
+  ->  Nested Loop Left Join  (cost=0.43..26.10 rows=2 width=1146) (actual time=2.637..2.914 rows=50 loops=1)
+        Join Filter: (zh.canonical_tag_id = ct.id)
+        Rows Removed by Join Filter: 25
+        Buffers: shared hit=6781
+        ->  Nested Loop  (cost=0.29..17.89 rows=2 width=748) (actual time=2.634..2.899 rows=50 loops=1)
+              Join Filter: (ct.id = membership.canonical_tag_id)
+              Rows Removed by Join Filter: 150
+              Buffers: shared hit=6779
+              ->  Nested Loop Left Join  (cost=0.29..17.51 rows=4 width=720) (actual time=0.006..0.009 rows=4 loops=1)
+                    Join Filter: (en.canonical_tag_id = ct.id)
+                    Buffers: shared hit=3
+                    ->  Nested Loop Left Join  (cost=0.14..9.29 rows=4 width=382) (actual time=0.004..0.006 rows=4 loops=1)
+                          Join Filter: (requested.canonical_tag_id = ct.id)
+                          Buffers: shared hit=2
+                          ->  Seq Scan on canonical_tag ct  (cost=0.00..1.06 rows=4 width=44) (actual time=0.002..0.003 rows=4 loops=1)
+                                Filter: ((status)::text = 'active'::text)
+                                Rows Removed by Filter: 1
+                                Buffers: shared hit=1
+                          ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.001 rows=0 loops=4)
+                                Buffers: shared hit=1
+                                ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation requested  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=1)
+                                      Index Cond: ((locale)::text = 'en'::text)
+                                      Buffers: shared hit=1
+                    ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=4)
+                          Buffers: shared hit=1
+                          ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation en  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=0 loops=1)
+                                Index Cond: ((locale)::text = 'en'::text)
+                                Buffers: shared hit=1
+              ->  Materialize  (cost=0.00..0.20 rows=3 width=44) (actual time=0.657..0.719 rows=50 loops=4)
+                    Buffers: shared hit=6776
+                    ->  Subquery Scan on membership  (cost=0.00..0.19 rows=3 width=44) (actual time=2.626..2.865 rows=50 loops=1)
+                          Buffers: shared hit=6776
+                          ->  Append  (cost=0.00..0.16 rows=3 width=44) (actual time=2.626..2.861 rows=50 loops=1)
+                                Buffers: shared hit=6776
+                                ->  CTE Scan on base_membership  (cost=0.00..0.04 rows=2 width=44) (actual time=2.626..2.678 rows=25 loops=1)
+                                      Buffers: shared hit=6576
+                                ->  Subquery Scan on "*SELECT* 2"  (cost=0.00..0.10 rows=1 width=44) (actual time=0.026..0.180 rows=25 loops=1)
+                                      Buffers: shared hit=200
+                                      ->  Nested Loop Anti Join  (cost=0.00..0.09 rows=1 width=40) (actual time=0.026..0.178 rows=25 loops=1)
+                                            Join Filter: ((mapped.novel_id = automatic.novel_id) AND (mapped.canonical_tag_id = automatic.canonical_tag_id))
+                                            Rows Removed by Join Filter: 625
+                                            Buffers: shared hit=200
+                                            ->  CTE Scan on auto_membership automatic  (cost=0.00..0.02 rows=1 width=40) (actual time=0.023..0.118 rows=25 loops=1)
+                                                  Buffers: shared hit=200
+                                            ->  CTE Scan on base_membership mapped  (cost=0.00..0.04 rows=2 width=32) (actual time=0.000..0.001 rows=25 loops=25)
+        ->  Materialize  (cost=0.14..8.17 rows=1 width=354) (actual time=0.000..0.000 rows=1 loops=50)
+              Buffers: shared hit=2
+              ->  Index Scan using canonical_tag_translation_locale_name_idx on canonical_tag_translation zh  (cost=0.14..8.16 rows=1 width=354) (actual time=0.001..0.001 rows=1 loops=1)
+                    Index Cond: ((locale)::text = 'zh'::text)
+                    Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=52
+Planning Time: 1.184 ms
+Execution Time: 3.003 ms
+WO7_EXPLAIN_END
+
+ ✓ |node| tests/integration/tagging/public-auto-postgres.test.ts (12 tests) 40125ms
+   ✓ WO7 public auto real roles > records isolated 25-book classification throughput for the future approval checklist  668ms
+   ✓ WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics  34369ms
+   ✓ WO7 public auto real roles > locale scope past Postgres' 32,767 bind-variable ceiling enqueues the full locale and stays idempotent  4467ms
+ ✓ |node| tests/integration/tagging/task-creation-postgres.test.ts (6 tests) 8830ms
+   ✓ B-21 chunked task creation and B-23 reclassification on PostgreSQL > leaves the same task row, item set and audit row as the pre-fix implementation (initialize_missing)  830ms
+   ✓ B-21 chunked task creation and B-23 reclassification on PostgreSQL > leaves the same task row, item set and audit row as the pre-fix implementation (reclassify_existing)  960ms
+   ✓ B-21 chunked task creation and B-23 reclassification on PostgreSQL > is idempotent per request id with web_app's real grants, including a concurrent replay  859ms
+   ✓ B-21 chunked task creation and B-23 reclassification on PostgreSQL > rolls the task, every item chunk and the audit row back when a later chunk fails, and a retry succeeds  565ms
+   ✓ B-21 chunked task creation and B-23 reclassification on PostgreSQL > the measurement script runs for both implementations and reports a peak RSS  4462ms
+
+ Test Files  3 passed (3)
+      Tests  33 passed (33)
+   Start at  16:48:05
+   Duration  51.00s (transform 534ms, setup 0ms, collect 964ms, tests 49.54s, environment 0ms, prepare 100ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-tagging-public-auto-secrets.s9vQ8i/integration-result.json
+WO7_INTEGRATION=PASS passed=33 skipped=0
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+P2_06_5_DICTIONARY_DRIFT=0
+P2_06_5_POSTGRES_VERIFICATION=PASS
+P2_06_5_DISPOSABLE_DATABASE_CLEANED=yes

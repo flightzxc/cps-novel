@@ -1,0 +1,45 @@
+from pathlib import Path
+import json,re,subprocess
+p=Path('.tmp/v0511-phase1')
+rows=[line.split('\t') for line in (p/'gate-summary.tsv').read_text().splitlines()]
+passed={r[0] for r in rows if r[2]=='0'}
+runners=[x.stem for x in Path('scripts').glob('run-*-verification.sh') if 'p1-12' not in x.name]
+assert len(runners)==33
+assert set(runners)<=passed,set(runners)-passed
+required=['typecheck','lint','full-tests','build','prisma-validate','dictionary-static','b21','nginx-matrix','public-cutover-mutations','compose','brand-image']
+assert set(required)<=passed,set(required)-passed
+full=(p/'full-tests.log').read_text()
+assert re.search(r'Test Files\s+553 passed',full)
+assert re.search(r'Tests\s+9022 passed',full)
+a=json.loads((p/'full-tests.json').read_text())
+assert a['success'] and a['numFailedTests']==0 and a['numFailedTestSuites']==0 and a['numPassedTests']==9022
+assert not re.search(r'(?:Unhandled Errors|Unhandled Rejection|Uncaught Exception)\s*[─⎯\n]',full)
+counts={
+'run-revenue-dashboard-postgres-verification':'REVENUE_DASHBOARD_INTEGRATION=PASS files=1 passed=24 skipped=0',
+'run-sitemap-refresh-postgres-verification':'SITEMAP_REFRESH_INTEGRATION=PASS files=3 passed=34 skipped=0',
+'run-catalog-batch-postgres-verification':'CATALOG_BATCH_INTEGRATION=PASS files=4 passed=57 skipped=0',
+'run-article-publish-batch-postgres-verification':'ARTICLE_PUBLISH_BATCH_INTEGRATION=PASS files=1 passed=12 skipped=0',
+'run-next-proxy-probe-verification':'NEXT_PROXY_PROBE=PASS next=16.3.7 probes=1736 known_findings=0',
+'b21':'B21_MEASUREMENT=PASS','nginx-matrix':'NGINX_MATRIX_ALL=PASS',
+'public-cutover-mutations':'PUBLIC_CUTOVER_MUTATIONS=PASS','brand-image':'BRAND_IMAGE=PASS',
+'run-preprod-db-contract-verification':'PREPROD_DB_CONTRACT=PASS'}
+for f,expected in counts.items():
+ s=(p/(f+'.log')).read_text();assert expected in s,(f,expected)
+mut=(p/'public-cutover-mutations.log').read_text()
+assert len(re.findall(r'^MUTATION=PASS ',mut,re.M))==15
+x9=(p/'run-x9-postgres-verification.log').read_text()
+assert len(re.findall(r'^X9_MIGRATION_\S+=PASS migrations=23 tables=57$',x9,re.M))==2
+for runner in runners:
+ s=(p/(runner+'.log')).read_text()
+ assert '=PASS' in s,runner
+ for line in s.splitlines():
+  if '_INTEGRATION=PASS' in line and 'skipped=' in line:assert 'skipped=0' in line,(runner,line)
+assert subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()=='eb40756416b186ca4b293ff57e24026af78cf4f9'
+assert not subprocess.check_output(['git','status','--porcelain=v1'])
+before=json.loads((p/'cps-reference-before.json').read_text())
+for repo,expected in before.items():
+ now={'head':subprocess.check_output(['git','-C',repo,'rev-parse','HEAD']).decode(),'status':subprocess.check_output(['git','-C',repo,'status','--porcelain=v1']).decode()}
+ assert now==expected,repo
+out={'result':'PASS','final':'eb40756416b186ca4b293ff57e24026af78cf4f9','tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}']).decode().strip(),'runners':33,'gates':len(passed),'testFiles':553,'passedTests':9022,'failedTests':0,'mutations':15,'migrations':23,'x9Tables':57,'cpsReferenceUnchanged':True}
+(p/'gate-acceptance.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+print(json.dumps(out,ensure_ascii=False,indent=2))

@@ -1,0 +1,114 @@
+ Image cps-novel:0.5.11-eb40756 Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 955B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 2.86kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 167B done
+#4 DONE 0.0s
+
+#5 [dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 72.86kB 0.0s done
+#6 DONE 0.0s
+
+#7 [runner 10/17] COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+#7 CACHED
+
+#8 [dependencies 8/8] RUN npx --no-install prisma generate
+#8 CACHED
+
+#9 [runner 13/17] COPY --from=builder --chown=nextjs:nodejs /app/scheduler ./scheduler
+#9 CACHED
+
+#10 [dependencies 2/8] WORKDIR /app
+#10 CACHED
+
+#11 [builder 1/2] COPY . .
+#11 CACHED
+
+#12 [dependencies 5/8] COPY package.json package-lock.json ./
+#12 CACHED
+
+#13 [runner  9/17] COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
+#13 CACHED
+
+#14 [dependencies 4/8] RUN npm install --global npm@11.6.2
+#14 CACHED
+
+#15 [runner  7/17] COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+#15 CACHED
+
+#16 [dependencies 6/8] RUN npm ci
+#16 CACHED
+
+#17 [runner  5/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#17 CACHED
+
+#18 [runner  6/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#18 CACHED
+
+#19 [runner  8/17] COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+#19 CACHED
+
+#20 [runner 11/17] COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+#20 CACHED
+
+#21 [runner  3/17] RUN apk add --no-cache bash libc6-compat openssl     && npm install --global npm@11.6.2 tsx@4.21.0
+#21 CACHED
+
+#22 [dependencies 7/8] COPY prisma ./prisma
+#22 CACHED
+
+#23 [runner 12/17] COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
+#23 CACHED
+
+#24 [runner  4/17] RUN addgroup --system --gid 1001 nodejs     && adduser --system --uid 1001 --ingroup nodejs nextjs     && mkdir -p /app/runtime/static-sitemaps     && chown -R nextjs:nodejs /app/runtime
+#24 CACHED
+
+#25 [dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#25 CACHED
+
+#26 [runner 14/17] COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+#26 CACHED
+
+#27 [runner 16/17] COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+#27 CACHED
+
+#28 [builder 2/2] RUN npm run build
+#28 CACHED
+
+#29 [runner 15/17] COPY --from=builder --chown=nextjs:nodejs /app/infra ./infra
+#29 CACHED
+
+#30 [runner 17/17] RUN set -eu;     test -n "0.5.11";     test -n "v0.5.11";     test "0.5.11" != "latest";     test "$(node -p 'require("./package.json").version')" = "0.5.11";     echo "eb40756416b186ca4b293ff57e24026af78cf4f9" | grep -Eq '^[0-9a-f]{40}$';     node -e 'if (!Number.isFinite(Date.parse(process.argv[1]))) process.exit(1)' "2026-10-08T07:54:09Z";     printf '{"version":"%s","commit":"%s","builtAt":"%s"}\n'       "0.5.11" "eb40756416b186ca4b293ff57e24026af78cf4f9" "2026-10-08T07:54:09Z" > /app/.build-metadata.json;     chmod 0444 /app/.build-metadata.json
+#30 CACHED
+
+#31 exporting to image
+#31 exporting layers done
+#31 writing image sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7 done
+#31 naming to docker.io/library/cps-novel:0.5.11-eb40756 done
+#31 DONE 0.0s
+
+#32 resolving provenance for metadata file
+#32 DONE 0.0s
+ Image cps-novel:0.5.11-eb40756 Built 
+IMAGE=PASS anchor=config_id
+ARCHIVE_BUILD=PASS
+ARCHIVE_FILE=/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/preproduction-archive/cps-novel-0.5.11-eb40756.tar.zst
+ARCHIVE_SHA256=8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d
+IMAGE_TARGET_DIGEST=sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+IMAGE_PLATFORM_MANIFEST_DIGEST=sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+IMAGE_CONFIG_DIGEST=sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7
+IMAGE_PLATFORM=linux/amd64
+IMAGE_REVISION=eb40756416b186ca4b293ff57e24026af78cf4f9
+RELEASE_MANIFEST=/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/preproduction-archive/eb40756416b186ca4b293ff57e24026af78cf4f9.json

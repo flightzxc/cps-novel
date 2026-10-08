@@ -1,0 +1,15 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.11
+
+ ✓ |node| tests/integration/tasks/promo-claim-release-postgres.test.ts (24 tests) 2273ms
+   ✓ promo-claim lifecycle: 阶段2 第3步 scheduler 放行/暂停 (real Postgres) > 并发放行：同一账号 100 次并发触发，任意时刻至多一个分片处于 pending/processing > 100 次并发放行只有恰好一次成功，其余全部 admission_blocked  322ms
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  16:46:04
+   Duration  2.76s (transform 198ms, setup 0ms, collect 296ms, tests 2.27s, environment 0ms, prepare 42ms)
+
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+PROMO_CLAIM_RELEASE_DICTIONARY_DRIFT=0
+PROMO_CLAIM_RELEASE_POSTGRES_VERIFICATION=PASS
+PROMO_CLAIM_RELEASE_DISPOSABLE_DATABASE_CLEANED=yes

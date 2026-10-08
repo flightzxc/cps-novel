@@ -1,0 +1,16 @@
+ENV_BACKUP=/opt/cps-novel/shared/env/preprod.env.bak-v0511-20261008T091454Z
+ENV_BEFORE_SHA256=0d2ac33e1770c4e643351421d9300c50a8c50dd0e17278c11714cd97902a405c
+ENV_AFTER_SHA256=9151af405e540f697ad40f7fed1dd428275f4dd0ce5e1acf45d71c176374e328
+--- /opt/cps-novel/shared/env/preprod.env.bak-v0511-20261008T091454Z
++++ /opt/cps-novel/shared/env/preprod.env
+@@ -1 +1 @@
+-APP_VERSION=0.5.10
++APP_VERSION=0.5.11
+@@ -3 +3 @@
+-NEXT_PUBLIC_BUILD_VERSION=v0.5.10
++NEXT_PUBLIC_BUILD_VERSION=v0.5.11
+@@ -16 +16 @@
+-WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify
++WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1
+ENV_ONLY_THREE_AUTHORIZED_LINES_CHANGED=PASS
+ENV_OTHER_BYTES_CMP=PASS ADMIN_LOGIN_TURNSTILE_VARIABLES=absent REVENUE_VIEW_VARIABLES=absent

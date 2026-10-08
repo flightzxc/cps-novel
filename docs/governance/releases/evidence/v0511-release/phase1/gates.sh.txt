@@ -1,0 +1,76 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+cd /Users/chenweifeng/Documents/cps海阅/release-v0.5.11
+export PATH="$PWD/.tmp/v0511-phase1/toolchain/bin:$PATH"
+evidence="$PWD/.tmp/v0511-phase1"
+lock=/Users/chenweifeng/Documents/cps海阅/.heavy-test.lock
+until mkdir "$lock" 2>/dev/null; do sleep 15; done
+printf "%s\n" release-v0.5.11 > "$lock/owner"
+cleanup() {
+ local rc=$?
+ if [ "$(cat "$lock/owner" 2>/dev/null)" = release-v0.5.11 ]; then rm -f "$lock/owner"; rmdir "$lock"; fi
+ echo "GATES_EXIT=$rc"
+}
+trap cleanup EXIT
+wait_load() {
+ local ceiling="$1"
+ while ! sysctl -n vm.loadavg | awk -v ceiling="$ceiling" '{exit !(($2+0)<=(ceiling+0))}'; do
+  echo "LOAD_WAIT threshold=$ceiling load=$(sysctl -n vm.loadavg)"
+  sleep 15
+ done
+}
+run() {
+ local label="$1"; shift
+ if awk -F '\t' -v label="$label" '$1==label && ($3+0)==0 {found=1} END {exit !found}' "$evidence/gate-summary.tsv"; then
+  echo "GATE_ALREADY_PASS=$label"
+  return 0
+ fi
+ wait_load 8
+ local start=$(date +%s) rc=0 attempt=1
+ echo "GATE_START=$label utc=$(date -u +%Y-%m-%dT%H:%M:%SZ) load=$(sysctl -n vm.loadavg)"
+ "$@" > "$evidence/$label.log" 2>&1 || rc=$?
+ local elapsed=$(($(date +%s)-start))
+ printf '%s\t%s\t%s\t%s\n' "$label" "$attempt" "$rc" "$elapsed" >> "$evidence/gate-summary.tsv"
+ if [ "$rc" -ne 0 ]; then
+  echo "GATE_FAIL=$label rc=$rc seconds=$elapsed load=$(sysctl -n vm.loadavg)"
+  tail -n 50 "$evidence/$label.log"
+  exit "$rc"
+ fi
+ echo "GATE_PASS=$label seconds=$elapsed"
+}
+[ "$(git rev-parse HEAD)" = eb40756416b186ca4b293ff57e24026af78cf4f9 ]
+[ -z "$(git status --porcelain=v1)" ]
+run typecheck npm run typecheck
+run lint npm run lint
+run full-tests npm test -- --maxWorkers=4 --reporter=default --reporter=json --outputFile="$evidence/full-tests.json"
+run build npm run build
+run prisma-validate env DATABASE_URL=postgresql://validation:validation@127.0.0.1:1/cps_novel npx prisma validate
+run dictionary-static node scripts/check-database-dictionary-drift.mjs --static
+migration_count=$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')
+[ "$migration_count" = 23 ]
+echo "MIGRATION_COUNT=23" | tee "$evidence/migration-count.log"
+runner_count=0
+for script in scripts/run-*-verification.sh; do
+ case "$script" in scripts/run-p1-12-runtime-verification.sh) continue;; esac
+ runner_count=$((runner_count+1))
+ label="$(basename "$script" .sh)"
+ if [ "$label" = run-next-proxy-probe-verification ]; then
+  run "$label" env NEXT_PROBE_STRICT=1 NEXT_PROBE_ALLOW_FAIL=0 /bin/bash "$script"
+ else
+  run "$label" /bin/bash "$script"
+ fi
+done
+[ "$runner_count" = 33 ]
+echo "RUNNERS=PASS count=$runner_count"
+run b21 /bin/bash scripts/measure-tagging-task-memory.sh
+run nginx-matrix /bin/bash scripts/preproduction/verify-nginx-matrix.sh
+run public-cutover-mutations node scripts/preproduction/verify-public-cutover-mutations.mjs
+run compose /bin/bash "$evidence/compose.sh"
+docker system df > "$evidence/docker-df-before-brand.log"
+df -h . > "$evidence/disk-before-brand.log"
+# Refuse clearly insufficient host space without deleting existing Docker objects.
+[ "$(df -k . | awk 'NR==2 {print $4+0}')" -gt 20971520 ]
+run brand-image /bin/bash scripts/preproduction/verify-brand-image.sh
+[ -z "$(git status --porcelain=v1)" ]
+echo 'GATES_ALL=PASS'

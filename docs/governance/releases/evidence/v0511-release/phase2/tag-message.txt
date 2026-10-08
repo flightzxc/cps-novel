@@ -1,0 +1,8 @@
+海阅 v0.5.11 正式站发布
+
+Final eb40756416b186ca4b293ff57e24026af78cf4f9，linux/amd64 不可变归档部署，仅 haiyue-vps。
+分页与焦点、RTL 与层级、试读失败诊断、模板 Key 闸门、空语种隐藏、站点地图版本清理、桌面分类栏、nginx 安装器修复、账号级网文收益看板、IndexNow 开关透传。新增收益四表迁移及最小权限 grants。
+原部署与自动核验通过；Owner Sitemap 刷新、桌面目视、收益同步及上游对数待确认。nginx 未安装，Turnstile 与 IndexNow 保持关闭，试读重新入队未执行。
+
+Agent: codex
+Model: GPT-6

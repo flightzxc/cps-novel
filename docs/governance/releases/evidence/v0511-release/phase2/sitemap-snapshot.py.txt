@@ -1,0 +1,16 @@
+import subprocess,json,xml.etree.ElementTree as E,urllib.parse,re
+ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+def fetch(path):
+ js="fetch('http://127.0.0.1:3000'+process.argv[1],{headers:{Host:'pulsenovels.com'}}).then(async r=>{if(r.status!==200)throw Error('HTTP='+r.status);process.stdout.write(await r.text())}).catch(e=>{console.error(e.message);process.exit(1)})"
+ return subprocess.check_output(['docker','exec','cps-novel-web-1','node','-e',js,path],text=True)
+index=E.fromstring(fetch('/sitemap.xml'));urls=[x.text for x in index.findall('s:sitemap/s:loc',ns)];rows=[];novels={};chapters={};categories=[]
+for u in urls:
+ assert u.startswith('https://pulsenovels.com/')
+ root=E.fromstring(fetch(urllib.parse.urlparse(u).path));locs=[x.text for x in root.findall('s:url/s:loc',ns)]
+ assert all(urllib.parse.urlparse(x).scheme=='https' and urllib.parse.urlparse(x).netloc=='pulsenovels.com' for x in locs), 'LOC_HOST_MISMATCH'
+ name=u.rsplit('/',1)[-1];m=re.fullmatch(r'site_(mainpage|novelpage|blogpage)_([a-z]+(?:-[A-Za-z]+)?)(?:_\d+)?\.xml',name);assert m
+ kind,locale=m.groups();n=sum(bool(re.search(r'/novel/[^/]+/?$',x)) for x in locs) if kind=='novelpage' else 0;c=sum(bool(re.search(r'/novel/[^/]+/chapter/\d+/?$',x)) for x in locs) if kind=='novelpage' else 0
+ if kind=='novelpage':novels[locale]=novels.get(locale,0)+n;chapters[locale]=chapters.get(locale,0)+c
+ cats=[x for x in locs if '/category/' in x];categories+=cats
+ rows.append({'file':name,'entries':len(locs),'novels':n,'chapters':c,'categories':len(cats)});print(json.dumps(rows[-1]),flush=True)
+print('SNAPSHOT='+json.dumps({'shards':rows,'novels':novels,'chapters':chapters,'total':sum(x['entries'] for x in rows),'en_categories':sum(x['categories'] for x in rows if x['file'].startswith('site_mainpage_en')),'categories':categories}))

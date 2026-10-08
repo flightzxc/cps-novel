@@ -1,0 +1,10 @@
+发布：准备海阅 v0.5.11 六文件版本身份
+
+以主控已逐项独立复核（含变异）并集成的完整基线 aacab24c4086f4c736590c86c91ea0ce2156b512 为唯一起点，照 v0.5.10 的六文件范围升版。十项范围与 Owner 决策登记版本台账；本次不做功能开发。
+
+新增账号级收益四表迁移，23 条迁移、57 张业务表；新增 grants，主 worker 手动任务 changdu.revenue_sync.v1，看板默认 super_admin 且仍要求 2FA。没有依赖或 nginx 模板变化；本版不安装 nginx，不打开 IndexNow 或 Turnstile。Next 16.3.7 的新增 high 按 Owner 决定本版放行，v0.5.12 升级 16.3.8，其余 audit 范围必须严格符合六项 high、0 critical。
+
+先本地提交身份，再串行完成全部门禁，通过后才推送 GitHub 并构建核验 linux/amd64 不可变归档。第一阶段不连接任何运维主机，归档交付后停止；部署须 Owner 单独授权。正式 tag、生成 CHANGELOG、发版级开发日志与 Notion 收官待部署验收后完成。
+
+Agent: codex
+Model: GPT-6

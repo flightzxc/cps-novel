@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "unchanged": {
+    "PREPROD_WRITE_GATES=": "PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write open=catalog_write,promo_write,sitemap_write,auto_tag_write",
+    "PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=": "PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10",
+    "PREPROD_MOBOREADER_RATE_GATE_CONFIG=": "PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000",
+    "PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=": "PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false"
+  }
+}

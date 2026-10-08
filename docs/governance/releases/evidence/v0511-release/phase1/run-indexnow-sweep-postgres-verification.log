@@ -1,0 +1,44 @@
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.11
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 429 retries only after due scan creates a new delivery
+WO6_RETRY http=429 delay_ms=358017 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 500 retries only after due scan creates a new delivery
+WO6_RETRY http=500 delay_ms=322420 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 503 retries only after due scan creates a new delivery
+WO6_RETRY http=503 delay_ms=341218 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > main backlog of 20000 claims does not delay light delivery beyond a polling cycle
+WO6_PRESSURE wait_ms=956 http_ms=971 poll_ms=1000 remaining=19995 main_calls=5
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"15347431-720c-4eec-8dbe-bb4ec28e4c6f","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":0}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation
+WO6_FAIRNESS scan_completion_position=3 delivered_before_scan=1 backlog=301
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"ab9a811a-a191-41d7-8bdf-63afe8db245e","total":2,"kept":2,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":1}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+WO6_TIMEOUT sitemap_wait_ms=10067 http_timeout_ms=10000
+
+ ✓ |node| tests/integration/tasks/indexnow-sweep-postgres.test.ts (20 tests) 14912ms
+   ✓ WO6 real publication, scheduler, lanes and HTTP > limits due work to 200 and empty outbox still admits recovery scans  564ms
+   ✓ WO6 real publication, scheduler, lanes and HTTP > main backlog of 20000 claims does not delay light delivery beyond a polling cycle  1370ms
+   ✓ WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation  1503ms
+   ✓ WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan  10190ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  16:26:47
+   Duration  17.46s (transform 671ms, setup 0ms, collect 2.33s, tests 14.91s, environment 0ms, prepare 40ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-wo6-secrets.02k2KW/integration-result.json
+WO6_INTEGRATION=PASS passed=20 skipped=0
+{"status":"ok","models":57,"recordCount":1326,"activeCount":1256,"tableCount":57,"constraintCount":270,"indexCount":238,"triggerCount":3}
+WO6_DICTIONARY_DRIFT=0
+WO6_POSTGRES_VERIFICATION=PASS
+WO6_DISPOSABLE_DATABASE_CLEANED=yes

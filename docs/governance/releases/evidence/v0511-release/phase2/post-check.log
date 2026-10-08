@@ -1,0 +1,15 @@
+{"service": "web", "id": "715e5aea38410caa997054d018ced6b5a047715909e1153b68196933298d48cc", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+INDEXNOW_OFF=PASS service=web
+{"service": "worker", "id": "7a9cc278b59476b27eb738e2f2fb4e4921bc4177b63863714a82bcaa9dab6a03", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+STARTUP_ALLOWLIST={"service": "worker", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "effective": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "invalid": []}
+INDEXNOW_OFF=PASS service=worker
+{"service": "worker-light", "id": "93fec5d7d693be3837a7efc243bc1e6f164b5c5b8c569d3271c3296f1dd46f0b", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+STARTUP_ALLOWLIST={"service": "worker-light", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1"], "effective": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1"], "invalid": []}
+INDEXNOW_OFF=PASS service=worker-light
+{"service": "scheduler", "id": "8b530c49ecb6967cb0714104f6b96b72595f97d244de4961830ad6f20bd336ac", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+{"service": "backup-timer", "id": "3fd1214b92ccdd550a9f67b29e40ca6e06b320208933100d5800f683e3781baa", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+{"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+REVENUE_VIEW_ROLES=super_admin
+POST_DB={"finished" : 23, "unfinished" : 0, "rolled_back" : 0, "new_migration_ms" : 75.079000, "tables" : ["revenue_sync_scope", "revenue_sync_batch", "revenue_raw_snapshot", "revenue_daily_stat"], "worker_insert" : true, "web_insert" : false, "web_select" : true, "scheduler_select" : false}
+POST_NGINX_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}
+POST_CHECK=PASS

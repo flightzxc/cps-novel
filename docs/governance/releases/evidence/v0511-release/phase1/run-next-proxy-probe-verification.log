@@ -1,0 +1,9 @@
+NEXT_VERSION_UNDER_TEST=16.3.7
+PROBE_DATABASE=READY name=next_probe_162705_92076_18061 port=56950
+PROBE_BUILD=PASS next=16.3.7
+PROBE_SERVER=READY mode=next-start port=56959 next=16.3.7
+NEXT_PROXY_PROBE_SUMMARY {"nextVersion":"16.3.7","total":1736,"failed":0,"knownFindings":{},"byGroup":{"control":{"total":10,"failed":0},"public-host-admin-path":{"total":903,"failed":0},"public-host-legit-path":{"total":11,"failed":0},"host-smuggling":{"total":48,"failed":0},"public-page-hijack":{"total":10,"failed":0},"admin-host-protected-page":{"total":630,"failed":0},"admin-host-api":{"total":105,"failed":0},"proxy-redirect-integrity":{"total":4,"failed":0},"malformed-authorization":{"total":15,"failed":0}},"publicHostAdminPathOutcomes":{"404-empty(proxy-deny-signature)":746,"404-next-page":137,"[308->…":64,"308->…":4}}
+NEXT_PROXY_PROBE=PASS next=16.3.7 probes=1736 known_findings=0
+PROBE_EVIDENCE=/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/next-proxy-probe/probe-next-16.3.7-next-start.json
+NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.7
+NEXT_PROBE_CLEANUP=PASS

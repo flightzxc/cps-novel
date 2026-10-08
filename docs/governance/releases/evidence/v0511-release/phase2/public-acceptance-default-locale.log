@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/v0511-phase2/public-acceptance.py", line 26, in <module>
+    eng,en=fetch('en-home','/en')
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/v0511-phase2/public-acceptance.py", line 21, in fetch
+    assert r=='200',(label,r)
+           ^^^^^^^^
+AssertionError: ('en-home', '308')

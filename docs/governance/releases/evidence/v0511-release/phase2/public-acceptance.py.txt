@@ -1,0 +1,45 @@
+from pathlib import Path
+from html.parser import HTMLParser
+import json,re,subprocess
+p=Path('.tmp/v0511-phase2')
+class Inspect(HTMLParser):
+ def __init__(self,s):
+  super().__init__();self.tags=[];self.scripts=[];self.inscript=False;self.feed(s)
+ def handle_starttag(self,t,attrs):
+  a=dict(attrs);self.tags.append((t,a))
+  if t=='script':self.inscript=True
+ def handle_endtag(self,t):
+  if t=='script':self.inscript=False
+ def handle_data(self,d):
+  if self.inscript:self.scripts.append(d)
+requests=json.loads((p/'external-requests.json').read_text()) if (p/'external-requests.json').exists() else []
+def fetch(label,path):
+ assert len(requests)<40
+ body=p/(label+'.html');head=p/(label+'.headers')
+ if any(x['label']==label and x['path']==path and x['http']=='200' for x in requests):
+  s=body.read_text();return s,Inspect(s)
+ r=subprocess.check_output(['curl','--proxy','http://127.0.0.1:7899','--silent','--show-error','--max-time','30','--output',str(body),'--dump-header',str(head),'--write-out','%{http_code}','https://pulsenovels.com'+path],text=True).strip()
+ requests.append({'label':label,'path':path,'http':r});(p/'external-requests.json').write_text(json.dumps(requests,indent=2)+'\n')
+ assert r=='200',(label,r)
+ s=body.read_text();return s,Inspect(s)
+empty,cs=fetch('cs-home','/cs')
+robots=[a.get('content','') for t,a in cs.tags if t=='meta' and a.get('name')=='robots']
+assert any('noindex' in x for x in robots),robots
+eng,en=fetch('en-home-canonical','/')
+assert not any(a.get('hreflang')=='cs' for t,a in en.tags if t=='link' and a.get('rel')=='alternate')
+rsc=[];decoder=json.JSONDecoder()
+for chunk in en.scripts:
+ for match in re.finditer(r'self\.__next_f\.push\(',chunk):
+  a,_=decoder.raw_decode(chunk[match.end():])
+  if len(a)>1 and isinstance(a[1],str):rsc.append(a[1])
+active=[json.loads(x) for x in re.findall(r'"activeLocales":(\[[^\]]*\])',''.join(rsc))]
+assert active and all('cs' not in x for x in active),active
+arhtml,ar=fetch('ar-home','/ar')
+root=next(a for t,a in ar.tags if t=='html');assert root.get('lang')=='ar' and root.get('dir')=='rtl'
+assert any(a.get('data-testid')=='home-category-strip' for t,a in ar.tags)
+assert any(a.get('data-testid')=='home-category-nav' and 'flex-nowrap' in a.get('class','') and 'md:flex-wrap' not in a.get('class','') for t,a in ar.tags)
+assert any(t=='a' and '/category/' in a.get('href','') for t,a in ar.tags)
+browse,_=fetch('browse-page2','/browse?page=2')
+i=browse.find('data-testid="pagination"');f=browse.find('<footer');assert i>=0 and f>i
+out={'F2':{'result':'PASS','emptyLocale':'cs','http':200,'robots':robots,'languageMenuActiveLocales':active[0],'hreflangCsAbsent':True},'F3':{'htmlLang':'ar','dir':'rtl','categoryContainer':True,'categoryLinks':True,'desktopVisual':'pending Owner'},'F4':{'result':'PASS','paginationBeforeFooter':True},'F5':{'blog':'skipped: write gate closed','templateKey':'deployed; no save performed'},'requests':requests}
+(p/'public-acceptance.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n');print(json.dumps(out,ensure_ascii=False,indent=2))

@@ -1,0 +1,14 @@
+import json,sys
+for f in sys.argv[1:]:
+ d=json.load(open(f));s=d['services']
+ for k in ['web','worker','worker-light','scheduler']:
+  e=s[k].get('environment',{})
+  for n in ['REVENUE_VIEW_ROLES','REVENUE_VIEW_USER_IDS']:
+   if k=='web':assert e.get(n)==('super_admin' if n.endswith('ROLES') else ''),(f,k,n,e.get(n))
+   else:assert n not in e,(f,k,n)
+  for n in ['FEATURE_INDEXNOW_OUTBOX','INDEXNOW_OUTBOX_ALLOW_WRITE']:
+   if k=='scheduler':assert n not in e,(f,k,n)
+   else:assert str(e.get(n)).lower()=='false',(f,k,n,e.get(n))
+ for n in ['FEATURE_INDEXNOW_OUTBOX','INDEXNOW_OUTBOX_ALLOW_WRITE']:
+  assert s['web']['environment'][n]==s['worker']['environment'][n]==s['worker-light']['environment'][n],(f,n)
+ print('COMPOSE_CONTRACT=PASS file='+f)

@@ -3,7 +3,52 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-07 · 共 1132 个 commit
+生成时间：2026-10-08 · 共 1174 个 commit
+
+## v0.5.11
+
+- `eb40756` 2026-10-08 发布：准备海阅 v0.5.11 六文件版本身份  — _codex · GPT-6_
+- `aacab24` 2026-10-08 合并(v0.5.11)：数据看板追加改动（revenue:view 默认授予 super_admin、仍要求 2FA，compose 默认 REVENUE_VIEW_ROLES=super_admin；同账号多网文应用按账号去重，generic_task.channel_app_id 写 NULL、projectType 折入 operation_scope_hash；任务改名 changdu.revenue_sync.v1；迁移文件与 5cd8101 逐字节一致；feat/novel-revenue-dashboard @c4618f6，主控复核含独立变异）  — _claude-code · Claude Opus 5.5_
+- `c4618f6` 2026-10-08 修复(收益看板)：迁移文件还原为与 5cd8101 逐字节一致，改名原委记入治理日志  — _claude-code · Claude Opus 5.5_
+- `661393f` 2026-10-08 修复(收益看板)：同账号多网文应用不再被判为账号不唯一，收益同步任务改名 changdu.revenue_sync.v1  — _claude-code · Claude Sonnet 5.5_
+- `35609d8` 2026-10-08 功能(收益看板)：revenue:view 默认授权 super_admin（Owner 10-08 决定）  — _claude-code · Claude Sonnet 5.5_
+- `2dde107` 2026-10-08 合并(v0.5.11)：B-34 IndexNow 出站开关透传给 worker 与 worker-light（与 web 逐字一致，scheduler 不带；p1-12 契约改写、x8 校验与派生式契约测试；真实库证明后台批量发布与按钮发布写出相同出站记录；只修不开闸，生产 env 不变；fix/b34-indexnow-outbox-passthrough @18781c4，主控复核）  — _claude-code · Claude Opus 5.5_
+- `eae5cc9` 2026-10-08 合并(v0.5.11)：数据看板·账号级网文收益看板（迁移 20261008120000 新增四表 22→23/53→57；grants worker_app SELECT/INSERT/UPDATE、web_app/analyst_ro SELECT；主 worker 新任务 moboreader.revenue_sync.v1 登记 MOBOREADER_UPSTREAM_TASK_TYPES；/revenue 页 revenue:view 默认无人+2FA，compose 透传 REVENUE_VIEW_ROLES/USER_IDS 默认空；GetReport 固定 projectType=1、只认达人凭证；feat/novel-revenue-dashboard @5cd8101，会话「海阅数据看板交接」施工复核，主控复核含独立变异）。冲突仅 port-registry.md 两边追加段，均保留。  — _claude-code · Claude Opus 5.5_
+- `18781c4` 2026-10-08 修复(B-34)：IndexNow 出站双闸透传给 worker 与 worker-light，契约改为按"是否执行发布核心"判定（不开闸）  — _claude-code · Claude Sonnet 5_
+- `5cd8101` 2026-10-08 修复(收益看板)：next-proxy 探针的后台页面清单补上 /revenue  — _claude-code · Claude Opus 5.5_
+- `0efb0b5` 2026-10-08 测试(收益看板)：/revenue 页面、同步表单、action 授权顺序与纯函数  — _claude-code · Claude Sonnet 5.5_
+- `107759d` 2026-10-08 功能(收益看板)：后台 /revenue 页面、手动同步 action 与侧栏入口  — _claude-code · Claude Sonnet 5.5_
+- `e46c968` 2026-10-08 合并(v0.5.11)：nginx 安装器三项底层缺陷修复（渲染入口 realpath 比较 + 物理 root + 空输出守卫；安装前候选形状门禁 verify-nginx-candidate.mjs，安装后逐文件哈希核对、不符即回退；reload 后就绪等待：master 不变 + 新 worker + 旧 worker 退出或 shutting down + 端口监听，超时回退）；切换手册与证据补记，HSTS 提级步骤简化；fix/nginx-installer-empty-render @72c5c1b，主控复核  — _claude-code · Claude Opus 5.5_
+- `72c5c1b` 2026-10-08 文档(运维)：切换手册说明安装器内置三项保护；证据末尾追加"底层修复已落地（v0.5.11）"  — _claude-code · Claude Sonnet 5_
+- `27c16c0` 2026-10-08 合并(v0.5.11)：PN-16 桌面首页分类栏改为单行 + 左右箭头（CategoryNav：不溢出不渲染箭头、到头禁用、点一次滚 0.8 屏、RTL 用 scrollBy 物理位移 + Math.abs 判边、聚焦标签自动滚入；手机布局逐像素不变；aria-label 复用 pagination 文案）；Owner 2026-10-08 决定；fix/pn16-desktop-category-bar @39b5836，主控复核  — _claude-code · Claude Opus 5.5_
+- `1e3c83e` 2026-10-08 合并(v0.5.11)：B-33 静态站点地图版本目录保留策略（promote 成功后按 promotedAt 保留最近 10 个 + current + 锁内 runId；未 promote 残留须早于 current 且闲置 ≥2h 才删；单次 ≤100 个/10s 分批；清理失败不影响刷新；fix/b33-sitemap-release-retention @463173a，主控复核）  — _claude-code · Claude Opus 5.5_
+- `4189aa6` 2026-10-08 测试(集成修正)：博客列表分享卡片用例补 activeLocales（PN-09 将 CollectionSeoData.activeLocales 改为必填后与 PN-12 测试的合并交叉，tsc/build 在集成分支 76128ea 上失败）  — _claude-code · Claude Opus 5.5_
+- `39b5836` 2026-10-08 修复(首页)：桌面题材导航改为单行横向滚动 + 溢出箭头（PN-16）  — _claude-code · Claude Sonnet 5_
+- `0d0bba2` 2026-10-08 整理(测试)：去掉安装器测试里未使用的参数（消除 lint 警告）  — _claude-code · Claude Sonnet 5_
+- `0d3146f` 2026-10-08 修复(运维)：就绪等待容忍 master 暂不可读；node 纳入安装前工具检查；补 preprod/旧路径用例  — _claude-code · Claude Sonnet 5_
+- `7d89e69` 2026-10-08 测试(收益看板)：真实库运行器与 worker_app / web_app 全链路验收  — _claude-code · Claude Sonnet 5.5_
+- `463173a` 2026-10-08 修复(B-33)：静态站点地图版本目录加保留策略，promote 成功后清理旧版本  — _claude-code · Claude Sonnet 5_
+- `28470e1` 2026-10-08 测试(运维)：变异门禁支持按名称运行子集  — _claude-code · Claude Sonnet 5_
+- `3535b3b` 2026-10-08 修复(运维)：nginx 安装器三项底层缺陷——软链目录空渲染、无空候选门禁、reload 后无就绪等待  — _claude-code · Claude Sonnet 5_
+- `8d6c69f` 2026-10-08 功能(收益看板)：读服务 loadRevenueDashboard（三态覆盖、Decimal 汇总、最近批次与凭证元数据）  — _claude-code · Claude Sonnet 5.5_
+- `cf4cf26` 2026-10-08 功能(收益看板)：收益同步任务（入队、worker handler、主通道白名单与 revenue:view 透传）  — _claude-code · Claude Sonnet 5.5_
+- `76128ea` 2026-10-08 合并(v0.5.11)：PN-09 没有书的语种不收录、不进语言菜单与 hreflang、不进站点地图（复用 getActiveLocales 唯一判定，/cs 仍 200 只 noindex；首页/browse/blog 的 hreflang 改为只列活跃语种；站点地图 mainpage 只认有书）；Owner 2026-10-08 选择连入口也隐藏；fix/pn09-empty-locale-hidden @8c12e8f，主控复核  — _claude-code · Claude Opus 5.5_
+- `ea2caba` 2026-10-08 合并(v0.5.11)：模板更新时服务端拒绝修改 Key（template_key_immutable，防跨家族静默并入）+ 博客详情分享图改走 resolveShareImage（PN-12 遗留）；fix/template-key-guard-and-blog-share-card @57be5f9，主控复核  — _claude-code · Claude Opus 5.5_
+- `8c12e8f` 2026-10-08 修复(PN-09)：没有书的语种既不收录，也不在语言菜单和语种链接里露出入口  — _claude-code · Claude Sonnet 5_
+- `88b0bc5` 2026-10-08 合并(v0.5.11)：B-36 试读上游读取失败记录可诊断的错误类别（adapter 校验点命名 19 类 kind、receivedType 词表、三道闸脱敏不记正文；条目 error.detail 与结构化日志；code/message 与后台展示不变；fix/b36-preview-failure-reason @f258c5c，主控复核）  — _claude-code · Claude Opus 5.5_
+- `32904c2` 2026-10-08 功能(收益看板)：畅读 GetReport 适配器、解析器与达人凭证口径校验  — _claude-code · Claude Sonnet 5.5_
+- `f258c5c` 2026-10-08 修复(试读)：试读上游读取失败时，条目 error.detail 记录可诊断的错误类别（B-36）  — _claude-code · Claude Sonnet 5_
+- `2a78136` 2026-10-08 功能(收益看板)：新增账号级收益四表（迁移、数据字典、授权与治理文档同步）  — _claude-code · Claude Sonnet 5.5_
+- `e8ae210` 2026-10-08 合并(v0.5.11)：PN-02/PN-03 遗留的从右到左物理方向改逻辑方向（Hero 遮罩镜像、语言菜单 end-0、text-start、阅读设置 md:end-0、跳过链接 start-4、贴边负外边距、翻页箭头镜像）+ 语言菜单 z-60 盖住阅读设置面板；viewport-fit=cover 只评估不改（fix/rtl-and-layer-leftovers @3f5c2f7，主控复核）  — _claude-code · Claude Opus 5.5_
+- `7cd32c3` 2026-10-08 合并(v0.5.11)：PN-06 书库/分类/博客列表分页条移到网格之后、页脚之前 + PN-10 锁定章节续读弹窗键盘焦点循环与归还（fix/pn06-pn10-pagination-modal-focus @2e99ae5，主控复核）  — _claude-code · Claude Opus 5.5_
+- `3f5c2f7` 2026-10-08 修复：同类清查中明显错误的三处物理方向（贴边负外边距与翻页箭头）  — _claude-code · Claude Sonnet 5_
+- `dcb72fc` 2026-10-08 修复：从右到左排版改用逻辑方向，并让语言菜单盖住阅读设置面板  — _claude-code · Claude Sonnet 5_
+- `57be5f9` 2026-10-08 修复：博客详情分享图改走 resolveShareImage 共用口径（PN-12 遗留）  — _claude-code · Claude Sonnet 5_
+- `1120918` 2026-10-08 修复：更新模板时服务端拒绝修改 Key（template_key_immutable）  — _claude-code · Claude Sonnet 5_
+- `2e99ae5` 2026-10-08 修复(公开站)：锁定章节续读弹窗补键盘焦点循环与焦点归还（PN-10）  — _claude-code · Claude Sonnet 5_
+- `3ed8f0b` 2026-10-08 修复(公开站)：书库/分类/博客列表的分页条移到作品网格之后、页脚之前（PN-06 布局部分）  — _claude-code · Claude Sonnet 5_
+- `01aabe1` 2026-10-08 发版：补齐 v0.5.10 Git 与 Notion 同步回读收据  — _codex · GPT-6_
+- `afd2645` 2026-10-08 发版：登记海阅 v0.5.10 正式站部署验收与完整站点地图证据  — _codex · GPT-6_
 
 ## v0.5.10
 

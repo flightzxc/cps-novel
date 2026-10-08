@@ -1,0 +1,32 @@
+[
+  {
+    "label": "health",
+    "path": "/api/health",
+    "http": 200,
+    "seconds": 1.544146
+  },
+  {
+    "label": "worker-warmup",
+    "path": "/api/health/worker",
+    "http": 200,
+    "seconds": 1.500496
+  },
+  {
+    "label": "worker-sample1",
+    "path": "/api/health/worker",
+    "http": 200,
+    "seconds": 0.937256
+  },
+  {
+    "label": "worker-sample2",
+    "path": "/api/health/worker",
+    "http": 200,
+    "seconds": 0.937656
+  },
+  {
+    "label": "worker-sample3",
+    "path": "/api/health/worker",
+    "http": 200,
+    "seconds": 0.863936
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "worktreeCreation": "Desktop tool returned Not a git repository at parent cwd; created independent worktree with git worktree add from exact approved baseline.",
+  "wrapperCorrections": [
+    {
+      "step": "npm ci",
+      "cause": "Selecting Homebrew Node 20 also selected npm 10.8.2 instead of declared npm 11.6.2, resulting in EUSAGE missing @emnapi runtime/core.",
+      "fix": "Use Node 20.20.2 with npm/npx 11.6.2 through local toolchain PATH; npm ci and prisma generate passed without dependency/lock changes.",
+      "evidence": "npm-ci.log / npm-ci-11.log / prisma-generate.log"
+    },
+    {
+      "step": "prisma validate",
+      "cause": "Wrapper omitted required DATABASE_URL; original diagnostic P1012 Environment variable not found: DATABASE_URL.",
+      "fix": "Supply a local syntactic validation URL; no connection made by validate. Passed gates reused; actual PostgreSQL migration/dictionary checks remain original verification runners.",
+      "evidence": "gate-summary.tsv / prisma-validate.log"
+    }
+  ],
+  "stageBoundary": "No operations hosts, deployment, tag, CHANGELOG generation, release-level development log or Notion closeout in phase 1."
+}

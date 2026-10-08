@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+[ "$(id -un)" = deploy ]
+[ "$(hostname)" = haiyue-vps ]
+staging=/opt/cps-novel/shared/artifacts/staging
+final=eb40756416b186ca4b293ff57e24026af78cf4f9
+previous=7f955106a82f8dff82568e305ea35f1a68b8c934
+release=/opt/cps-novel/releases/$final
+cd "$staging"
+printf '%s  %s\n' 8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d cps-novel-0.5.11-eb40756.tar.zst | sha256sum -c -
+sha256sum cps-novel-0.5.11-eb40756.tar.zst
+printf '%s  %s\n' 7386f2aed087b79e94f526017537a1aeeaab1425d5bfc998aee4d28137835d08 cps-novel-v0.5.11.bundle | sha256sum -c -
+printf '%s  %s\n' 4581711e9f833b673b3b2f67dbb8ae5cfcd1380840d1aeb4bc2b2d8eb2554a94 "$final.json" | sha256sum -c -
+if test -e "$release"; then echo RELEASE_DIRECTORY_EXISTS; exit 65; fi
+git clone --no-hardlinks "/opt/cps-novel/releases/$previous" "$release" </dev/null
+git -C "$release" fetch "$staging/cps-novel-v0.5.11.bundle" refs/heads/release/v0.5.11-2026-10-08 </dev/null
+git -C "$release" checkout --detach "$final" </dev/null
+[ "$(git -C "$release" rev-parse HEAD)" = "$final" ]
+[ "$(git -C "$release" rev-parse HEAD^{tree})" = b98d07a62c98196593a625c5cedcd2344a8e9220 ]
+[ -z "$(git -C "$release" status --porcelain=v1)" ]
+echo CODE_FINAL_TREE_CLEAN=PASS
+"$release/scripts/preproduction/verify-release-archive.sh" --manifest "$staging/$final.json" --approved-commit "$final" --expected-archive-sha256 8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d --load </dev/null

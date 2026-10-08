@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+set +x
+backup_name="cps-novel-v0511-$(date -u +%Y%m%dT%H%M%SZ).dump"
+container_path="/var/lib/cps-novel/backups/logical/$backup_name"
+host_path="/opt/cps-novel/shared/backups/logical/$backup_name"
+docker exec cps-novel-backup-timer-1 /bin/bash /app/scripts/db/backup-logical.sh --output "$container_path" </dev/null
+docker exec cps-novel-backup-timer-1 sha256sum "$container_path" </dev/null
+docker exec cps-novel-backup-timer-1 stat -c '%s' "$container_path" </dev/null
+docker exec cps-novel-backup-timer-1 pg_restore --list "$container_path" </dev/null >/dev/null
+echo "ONLINE_BACKUP_HOST_PATH=$host_path"
+echo 'ONLINE_BACKUP_RESTORE_LIST=PASS'

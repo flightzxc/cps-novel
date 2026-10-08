@@ -19,17 +19,17 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.11 —— 准备中（2026-10-08；第一阶段，尚未部署）
+### v0.5.11 —— 已部署正式站（2026-10-08 17:15:56 +0800；Owner 操作项目待确认）
 
-- 唯一基线 `aacab24c4086f4c736590c86c91ea0ce2156b512`，来自 `integration/v0.5.11-2026-10-08`，基于 v0.5.10 收官 `01aabe1`；主控已逐项复核（含独立变异）并集成。本次只做升版与发布，不开发功能。
-- 本版十项：PN-06 分页移到网格后、页脚前与 PN-10 锁定弹窗焦点；RTL 与层级遗留；B-36 试读失败类别与脱敏诊断；模板 Key 服务端不可变闸门与博客分享卡片；PN-09 空语种 noindex 并隐藏入口；B-33 站点地图旧版本清理；PN-16 桌面首页分类栏单行加箭头；nginx 安装器修复（本版不安装）；账号级网文收益看板；B-34 IndexNow 出站开关透传（只修不开闸）。另含主控 PN-09 × PN-12 类型交叉修正 `4189aa6`。
-- 新迁移 `20261008120000_revenue_account_level_dashboard` 仅新增收益四表，迁移 22→23、业务表 53→57，不改旧表。worker_app 对四表 SELECT/INSERT/UPDATE，无 DELETE；web_app 与 analyst_ro 只读，scheduler_app 无权限。无依赖或 nginx 模板变化。
-- 收益任务 `changdu.revenue_sync.v1` 仅后台手动触发，由主 worker 执行，worker-light 禁止执行，不设定时任务。`revenue:view` 默认开放给 super_admin，仍要求两步验证；新增 REVENUE_VIEW_ROLES / REVENUE_VIEW_USER_IDS 采用 compose 默认值，生产 env 不加。GetReport 固定 projectType=1，仅接受 JWT 带 StarId 的达人凭证。
-- Owner 2026-10-08 裁决：PN-09 连入口也隐藏；PN-16 单行加箭头；PN-04 保持现状；收益看板向 super_admin 开放；任务名 changdu.revenue_sync.v1。viewport-fit=cover 评估不做；HSTS 提级待稳定一周后用新安装器执行；CPS 收入口径可能混入小说，已登记 CPS 待办。
-- Next 维持 16.3.7；Owner 已放行 2026-10-08 新安全公告对应 next high，v0.5.12 升级 16.3.8。本版 audit 必须 0 critical、恰好六项 high：@prisma/config、deepmerge-ts、effect、nanoid、prisma、next；其他 high 或 critical 必须停止。
-- 独立工作树 `release-v0.5.11`，发布分支 `release/v0.5.11-2026-10-08`。先提交六文件身份，串行执行完整门禁与 33 个运行器（排除 p1-12）；全绿后推送 GitHub，构建并本地核验 linux/amd64 不可变归档。Final/tree 与归档身份以第一阶段实测交付为准。
-- 第一阶段不连接任何运维主机，归档交付后停止。第二阶段须 Owner 单独授权，仅限 haiyue-vps 低流量时段；本版部署后改动在正式站生效。IndexNow 与 Turnstile 保持关闭，不安装 nginx，不代 Owner 触发收益同步。
-- annotated tag、生成 CHANGELOG、正式发版级开发日志及 Notion 收官在第二阶段部署验收后完成；目前状态为已合入、尚未部署，不记为已上线。
+- Final `eb40756416b186ca4b293ff57e24026af78cf4f9` / tree `b98d07a62c98196593a625c5cedcd2344a8e9220`；image cps-novel:0.5.11-eb40756，linux/amd64，归档331746262bytes / SHA256 `8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d`，服务器独立重算与原verify --load/OCI身份PASS；源码current/HEAD/tree干净核对通过。
+- 原RELEASE=PASS/EXIT=0；维护17:15:08–17:15:55 +0800，共47秒，新迁移75.079ms。23迁移finished/0rolledback、收益四表存在、四grants点位t/f/t/f、五应用与backup健康、health0.5.11/Final/metadata passed，postgres CID与nginx public哈希不变。
+- 十项范围及来源详见[发布记录](releases/v0.5.11-preproduction.md)。分页焦点、RTL、试读脱敏、模板Key/博客卡片、空语种隐藏、Sitemap清理、桌面分类栏、安装器修复、账号级收益看板、IndexNow透传均合入；博客/Turnstile/IndexNow仍关闭，nginx安装器本版未安装。主控交叉类型修正4189aa6也包含。
+- env改前全值符合提示词，备份preprod.env.bak-v0511-20261008T091454Z；仅两个版本字段与主WORKER_TASK_ALLOWLIST追加changdu.revenue_sync.v1，余字节cmp一致/轻量通道不变；不加REVENUE_VIEW_*或ADMIN_LOGIN_TURNSTILE_*。启动白名单主包含新任务/light不含/invalid空，web默认super_admin+2FA，三服务IndexNow双false。
+- 第一阶段44门禁/33运行器、553files9022tests、专项skipped0、strictproxy1736/known0、23迁移/57表、drift0、15变异、真实品牌镜像与三composePASS。audit0critical、批准六high，source-map-js全1.2.2、Next16.3.7。Owner10-08安全公告放行本版、v0.5.12升级16.3.8。
+- F2cs200/noindex/菜单hreflang隐藏、F3ar lang/dir与分类真链接、F4分页页脚前PASS；F5博客写闸关闭跳过、不保存模板。现有35分片小说28813/章86168逐语种等于B快照，较旧版增加68/204来自部署前新发布；cs不在mainpage。10本机外部请求经指定代理，六服务自部署错误/权限/token模式0。
+- **待Owner确认**：F1后台刷新Sitemap/B33清理日志及目录下降（基线390/411.5M，当前仍390，无新cleanup）；F3电脑分类栏单行箭头目视；F6super_admin+2FA同步09-20～10-08并与上游网文日报对数（当前0任务/0批次，未冒充成功）。不代Owner点击，不阻断其余验收，F7不在授权内。
+- Owner10-08决定PN09连入口隐藏、PN16单行箭头、PN04现状、看板super_admin、主任务手动无定时。viewport-fit=cover不做；HSTS稳定一周后另行用新安装器；CPS收入可能混入小说已登记待办。本次不动证书/DNS/NAS/推广批次/业务开关，不重建postgres；回滚须另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复env并查收益在途。
+- annotated v0.5.11固定Final、原生成CHANGELOG、本台账与唯一日志本地完成，远端推送与Notion回读收据待补；保留全部历史及模板。
 
 ### v0.5.10 —— 已部署正式站（2026-10-08 01:11:28 +0800；Owner 操作项目待确认）
 
@@ -390,7 +390,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.11` | 2026-10-08 | PATCH | 分页与焦点、RTL、试读诊断、模板闸门、空语种隐藏、站点地图清理、桌面分类栏、安装器修复、账号级收益看板、IndexNow 透传；新增收益四表迁移与 grants | `release/v0.5.11-2026-10-08`；基线 `aacab24` | 准备中，尚未部署；第一阶段归档交付后停止，部署待 Owner 单独授权 |
+| `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
 | `v0.5.10` | 2026-10-08 01:11:28 | PATCH | 书封、分类Sitemap/站内链接、分页SEO、阅读设置、阿语与运营后台；Turnstile合入关闭；无新迁移 | Final `7f955106a82f8dff82568e305ea35f1a68b8c934`；annotated `v0.5.10`；image `cps-novel:0.5.10-7f95510` | 正式站已部署，自动验收PASS；35分片115163、en分类1788→72；Owner浏览器/手机待确认 |
 | `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已于2026-10-07切换正式域名pulsenovels.com对外开放（19:39:17 JST确认）；同版Final不变；public配置/部署/live/外部/100x20/worker及当天sitemap计数通过；Owner接受已知B-38部分分类404，随v0.5.10修复；预生产E/F/5b/5c/5d为历史PASS；Owner登录/2FA与认证记录核对PASS，GSC/监控待做；Git已push核远端，Notion开放及Owner2FA完成状态同步回读PASS（19:49 JST） |
 | `v0.5.8` | 2026-10-05 21:27:39 | PATCH | worker 心跳部分索引及健康检查修复；NAS stat 跨平台与排序修复；新增 1 条迁移 | Final `0329b113bcfefb35a7654bfd311d2e0a6095ed25`；annotated `v0.5.8`；image `cps-novel:0.5.8-0329b11`；`release/v0.5.8-2026-10-05` | 已部署密码保护预生产；E/F/G PASS；批次 paused；正式域名未开放；Notion 第二阶段同步回读 PASS（2026-10-05T22:36:40.438000+09:00） |

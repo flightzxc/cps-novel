@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "paths": [
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux",
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin"
+  ],
+  "heads": {
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin": "5096765a7d53ba704bc8d07322864c366cb41895"
+  },
+  "head_and_status_byte_identical": true
+}

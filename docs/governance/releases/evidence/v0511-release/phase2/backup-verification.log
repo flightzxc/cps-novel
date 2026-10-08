@@ -1,0 +1,5 @@
+/opt/cps-novel/shared/artifacts/staging/cps-novel-0.5.11-eb40756.tar.zst 205989614
+5af3a9f2a0d872cd06319d00cbdb427646cce1cecd4fe96f088012c2df155244  /var/lib/cps-novel/backups/logical/cps-novel-v0511-20261008T090143Z.dump
+cps-novel-v0511-20261008T090143Z.dump: FAILED open or read
+sha256sum: cps-novel-v0511-20261008T090143Z.dump: No such file or directory
+sha256sum: WARNING: 1 listed file could not be read

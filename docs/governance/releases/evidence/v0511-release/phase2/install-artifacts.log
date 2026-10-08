@@ -1,0 +1,49 @@
+cps-novel-0.5.11-eb40756.tar.zst: OK
+8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d  cps-novel-0.5.11-eb40756.tar.zst
+cps-novel-v0.5.11.bundle: OK
+eb40756416b186ca4b293ff57e24026af78cf4f9.json: OK
+Cloning into '/opt/cps-novel/releases/eb40756416b186ca4b293ff57e24026af78cf4f9'...
+done.
+Note: switching to '7f955106a82f8dff82568e305ea35f1a68b8c934'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+From /opt/cps-novel/shared/artifacts/staging/cps-novel-v0.5.11.bundle
+ * branch                release/v0.5.11-2026-10-08 -> FETCH_HEAD
+Previous HEAD position was 7f955106a 发布：准备海阅 v0.5.10 六文件版本身份
+HEAD is now at eb4075641 发布：准备海阅 v0.5.11 六文件版本身份
+CODE_FINAL_TREE_CLEAN=PASS
+IDENTITY=PASS
+  target            sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  config            sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7
+  platform          linux/amd64
+  revision          eb40756416b186ca4b293ff57e24026af78cf4f9
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=eb40756416b186ca4b293ff57e24026af78cf4f9
+  archive_sha256=8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d
+  image_tag=cps-novel:0.5.11-eb40756
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.5.11-eb40756
+  target             =sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  platform_manifest  =sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  config             =sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7
+  platform           =linux/amd64
+  revision           =eb40756416b186ca4b293ff57e24026af78cf4f9
+INSTALL_EXIT=0

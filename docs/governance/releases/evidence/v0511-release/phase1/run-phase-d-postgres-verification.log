@@ -1,0 +1,144 @@
+Prisma schema loaded from prisma/schema.prisma
+The schema at prisma/schema.prisma is valid 🚀
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 243ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "p1_07_p1_13_phase_d_164502_70503_19491", schema "public" at "127.0.0.1:61089"
+
+23 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+POSTGRES_VERSION=16.14 (Debian 16.14-1.pgdg13+1)
+TEST_DB_ISOLATION=UNIQUE_DATABASE_PER_RUN name=p1_07_p1_13_phase_d_164502_70503_19491 port=61089
+
+ RUN  v3.2.7 /Users/chenweifeng/Documents/cps海阅/release-v0.5.11
+
+P1_07_INDEX_PLANS={"channel_sync_task_item":{"pending":["channel_sync_task_item_pending_global_idx","channel_sync_active_scope_uidx"],"expired":["channel_sync_task_item_expired_lease_idx","channel_sync_type_status_created_idx"]},"generic_task_item":{"pending":["generic_task_item_pending_global_idx","generic_task_active_scope_uidx"],"expired":["generic_task_item_expired_lease_idx","generic_task_origin_key"]}}
+ ✓ |node| tests/integration/tasks/p1-07-postgres.test.ts (28 tests) 5960ms
+   ✓ P1-07 PostgreSQL 16 runtime > serializes same-parent recompute before taking a fresh aggregate snapshot  424ms
+   ✓ P1-07 PostgreSQL 16 runtime > recovers after a real worker child process is killed and restarted  622ms
+   ✓ P1-07 PostgreSQL 16 runtime > bounds an abort-ignoring handler and fences its late result  344ms
+   ✓ P1-07 PostgreSQL 16 runtime > uses all four independent pending and expired indexes  318ms
+ ✓ |node| tests/integration/tasks/catalog-finalize-postgres.test.ts (8 tests) 1335ms
+ ✓ |node| tests/integration/tasks/p1-13-postgres-acceptance.test.ts (6 tests) 1053ms
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > blocks finalize before Preview staging when the feature gate closes
+{"family":"generic","taskType":"catalog_scan","taskId":"bc99085d-d86a-45fb-9558-6f4f49e412a2","itemId":"8250d42e-f1f4-4d54-b05b-d62f55b9a50e","workerId":"p2-05-worker","errorKind":"feature_disabled","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:20.573Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > blocks finalize before Preview staging when the write gate closes
+{"family":"generic","taskType":"catalog_scan","taskId":"5468e8a2-fba7-48de-a384-563d66aa7eee","itemId":"8f81f876-f146-474d-97ad-b01893cd31bb","workerId":"p2-05-worker","errorKind":"write_disabled","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:20.794Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > keeps successful positive facts after later partial failure and skips incomplete snapshots
+{"family":"generic","taskType":"catalog_scan","taskId":"29d27288-ccba-4bc3-b3d2-072e7ba28401","itemId":"67eaf301-e80f-4125-abc6-79e061d42739","workerId":"p2-05-worker","errorKind":"upstream_error","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:23.334Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > records upstream_error and does not continue later catalog pages
+{"family":"generic","taskType":"catalog_scan","taskId":"b89325ea-a223-45dc-8244-223b6bc6265c","itemId":"4daf72d9-6df1-4b77-a84b-b98246787482","workerId":"p2-05-worker","errorKind":"upstream_error","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:25.146Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (getbydataid)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"e8934c2e-4449-469c-99d8-1e8fd8117285","itemId":"c96668c7-e514-4e7a-b698-6190273aa6cc","workerId":"preview-one-52c28dd7-0da7-459a-a174-2f10415249ea","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:26.001Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (getchapterinfo)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"8a1f5b29-54e8-46e0-b638-140acc5993e4","itemId":"077fad31-218e-4628-97d1-f2d7375ae660","workerId":"preview-one-8989798d-f80a-4ed6-9a0d-b52c5705275a","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:26.253Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (source_app_excluded)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"6fe70835-0a50-46fe-9487-8872438eb94e","itemId":"e8e37714-dd88-4807-8397-47dfa77ac4cd","workerId":"preview-one-8e6df0aa-66d5-4fe5-9958-50dc5946ce65","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:26.495Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (channel_inactive)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"624dfddb-3d62-4283-ad0e-88d4d5ee75e0","itemId":"c1f5cf32-c6d0-4624-a08f-80d5a32e1e4b","workerId":"preview-one-4e880bef-b87c-4647-9f69-ed9f9e4253de","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:26.731Z"}
+
+stderr | tests/integration/tasks/p2-05-postgres.test.ts > P2-05 PostgreSQL 16.14 write paths > targeting cannot bypass a closed preview boundary (account_disabled)
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"84dcbe9c-7ecc-47af-b462-a8791d54857e","itemId":"e0437750-0b41-41f4-b19b-ea53ad27e857","workerId":"preview-one-de56b2c8-824c-46e8-8519-038e49da2937","errorKind":"handler_failed","attempt":1,"source":"handler","occurredAt":"2026-10-08T07:45:26.958Z"}
+
+ ✓ |node| tests/integration/tasks/p2-05-postgres.test.ts (41 tests) 10047ms
+   ✓ P2-05 PostgreSQL 16.14 write paths > 5-A: a later re-scan (different task) overwrites catalog_position with its own coordinate and scanTaskId — the row is not stuck with the first scan's stale registration  307ms
+   ✓ P2-05 PostgreSQL 16.14 write paths > writes sourceLocale and captures a linked source promo before rawPayload redaction  319ms
+   ✓ P2-05 PostgreSQL 16.14 write paths > preserves four raw identities and updates only real language and agency display names  373ms
+   ✓ P2-05 PostgreSQL 16.14 write paths > keeps successful positive facts after later partial failure and skips incomplete snapshots  412ms
+   ✓ P2-05 PostgreSQL 16.14 write paths > materializes 5 to policy 3, then 2 to 2 without hard deletion or side effects  304ms
+
+ Test Files  4 passed (4)
+      Tests  83 passed (83)
+   Start at  16:45:07
+   Duration  20.20s (transform 393ms, setup 0ms, collect 725ms, tests 18.40s, environment 0ms, prepare 130ms)
+
+PHASE_D_PG_GATED_TESTS=PASS
+PHASE_D_POSTGRES_CLEANUP=PASS

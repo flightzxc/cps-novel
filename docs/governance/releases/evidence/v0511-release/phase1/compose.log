@@ -1,0 +1,3 @@
+COMPOSE_CONTRACT=PASS file=.tmp/v0511-phase1/compose-local.json
+COMPOSE_CONTRACT=PASS file=.tmp/v0511-phase1/compose-x8.json
+COMPOSE_CONTRACT=PASS file=.tmp/v0511-phase1/compose-preprod.json

@@ -1,0 +1,20 @@
+IDENTITY=PASS
+  target            sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  config            sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7
+  platform          linux/amd64
+  revision          eb40756416b186ca4b293ff57e24026af78cf4f9
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=eb40756416b186ca4b293ff57e24026af78cf4f9
+  archive_sha256=8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d
+  image_tag=cps-novel:0.5.11-eb40756
+  approval_record_checked=yes
+IMAGE=PASS anchor=config_id
+VERIFY=PASS
+  image_tag          =cps-novel:0.5.11-eb40756
+  target             =sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  platform_manifest  =sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b
+  config             =sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7
+  platform           =linux/amd64
+  revision           =eb40756416b186ca4b293ff57e24026af78cf4f9

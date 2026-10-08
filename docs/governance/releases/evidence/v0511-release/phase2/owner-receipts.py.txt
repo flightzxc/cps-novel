@@ -1,0 +1,25 @@
+import subprocess,json,re
+from pathlib import Path
+log=Path('/opt/cps-novel/logs/release-v0.5.11-eb40756.log').read_text()
+since=re.search(r'DEPLOY_STARTED_AT=(\S+)',log)[1]
+sql="""BEGIN READ ONLY;
+SELECT json_build_object(
+ 'read_at',clock_timestamp(),
+ 'empty_locales',(SELECT json_agg(locale ORDER BY locale) FROM (VALUES ('en'),('es'),('pt-BR'),('id'),('vi'),('th'),('ja'),('ko'),('zh-Hant'),('ar'),('fr'),('de'),('pl'),('ru'),('cs')) l(locale) WHERE NOT EXISTS (SELECT 1 FROM article a WHERE a.locale=l.locale AND a.status='published' AND a.deleted_at IS NULL)),
+ 'sitemap_tasks',(SELECT coalesce(json_agg(json_build_object('id',id,'status',status,'created_at',created_at,'updated_at',updated_at) ORDER BY created_at),'[]') FROM generic_task WHERE task_type='sitemap_refresh' AND created_at >= %s::timestamptz),
+ 'revenue_tasks',(SELECT coalesce(json_agg(json_build_object('id',id,'status',status,'created_at',created_at,'updated_at',updated_at) ORDER BY created_at),'[]') FROM generic_task WHERE task_type='changdu.revenue_sync.v1' AND created_at >= %s::timestamptz),
+ 'revenue_batches',(SELECT coalesce(json_agg(json_build_object('id',id,'task_id',generic_task_id,'status',status,'begin_date',begin_date,'end_date',end_date,'credential_id',credential_id,'credential_fingerprint_prefix',credential_fingerprint_prefix,'detail_row_count',detail_row_count,'total_row_count',total_row_count,'reconciliation_status',reconciliation_status,'error_code',error_code,'created_at',created_at,'finished_at',finished_at) ORDER BY created_at),'[]') FROM revenue_sync_batch),
+ 'daily_stats',(SELECT coalesce(json_agg(json_build_object('stat_date',stat_date,'real_dev_num',real_dev_num,'new_real_dev_num',new_real_dev_num,'real_income',real_income) ORDER BY stat_date),'[]') FROM revenue_daily_stat),
+ 'published_by_locale',(SELECT json_agg(row_to_json(s)) FROM (SELECT locale,count(*) FROM article WHERE status='published' AND deleted_at IS NULL GROUP BY locale ORDER BY locale)s));
+COMMIT;""" % ("'"+since+"'","'"+since+"'")
+out=subprocess.check_output(['docker','exec','cps-novel-postgres-1','psql','--no-psqlrc','-v','ON_ERROR_STOP=1','-U','postgres','-d','cps_novel','-Atqc',sql],text=True)
+print('OWNER_RECEIPTS='+out.strip())
+lines=subprocess.check_output(['docker','logs','--since',since,'cps-novel-worker-light-1'],stderr=subprocess.STDOUT,text=True).splitlines()
+for line in lines:
+ if '"event":"sitemap_release_cleanup"' in line:
+  event=json.loads(line)
+  print('SITEMAP_RELEASE_CLEANUP='+json.dumps(event))
+print('SITEMAP_DIRECTORY_COUNT='+subprocess.check_output(['docker','exec','cps-novel-web-1','sh','-c','ls /app/runtime/static-sitemaps/releases | wc -l'],text=True).strip())
+print(subprocess.check_output(['docker','exec','cps-novel-web-1','du','-sh','/app/runtime/static-sitemaps/releases'],text=True).strip())
+print('SITEMAP_CURRENT='+subprocess.check_output(['docker','exec','cps-novel-web-1','readlink','/app/runtime/static-sitemaps/current'],text=True).strip())
+print('SITEMAP_CURRENT_MANIFEST='+subprocess.check_output(['docker','exec','cps-novel-web-1','node','-e',"process.stdout.write(require('fs').readFileSync('/app/runtime/static-sitemaps/current/manifest.json','utf8'))"],text=True).strip())

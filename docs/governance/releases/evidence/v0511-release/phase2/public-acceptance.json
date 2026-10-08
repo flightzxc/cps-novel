@@ -1,0 +1,69 @@
+{
+  "F2": {
+    "result": "PASS",
+    "emptyLocale": "cs",
+    "http": 200,
+    "robots": [
+      "noindex, follow"
+    ],
+    "languageMenuActiveLocales": [
+      "en",
+      "es",
+      "pt-BR",
+      "id",
+      "vi",
+      "th",
+      "ja",
+      "ko",
+      "zh-Hant",
+      "ar",
+      "fr",
+      "de",
+      "pl",
+      "ru"
+    ],
+    "hreflangCsAbsent": true
+  },
+  "F3": {
+    "htmlLang": "ar",
+    "dir": "rtl",
+    "categoryContainer": true,
+    "categoryLinks": true,
+    "desktopVisual": "pending Owner"
+  },
+  "F4": {
+    "result": "PASS",
+    "paginationBeforeFooter": true
+  },
+  "F5": {
+    "blog": "skipped: write gate closed",
+    "templateKey": "deployed; no save performed"
+  },
+  "requests": [
+    {
+      "label": "cs-home",
+      "path": "/cs",
+      "http": "200"
+    },
+    {
+      "label": "en-home",
+      "path": "/en",
+      "http": "308"
+    },
+    {
+      "label": "en-home-canonical",
+      "path": "/",
+      "http": "200"
+    },
+    {
+      "label": "ar-home",
+      "path": "/ar",
+      "http": "200"
+    },
+    {
+      "label": "browse-page2",
+      "path": "/browse?page=2",
+      "http": "200"
+    }
+  ]
+}

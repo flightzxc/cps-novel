@@ -1,0 +1,27 @@
+[
+  {
+    "label": "cs-home",
+    "path": "/cs",
+    "http": "200"
+  },
+  {
+    "label": "en-home",
+    "path": "/en",
+    "http": "308"
+  },
+  {
+    "label": "en-home-canonical",
+    "path": "/",
+    "http": "200"
+  },
+  {
+    "label": "ar-home",
+    "path": "/ar",
+    "http": "200"
+  },
+  {
+    "label": "browse-page2",
+    "path": "/browse?page=2",
+    "http": "200"
+  }
+]

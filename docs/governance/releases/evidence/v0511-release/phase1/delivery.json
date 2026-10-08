@@ -1,0 +1,114 @@
+{
+  "stage": 1,
+  "status": "PASS; stopped before deployment",
+  "completedAtJST": "2026-10-08T16:58:45.605314+09:00",
+  "worktree": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11",
+  "branch": "release/v0.5.11-2026-10-08",
+  "baseline": "aacab24c4086f4c736590c86c91ea0ce2156b512",
+  "gitHubFinal": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+  "gateAcceptance": {
+    "result": "PASS",
+    "final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+    "tree": "b98d07a62c98196593a625c5cedcd2344a8e9220",
+    "runners": 33,
+    "gates": 44,
+    "testFiles": 553,
+    "passedTests": 9022,
+    "failedTests": 0,
+    "mutations": 15,
+    "migrations": 23,
+    "x9Tables": 57,
+    "cpsReferenceUnchanged": true
+  },
+  "audit": {
+    "critical": 0,
+    "high": 6,
+    "highPackages": [
+      "@prisma/config",
+      "deepmerge-ts",
+      "effect",
+      "nanoid",
+      "next",
+      "prisma"
+    ],
+    "ownerApproved": true
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 19
+  },
+  "node": "20.20.2",
+  "npm": "11.6.2",
+  "next": "16.3.7",
+  "sourceMapJs": "all 1.2.2",
+  "archive": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/preproduction-archive/cps-novel-0.5.11-eb40756.tar.zst",
+    "bytes": 331746262,
+    "sha256": "8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d",
+    "manifestPath": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/preproduction-archive/eb40756416b186ca4b293ff57e24026af78cf4f9.json",
+    "manifest": {
+      "schemaVersion": 2,
+      "transport": "archive",
+      "approved_git_commit": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+      "version": "0.5.11",
+      "image_tag": "cps-novel:0.5.11-eb40756",
+      "image_platform": "linux/amd64",
+      "image_revision": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+      "archive_filename": "cps-novel-0.5.11-eb40756.tar.zst",
+      "archive_sha256": "8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d",
+      "oci": {
+        "target": {
+          "mediaType": "application/vnd.oci.image.manifest.v1+json",
+          "digest": "sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b",
+          "size": 3294
+        },
+        "platform_manifest": {
+          "mediaType": "application/vnd.oci.image.manifest.v1+json",
+          "digest": "sha256:21e1686e1d73a9a4b909a778472b3dd5836314457d06e08e068da41f1a97b92b",
+          "size": 3294
+        },
+        "config": {
+          "mediaType": "application/vnd.oci.image.config.v1+json",
+          "digest": "sha256:f185ef47d36c3a08622b7d3bbc5871160608adf53dc54a3cf10533441596a1b7",
+          "size": 13668
+        }
+      },
+      "layer_count": 20,
+      "built_at": "2026-10-08T07:54:09Z",
+      "source_repository": "https://github.com/flightzxc/cps-novel",
+      "identityNote": "Identity = approved_git_commit + oci.platform_manifest.digest + oci.config.digest + archive_sha256. image_tag alone is NOT identity. Which digest a host reports depends on its image store; both are recorded here.",
+      "versionIdentityIssue": "git tag may differ from package.json version; commit and digests are authoritative"
+    },
+    "verification": "VERIFY_OFFLINE=PASS / VERIFY=PASS --load; anchor=config_id"
+  },
+  "rawLogs": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.11/.tmp/v0511-phase1",
+  "notes": {
+    "worktreeCreation": "Desktop tool returned Not a git repository at parent cwd; created independent worktree with git worktree add from exact approved baseline.",
+    "wrapperCorrections": [
+      {
+        "step": "npm ci",
+        "cause": "Selecting Homebrew Node 20 also selected npm 10.8.2 instead of declared npm 11.6.2, resulting in EUSAGE missing @emnapi runtime/core.",
+        "fix": "Use Node 20.20.2 with npm/npx 11.6.2 through local toolchain PATH; npm ci and prisma generate passed without dependency/lock changes.",
+        "evidence": "npm-ci.log / npm-ci-11.log / prisma-generate.log"
+      },
+      {
+        "step": "prisma validate",
+        "cause": "Wrapper omitted required DATABASE_URL; original diagnostic P1012 Environment variable not found: DATABASE_URL.",
+        "fix": "Supply a local syntactic validation URL; no connection made by validate. Passed gates reused; actual PostgreSQL migration/dictionary checks remain original verification runners.",
+        "evidence": "gate-summary.tsv / prisma-validate.log"
+      }
+    ],
+    "stageBoundary": "No operations hosts, deployment, tag, CHANGELOG generation, release-level development log or Notion closeout in phase 1."
+  },
+  "governance": {
+    "sixFileVersionBump": "completed, committed, pushed",
+    "versionRegistry": "preparation entry completed; not deployed",
+    "annotatedTag": "deferred until phase 2 deployment acceptance",
+    "generatedChangelog": "deferred until phase 2 deployment acceptance",
+    "releaseDevelopmentLog": "deferred until phase 2 deployment acceptance",
+    "notionCloseout": "deferred until phase 2 deployment acceptance"
+  },
+  "operationsHostsConnected": false,
+  "deploymentPerformed": false,
+  "heavyLockReleased": true
+}

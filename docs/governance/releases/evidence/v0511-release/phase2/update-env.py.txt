@@ -1,0 +1,35 @@
+from pathlib import Path
+import hashlib,datetime,os,shutil,difflib
+p=Path('/opt/cps-novel/shared/env/preprod.env');before=p.read_bytes()
+if hashlib.sha256(before).hexdigest()!='0d2ac33e1770c4e643351421d9300c50a8c50dd0e17278c11714cd97902a405c':raise SystemExit('ENV_PRECONDITION_SHA_MISMATCH')
+changes={b'WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify\n':b'WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1\n',b'APP_VERSION=0.5.10\n':b'APP_VERSION=0.5.11\n',b'NEXT_PUBLIC_BUILD_VERSION=v0.5.10\n':b'NEXT_PUBLIC_BUILD_VERSION=v0.5.11\n'}
+for old in changes:
+ if before.count(old)!=1:raise SystemExit('ENV_PRECONDITION_MISMATCH='+old.split(b'=')[0].decode())
+if any(line.startswith((b'ADMIN_LOGIN_TURNSTILE_',b'REVENUE_VIEW_')) for line in before.splitlines()):raise SystemExit('UNEXPECTED_TURNSTILE_ENV_VARIABLE')
+after=before
+for old,new in changes.items():after=after.replace(old,new)
+# Before writing, prove each changed line is an authorized key and every other byte remains identical.
+removed=[x[1:] for x in difflib.ndiff(before.decode().splitlines(),after.decode().splitlines()) if x.startswith('- ')]
+added=[x[1:] for x in difflib.ndiff(before.decode().splitlines(),after.decode().splitlines()) if x.startswith('+ ')]
+if len(removed)!=3 or len(added)!=3:raise SystemExit('ENV_DIFF_NOT_THREE_LINES')
+backup=p.with_name(p.name+'.bak-v0511-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
+temp=p.with_name(p.name+'.tmp-v0511-'+str(os.getpid()))
+if backup.exists() or temp.exists():raise SystemExit('ENV_BACKUP_OR_TEMP_EXISTS')
+shutil.copy2(p,backup)
+if backup.read_bytes()!=before:raise SystemExit('ENV_BACKUP_VERIFICATION_FAILED')
+try:
+ fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+ with os.fdopen(fd,'wb') as f:f.write(after);f.flush();os.fsync(f.fileno())
+ os.replace(temp,p)
+finally:temp.unlink(missing_ok=True)
+if p.read_bytes()!=after or backup.read_bytes()!=before:raise SystemExit('ENV_WRITE_VERIFICATION_FAILED')
+print('ENV_BACKUP='+str(backup));print('ENV_BEFORE_SHA256='+hashlib.sha256(before).hexdigest());print('ENV_AFTER_SHA256='+hashlib.sha256(after).hexdigest())
+print(''.join(difflib.unified_diff(before.decode().splitlines(True),after.decode().splitlines(True),fromfile=str(backup),tofile=str(p),n=0)),end='')
+print('ENV_ONLY_THREE_AUTHORIZED_LINES_CHANGED=PASS')
+
+import subprocess,tempfile
+with tempfile.TemporaryDirectory() as td:
+ a=Path(td)/'before';b=Path(td)/'after'
+ def strip_versions(data):return b''.join(x for x in data.splitlines(keepends=True) if not x.startswith((b'APP_VERSION=',b'NEXT_PUBLIC_BUILD_VERSION=',b'WORKER_TASK_ALLOWLIST=')))
+ a.write_bytes(strip_versions(before));b.write_bytes(strip_versions(p.read_bytes()));subprocess.run(['cmp',str(a),str(b)],check=True)
+print('ENV_OTHER_BYTES_CMP=PASS ADMIN_LOGIN_TURNSTILE_VARIABLES=absent REVENUE_VIEW_VARIABLES=absent')

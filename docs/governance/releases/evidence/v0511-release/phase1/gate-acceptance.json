@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+  "tree": "b98d07a62c98196593a625c5cedcd2344a8e9220",
+  "runners": 33,
+  "gates": 44,
+  "testFiles": 553,
+  "passedTests": 9022,
+  "failedTests": 0,
+  "mutations": 15,
+  "migrations": 23,
+  "x9Tables": 57,
+  "cpsReferenceUnchanged": true
+}
