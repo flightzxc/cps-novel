@@ -97,7 +97,7 @@ GRANT SELECT ON TABLE
   channel_account_hold,
   -- 收益看板·账号级每日汇总（迁移 20261008120000_revenue_account_level_dashboard）。
   -- Web 只读：后台 /revenue 页的读服务（src/server/revenue/read-service.ts）读四表，
-  -- 写入一律由 worker 的 `moboreader.revenue_sync.v1` 任务完成。analyst_ro 与仓库其余
+  -- 写入一律由 worker 的 `changdu.revenue_sync.v1` 任务完成。analyst_ro 与仓库其余
   -- 业务表同口径只读（四表不含 S2/S3 列：`raw_payload` 是上游汇总统计行，不含推广码、
   -- 链接或凭证）。
   revenue_sync_scope,
@@ -412,7 +412,7 @@ GRANT SELECT ON TABLE channel_account, channel_account_credential,
 -- further down this file.
 GRANT SELECT, INSERT, UPDATE ON TABLE channel_account_hold TO worker_app;
 -- 收益看板·账号级每日汇总（迁移 20261008120000_revenue_account_level_dashboard）：
--- worker 的 `moboreader.revenue_sync.v1` 在 finalize 事务的 protectedWrite 里 upsert
+-- worker 的 `changdu.revenue_sync.v1` 在 finalize 事务的 protectedWrite 里 upsert
 -- scope、写 batch、upsert raw snapshot 与 daily stat（worker/handlers/revenue-sync.ts）。
 -- SELECT 与 INSERT/UPDATE 并列写出，原因同本文件后面的 RETURNING 说明：Prisma 的
 -- upsert/create 一律带 `RETURNING <全部标量列>`，只给 INSERT/UPDATE 会在第一行就

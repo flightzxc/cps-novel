@@ -2,6 +2,11 @@
  * 畅读收益接口适配器：`POST https://kocserver-cn.cdreader.com/api/Report/GetReport`，
  * 取海阅（网文，projectType=1）账号级每日汇总。
  *
+ * 文件名里的 `moboreader-` 指 kocserver 上游适配器家族（与 `moboreader-rate-limit` 等同族），不代表只覆盖
+ * MoboReader 这一个应用：**接口是账号级的，覆盖该畅读账号下全部网文应用**（响应里没有应用字段）。以后同一账号
+ * 下增加别的网文应用时，这里取到的就是它们的合计——按应用拆分的前提见 `src/server/revenue/account.ts` 文件头
+ * 的“多剧场扩展路径”。
+ *
  * ── 为什么所有请求必须固定带 projectType=1 ──────────────────────────────────
  * 海阅与 CPS 短剧共用同一个畅读上游账号。上游靠请求体里的 `projectType` 区分网文(1)/短剧(2)，
  * **不带 projectType 时返回两者合计**（已在生产只读实测证实）。所以请求体由

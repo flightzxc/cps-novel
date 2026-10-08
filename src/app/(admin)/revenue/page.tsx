@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
  * 取数走 server component 直接调 `loadRevenueDashboard`（`@/server/revenue`），不新增任何
  * `/api/admin/**` 路由；写入只有一个 server action（`./_actions.ts`，`admin.revenue.sync.enqueue`）。
  *
- * 能力位 `revenue:view`（要求 2FA，默认无人拥有）。页面级 guard 只是体验层——没有授权时渲染
+ * 能力位 `revenue:view`（要求 2FA，默认授予 super_admin——Owner 2026-10-08 决定）。页面级 guard 只是体验层——没有授权时渲染
  * 「缺少能力位」面板，**并且不发起任何查询**；数据与写入的真正闸门在服务与 action 里。
  *
  * 区间：`?from=&to=`（YYYY-MM-DD，北京时间）。读服务对非法区间会抛错，所以先在
@@ -68,7 +68,7 @@ export default async function RevenuePage({
       description={`${view.range.dateFrom} ~ ${view.range.dateTo}，共 ${view.range.dayCount} 天（北京时间）`}
     >
       <div className="space-y-6">
-        <MethodologyNote />
+        <MethodologyNote novelAppCount={view.account?.novelAppCount ?? null} />
         <AdminTimeZoneNote />
 
         {range.fallbackNotice && (
@@ -90,7 +90,7 @@ export default async function RevenuePage({
           dateTo={view.range.dateTo}
           today={today}
         />
-        <SummaryCards summary={view.summary} />
+        <SummaryCards summary={view.summary} novelAppCount={view.account?.novelAppCount ?? null} />
         <DailyTable days={view.days} />
         <BatchTable batches={view.batches} />
       </div>

@@ -116,15 +116,15 @@ services:
       # only; unset (Level 0, production) is byte-for-byte today's behaviour.
       PROMO_CLAIM_ROLES: ${PROMO_CLAIM_ROLES:-}
       PROMO_CLAIM_USER_IDS: ${PROMO_CLAIM_USER_IDS:-}
-      # revenue:view (/revenue 收益看板及其手动同步) is the other capability that does
-      # NOT default to super_admin: defaultRoles: [] + requiresTwoFactor in
-      # src/lib/auth/capabilities.ts (rolesEnv/userIdsEnv below are derived from that
-      # table by tests/backend/runtime/revenue-view-compose-passthrough.test.ts). Web
-      # only -- it is an admin-UI capability and must not reach worker / worker-light /
-      # scheduler. Before this passthrough existed the variables were simply not
-      # delivered to the container, so no deployment could ever grant the capability.
-      # Unset keeps today's behaviour byte-for-byte (granted to nobody).
-      REVENUE_VIEW_ROLES: ${REVENUE_VIEW_ROLES:-}
+      # revenue:view (/revenue 数据看板及其手动同步). Owner 2026-10-08 decision: open to
+      # every super_admin by default (defaultRoles: ["super_admin"] + requiresTwoFactor in
+      # src/lib/auth/capabilities.ts -- 2FA is still required; the two-person team is not
+      # granted per-user). rolesEnv/userIdsEnv below are derived from that table by
+      # tests/backend/runtime/revenue-view-compose-passthrough.test.ts, which also pins the
+      # default here to the table's defaultRoles. Web only -- it is an admin-UI capability
+      # and must not reach worker / worker-light / scheduler. Set REVENUE_VIEW_ROLES to
+      # narrow or replace the default role set; REVENUE_VIEW_USER_IDS adds named identities.
+      REVENUE_VIEW_ROLES: ${REVENUE_VIEW_ROLES:-super_admin}
       REVENUE_VIEW_USER_IDS: ${REVENUE_VIEW_USER_IDS:-}
       # RC-6 safety valve. Preproduction pins this to 1 in its environment;
       # the root compose must pass it through or /go keeps writing events.

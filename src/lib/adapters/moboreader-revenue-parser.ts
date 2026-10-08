@@ -1,5 +1,7 @@
 /**
  * 畅读 GetReport（网文 projectType=1 账号级每日汇总）上游行的纯函数解析与对账。
+ * 接口是账号级的：每一行都是该畅读账号下全部网文应用的合计，行里没有应用字段（文件名里的 `moboreader-`
+ * 只表示 kocserver 上游适配器家族）。
  *
  * 搬运自 CPS `src/lib/changdu-total-revenue/parser.ts`（tag v8.7.2，peeled commit
  * c8c7d4ed66c42395a44811262afdb84bf29a8405），逐符号登记在 docs/governance/port-registry.md。

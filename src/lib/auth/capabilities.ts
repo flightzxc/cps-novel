@@ -86,10 +86,13 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
       defaultRoles: [],
       requiresTwoFactor: true,
     },
+    // 数据看板（/revenue 及其手动同步）。Owner 2026-10-08 决定：默认开放给所有 super_admin（团队只有
+    // 两个人，不再逐人授权），仍要求 2FA。env 仍可覆盖：REVENUE_VIEW_ROLES 非空时取代默认角色集，
+    // REVENUE_VIEW_USER_IDS 按身份追加。
     "revenue:view": {
       rolesEnv: "REVENUE_VIEW_ROLES",
       userIdsEnv: "REVENUE_VIEW_USER_IDS",
-      defaultRoles: [],
+      defaultRoles: ["super_admin"],
       requiresTwoFactor: true,
     },
     // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.3): both

@@ -1,7 +1,9 @@
 /**
- * 收益同步任务 `moboreader.revenue_sync.v1`：取海阅（网文，projectType=1）账号级每日汇总，落库到
+ * 收益同步任务 `changdu.revenue_sync.v1`：取海阅（网文，projectType=1）账号级每日汇总，落库到
  * revenue_sync_scope / revenue_sync_batch / revenue_raw_snapshot / revenue_daily_stat。
  *
+ * 账号级：上游 `GetReport` 覆盖该畅读账号下**全部网文应用**的合计，响应里没有应用字段；所以任务行的
+ * `channel_app_id` 是 NULL，作用域是“账号 × projectType”（`revenue_sync_scope`）。
  * 触发方式：只能后台手动（`src/server/revenue/enqueue.ts`），不设定时任务；由**主通道** worker 执行
  * （任务类型登记在 `src/lib/tasks/worker-lanes.mjs` 的 `MOBOREADER_UPSTREAM_TASK_TYPES`，轻量通道不得出现）。
  * `maxAttempts: 1`：失败直接作为批次失败原因呈现给运营，由人决定是否重来。
@@ -51,6 +53,7 @@ import {
   parseRevenueSyncTaskParams,
   revenueBatchFingerprint,
   revenueRawDedupeKey,
+  revenueSyncOperationScopeHash,
   type RevenueSyncTaskParams,
 } from "../../src/lib/tasks/revenue-sync";
 import { resolveClaimCredentialReadiness } from "../credentials/claim-readiness";
@@ -331,20 +334,22 @@ export function createRevenueSyncHandler(
     const context = { taskId: lease.taskId, workerId: lease.workerId, now };
 
     // 任务行本身必须与参数对得上：同一个账号、网文业务线。对不上说明任务行或条目被改过——不信任，
-    // 也不写批次（不知道该往哪个作用域写）。
+    // 也不写批次（不知道该往哪个作用域写）。收益同步是账号级任务，任务行的 `channel_app_id` 是 NULL，
+    // 所以业务线不能再从应用上读；任务行里自描述业务线的是 `operation_scope_hash`（折进了 projectType），
+    // 与参数里（parse 已校验恒为 1）的 projectType 重新推一遍对拍。
     const task = await db.genericTask.findUnique({
       where: { id: lease.taskId },
       select: {
         taskType: true,
         channelAccountId: true,
-        channelApp: { select: { projectType: true } },
+        operationScopeHash: true,
       },
     });
     if (
       !task
       || task.taskType !== REVENUE_SYNC_TASK_TYPE
       || task.channelAccountId !== params.channelAccountId
-      || task.channelApp?.projectType !== NOVEL_REVENUE_PROJECT_TYPE
+      || task.operationScopeHash !== revenueSyncOperationScopeHash(params.projectType)
     ) {
       return {
         status: "failed",
@@ -352,8 +357,20 @@ export function createRevenueSyncHandler(
       };
     }
 
+    // 账号仍然 active，并且它所在的 channel 下仍有至少一个 active 的网文应用（原先靠任务行的应用来保证
+    // “这是网文业务线”，账号级任务不再挂应用，改在执行时核对）。
     const account = await db.channelAccount.findFirst({
-      where: { id: params.channelAccountId, status: "active", deletedAt: null },
+      where: {
+        id: params.channelAccountId,
+        status: "active",
+        deletedAt: null,
+        channel: {
+          status: "active",
+          channelApps: {
+            some: { projectType: NOVEL_REVENUE_PROJECT_TYPE, status: "active", sourceApp: { status: "active" } },
+          },
+        },
+      },
       select: { id: true },
     });
     if (!account) {

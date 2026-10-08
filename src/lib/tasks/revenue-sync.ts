@@ -1,6 +1,6 @@
 /**
- * 收益同步任务 `moboreader.revenue_sync.v1` 的参数、日期口径与幂等键——web（入队）与 worker（执行）
- * 共用的**单一真源**。
+ * 收益同步任务 `changdu.revenue_sync.v1` 的参数、日期口径与幂等键——web（入队）与 worker（执行）
+ * 共用的**单一真源**（账号级：上游 `GetReport` 返回该畅读账号下全部网文应用的合计，任务不属于某一个应用）。
  *
  * 为什么必须是单一真源（CPS `src/lib/changdu-total-revenue/task-params.ts` 的教训）：CPS 的另一条
  * 收益同步链路曾出现“创建端用 `JSON.stringify` 写 `{ sourceEndpoint, sourceReportType }`，消费端用裸
@@ -15,9 +15,17 @@ import { createHash } from "node:crypto";
 
 import { NOVEL_REVENUE_PROJECT_TYPE } from "../adapters/moboreader-revenue-constants";
 import { isValidCalendarDate } from "../adapters/moboreader-revenue-parser";
-import { MOBOREADER_TASK_TYPES } from "./moboreader";
 
-export const REVENUE_SYNC_TASK_TYPE = MOBOREADER_TASK_TYPES.revenueSync;
+/**
+ * 收益同步任务类型（**唯一定义点**；`src/lib/tasks/worker-lanes.mjs` 是无依赖的部署侧策略文件，
+ * 不能 import 本文件，所以那里手抄了同一个字符串，由 `tests/backend/revenue/revenue-sync-worker-lane.test.ts` 对拍）。
+ *
+ * 命名为 `changdu.`（而不是 `moboreader.`）的原因：上游 `GetReport` 是**畅读账号级**的——同一账号同一
+ * `projectType` 下所有网文应用合计，响应里没有应用字段。这个任务属于畅读渠道账号，不属于 MoboReader 这一个
+ * 应用；以后同一账号下再增加别的网文应用时，`moboreader.` 前缀会误导，而且一旦进了生产白名单再改名就要动生产 env。
+ * 只调用上游、不设定时任务，所以只能进主通道白名单（见 `worker-lanes.mjs` 的 `MOBOREADER_UPSTREAM_TASK_TYPES`）。
+ */
+export const REVENUE_SYNC_TASK_TYPE = "changdu.revenue_sync.v1";
 /** `generic_task_item.target_type`：一个收益同步任务只有一个条目。 */
 export const REVENUE_SYNC_TARGET_TYPE = "revenue_sync";
 export const REVENUE_SYNC_AUDIT_ACTION_QUEUED = "revenue.sync.queued";
@@ -135,13 +143,18 @@ function digest(parts: readonly (string | number)[]): string {
 }
 
 /**
- * `generic_task.operation_scope_hash`：固定为 revenue_sync 的作用域哈希。配合
- * `generic_task_active_scope_uidx`（task_type + 账号 + 应用 + 此哈希，仅 pending/processing），
- * 使“同一账号同一时刻只有一个活跃的收益同步任务”。
+ * `generic_task.operation_scope_hash`：revenue_sync 的作用域哈希，**把 `projectType` 折进去**（照
+ * `catalog_scan` 的做法，见 `src/lib/tasks/moboreader.ts` 的 `catalogScanOperationScopeHash`）。
+ *
+ * 收益同步是账号级任务，`generic_task.channel_app_id` 写 NULL（不属于某一个应用）。
+ * `generic_task_active_scope_uidx`（task_type + channel_account_id + channel_app_id + 此哈希，仅
+ * pending/processing）是 `NULLS NOT DISTINCT`，所以 channel_app_id 为 NULL 时仍然成立“同一账号同一
+ * `projectType` 同一时刻只有一个活跃的收益同步任务”；`projectType` 在哈希里，将来同账号接别的业务线
+ * （如短剧 projectType）的同类任务时互不挤占。
  */
-export function revenueSyncOperationScopeHash(): string {
+export function revenueSyncOperationScopeHash(projectType: number = NOVEL_REVENUE_PROJECT_TYPE): string {
   return createHash("sha256")
-    .update(JSON.stringify({ scope: "revenue_sync", projectType: NOVEL_REVENUE_PROJECT_TYPE }))
+    .update(JSON.stringify({ scope: "revenue_sync", projectType }))
     .digest("hex");
 }
 

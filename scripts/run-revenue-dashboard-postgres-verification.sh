@@ -145,7 +145,7 @@ fi
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs REVENUE_DASHBOARD "$secret_dir/integration-result.json" \
-  tests/integration/revenue/revenue-dashboard-postgres.test.ts=21
+  tests/integration/revenue/revenue-dashboard-postgres.test.ts=24
 then
   echo "REVENUE_DASHBOARD_POSTGRES_VERIFICATION=FAIL (whole-file skip or not-executed assertion failed)" >&2
   exit 1

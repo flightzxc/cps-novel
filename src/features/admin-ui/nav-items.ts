@@ -89,8 +89,9 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * (`ADMIN_TASK_ROUTES`, `src/app/api/admin/_lib/registry.ts`) regardless of
  * this list.
  * `/revenue` joined with the account-level novel revenue dashboard (read view
- * + manual sync trigger); gated by `revenue:view` (2FA, no default holder), so
- * the sidebar entry stays greyed with a capability reason until it is granted.
+ * + manual sync trigger); gated by `revenue:view` (2FA; super_admin holds it by default per the Owner's
+ * 2026-10-08 decision), so the sidebar entry stays greyed with a capability reason for
+ * any role that has not been granted it.
  * `/settings` joined in PR-C4 (OG fallback image + IndexNow delivery config
  * admin surface). Note this list is not what keeps `/settings` clickable in
  * the sidebar today — `itemState` in `./sidebar.tsx` already special-cases

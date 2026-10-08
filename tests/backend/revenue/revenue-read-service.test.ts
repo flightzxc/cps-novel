@@ -204,7 +204,7 @@ describe("loadRevenueDashboard", () => {
 
     const view = await loadRevenueDashboard(asPrisma(db), range);
 
-    expect(view.account).toEqual({ id: ACCOUNT_ID, label: "ch***@qq.com" });
+    expect(view.account).toEqual({ id: ACCOUNT_ID, label: "ch***@qq.com", novelAppCount: 1 });
     expect(view.range).toEqual({ ...range, dayCount: 7 });
     expect(view.days.map((day) => `${day.date}:${day.coverage}`)).toEqual([
       "2026-10-07:not_synced", "2026-10-06:no_upstream_row", "2026-10-05:reported", "2026-10-04:no_upstream_row",
@@ -265,6 +265,18 @@ describe("loadRevenueDashboard", () => {
     expect(view.activeTask).toMatchObject({ id: "t", status: "processing" });
     expect(db.revenueDailyStat.findMany).not.toHaveBeenCalled();
     expect(db.revenueSyncBatch.findMany).not.toHaveBeenCalled();
+  });
+
+  it("同一账号下挂两个 active 网文应用 → 视图正常返回（不是 account=null），account.novelAppCount = 2", async () => {
+    const account = { id: ACCOUNT_ID, accountName: "chenweifeng@qq.com" };
+    const db = makeDb({
+      apps: [
+        { id: APP_ID, channel: { channelAccounts: [account] } },
+        { id: "33333333-3333-4333-8333-333333333333", channel: { channelAccounts: [account] } },
+      ],
+    });
+    const view = await loadRevenueDashboard(asPrisma(db), range);
+    expect(view.account).toEqual({ id: ACCOUNT_ID, label: "ch***@qq.com", novelAppCount: 2 });
   });
 
   it.each([

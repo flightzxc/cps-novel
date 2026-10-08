@@ -64,7 +64,8 @@ NEXT_GATE=CONTRACTS_MERGE
 四项能力齐备（`src/lib/auth/capabilities.ts:4-8`），`ADMIN_CAPABILITY_CONFIG` 中四项的
 `requiresTwoFactor` 均为 `true`。三态可由 `hasAdminCapability()` + `twoFactorCompleted` 计算。
 
-`promo:claim` 与 `revenue:view` 的 `defaultRoles: []`：未配置 env 时 `allowedRoles` 为空集，
+`promo:claim` 的 `defaultRoles: []`（审阅当时 `revenue:view` 亦同；2026-10-08 起 `revenue:view` 改为默认
+授予 `super_admin`，仍要求 2FA）：未配置 env 时 `allowedRoles` 为空集，
 `hasAdminCapability` 返回 `false` → 判 `denied`。**默认 disabled 的 capability 不会被误显示为可用**，
 且是 fail-closed 而非依赖调用方记得判断。
 

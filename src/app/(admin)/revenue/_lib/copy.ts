@@ -12,7 +12,15 @@ export const REVENUE_WORKER_CLAIM_WARN_MS = 10 * 60 * 1000;
 /** 凭证到期前多少天开始标黄。 */
 export const REVENUE_CREDENTIAL_WARN_DAYS = 3;
 
-export const REVENUE_TASK_TYPE_LABEL = "moboreader.revenue_sync.v1";
+export const REVENUE_TASK_TYPE_LABEL = "changdu.revenue_sync.v1";
+
+/**
+ * 同一畅读账号下有 ≥ 2 个网文应用时，指标卡上方的灰字提示（1 个应用时不显示）。
+ * 上游 `GetReport` 不带应用维度，所以这里如实说明“合计”，并指出按应用拆分的前提。
+ */
+export function multiAppTotalHint(novelAppCount: number): string {
+  return `上游收益接口不区分应用，以下为 ${novelAppCount} 个网文应用的合计；按应用拆分需另行接入上游"授权产品"维度。`;
+}
 
 export const WORKER_CLAIM_WARNING =
   `任务排队超过 10 分钟仍未被 worker 认领。请确认生产环境主通道 WORKER_TASK_ALLOWLIST 已包含 ${REVENUE_TASK_TYPE_LABEL}。`;

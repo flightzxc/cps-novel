@@ -1,8 +1,10 @@
 /** Runtime and deployment share this dependency-free policy. */
+// 清单语义：会调用 kocserver 上游（MoboReader / 畅读同一个上游域）的任务，只能进主通道，不得进轻量通道。
+// 名字里的 MOBOREADER 指“上游家族”，不是任务类型前缀——所以任务类型不必以 `moboreader.` 开头也属于本清单。
 export const MOBOREADER_UPSTREAM_TASK_TYPES = Object.freeze([
   "catalog_scan", "moboreader.preview_refresh.v1", "promo_link.claim.v1",
-  // 收益看板·账号级每日汇总：调用畅读 GetReport，所以和上面几个一样只能放主通道白名单。
-  "moboreader.revenue_sync.v1",
+  // 收益看板·账号级每日汇总（畅读渠道账号级任务）：调用同一上游的 GetReport，所以和上面几个一样只能放主通道白名单。
+  "changdu.revenue_sync.v1",
 ]);
 export const APPROVED_LIGHT_TASK_TYPES = Object.freeze([
   "sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1",

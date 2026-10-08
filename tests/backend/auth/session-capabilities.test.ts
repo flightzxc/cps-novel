@@ -127,7 +127,7 @@ describe("admin session lifecycle", () => {
 });
 
 describe("admin capabilities", () => {
-  it("defaults credential, settings, task, and takedown management to super_admin", async () => {
+  it("defaults credential, settings, task, takedown management and the revenue dashboard to super_admin", async () => {
     const { stores } = fixture();
     const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
     expect(hasAdminCapability(context, "credential:manage", {} as NodeJS.ProcessEnv)).toBe(true);
@@ -137,7 +137,45 @@ describe("admin capabilities", () => {
     expect(hasAdminCapability(context, "content:view", {} as NodeJS.ProcessEnv)).toBe(false);
     expect(hasAdminCapability(context, "content:read", {} as NodeJS.ProcessEnv)).toBe(false);
     expect(hasAdminCapability(context, "promo:claim", {} as NodeJS.ProcessEnv)).toBe(false);
-    expect(hasAdminCapability(context, "revenue:view", {} as NodeJS.ProcessEnv)).toBe(false);
+    // Owner 2026-10-08：数据看板默认开放给所有 super_admin（无需任何 env）。
+    expect(hasAdminCapability(context, "revenue:view", {} as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  describe("revenue:view（数据看板）默认授权 super_admin、仍要求 2FA", () => {
+    const noEnv = {} as NodeJS.ProcessEnv;
+
+    it("super_admin 会话在没有任何 env 时拥有，非 super_admin 角色没有", async () => {
+      const superAdmin = fixture();
+      const superContext = await requireAdminSession(TOKEN, { identities: superAdmin.stores, sessions: superAdmin.stores, now: NOW });
+      expect(superContext.identity.role).toBe("super_admin");
+      expect(hasAdminCapability(superContext, "revenue:view", noEnv)).toBe(true);
+      expect(() => requireHighRiskAdminCapability(superContext, "revenue:view", noEnv)).not.toThrow();
+
+      const ops = fixture({ role: "ops" });
+      const opsContext = await requireAdminSession(TOKEN, { identities: ops.stores, sessions: ops.stores, now: NOW });
+      expect(hasAdminCapability(opsContext, "revenue:view", noEnv)).toBe(false);
+      expect(() => requireHighRiskAdminCapability(opsContext, "revenue:view", noEnv))
+        .toThrowError(expect.objectContaining({ code: "admin_capability_denied", status: 403 }));
+    });
+
+    it("没过 2FA 的 super_admin 会话被要求 2FA（拥有能力位不等于免 2FA）", async () => {
+      const { stores } = fixture({ twoFactorCompletedAt: null });
+      const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
+      expect(hasAdminCapability(context, "revenue:view", noEnv)).toBe(true);
+      expect(ADMIN_CAPABILITY_CONFIG["revenue:view"].requiresTwoFactor).toBe(true);
+      expect(() => requireHighRiskAdminCapability(context, "revenue:view", noEnv))
+        .toThrowError(expect.objectContaining({ code: "admin_two_factor_required", status: 403 }));
+    });
+
+    it("REVENUE_VIEW_ROLES 非空时取代默认角色集（部署可以收窄）；USER_IDS 按身份追加", async () => {
+      const { stores } = fixture();
+      const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
+      expect(hasAdminCapability(context, "revenue:view", { REVENUE_VIEW_ROLES: "ops" } as unknown as NodeJS.ProcessEnv)).toBe(false);
+      expect(hasAdminCapability(context, "revenue:view", {
+        REVENUE_VIEW_ROLES: "ops",
+        REVENUE_VIEW_USER_IDS: "admin-1",
+      } as unknown as NodeJS.ProcessEnv)).toBe(true);
+    });
   });
 
   it("supports independent role and user allowlists", async () => {
@@ -208,9 +246,9 @@ describe("admin capabilities", () => {
     ];
     const { stores } = fixture({ twoFactorCompletedAt: null });
     const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
+    // revenue:view 默认就授予 super_admin（Owner 2026-10-08），不再需要 env 兜底；promo:claim 仍无默认持有者。
     const env = {
       PROMO_CLAIM_USER_IDS: "admin-1",
-      REVENUE_VIEW_USER_IDS: "admin-1",
     } as unknown as NodeJS.ProcessEnv;
     for (const capability of capabilities) {
       expect(ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor).toBe(true);
