@@ -33,7 +33,7 @@ import {
   buildCanonical,
   buildLocaleCanonical,
   openGraphLocaleTag,
-  resolveOgImage,
+  resolveShareImage,
   truncateDescription,
 } from "./_shared";
 
@@ -52,7 +52,11 @@ export function buildBlogSeoMeta(data: BlogSeoData, locale = "en") {
   const title = data.title.trim();
   const description = truncateDescription(data.description);
   const canonical = buildCanonical(data.canonicalPath);
-  const ogImage = resolveOgImage(data.coverUrl, data.defaultOgImage);
+  // 分享图口径与 novel/chapter 同一个判定（`resolveShareImage`，B-37）：文章自己的封面优先，
+  // 没有封面才用站点默认图。运营上传的封面尺寸未知，所以走"非默认图"口径——
+  // `twitter:card = summary`、og:image 不声明 width/height；只有落到站点默认图
+  // （1200×630）时才是 `summary_large_image` + 1200×630。不要在这里再写死尺寸。
+  const share = resolveShareImage({ coverUrl: data.coverUrl, defaultOgImage: data.defaultOgImage, alt: title });
   const ogLocale = openGraphLocaleTag(locale);
   const homeName = getHomeName(locale);
 
@@ -62,7 +66,7 @@ export function buildBlogSeoMeta(data: BlogSeoData, locale = "en") {
     headline: title,
     description: data.description,
     url: canonical,
-    image: ogImage,
+    image: share.url,
     inLanguage: locale,
     ...(data.publishedAt ? { datePublished: data.publishedAt.toISOString() } : {}),
     ...(data.updatedAt ? { dateModified: data.updatedAt.toISOString() } : {}),
@@ -88,13 +92,13 @@ export function buildBlogSeoMeta(data: BlogSeoData, locale = "en") {
       url: canonical,
       siteName: data.siteName,
       locale: ogLocale,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      images: share.openGraphImages,
     },
     twitter: {
-      card: "summary_large_image" as const,
+      card: share.twitterCard,
       title,
       description,
-      images: [ogImage],
+      images: [share.url],
     },
     alternates: {
       canonical,
