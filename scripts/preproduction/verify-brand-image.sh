@@ -13,6 +13,11 @@ trap cleanup EXIT INT TERM
 docker build --platform linux/amd64 --build-arg "APP_VERSION=$version" \
   --build-arg "GIT_COMMIT=$commit" --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --build-arg "NEXT_PUBLIC_BUILD_VERSION=v$version" -t "$image" .
+# B-40：运行镜像只允许带生产依赖。检查脚本取自本次检出，经 stdin 送进容器，镜像只需提供 node。
+if ! docker run --rm -i --network none "$image" node --input-type=module - \
+  < scripts/preproduction/verify-runtime-image-deps.mjs; then
+  echo 'BRAND_IMAGE=FAIL reason=runtime_deps'; exit 65
+fi
 docker run -d --name "$container" -p 127.0.0.1::3000 \
   -e SITE_URL=https://pulsenovels.com -e ADMIN_CANONICAL_ORIGIN=https://zbcwf.pulsenovels.com \
   -e "APP_VERSION=$version" -e "GIT_COMMIT=$commit" "$image" >/dev/null

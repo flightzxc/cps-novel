@@ -25,6 +25,7 @@
     "@prisma/client": "6.19.2",
     "intl-messageformat": "^11.2.3",
     "next": "16.3.8",
+    "prisma": "6.19.2",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
@@ -42,7 +43,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "jsdom": "^26",
-    "prisma": "6.19.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3"
