@@ -132,12 +132,19 @@ export async function BlogListBody({
   return (
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
-      <BlogListScreen locale={locale} chrome={loaded.chrome} posts={loaded.paged.posts} />
-      <Pagination
+      <BlogListScreen
         locale={locale}
-        currentPage={loaded.paged.page}
-        totalPages={loaded.paged.totalPages}
-        basePath={`${localePrefix(locale)}/blog`}
+        chrome={loaded.chrome}
+        posts={loaded.paged.posts}
+        // PN-06：分页条进列表之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
+        pagination={
+          <Pagination
+            locale={locale}
+            currentPage={loaded.paged.page}
+            totalPages={loaded.paged.totalPages}
+            basePath={`${localePrefix(locale)}/blog`}
+          />
+        }
       />
     </>
   );
