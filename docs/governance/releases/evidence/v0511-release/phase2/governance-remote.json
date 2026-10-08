@@ -1,0 +1,11 @@
+{
+  "result": "PASS",
+  "governance_commit": "47b89f3c9efa4dbc9da41511880a03a111deda33",
+  "annotated_tag_object": "227385e4a4fea4e9f9dfade155ce63b897d0ac0c",
+  "peeled_final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+  "remote_refs": {
+    "refs/heads/release/v0.5.11-2026-10-08": "47b89f3c9efa4dbc9da41511880a03a111deda33",
+    "refs/tags/v0.5.11": "227385e4a4fea4e9f9dfade155ce63b897d0ac0c",
+    "refs/tags/v0.5.11^{}": "eb40756416b186ca4b293ff57e24026af78cf4f9"
+  }
+}

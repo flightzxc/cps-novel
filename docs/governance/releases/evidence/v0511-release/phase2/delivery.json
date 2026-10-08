@@ -1,0 +1,67 @@
+{
+  "stage": 2,
+  "status": "deployed; A-E and automated F PASS; Owner F1/F3/F6 pending",
+  "completed_at": "2026-10-08T09:28:39.301713+00:00",
+  "final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+  "tree": "b98d07a62c98196593a625c5cedcd2344a8e9220",
+  "maintenance_utc": [
+    "2026-10-08T09:15:08Z",
+    "2026-10-08T09:15:55Z"
+  ],
+  "maintenance_seconds": 47,
+  "new_migration_ms": 75.079,
+  "migrations_finished": 23,
+  "rolled_back": 0,
+  "postgres_id_unchanged": true,
+  "six_services_healthy": true,
+  "grants": {
+    "worker_insert": true,
+    "web_insert": false,
+    "web_select": true,
+    "scheduler_select": false
+  },
+  "env_changes": 3,
+  "other_env_bytes_cmp": "PASS",
+  "nginx_hashes_unchanged": true,
+  "archive_sha256": "8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d",
+  "indexnow": "false in all three services",
+  "turnstile": "false",
+  "external_requests": 10,
+  "worker_warmup_and_samples": "4/4 HTTP200/ok/expiredLocks0",
+  "empty_locales": [
+    "cs"
+  ],
+  "sitemap_existing_generation": {
+    "shards": 35,
+    "novels": 28813,
+    "chapters": 86168,
+    "url_total": 115444,
+    "releases": 390,
+    "cleanup_event": null,
+    "new_refresh": "pending Owner"
+  },
+  "owner_receipt_read_at": "2026-10-08T09:27:52.836224+00:00",
+  "revenue_batches": 0,
+  "owner_upstream_reconciliation": "pending Owner",
+  "F7": "not authorized; not executed",
+  "rollback": "not authorized; not executed",
+  "notion": {
+    "result": "PASS",
+    "page_id": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+    "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+    "verified_at": "2026-10-08T09:25:42.103Z",
+    "final_read_last_edited_at": "2026-10-08T09:26:53.676Z",
+    "history_rules_template_byte_preserved": true,
+    "final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+    "tree": "b98d07a62c98196593a625c5cedcd2344a8e9220",
+    "new_ledger_count": 1,
+    "owner_F1_F3_F6": "pending Owner",
+    "migration_ms": 75.079,
+    "sections": [
+      "current snapshot",
+      "registry row",
+      "full release ledger",
+      "development log mirror"
+    ]
+  }
+}

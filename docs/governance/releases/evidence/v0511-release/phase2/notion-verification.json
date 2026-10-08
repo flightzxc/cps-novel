@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "page_id": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "verified_at": "2026-10-08T09:25:42.103Z",
+  "final_read_last_edited_at": "2026-10-08T09:26:53.676Z",
+  "history_rules_template_byte_preserved": true,
+  "final": "eb40756416b186ca4b293ff57e24026af78cf4f9",
+  "tree": "b98d07a62c98196593a625c5cedcd2344a8e9220",
+  "new_ledger_count": 1,
+  "owner_F1_F3_F6": "pending Owner",
+  "migration_ms": 75.079,
+  "sections": [
+    "current snapshot",
+    "registry row",
+    "full release ledger",
+    "development log mirror"
+  ]
+}

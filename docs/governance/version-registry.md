@@ -29,7 +29,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - F2cs200/noindex/菜单hreflang隐藏、F3ar lang/dir与分类真链接、F4分页页脚前PASS；F5博客写闸关闭跳过、不保存模板。现有35分片小说28813/章86168逐语种等于B快照，较旧版增加68/204来自部署前新发布；cs不在mainpage。10本机外部请求经指定代理，六服务自部署错误/权限/token模式0。
 - **待Owner确认**：F1后台刷新Sitemap/B33清理日志及目录下降（基线390/411.5M，当前仍390，无新cleanup）；F3电脑分类栏单行箭头目视；F6super_admin+2FA同步09-20～10-08并与上游网文日报对数（当前0任务/0批次，未冒充成功）。不代Owner点击，不阻断其余验收，F7不在授权内。
 - Owner10-08决定PN09连入口隐藏、PN16单行箭头、PN04现状、看板super_admin、主任务手动无定时。viewport-fit=cover不做；HSTS稳定一周后另行用新安装器；CPS收入可能混入小说已登记待办。本次不动证书/DNS/NAS/推广批次/业务开关，不重建postgres；回滚须另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复env并查收益在途。
-- annotated v0.5.11固定Final、原生成CHANGELOG、本台账与唯一日志本地完成，远端推送与Notion回读收据待补；保留全部历史及模板。
+- annotated v0.5.11固定Final、原生成CHANGELOG、本台账与唯一日志本地完成，治理提交47b89f3c9efa4dbc9da41511880a03a111deda33及tag已推送回读PASS，Notion同步并回读PASS（2026-10-08T09:25:42.103Z），历史规则与模板保留；保留全部历史及模板。
 
 ### v0.5.10 —— 已部署正式站（2026-10-08 01:11:28 +0800；Owner 操作项目待确认）
 
