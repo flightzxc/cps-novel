@@ -364,10 +364,8 @@ describe('public nginx transaction', () => {
     const f = fixture(); try { const backup = `${f.dir}/shared/nginx-backups/install.invalid`; mkdirSync(backup, { recursive: true }); writeFileSync(`${backup}/READY`, ''); const r = f.run(['--restore-backup', backup]); expect(r.status).toBe(65); expect(r.stdout).toContain('backup_invalid'); expect(readFileSync(`${f.dir}/etc/nginx/conf.d/cps-novel-preprod.conf`, 'utf8')).toBe('old-site\n'); expect(existsSync(`${f.dir}/reloads`)).toBe(false); } finally { f.clean(); }
   }, SLOW);
 
-  describe.each([
-    ['link-abs', 'absolute path through the current symlink'],
-    ['link-rel', 'relative path from a logical cwd inside the symlink'],
-  ] as const)('installs the real candidate (%s)', (via, _label) => {
+  // link-abs: absolute path through the `current` symlink; link-rel: relative path from a logical cwd inside it.
+  describe.each(['link-abs', 'link-rel'] as const)('installs the real candidate (%s)', via => {
     it.each([['public', ['--mode', 'public', '--hsts-max-age', '31536000'], '31536000'], ['rehearsal', ['--mode', 'rehearsal'], '86400']] as const)('%s mode writes the complete, verified candidate', (mode, args, hsts) => {
       const f = fixture(); try {
         const r = f.run([...args], {}, via);
