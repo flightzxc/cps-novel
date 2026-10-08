@@ -429,9 +429,22 @@ describe.skipIf(!enabled).sequential("article publish batch task · real roles (
       const audit = await owner.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
         SELECT action, entity_type, actor_type, actor_id, before_snapshot, after_snapshot
         FROM operation_audit WHERE entity_id = ${articleId} AND action = 'article.publish'`);
+      // B-34：出站记录逐列对比，不只看"有一条"——事件、状态、语种、来源、是否立即投递、URL 形状
+      // （去掉文章自己的 slug / 短码后必须一样）、revision 是否等于文章 updated_at 毫秒，以及配套建出的
+      // 投递任务与条目（类型、条数、reason、triggeredBy、条目状态）。
       const outbox = await owner.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
-        SELECT event_type, status, locale, source, (available_at IS NULL) AS immediate
-        FROM indexnow_outbox WHERE article_id = ${articleId}::uuid`);
+        SELECT o.event_type, o.status, o.locale, o.source, (o.available_at IS NULL) AS immediate,
+               (o.defer_reason IS NULL) AS not_deferred, (o.source_task_id IS NULL) AS no_source_task,
+               replace(replace(o.url, a.slug, '<slug>'), a.public_page_short_id, '<short-id>') AS url_shape,
+               (o.revision = floor(extract(epoch FROM a.updated_at) * 1000)::bigint) AS revision_is_article_updated_at,
+               t.task_type AS delivery_task_type, t.total_count AS delivery_total_count,
+               t.params ->> 'reason' AS delivery_reason, t.params ->> 'triggeredBy' AS delivery_triggered_by,
+               ti.target_type AS delivery_item_target, ti.status AS delivery_item_status
+        FROM indexnow_outbox o
+        JOIN article a ON a.id = o.article_id
+        LEFT JOIN generic_task t ON t.id = o.delivery_task_id
+        LEFT JOIN generic_task_item ti ON ti.task_id = t.id
+        WHERE o.article_id = ${articleId}::uuid`);
       const preview = await owner.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
         SELECT t.task_type, t.mode, t.status, t.total_count, ti.status AS item_status
         FROM channel_sync_task t
@@ -447,12 +460,60 @@ describe.skipIf(!enabled).sequential("article publish batch task · real roles (
     expect(button.audit).toHaveLength(1);
     expect(button.outbox).toHaveLength(1);
     expect(button.preview).toHaveLength(1);
+    // B-34：开关为 true 时，经 worker_app（worker-light 的真实角色）执行的子任务写出的出站记录
+    // 与按钮发布（web_app）写出的记录形状一致——并且是"真的写了"，不是两边都空。
+    const expectedOutbox = {
+      event_type: "article_first_publish", status: "pending", locale: "en", source: "admin.article.publish",
+      immediate: true, not_deferred: true, no_source_task: true, revision_is_article_updated_at: true,
+      delivery_task_type: "indexnow_delivery", delivery_total_count: 1,
+      delivery_reason: "article_first_publish", delivery_triggered_by: "admin.article.publish",
+      delivery_item_target: "indexnow_outbox", delivery_item_status: "pending",
+    };
+    expect(button.outbox).toEqual([expect.objectContaining(expectedOutbox)]);
+    expect(task.outbox).toEqual([expect.objectContaining(expectedOutbox)]);
+    expect(task.outbox[0]!.url_shape).toBe("https://publish-batch.example/novel/<slug>-p<short-id>");
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM indexnow_outbox`)).toBe(2);
     // 逐项一致（请求编号按设计不同：按钮是调用方给的编号，任务是「批次:文章」）。
     expect({ ...task, label: "" }).toEqual({ ...button, label: "" });
 
     // 唯一按设计不同的一项：站点地图。按钮每篇首次发布各触发一次；后台任务整批结束触发一次。
     // 这里批次只有 1 篇，所以两边各 1 次——差别在 D 场景里用 1,000 篇证明。
     expect(sitemapCalls.count).toBe(2);
+  }, 300_000);
+
+  // B-34：双闸任何一把没开，两条路径都不能写。用 `it.each` 把三种"没同时打开"的取值都跑一遍；
+  // 每个用例结束（含失败）都把进程 env 还原成文件级的 ENV（两把都 true），不影响后面的用例。
+  it.each([
+    { name: "总闸与写闸都关", feature: "false", allow: "false" },
+    { name: "只开总闸（dry-run 形状）", feature: "true", allow: "false" },
+    { name: "只开写闸", feature: "false", allow: "true" },
+  ])("B'. IndexNow 出站双闸未同时打开（$name）：按钮发布与后台任务发布都不写出站记录、不建投递任务，其余发布结果照常", async ({ feature, allow }) => {
+    await resetDatabase();
+    const [buttonArticle] = await seedDrafts(1, { accountId: foundation.account, prefix: "btn" });
+    const [taskArticle] = await seedDrafts(1, { accountId: foundation.secondAccount, prefix: "tsk" });
+    vi.stubEnv("FEATURE_INDEXNOW_OUTBOX", feature);
+    vi.stubEnv("INDEXNOW_OUTBOX_ALLOW_WRITE", allow);
+    try {
+      const buttonResult = await applyPublishTransition(
+        web, { articleId: buttonArticle, requestId: randomUUID(), actor: { type: "admin", adminId: ADMIN_ID } },
+      );
+      expect(buttonResult.outcome).toBe("published");
+      const submitted = await submit({ filter: { search: "tsk-a-" } });
+      expect(submitted.draftCount).toBe(1);
+      await drain();
+    } finally {
+      vi.stubEnv("FEATURE_INDEXNOW_OUTBOX", ENV.FEATURE_INDEXNOW_OUTBOX);
+      vi.stubEnv("INDEXNOW_OUTBOX_ALLOW_WRITE", ENV.INDEXNOW_OUTBOX_ALLOW_WRITE);
+    }
+    // 两条路径都真的发布了（审计各 1 条）——只是没有出站副作用。
+    expect(await publishedCount()).toBe(2);
+    for (const articleId of [buttonArticle, taskArticle]) {
+      expect(await count(Prisma.sql`
+        SELECT count(*) AS n FROM operation_audit WHERE action = 'article.publish' AND entity_id = ${articleId}`)).toBe(1);
+    }
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM indexnow_outbox`)).toBe(0);
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM generic_task WHERE task_type = 'indexnow_delivery'`)).toBe(0);
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM generic_task_item WHERE target_type = 'indexnow_outbox'`)).toBe(0);
   }, 300_000);
 
   it("C'. 勾选「发布时暂不抓试读」：一个试读任务都不建，父任务结果记录跳过的本数", async () => {

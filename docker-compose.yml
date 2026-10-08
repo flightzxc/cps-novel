@@ -276,6 +276,21 @@ services:
       WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS: ${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
+      # B-34: IndexNow outbox 双闸（写出站记录）。`enqueueIndexNow` 读的是**当前进程**
+      # 的这两个变量（`src/lib/flags/feature-flags.ts` 的 `isIndexNowOutboxEnabled` /
+      # `isIndexNowOutboxWriteAllowed`，env 参数默认 `process.env`，调用时才读），而发布
+      # 核心 `applyPublishTransition` 不只在 web（"发布"按钮）里跑：后台批量发布的子任务
+      # `article.publish.v1` 在 worker 进程里调用它（`worker/handlers/article-publish.ts`，
+      # 部署上由 worker-light 消费，但 worker 入口 `worker/index.ts` 的两条通道都注册了
+      # 这个 handler）。所以每个能执行发布核心的服务——web、worker、worker-light——必须
+      # 拿到同一对取值（同一个 env 变量、同一个 `:-false` 默认），否则 web 上打开之后
+      # 按钮发布写出站记录、后台批量发布不写。scheduler 的入口不含发布核心，不带这两个变量。
+      # 这里只是透传，不开闸：env 样例与生产取值仍是 false。契约：
+      # tests/backend/runtime/indexnow-outbox-passthrough-contract.test.ts（三套 compose
+      # 渲染后逐字比对，服务清单由源码导入关系派生）。registered:
+      # docs/governance/feature-flag-registry.md.
+      FEATURE_INDEXNOW_OUTBOX: ${FEATURE_INDEXNOW_OUTBOX:-false}
+      INDEXNOW_OUTBOX_ALLOW_WRITE: ${INDEXNOW_OUTBOX_ALLOW_WRITE:-false}
       FEATURE_INDEXNOW_DELIVERY: ${FEATURE_INDEXNOW_DELIVERY:-false}
       INDEXNOW_DELIVERY_ALLOW_WRITE: ${INDEXNOW_DELIVERY_ALLOW_WRITE:-false}
       FEATURE_SITEMAP_AUTO_REFRESH: ${FEATURE_SITEMAP_AUTO_REFRESH:-false}
@@ -422,6 +437,10 @@ services:
       WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS: ${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
+      # B-34: 同 worker 服务块的说明——后台批量发布（`article.publish.v1`）在 worker-light
+      # 里执行发布核心，必须与 web、worker 带同一对 IndexNow outbox 双闸取值。
+      FEATURE_INDEXNOW_OUTBOX: ${FEATURE_INDEXNOW_OUTBOX:-false}
+      INDEXNOW_OUTBOX_ALLOW_WRITE: ${INDEXNOW_OUTBOX_ALLOW_WRITE:-false}
       FEATURE_INDEXNOW_DELIVERY: ${FEATURE_INDEXNOW_DELIVERY:-false}
       INDEXNOW_DELIVERY_ALLOW_WRITE: ${INDEXNOW_DELIVERY_ALLOW_WRITE:-false}
       FEATURE_SITEMAP_AUTO_REFRESH: ${FEATURE_SITEMAP_AUTO_REFRESH:-false}

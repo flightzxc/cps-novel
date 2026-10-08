@@ -303,9 +303,21 @@ describe("P1-12 Compose and image contracts", () => {
   );
 
   it("passes all ten double-gate variables only to their relevant processes, default off", () => {
+    // B-34 rewrote the IndexNow outbox half of this contract. It used to say
+    // "worker must not carry INDEXNOW_OUTBOX" (outbox rows were only ever
+    // written from the web "发布" button). The publish core also runs in
+    // worker processes now (background batch publish, `article.publish.v1`),
+    // and the pair is read from the CALLING process's env, so the rule is:
+    // every service that can run the publish core carries the pair, with the
+    // same text and default; a service that cannot (scheduler) must not.
+    // The service list is derived from the source import graph, and the
+    // rendered values are compared byte for byte, in
+    // `indexnow-outbox-passthrough-contract.test.ts`; this test is the static,
+    // text-level half of the same rule.
     const expectedByService = {
       web: DOUBLE_GATE_FLAGS.filter((flag) => !flag.includes("INDEXNOW_DELIVERY")),
-      worker: DOUBLE_GATE_FLAGS.filter((flag) => !flag.includes("INDEXNOW_OUTBOX")),
+      worker: DOUBLE_GATE_FLAGS,
+      "worker-light": DOUBLE_GATE_FLAGS,
       scheduler: ["FEATURE_INDEXNOW_DELIVERY", "INDEXNOW_DELIVERY_ALLOW_WRITE"],
     };
     for (const [name, flags] of Object.entries(expectedByService)) {
@@ -315,10 +327,19 @@ describe("P1-12 Compose and image contracts", () => {
       }
     }
     expect(serviceBlock("web")).not.toMatch(/INDEXNOW_DELIVERY/);
-    expect(serviceBlock("worker")).not.toMatch(/INDEXNOW_OUTBOX/);
+    expect(serviceBlock("scheduler")).not.toMatch(/INDEXNOW_OUTBOX/);
     for (const flag of DOUBLE_GATE_FLAGS) {
       expect(compose).toContain(`${flag}: \${${flag}:-false}`);
     }
+    // Same text on every publish-core service, not just "contains the name".
+    const outboxLines = (name: string) =>
+      serviceBlock(name)
+        .split("\n")
+        .filter((line) => /^\s+(FEATURE_INDEXNOW_OUTBOX|INDEXNOW_OUTBOX_ALLOW_WRITE):/.test(line))
+        .map((line) => line.trim());
+    expect(outboxLines("web")).toHaveLength(2);
+    expect(outboxLines("worker")).toEqual(outboxLines("web"));
+    expect(outboxLines("worker-light")).toEqual(outboxLines("web"));
   });
 
   it("C-25 review fix (P0): passes FEATURE_ARTICLE_SEO_VISIBILITY to both Web and Worker, not Web-only", () => {

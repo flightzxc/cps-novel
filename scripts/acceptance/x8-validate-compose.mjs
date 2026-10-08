@@ -189,6 +189,13 @@ for (const flag of [
   "PROMO_LINK_CLAIM_ALLOW_WRITE",
   "FEATURE_SITEMAP_AUTO_REFRESH",
   "SITEMAP_AUTO_REFRESH_ALLOW_WRITE",
+  // B-34: the IndexNow outbox pair is read by whichever process runs the
+  // publish core (applyPublishTransition -> enqueueIndexNow, env defaulting
+  // to process.env). Besides web that is every worker process -- the
+  // background batch publish (article.publish.v1) runs there -- so the pair
+  // is asserted on worker here and on worker-light in the block below.
+  "FEATURE_INDEXNOW_OUTBOX",
+  "INDEXNOW_OUTBOX_ALLOW_WRITE",
   "FEATURE_INDEXNOW_DELIVERY",
   "INDEXNOW_DELIVERY_ALLOW_WRITE",
   "FEATURE_P2_06_5_TAGGING",
@@ -210,6 +217,25 @@ for (const flag of [
   const expected = levelEntry.flags[flag];
   if (worker.environment?.[flag] !== expected) {
     fail(`${flag} must be ${expected} in worker for X8_LEVEL=${level} (got ${worker.environment?.[flag]})`);
+  }
+}
+// B-34: the IndexNow outbox pair must reach web, worker and worker-light with
+// byte-identical values -- a mismatch means the "发布" button writes outbox
+// rows while the background batch publish (worker-light) silently does not.
+// scheduler never runs the publish core and must not carry the pair. The
+// expected value comes from the level table (false at every level today).
+for (const flag of ["FEATURE_INDEXNOW_OUTBOX", "INDEXNOW_OUTBOX_ALLOW_WRITE"]) {
+  const expected = levelEntry.flags[flag];
+  for (const [name, service] of [["worker", worker], ["worker-light", services["worker-light"]]]) {
+    if (service?.environment?.[flag] !== expected) {
+      fail(`${flag} must be ${expected} in ${name} for X8_LEVEL=${level} (got ${service?.environment?.[flag]})`);
+    }
+    if (service.environment[flag] !== web.environment?.[flag]) {
+      fail(`${flag} differs between web ("${web.environment?.[flag]}") and ${name} ("${service.environment[flag]}")`);
+    }
+  }
+  if (services.scheduler.environment?.[flag] !== undefined) {
+    fail(`${flag} is read only by processes that run the publish core and must not reach scheduler`);
   }
 }
 // ADR guard (P2-06.5 auto-classification): FEATURE_NOVEL_TAG_AUTO and

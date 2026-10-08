@@ -11,7 +11,7 @@ X11 已实现，待生产开闸验收。本文件不代表生产授权；所有�
 
 | V020 步骤 | env / 白名单变更 | 必过证据 | 回关动作 |
 | --- | --- | --- | --- |
-| 3 | 先在 `PREPROD_APPROVED_OPEN_WRITE_GATES` 登记 `indexnow_outbox`，outbox 两项一起 true；delivery 两项仍 false。light 已含 `indexnow.sweep.v1`，仍不含 `indexnow_delivery` | compose 与容器配置读回一致；scheduler 零扫描入队，无 HTTP 外呼 | outbox 两项一起 false，保留全部 outbox/任务/attempt 记录 |
+| 3 | 先在 `PREPROD_APPROVED_OPEN_WRITE_GATES` 登记 `indexnow_outbox`，outbox 两项一起 true；delivery 两项仍 false。light 已含 `indexnow.sweep.v1`，仍不含 `indexnow_delivery`。outbox 两项的有效环境覆盖 **web、worker、worker-light 三个服务**（B-34 透传；scheduler 不带），按钮发布与后台批量发布都会写出站记录 | compose 与容器配置读回一致，且 web、worker、worker-light 三者两个变量的值逐字相同；scheduler 零扫描入队，无 HTTP 外呼 | outbox 两项一起 false（三个服务一起重建生效），保留全部 outbox/任务/attempt 记录 |
 | 4 | 不变 | 抽查 URL、locale、revision、去重与任务量；首次发布会立即建首条投递任务，pending 增长应与发布量对应 | 异常即回关 outbox，停止后续步骤 |
 | 5 | 不变 | Sitemap fixture、正式 locale dry-run、目录权限、分片、lastmod、HTTP route 全部 PASS | 失败停在本步；若发现 outbox 数据异常，同时回关 outbox |
 | 6 | Sitemap 双闸与 light 的 `sitemap_refresh` 同次生效；IndexNow delivery 仍 false | 首刷成功、共享卷和公开 sitemap 200、配置读回一致 | 任一侧无法生效，整体恢复本步之前的 Sitemap 配置与白名单 |

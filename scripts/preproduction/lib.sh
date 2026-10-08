@@ -51,6 +51,11 @@ preprod_site_mode() {
 preprod_allowlist_has() {
   printf '%s' "$1" | tr ',[:space:]' '\n' | grep -Fx "$2" >/dev/null
 }
+# B-34: outbox 两项（FEATURE_INDEXNOW_OUTBOX / INDEXNOW_OUTBOX_ALLOW_WRITE）在这里只校验
+# "env 文件里写的值合法且与登记一致"；它们由 docker-compose.yml 同值透传给 web、worker、
+# worker-light 三个会执行发布核心的服务（scheduler 不带）。透传本身由
+# tests/backend/runtime/indexnow-outbox-passthrough-contract.test.ts 在三套 compose 渲染结果上
+# 逐字比对，并核对这里的取值域（只认精确的 true/false）与 TS 解析一致。本函数的登记规则不变。
 preprod_assert_indexnow_gates() {
   local mode="$1" outbox="$2" delivery="$3"
   if [[ "$mode" != public ]] && (( outbox || delivery )); then echo indexnow_registration_requires_public; return 65; fi
