@@ -308,4 +308,21 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(blocked.textContent).toContain("来源语言暂不受产品支持：3 条");
     expect(blocked.textContent).not.toContain("internal_reason");
   });
+
+  // v0.5.12：任务中心一直原样显示 task_type；只给登记过的类型补中文名，原始类型仍保留在旁边，
+  // 没登记的类型一个字都不变（不替它编一句话）。
+  it("已登记的 changdu.revenue_sync.v1 显示中文名「畅读收益同步」，原始 task_type 仍在", () => {
+    render(<TasksTable tasks={[task({ family: "generic", taskType: "changdu.revenue_sync.v1", status: "completed" })]} />);
+    expect(screen.getByTestId(`task-type-label-${task().taskId}`).textContent).toBe("畅读收益同步");
+    expect(screen.getByText("changdu.revenue_sync.v1")).toBeTruthy();
+  });
+
+  it("没登记的类型不出现中文名元素，task_type 原样显示", () => {
+    for (const taskType of ["chapter_sync", "catalog_scan", "promo_link.claim.v1", "constructor"]) {
+      const { unmount } = render(<TasksTable tasks={[task({ taskType })]} />);
+      expect(screen.queryByTestId(`task-type-label-${task().taskId}`), taskType).toBeNull();
+      expect(screen.getByText(taskType), taskType).toBeTruthy();
+      unmount();
+    }
+  });
 });

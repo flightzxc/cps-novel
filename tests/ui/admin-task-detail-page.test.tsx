@@ -826,4 +826,28 @@ describe("/tasks/[id] · 生命周期分片自己的详情页：暂停/恢复隐
     expect(screen.getByTestId("task-pause-open")).toBeTruthy();
     expect(screen.queryByTestId("lifecycle-shard-control-redirect-note")).toBeNull();
   });
+
+  // v0.5.12：已登记类型的详情页标题带中文名，原始类型放在括号里；未登记类型原样。
+  it("changdu.revenue_sync.v1 详情页标题显示「畅读收益同步（原始类型）」", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({ taskType: "changdu.revenue_sync.v1", status: "completed" }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    // 页面里有两个 h1：AdminShell 的页标题和正文标题，两处都要带中文名。
+    const headings = screen.getAllByRole("heading", { level: 1 }).map((heading) => heading.textContent);
+    expect(headings).toContain("任务详情 · 畅读收益同步（changdu.revenue_sync.v1）");
+    expect(headings).toContain("通用任务 · 畅读收益同步（changdu.revenue_sync.v1）");
+  });
+
+  it("未登记类型的详情页标题保持「家族 · 原始类型」", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({ taskType: "moboreader.sync", status: "completed" }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    const headings = screen.getAllByRole("heading", { level: 1 }).map((heading) => heading.textContent);
+    expect(headings).toContain("任务详情 · moboreader.sync");
+    expect(headings).toContain("通用任务 · moboreader.sync");
+  });
 });

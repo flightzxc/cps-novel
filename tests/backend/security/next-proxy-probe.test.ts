@@ -1,4 +1,5 @@
-import { readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -6,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import { isAdminPath } from "@/lib/site/admin-origin";
 
 import {
+  NAVER_VERIFICATION_GROUP,
+  NAVER_VERIFICATION_PATH,
+  NAVER_VERIFICATION_SHA256,
   PROBE_ADMIN_API,
   PROBE_ADMIN_PAGES,
   PROBE_AUTH_PAGES,
@@ -14,6 +18,7 @@ import {
   classify,
   expectAdminApiUnauthenticated,
   expectAdminPageUnauthenticated,
+  expectNaverVerificationFile,
   expectNoContentServed,
   expectProxyDenialSignature,
   expectPublicPathNotDenied,
@@ -253,5 +258,107 @@ describe("parseRawResponse", () => {
 
   it("returns status 0 rather than throwing on a truncated response", () => {
     expect(parseRawResponse(Buffer.from("HTTP/1.1 200 OK\r\nContent-", "latin1")).status).toBe(0);
+  });
+});
+
+describe("v0.5.12 Naver site-verification file (public/naver07aa70d2794ed3e5288b204fb467ee18.html)", () => {
+  const FILE_ON_DISK = join(ROOT, "public", NAVER_VERIFICATION_PATH.slice(1));
+  const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+  const served = (status: number, options: { body?: string; sha?: string | null; headers?: Record<string, string> } = {}) => ({
+    status,
+    headers: options.headers ?? {},
+    rawHeaders: [],
+    body: options.body ?? "",
+    bodySha256: options.sha === undefined ? sha256(options.body ?? "") : options.sha,
+  });
+
+  it("ships byte-for-byte what Naver issued: pinned SHA-256, 67 bytes, no trailing newline", () => {
+    const bytes = readFileSync(FILE_ON_DISK);
+    expect(sha256(bytes)).toBe(NAVER_VERIFICATION_SHA256);
+    expect(NAVER_VERIFICATION_SHA256).toBe("80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431");
+    expect(bytes.length).toBe(67);
+    expect(bytes.at(-1)).not.toBe(0x0a);
+    expect(bytes.toString("utf8")).toBe("naver-site-verification: naver07aa70d2794ed3e5288b204fb467ee18.html");
+  });
+
+  it("is a path the proxy treats as an ordinary public path (not admin, normalisable) and the file name matches the URL", () => {
+    expect(isAdminPath(NAVER_VERIFICATION_PATH)).toBe(false);
+    expect(NAVER_VERIFICATION_PATH).toBe("/naver07aa70d2794ed3e5288b204fb467ee18.html");
+  });
+
+  it("is probed on the public host (GET variants + HEAD) and denied on the admin host, in its own group", () => {
+    const probes = buildProbes({ buildId: "BUILD" }).filter(
+      (probe: { group: string }) => probe.group === NAVER_VERIFICATION_GROUP,
+    ) as Array<{ id: string; hostRole: string; method?: string; target: string; noFollow?: boolean }>;
+    const ids = probes.map((probe) => probe.id).sort();
+    expect(ids).toEqual([
+      "admin-static/naver-verification/plain",
+      "public-static/naver-verification/accept-language-ko",
+      "public-static/naver-verification/head",
+      "public-static/naver-verification/naver-yeti-ua",
+      "public-static/naver-verification/plain",
+      "public-static/naver-verification/with-query",
+    ]);
+    // Redirect-following would hide a 3xx: every probe in the group reads the first answer.
+    for (const probe of probes) expect(probe.noFollow, probe.id).toBe(true);
+    expect(probes.filter((probe) => probe.hostRole === "public").length).toBe(5);
+    expect(probes.find((probe) => probe.id.endsWith("/head"))?.method).toBe("HEAD");
+    expect(probes.find((probe) => probe.id.endsWith("/with-query"))?.target).toBe(`${NAVER_VERIFICATION_PATH}?v=1`);
+    // It must not leak into the generic "legit path" group, whose shared assertions are written for pages.
+    const legit = buildProbes({ buildId: "BUILD" }).filter((probe: { group: string }) => probe.group === "public-host-legit-path");
+    expect(legit.some((probe: { target: string }) => probe.target === NAVER_VERIFICATION_PATH)).toBe(false);
+  });
+
+  it("verdict: only a first-answer 200 with the pinned bytes passes; any 3xx, wrong bytes, 404 or 5xx fails", () => {
+    const body = readFileSync(FILE_ON_DISK, "utf8");
+    const good = served(200, { body });
+    expect(good.bodySha256).toBe(NAVER_VERIFICATION_SHA256);
+    expect(expectNaverVerificationFile(good, { first: good, hops: [] })).toBeNull();
+
+    for (const status of [301, 302, 307, 308]) {
+      const redirect = served(status, { headers: { location: "https://novel.test/ko/naver07aa70d2794ed3e5288b204fb467ee18.html" } });
+      expect(expectNaverVerificationFile(redirect, { first: redirect, hops: [] }), String(status)).toMatch(/redirected/);
+    }
+    // Even when a followed redirect ends on the right bytes, the hop itself is the failure.
+    const first308 = served(308, { headers: { location: "/x" } });
+    expect(expectNaverVerificationFile(good, { first: first308, hops: [{ status: 308, to: "/x" }] })).toMatch(/redirected/);
+    // A recorded hop is a failure on its own, whatever status the first answer carried.
+    expect(expectNaverVerificationFile(good, { first: good, hops: [{ status: 308, to: "/x" }] })).toMatch(/redirected/);
+    expect(expectNaverVerificationFile(served(200, { body: "naver-site-verification: other.html" }), {})).toMatch(/differs from the pinned bytes/);
+    expect(expectNaverVerificationFile(served(200, { body: `${body}\n` }), {})).toMatch(/differs from the pinned bytes/);
+    expect(expectNaverVerificationFile(served(200, { body: "<html>app 404</html>", sha: sha256("<html>app 404</html>") }), {})).toMatch(/differs/);
+    expect(expectNaverVerificationFile(served(404), {})).toMatch(/should be 200/);
+    expect(expectNaverVerificationFile(served(404, { body: "<html>not found</html>" }), {})).toMatch(/should be 200/);
+    expect(expectNaverVerificationFile(served(500, { body: "boom" }), {})).toMatch(/should be 200/);
+    expect(expectNaverVerificationFile(served(0, { sha: null }), {})).toMatch(/should be 200/);
+  });
+
+  it("admin host probe expects the proxy's own bare 404, not a served file or a Next 404 page", () => {
+    const adminProbe = buildProbes({ buildId: "BUILD" }).find(
+      (probe: { id: string }) => probe.id === "admin-static/naver-verification/plain",
+    ) as { check: (r: unknown, c?: unknown) => string | null };
+    expect(adminProbe.check(response(404), {})).toBeNull();
+    expect(adminProbe.check(response(404, { body: "<html>not found</html>" }), {})).toMatch(/bare 404/);
+    expect(adminProbe.check(response(200, { body: "naver-site-verification: x.html" }), {})).toMatch(/bare 404/);
+  });
+
+  it("parseRawResponse hashes the exact (de-chunked) body bytes", () => {
+    const body = readFileSync(FILE_ON_DISK);
+    const plain = Buffer.concat([
+      Buffer.from(`HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: ${body.length}\r\n\r\n`, "latin1"),
+      body,
+    ]);
+    expect(parseRawResponse(plain).bodySha256).toBe(NAVER_VERIFICATION_SHA256);
+    const half = Math.floor(body.length / 2);
+    const chunked = Buffer.concat([
+      Buffer.from("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n", "latin1"),
+      Buffer.from(`${half.toString(16)}\r\n`, "latin1"),
+      body.subarray(0, half),
+      Buffer.from(`\r\n${(body.length - half).toString(16)}\r\n`, "latin1"),
+      body.subarray(half),
+      Buffer.from("\r\n0\r\n\r\n", "latin1"),
+    ]);
+    expect(parseRawResponse(chunked).bodySha256).toBe(NAVER_VERIFICATION_SHA256);
+    expect(parseRawResponse(Buffer.from("HTTP/1.1 200 OK\r\nContent-", "latin1")).bodySha256).toBeNull();
   });
 });

@@ -26,12 +26,23 @@
 // Exit code: 0 = every invariant held, 1 = at least one violated, 2 = harness error
 // (e.g. the control probes failed, meaning the server is not the app we think it is).
 
+import { createHash } from "node:crypto";
 import net from "node:net";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const PUBLIC_HOST_DEFAULT = "novel.test";
 export const ADMIN_HOST_DEFAULT = "zbcwf.novel.test";
+
+/**
+ * v0.5.12: Naver Search Advisor site-verification file, shipped as a plain static file in public/.
+ * src/proxy.ts runs on every non-_next/static path, so a root-level `*.html` request has to be proven (not assumed)
+ * to reach Next's static handler on the public host: 200, byte-identical body, and no 3xx hop on the way.
+ * The SHA-256 is pinned here; tests/backend/security/next-proxy-probe.test.ts pins that public/<file> still has it.
+ */
+export const NAVER_VERIFICATION_PATH = "/naver07aa70d2794ed3e5288b204fb467ee18.html";
+export const NAVER_VERIFICATION_SHA256 = "80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431";
+export const NAVER_VERIFICATION_GROUP = "public-host-static-verification-file";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 /** Real admin *pages* (the ones that exist as page.tsx) — see src/app/(admin)/**. */
@@ -184,7 +195,7 @@ function dechunk(buffer) {
 
 export function parseRawResponse(raw) {
   const separator = raw.indexOf("\r\n\r\n", 0, "latin1");
-  if (separator < 0) return { status: 0, headers: {}, rawHeaders: [], body: "", parseError: "no header terminator" };
+  if (separator < 0) return { status: 0, headers: {}, rawHeaders: [], body: "", bodySha256: null, parseError: "no header terminator" };
   const head = raw.subarray(0, separator).toString("latin1").split("\r\n");
   const statusMatch = /^HTTP\/\d\.\d (\d{3})/.exec(head[0] ?? "");
   const headers = {};
@@ -204,6 +215,8 @@ export function parseRawResponse(raw) {
     headers,
     rawHeaders,
     body: bodyBuffer.toString("utf8"),
+    // Hash of the exact body bytes (after de-chunking), for probes that assert a static file is served byte-for-byte.
+    bodySha256: createHash("sha256").update(bodyBuffer).digest("hex"),
   };
 }
 
@@ -294,6 +307,23 @@ export function expectPublicPathNotDenied(response, { requireNo5xx = false } = {
 export function expectNoContentServed(response) {
   if (response.status === 404 || REDIRECT_STATUSES.has(response.status)) return null;
   return `unexpected answer to a malformed request: ${classify(response)}`;
+}
+
+/**
+ * Public host + the Naver verification file: the first answer (before any redirect-following) must already be a plain
+ * 200 whose body is byte-identical to the pinned file. A 3xx anywhere — even one that would end in the right bytes —
+ * fails: Naver's crawler must get the file from the exact URL it was told to fetch.
+ */
+export function expectNaverVerificationFile(response, context) {
+  const first = context?.first ?? response;
+  if (REDIRECT_STATUSES.has(first.status) || (context?.hops?.length ?? 0) > 0) {
+    return `verification file was redirected: ${classify(first)}${context?.hops?.length ? ` (hops: ${context.hops.map((h) => `${h.status}->${h.to}`).join(" ; ")})` : ""}`;
+  }
+  if (first.status !== 200) return `verification file should be 200, got ${classify(first)}`;
+  if (first.bodySha256 !== NAVER_VERIFICATION_SHA256) {
+    return `verification file body differs from the pinned bytes: sha256=${first.bodySha256} (${Buffer.byteLength(first.body)} bytes)`;
+  }
+  return null;
 }
 
 /**
@@ -451,6 +481,50 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
       check: (r) => expectPublicPathNotDenied(r, { requireNo5xx }),
     });
   }
+
+  // ---- Public host: the Naver verification file is a root-level static *.html — it must pass the proxy untouched. ----
+  // The variants cover what could make the proxy or Next react to the request itself: a language header (root-path
+  // negotiation must stay `/`-only), Naver's own crawler UA (Yeti), a query string (cache-busting verifiers), and HEAD.
+  for (const [name, target, headers, method] of [
+    ["plain", NAVER_VERIFICATION_PATH, [], "GET"],
+    ["accept-language-ko", NAVER_VERIFICATION_PATH, [["Accept-Language", "ko-KR,ko;q=0.9,en;q=0.5"]], "GET"],
+    ["naver-yeti-ua", NAVER_VERIFICATION_PATH, [["User-Agent", "Mozilla/5.0 (compatible; Yeti/1.1; +http://naver.me/spd)"]], "GET"],
+    ["with-query", `${NAVER_VERIFICATION_PATH}?v=1`, [], "GET"],
+  ]) {
+    add({
+      id: `public-static/naver-verification/${name}`,
+      group: NAVER_VERIFICATION_GROUP,
+      hostRole: "public",
+      method,
+      target,
+      headers,
+      noFollow: true,
+      check: expectNaverVerificationFile,
+    });
+  }
+  add({
+    id: "public-static/naver-verification/head",
+    group: NAVER_VERIFICATION_GROUP,
+    hostRole: "public",
+    method: "HEAD",
+    target: NAVER_VERIFICATION_PATH,
+    noFollow: true,
+    // HEAD has no body to hash: status 200 and no redirect is the invariant.
+    check: (r, context) => {
+      const first = context?.first ?? r;
+      if (REDIRECT_STATUSES.has(first.status)) return `verification file HEAD was redirected: ${classify(first)}`;
+      return first.status === 200 ? null : `verification file HEAD should be 200, got ${classify(first)}`;
+    },
+  });
+  // Admin host: it serves admin paths only (RC-9) — the public verification file must be the proxy's bare 404 there.
+  add({
+    id: "admin-static/naver-verification/plain",
+    group: NAVER_VERIFICATION_GROUP,
+    hostRole: "admin",
+    target: NAVER_VERIFICATION_PATH,
+    noFollow: true,
+    check: expectProxyDenialSignature,
+  });
 
   // ---- Public host: Host-header smuggling toward the admin host. ----
   for (const p of ["/novels", "/login", "/api/admin/tasks", `/novels/${ZERO_UUID}`]) {
@@ -733,6 +807,9 @@ export async function runProbes({ host, port, publicHost, adminHost, buildId, co
       problem,
       bodySnippet: problem !== null || probe.control ? snippet(response) : undefined,
       contentType: response.headers["content-type"] ?? null,
+      ...(probe.group === NAVER_VERIFICATION_GROUP
+        ? { firstStatus: first.status, redirectHops: hops.length, bodySha256: first.bodySha256 ?? null, bodyBytes: Buffer.byteLength(first.body) }
+        : {}),
       bodyHead: probe.control || probe.id.endsWith("/plain")
         ? response.body.slice(0, 3500)
         : response.status === 200 ? response.body.slice(0, 700) : undefined,
@@ -806,6 +883,11 @@ export async function main(argv) {
   }
   for (const r of knownFindings) {
     console.log(`KNOWN_FINDING ${r.knownFinding} [${r.hostRole}] ${r.id} -> ${r.outcome}${r.guardAnswered ? " (page guard answered: the admin route was reached)" : ""}`);
+  }
+  for (const r of results.filter((x) => x.group === NAVER_VERIFICATION_GROUP)) {
+    console.log(
+      `NAVER_VERIFICATION_FILE ${r.ok ? "ok" : "FAIL"} host=${r.hostRole} probe=${r.id.split("/").slice(-1)[0]} status=${r.firstStatus} redirects=${r.redirectHops} bytes=${r.bodyBytes} sha256=${r.bodySha256 ?? "-"} content-type=${r.contentType ?? "-"}`,
+    );
   }
   console.log(`NEXT_PROXY_PROBE_SUMMARY ${JSON.stringify(summary)}`);
   if (options.jsonOut) writeFileSync(options.jsonOut, `${JSON.stringify({ summary, results }, null, 2)}\n`);
