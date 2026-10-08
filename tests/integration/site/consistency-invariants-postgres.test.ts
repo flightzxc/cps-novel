@@ -66,12 +66,21 @@ async function pageFacts(locale: SiteLocale, env: NodeJS.ProcessEnv) {
   for (const slug of ALL_SLUGS) {
     let page = 1;
     let cards = 0;
+    // 上限 = 第 1 页报告的总页数 + 1（第 N+1 页必须是 null）。不设上限的话，"超出页码不再 404"这类回归会让
+    // 循环永远翻下去：用例超时后循环仍在后台查库，运行器挂住而不是变红（主会话复核变异实测）。
+    let lastAllowedPage = Number.POSITIVE_INFINITY;
     for (;;) {
+      if (page > lastAllowedPage) {
+        throw new Error(`${locale}/${slug}: page ${page} is beyond totalPages ${lastAllowedPage - 1} + 1 and still returned a page`);
+      }
       const result = await getPublicCategoryPage(web, locale, slug, page, env);
       if (!result) break;
       pages.add(`${slug}|${page}`);
       cards += result.novels.length;
-      if (page === 1) totals.set(slug, { totalPages: result.totalPages, totalCount: result.totalCount, cards: 0 });
+      if (page === 1) {
+        totals.set(slug, { totalPages: result.totalPages, totalCount: result.totalCount, cards: 0 });
+        lastAllowedPage = result.totalPages + 1;
+      }
       page += 1;
     }
     if (totals.has(slug)) totals.get(slug)!.cards = cards;
