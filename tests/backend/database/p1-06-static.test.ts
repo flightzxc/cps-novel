@@ -175,8 +175,13 @@ describe("P1-06 database operations static contracts", () => {
     // adds two migration_sql `partial_index` constraint records
     // (generic_task_item_heartbeat_idx, channel_sync_task_item_heartbeat_idx)
     // -- no new table/field -- 1240 + 2 = 1242.
-    expect(records).toHaveLength(1242);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1242);
+    // 收益看板·账号级每日汇总 (20261008120000_revenue_account_level_dashboard)
+    // adds 4 table records (revenue_sync_scope / revenue_sync_batch /
+    // revenue_raw_snapshot / revenue_daily_stat), 54 field records (6 + 21 + 17 +
+    // 10 scalar columns) and 26 physical-object records (4 primary keys, 6 foreign
+    // keys, 4 unique indexes, 4 plain indexes, 8 CHECKs) -- 1242 + 84 = 1326.
+    expect(records).toHaveLength(1326);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1326);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

@@ -112,6 +112,7 @@ model ChannelAccount {
   genericTasks         GenericTask[]
   sideEffects          SideEffectIntent[]
   holds                ChannelAccountHold[]
+  revenueScopes        RevenueSyncScope[]
 
   @@index([channelId, status], map: "channel_account_channel_status_idx")
   @@index([status, deletedAt], map: "channel_account_status_deleted_idx")
@@ -843,6 +844,7 @@ model GenericTask {
   cronRun        CronRun?
   parentTask     GenericTask?  @relation("GenericTaskChildren", fields: [parentTaskId], references: [id], onDelete: Restrict)
   childTasks     GenericTask[] @relation("GenericTaskChildren")
+  revenueSyncBatches RevenueSyncBatch[]
 
   @@unique([taskType, originTaskId], map: "generic_task_origin_key")
   @@index([status, taskType, createdAt], map: "generic_task_claim_idx")
@@ -1410,4 +1412,109 @@ model ArticleNovelRebindBatchItem {
   @@index([articleId, status], map: "article_novel_rebind_batch_item_article_status_idx")
   @@index([processingToken], map: "article_novel_rebind_batch_item_processing_token_idx")
   @@map("article_novel_rebind_batch_item")
+}
+
+// ─── 收益看板（账号级每日汇总）四张表 ────────────────────────────────────────────
+// 迁移：prisma/migrations/20261008120000_revenue_account_level_dashboard/migration.sql
+// （CHECK 与全部手写物理名都在迁移里；本文件的 `map:` 与迁移里的物理名逐字一致）。
+// 设计依据：docs/architecture/candidate-v0.2.1/novel-v1-logical-data-model-v0.2.1.md §2.16
+// （收益五表；本期不建 RevenueAttributionSnapshot）。金额一律 Decimal，禁止浮点。
+
+/// 收益作用域：一个渠道账号 × 一个 projectType（网文=1）。
+model RevenueSyncScope {
+  id               String   @id @default(uuid()) @db.Uuid
+  channelAccountId String   @map("channel_account_id") @db.Uuid
+  projectType      Int      @map("project_type") @db.SmallInt
+  status           String   @default("active") @db.VarChar(32)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount     @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  batches        RevenueSyncBatch[]
+  dailyStats     RevenueDailyStat[]
+
+  @@unique([channelAccountId, projectType], map: "revenue_sync_scope_account_project_key")
+  @@map("revenue_sync_scope")
+}
+
+/// 一次同步批次（终态一次写入；`request_fingerprint` 让同一任务重试幂等）。
+model RevenueSyncBatch {
+  id                          String    @id @default(uuid()) @db.Uuid
+  revenueSyncScopeId          String    @map("revenue_sync_scope_id") @db.Uuid
+  genericTaskId               String?   @map("generic_task_id") @db.Uuid
+  beginDate                   DateTime  @map("begin_date") @db.Date
+  endDate                     DateTime  @map("end_date") @db.Date
+  requestFingerprint          String    @unique @map("request_fingerprint") @db.VarChar(96)
+  status                      String    @default("pending") @db.VarChar(32)
+  requestCount                Int       @default(0) @map("request_count")
+  detailRowCount              Int       @default(0) @map("detail_row_count")
+  totalRowCount               Int       @default(0) @map("total_row_count")
+  reconciliationStatus        String?   @map("reconciliation_status") @db.VarChar(32)
+  /// 无 FK：凭证可能已被替换；只用来回答"当时用的是哪一条"。
+  credentialId                String?   @map("credential_id") @db.Uuid
+  credentialFingerprintPrefix String?   @map("credential_fingerprint_prefix") @db.VarChar(16)
+  upstreamStarId              String?   @map("upstream_star_id") @db.VarChar(32)
+  errorCode                   String?   @map("error_code") @db.VarChar(64)
+  errorMessage                String?   @map("error_message") @db.VarChar(500)
+  requestedBy                 String    @map("requested_by") @db.VarChar(128)
+  startedAt                   DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt                  DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  scope        RevenueSyncScope     @relation(fields: [revenueSyncScopeId], references: [id], onDelete: Restrict)
+  genericTask  GenericTask?         @relation(fields: [genericTaskId], references: [id], onDelete: SetNull)
+  rawSnapshots RevenueRawSnapshot[]
+  dailyStats   RevenueDailyStat[]
+
+  @@index([revenueSyncScopeId, beginDate], map: "revenue_sync_batch_scope_begin_idx")
+  @@index([createdAt], map: "revenue_sync_batch_created_idx")
+  @@map("revenue_sync_batch")
+}
+
+/// 上游原始行存档（写入时不加工；`dedupe_key` 唯一、upsert，`sync_batch_id` 指向最后一次写入它的批次）。
+model RevenueRawSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  syncBatchId       String   @map("sync_batch_id") @db.Uuid
+  projectType       Int      @map("project_type") @db.SmallInt
+  dimension         String   @db.VarChar(32)
+  dimensionKey      String   @map("dimension_key") @db.VarChar(64)
+  dimensionValue    String?  @map("dimension_value") @db.VarChar(128)
+  isTotal           Boolean  @default(false) @map("is_total")
+  realDevNum        Int?     @map("real_dev_num")
+  newRealDevNum     Int?     @map("new_real_dev_num")
+  realDevNumRate    Decimal? @map("real_dev_num_rate") @db.Decimal(9, 6)
+  realIncome        Decimal? @map("real_income") @db.Decimal(18, 4)
+  realDistribIncome Decimal? @map("real_distrib_income") @db.Decimal(18, 4)
+  realProfit        Decimal? @map("real_profit") @db.Decimal(18, 4)
+  rawPayload        Json     @map("raw_payload") @db.JsonB
+  dedupeKey         String   @unique @map("dedupe_key") @db.VarChar(96)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  syncBatch RevenueSyncBatch @relation(fields: [syncBatchId], references: [id], onDelete: Restrict)
+
+  @@index([projectType, dimensionKey], map: "revenue_raw_snapshot_project_dimension_key_idx")
+  @@index([syncBatchId, isTotal], map: "revenue_raw_snapshot_batch_total_idx")
+  @@map("revenue_raw_snapshot")
+}
+
+/// 按日汇总（看板读这张）。字段缺失 = NULL，"0" = 0；上游不返回的日期没有行（由读服务判 coverage）。
+model RevenueDailyStat {
+  id                 String   @id @default(uuid()) @db.Uuid
+  revenueSyncScopeId String   @map("revenue_sync_scope_id") @db.Uuid
+  statDate           DateTime @map("stat_date") @db.Date
+  realDevNum         Int?     @map("real_dev_num")
+  newRealDevNum      Int?     @map("new_real_dev_num")
+  realDevNumRate     Decimal? @map("real_dev_num_rate") @db.Decimal(9, 6)
+  realIncome         Decimal? @map("real_income") @db.Decimal(18, 4)
+  sourceBatchId      String   @map("source_batch_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  scope       RevenueSyncScope @relation(fields: [revenueSyncScopeId], references: [id], onDelete: Restrict)
+  sourceBatch RevenueSyncBatch @relation(fields: [sourceBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([revenueSyncScopeId, statDate], map: "revenue_daily_stat_scope_date_key")
+  @@map("revenue_daily_stat")
 }

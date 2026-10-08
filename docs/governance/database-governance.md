@@ -215,6 +215,32 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 
 部署门禁与 D-7/feature flag 的上线顺序见 `docs/p2/P2_10_SITEMAP_RELEASE_CHECKLIST.md`。
 
+### 3.7 收益看板（账号级每日汇总）
+
+迁移 `20261008120000_revenue_account_level_dashboard`（本期**只新增四张表**，不改任何旧表；逻辑模型依据
+`docs/architecture/candidate-v0.2.1/novel-v1-logical-data-model-v0.2.1.md` §2.16 收益五表，本期不建
+`RevenueAttributionSnapshot`——按书/按推广码的拆分上游暂不支持，`GetMDetailsReport` / `GetMToTalReport`
+对网文无效，已实测）。
+
+| 表 | 分类 | 字段责任 | 关键约束 | DROP |
+| --- | --- | --- | --- | --- |
+| `revenue_sync_scope` | CPS_PARITY_ADAPTED | 收益作用域：一个渠道账号 × 一个 `project_type`（网文=1）；批次与日统计都挂在它下面 | `(channel_account_id, project_type)` 唯一；状态两值 CHECK；`project_type > 0`；账号 FK `ON DELETE RESTRICT` | CPS 的单主体 `principal` 模型（海阅是多账户） |
+| `revenue_sync_batch` | CPS_PARITY_ADAPTED | 一次同步批次：区间、状态、对账结论、当时用的凭证指纹前缀与达人 `StarId`；终态一次写入 | `request_fingerprint` 全局唯一（同一任务重试幂等）；状态五值 / 对账三值（可空）CHECK；`begin_date <= end_date`；终态形状 CHECK（终态必有 `finished_at`，失败/部分失败必有 `error_code`）；`generic_task_id` FK `ON DELETE SET NULL` | CPS 的 `batch_tasks` 整数任务编号 |
+| `revenue_raw_snapshot` | CPS_PARITY_ADAPTED | 上游原始行存档（明细行与总计行同表，写入时不加工）；`sync_batch_id` 指向最后一次写入它的批次 | `dedupe_key` 全局唯一（upsert 身份）；`project_type > 0`；批次 FK `ON DELETE RESTRICT` | CPS 的 `raw_payload_json` 文本列（改 `jsonb`） |
+| `revenue_daily_stat` | CPS_PARITY_ADAPTED | 按日汇总（激活用户、新用户、新用户比例、分成收入 US$），看板读这张；上游不返回的日期没有行 | `(revenue_sync_scope_id, stat_date)` 唯一；两个 FK 均 `ON DELETE RESTRICT` | CPS 的 `Float` 金额（海阅一律 `numeric`） |
+
+要点（与 CPS `changdu-total-revenue` 的刻意差异在 `docs/governance/port-registry.md` 逐条登记）：
+
+- **所有上游请求固定带 `projectType = 1`**：同一个畅读账号下，网文与短剧共用一个登录态，上游**不带 `projectType` 时返回两者合计**
+  （生产只读实测证实）。`buildNovelGetReportBody` 无条件写入、不接受外部传入；`project_type` 列再把数据按业务线隔离。
+- **金额 / 比例一律 `numeric`（Prisma `Decimal`），禁止浮点**：分成收入 `numeric(18,4)`、新用户比例 `numeric(9,6)`（小数形式，`"28.27%"` → `0.2827`）。
+  字段缺失存 `NULL`，`"0"` 存 `0`，两者在页面上含义不同，不得互相替代。
+- **上游不返回没有活动的日期**（不是返回 0 行）：读服务据此把每一天判成 `reported`（有行）/ `no_upstream_row`（被成功批次覆盖但上游没返回，视为 0 活动）/ `not_synced`（没有任何成功批次覆盖）。
+- **凭证口径校验**：worker 取数前用 `readStarScope` 检查凭证 JWT 带有非空且不为 `-1` 的 `*StarId` 声明（达人凭证）；聚合账号凭证（无 `StarId`）直接 `credential_not_star_scope` 失败、**不发任何上游请求**（CPS 7 月“87 倍事故”的教训）。批次行记录 `upstream_star_id`（非密钥）与 `credential_fingerprint_prefix`，让“这次查的是哪个达人”可事后核对。
+- **写入方只有 worker**：任务 `moboreader.revenue_sync.v1`（只在主通道白名单；不设定时任务）把 scope upsert、batch、raw snapshot upsert、daily stat upsert 全部放进 `protectedWrite`（finalize 事务，带租约围栏）；失败路径同样在 `protectedWrite` 里写一条 `failed` 批次（脱敏错误信息），保证页面看得到失败原因。web 侧只读，且**不读取、不解密凭证密文**。
+- **授权**：`worker_app` 四表 `SELECT, INSERT, UPDATE`（无 DELETE）；`web_app`、`analyst_ro` 四表只 `SELECT`；`scheduler_app` 无权限；入队沿用 web 既有的 `generic_task` / `generic_task_item` / `operation_audit` 权限，不新增。
+  `raw_payload` 是上游汇总统计行（不含推广码、链接或凭证），四张表整体按 `S1_INTERNAL` 登记。
+
 ## 4. 状态 CHECK 真源
 
 正式 CHECK 值必须与 `src/domain/database-statuses.ts` 一致：
@@ -256,6 +282,11 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
   `pending | processing | applied | skipped | failed`
 - ArticleNovelRebindBatchItem error kind（C-30A，`article_novel_rebind_batch_item.error_kind`，可空）：
   `drift | not_found | blocked | ineligible | fence_lost | unknown`
+- RevenueScope（收益看板，`revenue_sync_scope.status`，机器真源 `REVENUE_SCOPE_STATUSES`）：`active | disabled`
+- RevenueBatch（`revenue_sync_batch.status`，机器真源 `REVENUE_BATCH_STATUSES`）：
+  `pending | running | completed | partial_failed | failed`（当前实现一次写成终态；`pending`/`running` 为分阶段写入预留）
+- RevenueReconciliation（`revenue_sync_batch.reconciliation_status`，可空，机器真源 `REVENUE_RECONCILIATION_STATUSES`）：
+  `matched | mismatched | not_applicable`
 - ScheduleRun：`due | enqueued | misfired | skipped | failed`
 - CronRun：`created | task_created | failed`
 - Carousel batch：`pending | processing | completed | failed`
@@ -480,6 +511,25 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
     各一次顺序扫描。真实库证据：`bash scripts/run-worker-health-index-postgres-verification.sh`
     （EXPLAIN 断言两条健康查询都走索引、不再 Seq Scan，改回旧写法 / 删索引即变红）。
 
+24. `20261008120000_revenue_account_level_dashboard`（收益看板·账号级每日汇总，四张新表，只新增不改旧表）：
+    - 命名 CHECK：`db:public:revenue_sync_scope:revenue_sync_scope_status_check`（`active | disabled`）、
+      `…:revenue_sync_scope_project_type_check`（`project_type > 0`）；
+      `db:public:revenue_sync_batch:revenue_sync_batch_status_check`（五值）、
+      `…:revenue_sync_batch_reconciliation_status_check`（`IS NULL OR IN ('matched','mismatched','not_applicable')`）、
+      `…:revenue_sync_batch_date_range_check`（`begin_date <= end_date`）、
+      `…:revenue_sync_batch_counts_check`（三个计数非负）、
+      `…:revenue_sync_batch_terminal_shape_check`（`(status IN ('pending','running') OR finished_at IS NOT NULL) AND (status NOT IN ('failed','partial_failed') OR error_code IS NOT NULL)`）；
+      `db:public:revenue_raw_snapshot:revenue_raw_snapshot_project_type_check`（`project_type > 0`）。
+    - 唯一索引：`revenue_sync_scope_account_project_key` = `UNIQUE(channel_account_id, project_type)`、
+      `revenue_sync_batch_request_fingerprint_key` = `UNIQUE(request_fingerprint)`、
+      `revenue_raw_snapshot_dedupe_key_key` = `UNIQUE(dedupe_key)`、
+      `revenue_daily_stat_scope_date_key` = `UNIQUE(revenue_sync_scope_id, stat_date)`——后三者是 worker 全部 upsert 的幂等身份（重复同步幂等）。
+    - 外键删除策略：全部 `ON DELETE RESTRICT`，唯独 `revenue_sync_batch.generic_task_id` 为 `ON DELETE SET NULL`
+      （`generic_task` 头按 365 天保留期清理，批次长期保留，不能被任务头清理阻塞或级联删除）。
+      `revenue_sync_batch.credential_id` **故意不建 FK**（凭证可能已被替换，批次只回答“当时用的是哪一条”，同 `channel_account_hold.credential_id`）。
+    - 金额 / 比例列一律 `numeric`（`numeric(18,4)` / `numeric(9,6)`），无浮点；日期列用 `date`（北京时间日期，不带时区）。
+    - 授权见 §7：`worker_app` 四表 `SELECT, INSERT, UPDATE`，`web_app`/`analyst_ro` 只 `SELECT`；`infra/postgres/grants.sql` 已同步。
+
 ### P1-05B Migration 注意事项
 
 - Article 进入 `published` 前必须在同一原子写入中设置 `published_at`；draft 及其他非 published 状态允许 `published_at IS NULL`。
@@ -510,6 +560,7 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
 | public code、published metadata | S0 | 可读 | 可读写 | 任务参数可引用 | 可读 |
 | `article.body` | S0（published 时） | `web_app` 公开页面渲染可读 | 可生成/更新 | 不读 | 可读公开版本；不是章节版权正文 |
 | `site_setting.indexnow_key` | S2 | `settings:manage` + 当前会话 2FA 的受控 API 可读/写 | IndexNow 任务可读 | 禁止 | 禁止 |
+| `revenue_sync_scope` / `revenue_sync_batch` / `revenue_raw_snapshot` / `revenue_daily_stat` | S1（账号级汇总统计；`raw_payload` 为上游汇总行，不含推广码/链接/凭证） | 只读（后台 `/revenue` 读服务）；不读取、不解密凭证密文 | `SELECT, INSERT, UPDATE`（无 DELETE），`moboreader.revenue_sync.v1` 在 `protectedWrite` 里写入 | 禁止 | 只读 |
 
 ### P1-06 已实施权限矩阵
 
@@ -562,7 +613,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 
 - 每个 Prisma scalar 字段必须有 `db:public:{table}:{field}` 记录。
 - 每张表和每个约束分别有 table/constraint stable_key。
-- 920 条字典记录均为 `active`；数据库对象记录必须填写 `managed_by`、`physical_name` 和 `introduced_in_migration`。
+- 字典记录总数以 `docs/governance/database-schema-dictionary.jsonl` 为准（收益看板迁移后共 1326 条：1256 条 `active`、70 条 `superseded`，覆盖 57 张表）；数据库对象记录必须填写 `managed_by`、`physical_name` 和 `introduced_in_migration`。
 - `managed_by` 只允许 `prisma_schema | migration_sql | application_contract`；应用事务合同不得冒充数据库对象。
 - active 字典记录必须映射 Prisma、已应用 SQL Migration 或 `src/domain/database-invariants.ts` 中的应用事务不变量。
 - 字段替代只允许 `deprecated/superseded`，旧记录不得删除。
@@ -635,6 +686,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-10-06 | 领推广批次：去掉跨批次占用、建批次排除已领、D4 收窄为只看这一条（`ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md` §8，Owner 2026-10-06 确认；工作树 `cps海阅/promo-claim-dedup-at-execution`，分支 `fix/promo-claim-dedup-at-execution`，基线 `integration/v0.5.8-2026-10-05@6504e8c`） | **零 schema migration**；一处 grants 变更 + 字典 `read_roles` 同步。①`infra/postgres/grants.sql`：`scheduler_app` 对 `side_effect_intent` 的列级 SELECT 由 `operation_type, channel_account_id, request_summary` 追加 `status`（共四列）——`hasUnsafePendingItems` 新判据需要区分意图是否已落定（`prepared`/`claim_retry_blocked` 未落定仍判不安全；`confirmed`/`manual_review_required` 已落定不再判不安全）；`target_id`/`response_shape`/`promo_link_id` 等其余列仍拒绝；`web_app`/`worker_app`/`analyst_ro` 本来就能读 `status`；`worker_app` 读 `promo_link`/`side_effect_intent` 用的是既有表级授权，**无新增**。②字典 `docs/governance/database-schema-dictionary.jsonl`：`side_effect_intent.status` 的 `read_roles` 追加 `scheduler_app`（recordCount 不变）。③批次父任务 `result` 新增三个顶层 JSON 键 `alreadyHasPromoCodeCount`/`manualReviewPendingCount`/`inOtherUnfinishedBatchNoticeCount`（仅生命周期领推广批次，见第 3.4 节词典段），不改列/CHECK/索引；`blockedReasonCounts.queued_in_other_batch` 与生命周期批次的 `active_item_conflict` 不再产生，历史批次的结果不回写。**部署顺序**：`grants.sql` 须在新版 scheduler 生效前（或同一发布窗口内）重放，否则轮到 `releaseCount > 0` 的分片时 D4 检查 `permission denied for column status`，该账号的放行事务整体回滚且每轮先选中同一分片再失败，同账号后面的分片也放不出去，直到重放；本次无 migration，但 grants 重放步骤（`migrate-approved`/X8 `prepare_database()`）必须照常执行。 | Claude / Sonnet | 已实现，待复核发布 |
 | 2026-10-06 | 目录同步页"上游上架时间"筛选与排序（`开发单_Sonnet_目录同步页上游上架时间筛选_2026-10-06.md`，Owner 2026-10-06 同意；工作树 `cps海阅/catalog-created-time-filter`，分支 `feat/catalog-source-created-time-filter`，基线 `integration/v0.5.9-2026-10-06@150e8bc`） | 零 schema migration、零索引、零 grants 变更、零新环境变量。批次快照 `params.selection.filter`（及 `generic_task_item.payload.selection.filter`）新增可选 JSON 键 `sourceCreatedFrom`（`YYYY-MM-DD`，含当天；语义与三处共用判定见 §3.4 本日小节）：页面列表、批次上下文/预估、worker 枚举 `selectionWhere` 共用同一个判定片段 `sourceCreatedAtRawWhere`（`novel_source_item.source_created_at_raw >= 'YYYY-MM-DD 00:00:00'`，字符串比较，不读 `source_created_at`）；不带该键的历史快照枚举结果与哈希逐字不变。同一轮复核修复：批次上下文/预估（`catalogSelectionWhere`/`readCatalogBatchContext`）此前不认「推广链接状态」筛选，现复用 `promoLinkStatusIdConstraint` + `resolvePromoLinkStatusContext`（仅 `manual_review`/`not_claimed` 才解析上下文，与 worker `streamSelection` 同一做法），弹窗里的渠道分组/预计分片与页面列表、worker 枚举同一集合。字典：JSON 键落在既有 JSONB 列内部，不新增/不修改 `database-schema-dictionary.jsonl` 记录，`recordCount`/`activeCount` 不变。授权核对：worker 枚举只多读 `source_created_at_raw`，`worker_app` 已有 `novel_source_item` 表级 SELECT，`web_app`/`analyst_ro` 已有该列列级 SELECT，不改 `infra/postgres/grants.sql`。 | Claude Sonnet 5.5（施工） | 一次性 `postgres:16.14` 上 `scripts/run-catalog-batch-postgres-verification.sh` 零跳过通过（含场景 A–F 及批次上下文认推广链接状态 22 例：列表筛选与含当天边界、全选一致性、快照绝对日期、非法输入/历史快照、排序、9.8 万本规模计时）；字典 drift 为 0 |
 | 2026-10-06 | 文章「全选 → 后台批量发布」任务（`开发单_Sonnet_文章批量发布后台任务_全选拆分_2026-10-06.md`，Owner 2026-10-06 同意，并入 v0.5.9；工作树 `cps海阅/article-batch-publish-task`，分支 `feat/article-batch-publish-task`，基线 `integration/v0.5.9-2026-10-06@5ef9ecb`） | 零 schema migration、零索引、**零 grants 变更**、零新环境变量。新增两个任务类型 `article.publish.batch.v1`/`article.publish.v1`，其 `params`/`result`/条目 `payload`/`result` JSON 键登记见 §3.4 本日小节，落在既有 JSONB 列内部，不新增/不修改 `database-schema-dictionary.jsonl` 记录，`recordCount`/`activeCount` 不变（drift 为 0）。授权核对：发布核心原本只在 web 进程里跑，现在由 worker-light（`worker_app`）执行——整条路径（枚举、`applyPublishTransition`、IndexNow 出站、试读合并入队、站点地图入队）以 `worker_app` 真实角色在一次性 postgres:16.14 上跑通，无 `permission denied`，`worker_app` 既有授权已覆盖，不改 `infra/postgres/grants.sql`。部署配置：`WORKER_LIGHT_TASK_ALLOWLIST` 追加两个新类型（只在轻量通道，主通道白名单不得出现）；回滚到 v0.5.8 前必须先把它们从白名单摘掉（v0.5.8 的预检 `worker_light_task_unapproved` 会拒绝）。 | Claude Sonnet 5.5（施工） | 一次性 `postgres:16.14` 上 `scripts/run-article-publish-batch-postgres-verification.sh` 零跳过通过（9 例：场景 A–F + 执行时已非草稿跳过 + 入队边界）；字典 drift 为 0 |
+| 2026-10-08 | 收益看板·账号级每日汇总（后端：数据层 + worker 同步 + 读服务；工作树 `cps海阅/novel-revenue-dashboard`，分支 `feat/novel-revenue-dashboard`，基线 `01aabe1`） | 一条新迁移 `20261008120000_revenue_account_level_dashboard`：新增四表 `revenue_sync_scope` / `revenue_sync_batch` / `revenue_raw_snapshot` / `revenue_daily_stat`（§3.7、§5 第 24 条），只新增不改旧表。`infra/postgres/grants.sql`：`worker_app` 四表 `SELECT, INSERT, UPDATE`，`web_app` / `analyst_ro` 四表 `SELECT`，`scheduler_app` 无；入队沿用 web 既有 `generic_task` / `operation_audit` 权限。字典新增 84 条（4 表 + 54 字段 + 26 物理对象：4 主键、6 外键、4 唯一索引、4 普通索引、8 CHECK），`recordCount` 1242 → 1326、`activeCount` 1172 → 1256，表数 53 → 57；写死的计数同步更新（`scripts/check-database-dictionary-drift.mjs` 静态 / 真库两处、`tests/backend/database/p1-05b-static.test.ts`、`tests/backend/database/p1-06-static.test.ts`、`tests/backend/tagging/p2-06-5-governance.test.ts`、`scripts/run-x9-postgres-verification.sh`），drift 为 0。新增任务类型 `moboreader.revenue_sync.v1`（只在主通道白名单；`maxAttempts: 1`；不设定时任务），`generic_task.params` / `generic_task_item.payload` 的键 `{channelAccountId, projectType: 1, beginDate, endDate, requestedBy}` 落在既有 JSONB 列内部，不新增字典记录。真实库证据：新增运行器 `scripts/run-revenue-dashboard-postgres-verification.sh`（`worker_app` 跑 protectedWrite 全链路含重复同步幂等、`web_app` 跑读服务与入队、`web_app` 对四表 INSERT 被拒）。 | Claude Sonnet 5.5（施工） | 已实现，待复核与发布 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
@@ -660,3 +712,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 ### 2026-10-05 Worker 健康检查心跳索引
 
 增量迁移 `20261005100000_worker_health_partial_indexes` 为 `generic_task_item` 与 `channel_sync_task_item` 各新增一个部分索引 `(heartbeat_at) WHERE heartbeat_at IS NOT NULL`，服务 `GET /api/health/worker` 的"最近心跳"查询（旧写法整表顺序扫描，缓存冷时越过 1500 ms 探测预算而误报 503）。过期租约查询由初始迁移已有的 `*_expired_lease_idx` 覆盖，未新增索引。只加索引：不改列、CHECK、FK、数据，`grants.sql` 与 Prisma 模型字段均无变化。字典新增两条 `migration_sql` `partial_index` 记录，recordCount=1242、activeCount=1172、indexCount=226，53 张表不变。本改动已实现，待发布。
+
+### 2026-10-08 收益看板（账号级每日汇总）
+
+增量迁移 `20261008120000_revenue_account_level_dashboard` 新增 `revenue_sync_scope` / `revenue_sync_batch` / `revenue_raw_snapshot` / `revenue_daily_stat` 四张表（实体目录见 §3.7，物理约束见 §5 第 24 条，状态真源见 §4）。`grants.sql`：`worker_app` 四表 `SELECT, INSERT, UPDATE`，`web_app` / `analyst_ro` 四表 `SELECT`。字典 recordCount 1242 → 1326、activeCount 1172 → 1256，表数 53 → 57，drift 为 0。网文 `projectType = 1` 固定写入，不带 `projectType` 的上游请求会返回网文 + 短剧合计，所以任何新增调用点都不得绕过 `buildNovelGetReportBody`。
