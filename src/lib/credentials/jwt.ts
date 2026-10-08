@@ -42,3 +42,56 @@ export function validateCredentialJwtLocally(token: string, now = new Date()): L
     return { status: "invalid", expiresAt: null };
   }
 }
+
+/**
+ * 凭证口径：这条凭证是不是「达人（Star）」口径。
+ *
+ * 背景（CPS 7 月“87 倍事故”的教训）：畅读上游有两类登录态——
+ *   - 达人凭证：JWT payload 里带 `StarId`（海阅当前 active 凭证实测：`StarId=335788`、`RoleType=Star`、
+ *     `UserId` 为 32 位十六进制）。用它查收益，得到的是这个达人名下的数字；
+ *   - 聚合账号凭证：没有 `StarId`、有 `Url`、`UserId` 为纯数字。用它查收益，会把整个主体的收益
+ *     混进来，数字比真实值大几十倍，而且看起来“一切正常”。
+ * 所以收益同步在发任何上游请求之前先过这道闸：必须存在 key 以 `StarId` 结尾（大小写不敏感，
+ * 兼容 `http://…/claims/StarId` 这类带命名空间的写法）的 claim，值非空、不等于 `-1`，且形状合理
+ * （1–32 位字母数字 / 下划线 / 连字符，会原样落进 `revenue_sync_batch.upstream_star_id`）。
+ *
+ * 只解码 payload，不验签、不看过期（过期由 `validateCredentialJwtLocally` 负责）。
+ * **不返回、不记录 token 或除 StarId 以外的任何 claim 值**；失败时只有一个稳定原因码。
+ */
+export type StarScopeResult =
+  | { ok: true; starId: string }
+  | { ok: false; reason: "credential_not_star_scope" };
+
+const STAR_SCOPE_FAILURE: StarScopeResult = Object.freeze({ ok: false, reason: "credential_not_star_scope" } as const);
+const STAR_ID_SHAPE = /^[A-Za-z0-9_-]{1,32}$/;
+
+function decodeJwtPayloadObject(token: string): Record<string, unknown> | null {
+  const parts = token.trim().split(".");
+  if (parts.length !== 3 || parts.some((part) => !part)) return null;
+  try {
+    const padded = parts[1].padEnd(parts[1].length + ((4 - (parts[1].length % 4)) % 4), "=");
+    const payload: unknown = JSON.parse(
+      Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
+    );
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readStarScope(token: string): StarScopeResult {
+  const payload = decodeJwtPayloadObject(token);
+  if (!payload) return STAR_SCOPE_FAILURE;
+  for (const [key, value] of Object.entries(payload)) {
+    if (!/starid$/i.test(key)) continue;
+    const text =
+      typeof value === "string" ? value.trim()
+        : typeof value === "number" && Number.isFinite(value) ? String(value)
+          : "";
+    if (!text || text === "-1" || !STAR_ID_SHAPE.test(text)) continue;
+    return { ok: true, starId: text };
+  }
+  return STAR_SCOPE_FAILURE;
+}
