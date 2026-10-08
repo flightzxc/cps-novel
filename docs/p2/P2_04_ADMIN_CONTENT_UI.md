@@ -137,7 +137,7 @@ public reading contract。
 
 ### 需要配置的环境变量
 
-四项默认全空（与 `promo:claim` / `revenue:view` 一致），未配置即无人可读：
+四项默认全空（与 `promo:claim` 一致；`revenue:view` 已于 2026-10-08 改为默认授予 `super_admin`，不在此列），未配置即无人可读：
 
 ```
 CONTENT_VIEW_ROLES=       CONTENT_VIEW_USER_IDS=

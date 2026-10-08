@@ -240,6 +240,7 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 - **写入方只有 worker**：任务 `moboreader.revenue_sync.v1`（只在主通道白名单；不设定时任务）把 scope upsert、batch、raw snapshot upsert、daily stat upsert 全部放进 `protectedWrite`（finalize 事务，带租约围栏）；失败路径同样在 `protectedWrite` 里写一条 `failed` 批次（脱敏错误信息），保证页面看得到失败原因。web 侧只读，且**不读取、不解密凭证密文**。
 - **授权**：`worker_app` 四表 `SELECT, INSERT, UPDATE`（无 DELETE）；`web_app`、`analyst_ro` 四表只 `SELECT`；`scheduler_app` 无权限；入队沿用 web 既有的 `generic_task` / `generic_task_item` / `operation_audit` 权限，不新增。
   `raw_payload` 是上游汇总统计行（不含推广码、链接或凭证），四张表整体按 `S1_INTERNAL` 登记。
+- **后台能力位**：`/revenue` 数据看板及其手动同步由 `revenue:view` 把关（`src/lib/auth/capabilities.ts`）——Owner 2026-10-08 决定**默认授予 `super_admin`**（团队两人，不逐人授权），**仍要求 2FA**；`REVENUE_VIEW_ROLES`（非空时取代默认角色集）/ `REVENUE_VIEW_USER_IDS`（按身份追加）可在部署时覆盖，仅透传给 web，不进 worker / worker-light / scheduler。这是应用层授权，与上一条的数据库角色授权相互独立。
 
 ## 4. 状态 CHECK 真源
 

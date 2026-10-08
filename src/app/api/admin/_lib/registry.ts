@@ -376,8 +376,8 @@ export const ADMIN_SECURITY_ACTIONS = [
 /**
  * 海阅账号级小说收益看板（`/revenue`）的手动同步触发。
  *
- * 一个 action、一个能力位：`revenue:view`（`requiresTwoFactor: true`，默认无人拥有，只能靠
- * `REVENUE_VIEW_ROLES` / `REVENUE_VIEW_USER_IDS` 显式授予）。同步是写操作（建一条
+ * 一个 action、一个能力位：`revenue:view`（`requiresTwoFactor: true`，默认授予 `super_admin`——
+ * Owner 2026-10-08 决定；`REVENUE_VIEW_ROLES` / `REVENUE_VIEW_USER_IDS` 可覆盖 / 追加）。同步是写操作（建一条
  * `generic_task` + 审计），所以 `mutation: true`——同源校验、限流、请求标识都生效；
  * action 体里再走一次 `requireFreshAdminServiceMutation(…, "revenue:view", …)`，与
  * `tests/ui/admin-actions-capability.test.ts` 核对"动作体要的能力位 === 这里登记的"。

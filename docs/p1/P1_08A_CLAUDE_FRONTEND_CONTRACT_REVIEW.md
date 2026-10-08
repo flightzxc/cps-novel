@@ -115,7 +115,7 @@ Auth 内核的**安全形态**是扎实的，Owner 本轮条件确实闭环。�
 | --- | --- |
 | capability 不存在 | `!(capability in ADMIN_CAPABILITY_CONFIG)` |
 | 存在但当前 Session 未完成 2FA | `hasAdminCapability(...) && !twoFactorCompleted` |
-| 默认 disabled | 无 env 覆盖且 `defaultRoles.length === 0`（`promo:claim`、`revenue:view` 属此类） |
+| 默认 disabled | 无 env 覆盖且 `defaultRoles.length === 0`（`promo:claim` 属此类；`revenue:view` 原属此类，2026-10-08 起默认授予 `super_admin`，不再属此类） |
 | 可执行 | `hasAdminCapability(...) && twoFactorCompleted` |
 
 **关键约束**：`hasAdminCapability` 读 `process.env`，客户端读不到。因此四态**必须**由服务端算好、经 Capability DTO 下发。这也是 §7 变更申请里 Capability DTO 必须是四态枚举而非布尔的原因。

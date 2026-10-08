@@ -15,7 +15,7 @@
 - 五个存储端口与显式 `TEST_ONLY / NOT_PRODUCTION_PERSISTENCE` 内存适配器。
 - Session token hash、2h idle、24h absolute、15min touch、revoke/status/sessionVersion fail-closed。
 - TOTP、AES-256-GCM TOTP secret、scrypt 恢复码、5min/5-attempt challenge、5次/15min 登录失败锁定。
-- 四项 capability；promo/revenue 默认 disabled；四项均要求 Session 已完成 2FA。
+- 四项 capability；promo/revenue 默认 disabled；四项均要求 Session 已完成 2FA。（后续变更：`revenue:view` 于 2026-10-08 经 Owner 决定改为默认授予 `super_admin`，仍要求 2FA；`promo:claim` 仍默认 disabled。）
 - 14 个 Admin page roots、空 API/Action registry、未登记 404、Route/Action guards、service mutation 二次授权。
 - Same-origin、UUID mutation request id、安全 cookie 和 rate-limit port。
 - Credential metadata/enqueue/redacted-result 纯契约；Web/Scheduler 无 Credential 执行或解密入口。

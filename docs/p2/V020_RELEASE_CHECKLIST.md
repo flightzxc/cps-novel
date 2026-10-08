@@ -165,7 +165,8 @@
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
       `moboreader.revenue_sync.v1`（收益看板的手动同步，调用上游 GetReport）只在主通道白名单；
-      它没有 feature flag，由 `revenue:view` 能力位（默认无人拥有）控制谁能触发。
+      它没有 feature flag，由 `revenue:view` 能力位控制谁能触发（Owner 2026-10-08 决定：默认授予 `super_admin`，仍要求 2FA；
+      `REVENUE_VIEW_ROLES` / `REVENUE_VIEW_USER_IDS` 可覆盖 / 追加）。
 - [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist
       四处登记（PR6 fix lane A 前，Scheduler 一项实际未登记——`scheduler/index.ts` 的
       `SCHEDULES` 恒为空数组、`enqueueHomeCarouselCron` 零调用者，本行当时属于文档失实；

@@ -76,8 +76,10 @@ describe("capability contract", () => {
   });
 
   it("renders an unconfigured capability as denied rather than usable", () => {
-    // promo:claim and revenue:view ship with an empty default role list, so
-    // hasAdminCapability returns false until an env allowlist is configured.
+    // promo:claim ships with an empty default role list, so hasAdminCapability
+    // returns false until an env allowlist is configured. (revenue:view used to
+    // be in this group; Owner 2026-10-08 opened it to super_admin by default,
+    // still behind 2FA -- see tests/backend/auth/session-capabilities.test.ts.)
     expect(
       projectAdminCapability({
         capability: "promo:claim",
