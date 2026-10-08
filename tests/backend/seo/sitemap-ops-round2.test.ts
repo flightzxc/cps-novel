@@ -25,8 +25,9 @@ import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 /**
  * 运营第二轮 · 站点地图（Owner 2026-09-30，运营《小说站调整V2.docx》）：
  *
- * 1. 空语种不出站点地图——没有公开小说、（博客开启时）也没有公开博客文章的语种，总索引不列它
- *    的任何分片（包括 mainpage），直接访问它的分片网址返回 404；有内容的语种照常。
+ * 1. 空语种不出站点地图——没有公开小说的语种，总索引不列它的 mainpage / novelpage 分片，直接访问
+ *    返回 404；有书的语种照常。（PN-09，Owner 2026-10-08：此前"空"还要求没有公开博客文章，
+ *    导致只有博客的语种仍把一个 noindex 的首页写进站点地图，现收回到只看书；blogpage 不变。）
  * 2. 分类页并入 mainpage——不再有 categorypage 分片；旧 `site_categorypage_<语种>[_N].xml`
  *    308 到 `site_mainpage_<语种>.xml`（语种没有内容时 404）。
  * 3. 免费可读的章节页写进 novelpage 分片，紧跟在所属小说后面。
@@ -297,13 +298,18 @@ describe("empty locales are not in the sitemap (运营 V2)", () => {
     expect(await enHome.text()).toContain(`<loc>${SITE}</loc>`);
   });
 
-  it("a locale whose only content is a public blog post is listed (mainpage + blogpage) when the blog is on, and is not when the blog is off", async () => {
+  it("PN-09: a locale whose only content is a public blog post gets its blogpage but NO mainpage (its home is noindex, so it must not be in the sitemap); blog off -> nothing at all", async () => {
+    // 运营 V2（2026-09-30）曾规定"只有博客的语种 mainpage + blogpage 都列"。PN-09（Owner 2026-10-08：
+    // 没有书时连入口也隐藏）把"有内容"收回到"有书"：只有博客的语种首页 noindex，不能留在站点地图里。
+    // 博客文章页本身有内容、不受空语种影响，blogpage 照旧。
     const jaPost = blogRow({ id: "b-ja", locale: "ja", slug: "kansou" });
 
     const rootOn = await temporaryRoot();
     const on = await generateInto(rootOn, makeDb({ blogs: [jaPost] }), ENV_BLOG_ON);
-    expect(on.listed.sort()).toEqual(["sitemap/site_blogpage_ja.xml", "sitemap/site_mainpage_ja.xml"]);
-    expect((await get("site_mainpage_ja.xml")).status).toBe(200);
+    expect(on.listed.sort()).toEqual(["sitemap/site_blogpage_ja.xml"]);
+    expect((await get("site_blogpage_ja.xml")).status).toBe(200);
+    expect((await get("site_mainpage_ja.xml")).status).toBe(404);
+    expect(on.indexXml).not.toContain("site_mainpage_ja.xml");
 
     // Blog off: the post does not count as content — the locale has nothing, and the whole release has
     // no public URL at all, so generation refuses to publish an empty sitemap (existing fail-closed guard).
@@ -311,6 +317,18 @@ describe("empty locales are not in the sitemap (运营 V2)", () => {
     await expect(generateInto(rootOff, makeDb({ blogs: [jaPost] }), ENV_BLOG_OFF)).rejects.toThrow(
       /No sitemap child files were generated/,
     );
+  });
+
+  it("PN-09: a locale with a book AND a blog post keeps its mainpage (the book is what makes it non-empty)", async () => {
+    const jaPost = blogRow({ id: "b-ja", locale: "ja", slug: "kansou" });
+    const root = await temporaryRoot();
+    const { listed } = await generateInto(root, makeDb({ articles: [koBook], blogs: [jaPost] }), ENV_BLOG_ON);
+    // ko has a book -> mainpage + novelpage; ja only a post -> blogpage only.
+    expect(listed.sort()).toEqual([
+      "sitemap/site_blogpage_ja.xml",
+      "sitemap/site_mainpage_ko.xml",
+      "sitemap/site_novelpage_ko.xml",
+    ]);
   });
 
   it("uses the same visibility judgement as the shards: a locale whose only book is draft/unpublished/takedown/hidden-promo counts as empty", async () => {

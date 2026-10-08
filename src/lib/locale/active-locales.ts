@@ -30,17 +30,38 @@
  * `findMany` + per-row JS recheck. This is a deliberately looser bar than
  * `sitemap.ts`'s own per-locale `isVisibleCandidate` (which additionally
  * re-verifies `isPromoReady`'s exact whitespace-trim semantics per row) —
- * `getActiveLocales()` only answers "is this locale worth showing at all"
- * (gates the LocaleSwitcher entry — its sole consumer, per this round's §1
- * 清单① evidence pass; sitemap/hreflang/IndexNow stay on the STATIC layer,
- * `SITE_LOCALES`, exactly like their CPS counterparts do — see
- * `docs/governance/port-registry.md`'s P4 section, 清单① note: "CPS 用静态集
- * 的地方海阅不得换动态集"), never "which exact URLs exist". A locale
- * that clears this coarser bar but turns out to have zero rows that also
- * pass the row-level recheck simply renders an empty listing/empty sitemap
- * shard for that locale — a valid, already-anticipated state (see
- * `docs/governance/port-registry.md`'s P4 section, "cs 无内容" test case),
- * never a dead link or a 404.
+ * `getActiveLocales()` only answers "is this locale worth showing at all",
+ * never "which exact URLs exist".
+ *
+ * PN-09 (Owner 2026-10-08: 没有书时连入口也隐藏) — THIS SET IS ALSO THE ONE AND ONLY
+ * DEFINITION OF "EMPTY LOCALE": a locale not in it (`isEmptyLocale`,
+ * `./empty-locale.ts`) has no publicly-visible published book. The same set
+ * now drives, besides the LocaleSwitcher entry: `robots: noindex,follow` and "no
+ * hreflang at all" on that locale's home / `/browse` / `/blog` list pages, and the
+ * hreflang cluster of those pages for every other locale (only active locales
+ * are listed, `src/lib/seo/empty-locale-seo.ts`). This supersedes the earlier
+ * "sitemap/hreflang stay on the STATIC layer, `SITE_LOCALES`" note (L10N P4,
+ * `docs/governance/port-registry.md`'s P4 section, 清单① note: "CPS 用静态集的地方
+ * 海阅不得换动态集") for those surfaces only — CPS never has an empty locale,
+ * so CPS never needed this; the deviation is recorded in that same section and
+ * in `docs/adr/ADR-PN09-EMPTY-LOCALE-HIDDEN.md`. Route reachability does NOT
+ * change: a registered locale is never a 404 for being empty (`/cs` stays HTTP
+ * 200, just noindex).
+ *
+ * The sitemap is NOT a consumer of this function (the refresh worker has no
+ * Next.js cache context): its `mainpage` gate reads `loadVisible(locale)`
+ * built from the SAME `activePublicArticleWhere` fragment imported above, plus
+ * one row-level recheck. So "sitemap lists the locale's home" ⊆ "locale is
+ * active" always holds (exact ⊆ coarse) — a locale can be active yet absent
+ * from the sitemap (only whitespace-only promo links / only `en` without
+ * books), never the reverse, and the sitemap never lists a noindex home.
+ *
+ * Accepted approximation, unchanged from before: a locale that clears this
+ * coarser bar but has zero rows passing the row-level recheck (all promo URLs
+ * whitespace-only) stays active — indexable, in the menu, absent from the
+ * sitemap — until a real book appears. No such data exists in practice and the
+ * failure direction is the safe one (an extra visible locale, never a hidden
+ * populated one).
  */
 import { unstable_cache } from "next/cache";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -96,13 +117,16 @@ export async function queryActiveLocales(
 
 /**
  * The real, cached, production entry point — mirrors CPS's own
- * `getActiveLocales()` signature (no arguments) exactly. Consumers: only
+ * `getActiveLocales()` signature (no arguments) exactly. Consumers (all through
+ * `loadActiveLocales()` in `src/app/_lib/public-load.ts`, the request-deduped
+ * wrapper — never call this from a page directly):
  * `src/lib/site/chrome.ts`'s `loadPublicChrome` (→ `SiteChrome.activeLocales`
- * → `SiteHeader` → `LocaleSwitcher`), matching CPS's own single real
- * consumer (`site-header.tsx`) per `docs/governance/port-registry.md`'s P4
- * §1 清单①. Do not add a second consumer here without first checking that
- * CPS's own equivalent boundary also reads the dynamic layer, not the
- * static one — see this repo's "CPS 用静态集的地方不得换动态集" discipline.
+ * → `SiteHeader` → `LocaleSwitcher`, CPS's own single consumer
+ * `site-header.tsx`); and, since PN-09, the home / browse / blog-list metadata
+ * builders (`src/app/_pages/{home,browse,blog-list}.tsx` → `emptyLocaleRobots` /
+ * `buildActiveLocaleAlternates`) — a deliberate deviation from CPS's "static set
+ * outside the header", see the module header. Do not add another decision
+ * consumer, and never re-derive "does this locale have books" from a second query.
  *
  * 2026-09-30 one bounded, cost-only exception (not a second decision
  * consumer): `src/app/_pages/category.tsx`'s `hreflangLocalesFor` uses this

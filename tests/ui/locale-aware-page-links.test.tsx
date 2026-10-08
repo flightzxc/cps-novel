@@ -112,6 +112,8 @@ beforeEach(() => {
   process.env.SITE_URL = "https://example.test";
   process.env.FEATURE_ARTICLE_BLOG = "true";
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
+  // PN-09：首页 / 书库 / 博客列表的元数据按活跃语种判断"空语种"，`HomeBody` 等也会构造它——夹具必须给出活跃语种。
+  vi.mocked(publicLoad.loadActiveLocales).mockResolvedValue(["en", "es"] as never);
   loadHomeNovels.mockResolvedValue([card("1")]);
   loadHomeCarousel.mockResolvedValue([]);
   loadPublicCategories.mockResolvedValue([]);

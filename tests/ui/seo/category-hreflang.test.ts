@@ -247,6 +247,7 @@ describe("category / collection canonical carry the page's own locale prefix", (
       items: [],
       siteName: "Novel",
       defaultOgImage: "/og.jpg",
+      activeLocales: ["en", "ko"],
     };
     expect(buildCollectionSeoMeta(data, 1, "ko").canonical).toBe(`${ORIGIN}/ko/browse`);
     expect(buildCollectionSeoMeta(data, 2, "ko").canonical).toBe(`${ORIGIN}/ko/browse?page=2`);

@@ -50,3 +50,14 @@ export function useLocale(): SiteLocale {
   }
   return ctx.locale;
 }
+
+/**
+ * Same as `useLocale()`, but returns `null` instead of throwing when there is no
+ * `MessagesProvider` above (PN-09). `LocaleSwitcher` needs the current locale to decide
+ * whether it renders at all, and that decision is made before — and must not depend on —
+ * the hooks that do require a provider/App Router context (its early return exists so that
+ * `SiteHeader`/`SiteShell` rendered without either, e.g. in tests or dev-preview, stay inert).
+ */
+export function useOptionalLocale(): SiteLocale | null {
+  return useContext(MessagesContext)?.locale ?? null;
+}

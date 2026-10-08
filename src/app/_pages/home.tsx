@@ -68,6 +68,7 @@ function homeSeoData(
   locale: SiteLocale,
   settings: Awaited<ReturnType<typeof loadChrome>>["settings"],
   novels: Awaited<ReturnType<typeof loadHomeNovels>>,
+  activeLocales: readonly SiteLocale[],
 ) {
   const t = getPublicT(locale);
   const useSettingsMetadata = locale === PUBLIC_SITE_LOCALE;
@@ -80,16 +81,24 @@ function homeSeoData(
     defaultOgImage: settings.defaultOgImage.trim() || null,
     // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
     fallbackCoverUrl: novels[0]?.coverUrl ?? null,
+    // PN-09：空语种（不在活跃语种集合里）输出 noindex 且不声明 hreflang；hreflang 只列活跃语种。
+    // 集合来自 `loadActiveLocales()`（与语言菜单同一份、同一请求内去重），不另查数据库。
+    activeLocales,
   };
 }
 
 export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
   const categories = await loadPublicCategories(locale);
-  const [{ settings }, novels] = await Promise.all([
+  const [{ settings }, novels, activeLocales] = await Promise.all([
     loadChrome(locale, "home", categories),
     loadHomeNovels(locale),
+    loadActiveLocales(),
   ]);
-  const seo = generateSeoMeta({ entity: "home", locale, data: homeSeoData(locale, settings, novels) });
+  const seo = generateSeoMeta({
+    entity: "home",
+    locale,
+    data: homeSeoData(locale, settings, novels, activeLocales),
+  });
   // 🔴 `title.absolute`，不是字符串：根布局有 `%s | 站点名` 模板（TKD 对齐 CPS，
   // Owner 2026-09-30），首页标题不套模板（CPS 首页同样不带后缀）。英文首页与根布局
   // 同层、本来就不套；`/ja` 等非英语首页隔了一层 `[locale]` 布局，会被 Next 16.1.6
@@ -108,7 +117,11 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
   ]);
   // 与 `buildHomeMetadata` 同一个 `homeSeoData`：这里的 `seo` 只取 JSON-LD（`seo.other`），不输出
   // <title>/<meta>，但 WebSite JSON-LD 的 description 必须与 meta 一致（复核 A3）。
-  const seo = generateSeoMeta({ entity: "home", locale, data: homeSeoData(locale, settings, novels) });
+  const seo = generateSeoMeta({
+    entity: "home",
+    locale,
+    data: homeSeoData(locale, settings, novels, activeLocales),
+  });
 
   return (
     <>

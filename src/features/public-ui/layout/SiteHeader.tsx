@@ -37,8 +37,9 @@ export function SiteHeader({
   overlay?: boolean;
   /**
    * L10N P4：动态层 `getActiveLocales()` 结果，透传给 `LocaleSwitcher`。
-   * 缺省按空数组处理——`LocaleSwitcher` 在 `activeLocales.length <= 1` 时
-   * 不渲染任何 DOM，空数组与"只有 en 一个"效果相同（都隐藏切换器）。
+   * 缺省按空数组处理——`LocaleSwitcher` 在"活跃集合 ∪ 当前语种"不足两项时
+   * 不渲染任何 DOM，空数组与"只有 en 一个（且当前就是 en）"效果相同（都隐藏切换器）。
+   * 空语种不在这个集合里，菜单不会列出它们（PN-09）；只有读者当前正在看的那个语种例外。
    */
   activeLocales?: readonly SiteLocale[];
 }) {
@@ -129,7 +130,7 @@ export function SiteHeader({
             </nav>
 
             {/* 语言入口。只有在确实存在多个活跃语种时才渲染任何 DOM
-                （`LocaleSwitcher` 组件自身在 `activeLocales.length <= 1`
+                （`LocaleSwitcher` 组件自身在"活跃集合 ∪ 当前语种"不足两项
                 时返回 null，L10N P4：活跃集由动态层 `getActiveLocales()`
                 决定，不再是静态白名单）。这是本站唯一的语种切换入口——
                 没有第二个通过 `navItems` 注入的旁路（WO-2 review：移除了

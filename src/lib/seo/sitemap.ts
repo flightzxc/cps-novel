@@ -510,17 +510,26 @@ export function createSitemapFamilyBuilder(
   };
 
   /**
-   * 运营 V2（Owner 2026-09-30，NOVEL_ONLY）：一个语种"有内容"= 至少一本公开可见的小说，
-   * 或者（博客开启时）至少一篇公开可见的博客文章。判定直接读各分片自己用的
-   * `loadVisible` / `loadVisibleBlog`（同一套公开可见判定与同一份缓存），不另写一套。
-   * 没内容的语种不出任何分片（包括 mainpage）；novelpage / blogpage 本来就在空集时返回
-   * `[]`，这里补上的是 mainpage（此前每个已登记语种恒有一个只含首页的 mainpage 分片）。
-   * 默认语种 `en` 按同一规则处理，没内容也不列。
+   * 一个语种的 mainpage（首页 + 分类页）只在它有书时才出。
+   *
+   * 🔴 PN-09（Owner 2026-10-08：没有书时连入口也隐藏）修订了运营 V2（2026-09-30）的口径：
+   * V2 把"有内容"定为"至少一本公开可见的小说，或者（博客开启时）至少一篇公开可见的博客文章"，
+   * 于是只有博客的语种仍会把首页写进站点地图。但这个首页现在是 noindex 的（没有书 = 空语种，
+   * 见 `@/lib/locale/empty-locale`、`@/lib/seo/empty-locale-seo`），站点地图里列一个
+   * noindex 网址会在 Search Console 报"提交的网址带有 noindex"。所以 mainpage 的判定收回到
+   * 只看书。
+   *
+   * 这仍是**同一个**"有书"定义，不是第二份：`loadVisible` 读的 `articleSitemapWhere` 就是
+   * `activePublicArticleWhere`——`getActiveLocales()`（语言菜单与 noindex 的依据）用来做
+   * `groupBy` 的那个同名片段；这里只是在其后多做一道逐行复核（`isVisibleCandidate`，例如纯空白的
+   * 推广链接），所以"站点地图有首页"⊆"活跃语种"，不会出现"站点地图列了、页面却 noindex"。
+   * 默认语种 `en` 仍按同一规则处理，没书也不列。
+   *
+   * 只有博客的语种：novelpage 本来就空，mainpage 现在也不出，blogpage 不变（博客文章页本身
+   * 有内容、仍可收录——它们的 robots 不受空语种影响）。
    */
-  const localeHasPublicContent = async (locale: SiteLocale): Promise<boolean> => {
-    if ((await loadVisible(locale)).length > 0) return true;
-    return isArticleBlogEnabled(env) && (await loadVisibleBlog(locale)).length > 0;
-  };
+  const localeHasPublicBooks = async (locale: SiteLocale): Promise<boolean> =>
+    (await loadVisible(locale)).length > 0;
 
   return async ({ type, locale }) => {
     if (type === "blogpage") {
@@ -548,7 +557,7 @@ export function createSitemapFamilyBuilder(
 
     // mainpage：首页 → 该语种有公开内容的分类页（并入自原 categorypage，CPS v8.5.1
     // `src/lib/sitemap.ts` 330-367 行同一顺序：首页在前、分类页在后）。
-    if (!(await localeHasPublicContent(locale))) return [];
+    if (!(await localeHasPublicBooks(locale))) return [];
     const candidates = await loadVisible(locale);
     const settings = await getSiteSetting(db, { ttlMs: 0 });
     const homeLastmod = latestDate([

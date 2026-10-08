@@ -69,7 +69,7 @@ async function loadBlogListPage(locale: SiteLocale, rawPage: string | string[] |
   // identical fix.
   if (requested > paged.totalPages) return null;
 
-  return { settings, chrome, paged };
+  return { settings, chrome, paged, activeLocales };
 }
 
 export async function buildBlogListMetadata(
@@ -98,6 +98,8 @@ export async function buildBlogListMetadata(
       items: loaded.paged.posts.map((post) => ({ name: post.title, url: post.href })),
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
+      // PN-09：空语种输出 noindex 且不声明 hreflang；hreflang 只列活跃语种。
+      activeLocales: loaded.activeLocales,
     },
   });
   return toNextMetadata(seo);
@@ -126,6 +128,7 @@ export async function BlogListBody({
       items: loaded.paged.posts.map((post) => ({ name: post.title, url: post.href })),
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
+      activeLocales: loaded.activeLocales,
     },
   });
 

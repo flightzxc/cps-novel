@@ -204,3 +204,118 @@ describe("category page URLs (now inside the mainpage shard) carry the shard's o
     ]);
   });
 });
+
+/**
+ * PN-09（Owner 2026-10-08：没有书时连入口也隐藏）：站点地图一侧。
+ *
+ * 站点地图本来就不为"没有书"的语种出分片（上面的用例）。本组用例补两件事：
+ *  - 混合场景（ko、ru 有书，cs 等 13 个语种没有）下，三个家族 × 15 个语种逐个核对：
+ *    空语种一个条目都没有，总索引里一个 `_<空语种>` 分片都没有，首页网址不出现；
+ *  - 首页 / 分类页的 mainpage 只认"有书"。此前（运营 V2）还承认"有公开博客文章"，于是只有博客的
+ *    语种会把一个现在 noindex 的首页写进站点地图；现在这种语种没有 mainpage（博客文章页的 blogpage 照旧）。
+ */
+describe("PN-09: the sitemap never lists an empty locale's home or any other entry", () => {
+  const SETTING = {
+    siteName: "Fixture",
+    siteDescription: "",
+    homeMetaTitle: "",
+    homeMetaDescription: "",
+    defaultOgImage: "",
+    googleSearchConsoleVerification: "",
+    footerCopyrightText: "",
+    footerDisclaimerText: "",
+    friendLinks: [],
+    indexNowHost: "",
+    indexNowKey: "",
+    indexNowKeyLocation: "",
+    ga4MeasurementId: null,
+    yandexVerification: "",
+    yandexMetricaId: null,
+    updatedAt: new Date("2026-08-04T00:00:00.000Z"),
+  };
+
+  function mixedDb() {
+    const books: Record<string, ReturnType<typeof candidate>> = {
+      ko: candidate({ id: "a-ko", locale: "ko", slug: "deungdae", publicPageShortId: "kor12345" }),
+      ru: candidate({ id: "a-ru", locale: "ru", slug: "mayak", publicPageShortId: "rus12345", title: "Маяк" }),
+    };
+    const blogRow = {
+      id: "b-cs",
+      locale: "cs",
+      slug: "o-knihach",
+      title: "O knihách",
+      status: "published",
+      articleType: "blog_article",
+      seoVisibility: "public",
+      deletedAt: null,
+      updatedAt: new Date("2026-08-05T12:30:00.000Z"),
+    };
+    return {
+      article: {
+        findMany: vi.fn(async ({ where }: { where: { AND: Array<Record<string, unknown>> } }) => {
+          const locale = String(where.AND.find((clause) => "locale" in clause)?.locale);
+          if (JSON.stringify(where).includes('"articleType"')) return locale === "cs" ? [blogRow] : [];
+          return books[locale] ? [books[locale]] : [];
+        }),
+      },
+      novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      siteSetting: { findUnique: vi.fn().mockResolvedValue(SETTING) },
+    };
+  }
+
+  it("ko/ru have books; every one of the other 13 registered locales (cs included) yields no mainpage and no novelpage entry, with the blog both off and on", async () => {
+    process.env.SITE_URL = "https://novel.example";
+    const { SITE_LOCALES } = await import("@/lib/locale/locale-canonical");
+    for (const blog of ["false", "true"]) {
+      const build = createSitemapFamilyBuilder(mixedDb() as never, { ...process.env, FEATURE_ARTICLE_BLOG: blog });
+      for (const locale of SITE_LOCALES) {
+        const hasBook = locale === "ko" || locale === "ru";
+        for (const type of ["mainpage", "novelpage"] as const) {
+          const files = await build({ type, locale });
+          expect(files.length > 0, `${type}/${locale}/blog=${blog}`).toBe(hasBook);
+        }
+      }
+    }
+  });
+
+  it("a locale with only a public blog post (cs) has NO mainpage — its noindex home must not be in the sitemap — but its blog posts stay in blogpage", async () => {
+    process.env.SITE_URL = "https://novel.example";
+    const build = createSitemapFamilyBuilder(mixedDb() as never, { ...process.env, FEATURE_ARTICLE_BLOG: "true" });
+    expect(await build({ type: "mainpage", locale: "cs" })).toEqual([]);
+    expect(await build({ type: "novelpage", locale: "cs" })).toEqual([]);
+    const blog = await build({ type: "blogpage", locale: "cs" });
+    expect(blog.flatMap((file) => file.entries.map((entry) => entry.loc))).toEqual(["https://novel.example/cs/blog/o-knihach"]);
+  });
+
+  it("the generated release: no URL anywhere is an empty locale's home (/cs, /de…); the non-empty homes (/ko, /ru) are listed", async () => {
+    process.env.SITE_URL = "https://novel.example";
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sitemap-pn09-"));
+    temporaryRoots.push(root);
+    const result = await generateStaticSitemaps({
+      buildFamily: createSitemapFamilyBuilder(mixedDb() as never, { ...process.env, FEATURE_ARTICLE_BLOG: "true" }),
+      rootDir: root,
+      runId: "pn09",
+    });
+    const releaseDir = path.join(root, "releases", "pn09");
+    const locs: string[] = [];
+    for (const name of result.manifest.sitemapFiles) {
+      const body = await fs.readFile(path.join(releaseDir, name), "utf-8");
+      locs.push(...Array.from(body.matchAll(/<loc>([^<]+)<\/loc>/g)).map((match) => match[1]!));
+    }
+    expect(locs).toContain("https://novel.example/ko");
+    expect(locs).toContain("https://novel.example/ru");
+    // 空语种的首页：`/cs`、`/de` 等一律不在。
+    expect(locs).not.toContain("https://novel.example/cs");
+    expect(locs).not.toContain("https://novel.example/de");
+    expect(locs.filter((loc) => /^https:\/\/novel\.example\/(cs|de|es|fr|ja|pl|ar|id|th|vi|pt-BR|zh-Hant)(\/|$)/.test(loc))).toEqual([
+      // 唯一例外是 cs 的博客文章页本身（blogpage），不是首页。
+      "https://novel.example/cs/blog/o-knihach",
+    ]);
+    const indexXml = await fs.readFile(path.join(releaseDir, "sitemap.xml"), "utf-8");
+    expect(indexXml).not.toContain("site_mainpage_cs.xml");
+    expect(indexXml).not.toContain("site_novelpage_cs.xml");
+    expect(indexXml).toContain("site_mainpage_ko.xml");
+    expect(indexXml).toContain("site_mainpage_ru.xml");
+  });
+});

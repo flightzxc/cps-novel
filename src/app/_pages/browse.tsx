@@ -62,7 +62,7 @@ async function loadBrowsePage(
       loadChrome(locale, "browse", undefined, activeLocales),
       getPublicCategoryPage(prisma, locale, category, requested),
     ]);
-    return result ? { settings, chrome, paged: result, category: result.category } : null;
+    return result ? { settings, chrome, paged: result, category: result.category, activeLocales } : null;
   }
 
   const [{ settings, chrome }, cards] = await Promise.all([
@@ -81,7 +81,7 @@ async function loadBrowsePage(
   // needed the fix.
   if (requested > paged.totalPages) return null;
 
-  return { settings, chrome, paged, category: null };
+  return { settings, chrome, paged, category: null, activeLocales };
 }
 
 export async function buildBrowseMetadata(
@@ -123,6 +123,8 @@ export async function buildBrowseMetadata(
       defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
       // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
       fallbackCoverUrl: loaded.paged.novels[0]?.coverUrl ?? null,
+      // PN-09：空语种输出 noindex 且不声明 hreflang；hreflang 只列活跃语种。
+      activeLocales: loaded.activeLocales,
     },
   });
   return toNextMetadata(seo);
@@ -153,6 +155,7 @@ export async function BrowseBody({
       defaultOgImage: loaded.settings.defaultOgImage.trim() || null,
       // 站点默认图缺失时的兜底；分开传，模板才能判断最终分享图是默认图还是书封（B-37）。
       fallbackCoverUrl: loaded.paged.novels[0]?.coverUrl ?? null,
+      activeLocales: loaded.activeLocales,
     },
   });
 

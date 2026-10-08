@@ -160,7 +160,7 @@ describe("各模板统一走共享判定", () => {
   });
 
   it("home：有站点默认图 → 默认图大卡片（即便同时有第一本书封）；默认图缺失才用书封兜底 → summary", () => {
-    const base = { siteName: "PulseNovel", description: "Read novels." };
+    const base = { siteName: "PulseNovel", description: "Read novels.", activeLocales: ["en"] };
     expectLarge(
       generateSeoMeta({
         entity: "home",
@@ -181,6 +181,7 @@ describe("各模板统一走共享判定", () => {
       canonicalPath: "/browse",
       items: [],
       siteName: "PulseNovel",
+      activeLocales: ["en"],
     };
     expectLarge(
       generateSeoMeta({
