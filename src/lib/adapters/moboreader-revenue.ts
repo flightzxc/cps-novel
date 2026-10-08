@@ -39,15 +39,25 @@ import {
   type OnUpstreamObservation,
 } from "./upstream-observation";
 import { isTruthyTotalRow, isValidCalendarDate } from "./moboreader-revenue-parser";
+import {
+  NOVEL_REVENUE_DIMENSIONS,
+  NOVEL_REVENUE_ENDPOINT,
+  NOVEL_REVENUE_MAX_PAGES,
+  NOVEL_REVENUE_ORIGIN,
+  NOVEL_REVENUE_PAGE_SIZE,
+  NOVEL_REVENUE_PROJECT_TYPE,
+  NOVEL_REVENUE_REPORT_PATH,
+} from "./moboreader-revenue-constants";
 
-/** 网文 projectType。海阅仓库里没有现成的同名常量，这里是唯一定义点。 */
-export const NOVEL_REVENUE_PROJECT_TYPE = 1 as const;
-export const NOVEL_REVENUE_ORIGIN = "https://kocserver-cn.cdreader.com";
-export const NOVEL_REVENUE_REPORT_PATH = "/api/Report/GetReport";
-export const NOVEL_REVENUE_ENDPOINT = `${NOVEL_REVENUE_ORIGIN}${NOVEL_REVENUE_REPORT_PATH}`;
-export const NOVEL_REVENUE_DIMENSIONS = Object.freeze(["1"] as const);
-export const NOVEL_REVENUE_PAGE_SIZE = 999;
-export const NOVEL_REVENUE_MAX_PAGES = 10;
+export {
+  NOVEL_REVENUE_DIMENSIONS,
+  NOVEL_REVENUE_ENDPOINT,
+  NOVEL_REVENUE_MAX_PAGES,
+  NOVEL_REVENUE_ORIGIN,
+  NOVEL_REVENUE_PAGE_SIZE,
+  NOVEL_REVENUE_PROJECT_TYPE,
+  NOVEL_REVENUE_REPORT_PATH,
+};
 export const NOVEL_REVENUE_DEFAULT_TIMEOUT_MS = 30_000;
 /** 观测事件里使用的短逻辑名（不是完整 URL）。 */
 export const NOVEL_REVENUE_OBSERVATION_ENDPOINT = "getreport";
@@ -63,6 +73,9 @@ export type NovelRevenueAdapterErrorCode =
   | "invalid_request";
 
 export class NovelRevenueAdapterError extends Error {
+  /** 失败前已向上游发起的请求数（`fetchNovelDailyReport` 在抛出前补上；本地参数校验失败为 0）。 */
+  requestCount = 0;
+
   constructor(
     readonly code: NovelRevenueAdapterErrorCode,
     readonly status: number | null = null,
@@ -215,19 +228,33 @@ export async function fetchNovelDailyReport(input: FetchNovelDailyReportInput): 
   if (!token) throw new NovelRevenueAdapterError("invalid_request", null, "credential_required");
   // 先把请求体全部校验一遍，再发任何请求。
   buildNovelGetReportBody({ beginDate: input.beginDate, endDate: input.endDate, pageIndex: 1 });
-
-  const fetchImpl = input.fetchImpl ?? fetch;
   const timeoutMs = input.timeoutMs ?? NOVEL_REVENUE_DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new NovelRevenueAdapterError("invalid_request", null, "timeout_invalid");
   }
+
+  const progress = { requestCount: 0 };
+  try {
+    return await fetchAllPages(input, token, timeoutMs, progress);
+  } catch (error) {
+    // 失败也要告诉调用方“已经向上游发了几次请求”（批次行的 request_count）。
+    if (error instanceof NovelRevenueAdapterError) error.requestCount = progress.requestCount;
+    throw error;
+  }
+}
+
+async function fetchAllPages(
+  input: FetchNovelDailyReportInput,
+  token: string,
+  timeoutMs: number,
+  progress: { requestCount: number },
+): Promise<NovelDailyReport> {
+  const fetchImpl = input.fetchImpl ?? fetch;
   const rateGate = input.rateGate ?? NOOP_MOBOREADER_RATE_GATE;
   const onUpstreamObservation = input.onUpstreamObservation ?? NOOP_UPSTREAM_OBSERVATION;
   const observationNow = input.now ?? Date.now;
   const endpoint = NOVEL_REVENUE_OBSERVATION_ENDPOINT;
-
   const rows: unknown[] = [];
-  let requestCount = 0;
 
   for (let pageIndex = 1; pageIndex <= NOVEL_REVENUE_MAX_PAGES; pageIndex += 1) {
     const body = buildNovelGetReportBody({ beginDate: input.beginDate, endDate: input.endDate, pageIndex });
@@ -244,7 +271,7 @@ export async function fetchNovelDailyReport(input: FetchNovelDailyReportInput): 
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
     const dispatchStartedAt = observationNow();
-    requestCount += 1;
+    progress.requestCount += 1;
 
     let response: Response;
     try {
@@ -275,12 +302,11 @@ export async function fetchNovelDailyReport(input: FetchNovelDailyReportInput): 
 
     const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
     rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
-
-    if (!response.ok) {
+    const observe = (outcome: "ok" | "http_error") =>
       safeObserve(onUpstreamObservation, () => ({
         endpoint,
         httpStatus: response.status,
-        outcome: "http_error",
+        outcome,
         latencyMs: observationNow() - dispatchStartedAt,
         gateWaitMs,
         endpointGateWaitMs,
@@ -288,43 +314,26 @@ export async function fetchNovelDailyReport(input: FetchNovelDailyReportInput): 
         remainingBeforeDispatch,
         gatewayHeaders,
       }));
+
+    if (!response.ok) {
+      observe("http_error");
       if (response.status === 429) throw new NovelRevenueAdapterError("upstream_rate_limited", 429);
       throw new NovelRevenueAdapterError("upstream_http_error", response.status);
     }
 
+    // 2xx 就是线路层面的 ok（响应体能不能解析是下一步的事，见 UpstreamCallOutcome 的说明）。
+    observe("ok");
     let json: unknown;
     try {
       json = await response.json();
     } catch {
-      safeObserve(onUpstreamObservation, () => ({
-        endpoint,
-        httpStatus: response.status,
-        outcome: "ok",
-        latencyMs: observationNow() - dispatchStartedAt,
-        gateWaitMs,
-        endpointGateWaitMs,
-        hostGateWaitMs,
-        remainingBeforeDispatch,
-        gatewayHeaders,
-      }));
       throw new NovelRevenueAdapterError("transport_error", response.status, "response_not_json");
     }
-    safeObserve(onUpstreamObservation, () => ({
-      endpoint,
-      httpStatus: response.status,
-      outcome: "ok",
-      latencyMs: observationNow() - dispatchStartedAt,
-      gateWaitMs,
-      endpointGateWaitMs,
-      hostGateWaitMs,
-      remainingBeforeDispatch,
-      gatewayHeaders,
-    }));
 
     const list = extractNovelReportList(json, token);
     rows.push(...list);
     if (countDetailRows(list) < NOVEL_REVENUE_PAGE_SIZE) {
-      return { rows, requestCount };
+      return { rows, requestCount: progress.requestCount };
     }
   }
 

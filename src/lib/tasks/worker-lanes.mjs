@@ -1,6 +1,8 @@
 /** Runtime and deployment share this dependency-free policy. */
 export const MOBOREADER_UPSTREAM_TASK_TYPES = Object.freeze([
   "catalog_scan", "moboreader.preview_refresh.v1", "promo_link.claim.v1",
+  // 收益看板·账号级每日汇总：调用畅读 GetReport，所以和上面几个一样只能放主通道白名单。
+  "moboreader.revenue_sync.v1",
 ]);
 export const APPROVED_LIGHT_TASK_TYPES = Object.freeze([
   "sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1",
