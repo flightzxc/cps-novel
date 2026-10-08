@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "source": "Owner current conversation",
+  "ownerStatement": "验收通过了",
+  "recordedAt": "2026-10-08T17:02:07Z",
+  "recordedDatePlus0800": "2026-10-09",
+  "scope": "v0.5.12 release acceptance, including previously pending F.4 preview and F.5 task label",
+  "confirmationType": "Owner overall acceptance; no invented per-book measurements",
+  "articleSlugPreview": "Owner confirmed PASS",
+  "normalSlugPreview": "Owner confirmed PASS",
+  "taskTypeChineseLabel": "Owner confirmed PASS",
+  "articleGeneration71BookComparison": "待运营生成后核对",
+  "agentGeneratedArticles": false,
+  "agentCreatedGenerationBatch": false,
+  "final": "84af0d7ef5ef36b06fa9783c114fe831adab4e13",
+  "previousGovernanceCommit": "12c08b5c185c5544034f035b9a2defb7d4058a80"
+}
