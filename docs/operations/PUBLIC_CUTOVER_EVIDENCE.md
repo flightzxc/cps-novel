@@ -1502,3 +1502,28 @@ Owner回复“我登录了基本正常”，并提供v0.5.9后台渠道账户页
 后台认证记录及Owner截图证据HEAD `2f8cfa96c7a97dfb1d683a63b955e9afbc59a32b` 已push，远端HEAD一致。既有Notion当前快照及v0.5.9台账已更新Owner登录/2FA完成、实际会话/challenge时间与operation_audit无对应Auth事件的真实口径；异步任务 `task_426aa7d7776741ce8a8bae76e86f738b` succeeded，fetch核对全部关键值PASS，除目标v0.5.9状态单元外第二区及之后的规则、其它版本、历史和模板逐字一致。链接：https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2。
 
 发版治理：原Final/tag/image复用，本轮按Owner要求不发新版本、不打tag；ops证据分支已push核远端，不合并；版本台账与既有同版开发日志已登记正式开放及Owner2FA完成；Notion已同步读回PASS。本收据后续提交只追加文档，不改变运行身份。GSC、三条外部监控待做；B-38为Owner接受的既有缺陷、随v0.5.10修复；异地恢复DEFERRED、X8排重WAIVED如实保留。授权范围收尾完成。
+
+## 底层修复已落地（v0.5.11）
+
+2026-10-05 第二段准备与 2026-10-07 切换当天暴露的三个安装器底层缺陷，当时只靠操作包装规避，上文各段如实保留了失败与规避，**历史段落不改**。本节记录这三项在代码层的修复及与上文的对应关系。分支 `fix/nginx-installer-empty-render`，基线 `88b0bc5`（integration/v0.5.11-2026-10-08）；代码提交 `3535b3b`（主体）、`28470e1`、`0d3146f`、`0d0bba2`。仅在本机测试，未 push，未连接或修改任何服务器；模板数值、限流规则、证书路径均未改动。
+
+### 缺陷、修复与切换日包装的对应关系
+
+| 上文记录 | 底层缺陷 | 修复 | 回归证据 | 切换日包装现状 |
+|---|---|---|---|---|
+| “17:45：B 第二次失败，定位空渲染” | `render-public-nginx.mjs` 用 `process.argv[1] === fileURLToPath(import.meta.url)` 判断 CLI 入口；`render-nginx.sh` 的 root 为逻辑 pwd；软链目录下进程退出 0 但不写正文 | 入口判断改为两侧 `fs.realpathSync` 后比较；CLI 渲染结果为空时 65 失败；`render-nginx.sh`、`install-nginx.sh`、`install-public-nginx.sh` 的 root 改为 `cd -P` + `pwd -P`；`render-nginx.sh` 在 `mv` 前断言输出非空（原输出文件不动） | 软链绝对路径、软链目录相对路径、物理路径三种方式渲染字节逐字节相同且非空；public@86400 为 16,840 字节、SHA-256 `d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe`，rehearsal 为 15,898 字节、`9a163d703e6f30950d444b01f152fbcaabed7e6ec9db17b8971289c1f665ffe0`——与上文 10-07 与 10-05 的候选哈希完全一致，说明渲染产物本身未变。变异 `entry_guard_realpath`、`render_empty_guard_removed` 均使对应用例变红 | 不再需要 `cd -P`（保留无害） |
+| 同上（“安装器缺少空候选门禁”）与“包装修正、sudo 输入与偏离”（10-07，空候选/正常候选隔离检查） | 安装器拿到 0 字节候选照样安装；`nginx -t` 对空站点文件通过；reload 后 443 监听消失 | 写任何备份或 `/etc/nginx` 文件之前断言：候选非空（`candidate_empty`，65）；按 `--mode` 具备应有的 server 与关键指令（`candidate_incomplete`，65）——public：公开主机与后台主机 :80 301 与 :443 应用 server、后台 `auth_basic "CPS Novel Administration"`、公开主机开放、www 301、两个旧域名 301、:80 拒绝、未知 Host 拒绝、robots 与 HSTS 取值（HSTS 与 `--hsts-max-age` 绑定）；rehearsal 与 preprod、`--bootstrap-public` 各按自己的形状。检查由独立的 `verify-nginx-candidate.mjs` 完成，只输出检查码、字节数与摘要 | 空候选、缺 server（旧域名 301 / :80 拒绝）、缺后台 auth_basic、HSTS 取值不符，安装器均 65 退出且假 `/etc/nginx`、备份目录、`nginx -t` 与 reload 计数全部未动。变异 `gate_empty_check_removed`、`gate_shape_check_removed`、`candidate_admin_auth_removed` 变红 | 不再需要安装前手工检查候选非空并含各 server 与认证指令 |
+| 同上（“安装后哈希必须与候选一致”） | 安装后无核对 | 安装后逐个核对站点文件与全部 snippet 的 SHA-256 等于候选/来源；不等：`installed_hash_mismatch`，72，用本次备份回退；不一致的文件从未被 reload | 站点文件与 snippet 各一例：回退、非零、仅有回退自身的那一次 reload。变异 `hash_check_removed` 变红 | 不再需要手工核对站点文件哈希 |
+| “13:39：首次 A 失败…修正就绪等待”、“14:21：B 首次验证失败…补充 rehearsal 就绪检查”、“15:21–15:22 JST：首次 public 安装后 TLS 检查失败” 与“15:29–15:32 JST：…包装修正版” | `systemctl reload nginx`（`nginx -s reload`）返回后新 worker 尚未接管就探测，误判失败 | reload 前记录 master PID 与子进程集合；reload 后最多 10 轮（每轮 1 秒）确认交接与监听，超时 `ready_handoff_timeout` / `ready_listener_missing` / `ready_master_changed` / `ready_master_missing`，73，并回退；回退自身的 reload 同样等待，未能确认为 71。不做业务 HTTP 探测 | 第 k 轮才交接可通过；永不交接、旧 worker 不退出、443 缺失、master 变更、master 暂不可读（不误判）、回退未确认各一例。变异 `ready_wait_removed`、`ready_listener_probe_removed`、`ready_old_worker_check_removed`、`ready_master_blip_tolerance_removed` 变红 | 不再需要手写的 PID 交接等待循环；严格 HTTPS 探测（不用 `-k`）、维护页与健康接口验收仍是业务层步骤，保留 |
+
+### 就绪信号及其可靠性
+
+判定同时要求：master PID 与 reload 前相同；master 的子进程中出现 reload 前不存在的 PID；reload 前的每个子进程要么已退出、要么进程标题含 `shutting down`；期望端口（site 模式 80 与 443，`--bootstrap-public` 仅 80，`--restore-backup` 不断言端口）有 TCP 监听。信号来自 `systemctl show -p MainPID nginx`、`pgrep -P`、`ps -o args= -p`、`ss -ltn`，均为非特权读取，不依赖 nginx 日志（上文多次记录 deploy 无权读取）。可靠性依据：nginx 收到 HUP 后先解析新配置、绑定监听、启动新 worker，再通知旧 worker 退出，因此“出现新 worker”才表示新配置已生效；旧 worker 在被通知退出前仍可能短暂接受连接，所以还要求旧 worker 已退出或已标记 `shutting down`。本机用 `nginx:1.24.0-alpine` 实测：reload 后新 worker PID 全部变化，持有未完成请求的旧 worker 标题为 `nginx: worker process is shutting down`，其余旧 worker 已消失，reload 后的最初一次采样（不到 0.2 秒）里新旧 worker 并存、旧 worker 尚未改标题，下一次采样旧 worker 才标为 shutting down——这正是第二个条件所覆盖的窗口。
+
+### 本机验证（未接触服务器）
+
+- `public-cutover-install.test.ts` 61 例全部通过（含软链/物理/相对路径渲染一致、空候选/缺 server/缺后台 auth_basic/HSTS 不符 65 且假 `/etc/nginx` 未改、哈希不一致回退、就绪第 k 轮通过与超时等）；执行安装器的用例单独设 60 秒超时（B-27 同类高负载）。
+- 全量测试：ui 186 个文件 3,136 个用例通过；node 391 个文件（347 通过、44 跳过）、5,796 个用例（5,277 通过、519 跳过，跳过的均为需真实库的用例，由主控统一回归）。`npx tsc --noEmit`、`npm run lint`（0 error）、`npm run build` 通过。
+- `bash scripts/preproduction/verify-nginx-matrix.sh` 得到 `NGINX_MATRIX_ALL=PASS`（preprod、rehearsal、public 三模式），结束后无残留容器与网络。
+- `node scripts/preproduction/verify-public-cutover-mutations.mjs` 15 条变异（原有 5 条 + 安装器 10 条）全部变红，且每条复原后 `git diff --quiet` 为真，最终 `PUBLIC_CUTOVER_MUTATIONS=PASS`。
+- 已知限制：`render-nginx.sh` 的物理 root 与渲染器入口判断各自独立防护同一缺陷；入口判断修好后，单独回退 shell 侧物理 root 不会使任何用例变红（两层互为冗余），因此该处没有单独的变异条目。旧路径（`install-nginx.sh` 无 `--mode`）仅获得物理 root 与候选非空门禁，不含哈希核对与就绪等待。
