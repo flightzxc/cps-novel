@@ -124,40 +124,51 @@ describe("全站题材导航的归属", () => {
     renderHome();
 
     const nav = screen.getByTestId("home-category-nav");
+    const strip = screen.getByTestId("home-category-strip");
     expect(nav.className).not.toMatch(/(^|\s)(md:)?pt-\d/);
+    expect(strip.className).not.toMatch(/(^|\s)(md:)?pt-\d/);
     // 20/24 → 16/20（2026-09-20 首屏密度轮）。承重点仍是「没有 pt-*」。
-    expect(nav.className).toContain("mb-4");
-    expect(nav.className).toContain("md:mb-5");
+    // PN-16：桌面的 md:mb-5 随外层一行 flex 容器走（箭头与 nav 同行，下边距不能算在 nav 上，
+    // 否则箭头会按「含下边距的盒子」居中而偏下）；手机的 mb-4 仍在 nav 上。
+    expect(nav.className.split(/\s+/)).toContain("mb-4");
+    // 桌面下边距由外层 strip 的 md:mb-5 负责；nav 自己换成与 4px 内边距抵消的 -mb-1。
+    expect(nav.className.split(/\s+/)).toContain("md:-mb-1");
+    expect(strip.className.split(/\s+/)).toContain("md:mb-5");
+    expect(strip.contains(nav)).toBe(true);
   });
 
   /**
-   * 移动端单行横向滚动（2026-09-20）。
+   * 单行横向滚动：移动端 2026-09-20 起，桌面 PN-16（2026-10-08）起。
    *
    * 分类数量由上游内容决定，不是设计能约束的常数——实测 ko 9 个、de 4 个、
-   * vi 2 个。9 个在 390px 下换行成 3 行占 118px，把作品网格往下推 84px，
-   * 首屏可见排数从 1.86 掉到 1.47。
+   * vi 2 个，英语 55 个。9 个在 390px 下换行成 3 行占 118px，把作品网格往下推 84px；
+   * 英语 55 个在 1440px 下排 6 行。桌面不再 `md:flex-wrap` 换行，所有宽度都是单行，
+   * 靠 `CategoryNav` 的箭头够到后面的分类（箭头行为见 home-category-nav.test.tsx）。
    *
    * 🔴 三件事一起钉，少一件这个布局就不成立：
-   *   1. 移动端 `flex-nowrap` + `overflow-x-auto`，md 起换回 `flex-wrap`；
+   *   1. `flex-nowrap` + `overflow-x-auto` 不带断点前缀，且 md 起**没有**任何把它们改回去的类
+   *      （`md:flex-wrap` / `md:overflow-x-visible`）；
    *   2. chip 必须 `shrink-0`——不然 flex 会把它们压扁塞进一行，
    *      "横向滚动"变成"挤成一团"，而且压根不会溢出、也就不会滚动；
-   *   3. `-mx-5` / `px-5` 必须成对，且与 `Container` 的移动端内边距一致。
+   *   3. 手机的 `-mx-5` / `px-5` 必须成对，且与 `Container` 的移动端内边距一致；
+   *      桌面换成 `md:-mx-1` / `md:px-1`（容下焦点环的 4px 内边距与等量负外边距）。
    */
-  it("题材导航移动端是单行横向滚动，md 起恢复换行", () => {
+  it("题材导航在所有宽度都是单行横向滚动，桌面不再换行", () => {
     renderHome();
     const nav = screen.getByTestId("home-category-nav");
     const cls = nav.className.split(/\s+/);
 
     expect(cls).toContain("flex-nowrap");
     expect(cls).toContain("overflow-x-auto");
-    expect(cls).toContain("md:flex-wrap");
-    expect(cls).toContain("md:overflow-x-visible");
+    expect(cls).not.toContain("md:flex-wrap");
+    expect(cls).not.toContain("md:overflow-x-visible");
+    expect(cls.filter((token) => /^(?:[a-z0-9]+:)?(?:flex-wrap|flex-wrap-reverse)$/.test(token))).toEqual([]);
 
     // 负外边距与内边距成对出现，且与 Container 的移动端 px-5 对齐
     expect(cls).toContain("-mx-5");
     expect(cls).toContain("px-5");
-    expect(cls).toContain("md:mx-0");
-    expect(cls).toContain("md:px-0");
+    expect(cls).toContain("md:-mx-1");
+    expect(cls).toContain("md:px-1");
 
     // chip 不许被压缩，否则一行塞得下、根本不会产生滚动
     for (const chip of nav.querySelectorAll("a")) {
