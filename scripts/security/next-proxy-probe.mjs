@@ -47,6 +47,7 @@ export const PROBE_ADMIN_PAGES = Object.freeze([
   "/categories",
   "/home-carousel",
   "/templates",
+  "/revenue",
   `/novels/${ZERO_UUID}`,
   `/tasks/${ZERO_UUID}`,
 ]);
