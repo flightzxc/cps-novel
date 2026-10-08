@@ -146,6 +146,9 @@ export async function CategoryBody({
       title={heading}
       description={loaded.category.category.description ?? undefined}
       novels={loaded.category.novels}
+      // 标题下的作品数 = 这个分类分页能翻到的总本数（与分页、站点地图、404 判定同一份列表，
+      // 见 `CollectionScreen` 文件头注释），不是当前页本数。
+      totalCount={loaded.category.totalCount}
       emptyMessage={t("collection.categoryEmpty")}
       // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
       pagination={

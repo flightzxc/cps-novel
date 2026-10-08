@@ -130,6 +130,7 @@ const SCREENS: [string, ReactElement][] = [
       chrome={mockChrome("en", "collection")}
       title="言情"
       novels={MOCK_NOVEL_CARDS}
+      totalCount={MOCK_NOVEL_CARDS.length}
     />,
   ],
   [
