@@ -44,7 +44,6 @@ export const ADMIN_NAV_ITEMS: readonly AdminNavItem[] = Object.freeze([
     label: "数据看板",
     icon: "revenue",
     capability: "revenue:view",
-    placeholder: "子项待 P4",
   },
   {
     href: "/settings",
@@ -89,6 +88,9 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * status screen. Both still gate on `task:manage` at the route level
  * (`ADMIN_TASK_ROUTES`, `src/app/api/admin/_lib/registry.ts`) regardless of
  * this list.
+ * `/revenue` joined with the account-level novel revenue dashboard (read view
+ * + manual sync trigger); gated by `revenue:view` (2FA, no default holder), so
+ * the sidebar entry stays greyed with a capability reason until it is granted.
  * `/settings` joined in PR-C4 (OG fallback image + IndexNow delivery config
  * admin surface). Note this list is not what keeps `/settings` clickable in
  * the sidebar today — `itemState` in `./sidebar.tsx` already special-cases
@@ -109,6 +111,7 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/tags",
   "/tasks",
   "/promo-links",
+  "/revenue",
   "/settings",
   // Session-only self-service page; no settings:manage grant required.
   "/settings/security",

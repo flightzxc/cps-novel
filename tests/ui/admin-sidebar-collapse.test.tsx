@@ -136,6 +136,8 @@ describe("侧栏 · active 与分组展开", () => {
     // /tasks 与 /promo-links（PR-C5）也是真页面了，但这份 fixture 没有授予
     // `task:manage`，所以两者仍然不出现在链接列表里——只是原因从"未建"变成了
     // "缺能力位"，见下面单独的断言。
+    // /revenue（数据看板）同理是真页面；这份 fixture 授予了 `revenue:view`，
+    // 所以它以链接出现在"标签管理"与"站点设置"之间。
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "书目管理",
       "目录同步",
@@ -144,6 +146,7 @@ describe("侧栏 · active 与分组展开", () => {
       "文章管理",
       "分类管理",
       "标签管理",
+      "数据看板",
       "站点设置",
       "渠道账户",
     ]);

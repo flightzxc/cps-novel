@@ -103,6 +103,7 @@ const { saveCarouselConfigAction, saveManualCarouselSlotAction, deleteManualCaro
 const { startSecuritySetupAction, confirmSecuritySetupAction, regenerateSecurityRecoveryCodesAction } = await import(
   "@/app/(admin)/settings/security/_actions"
 );
+const { enqueueRevenueSyncAction } = await import("@/app/(admin)/revenue/_actions");
 
 const CONTEXT = { identity: { id: "admin-1" }, session: { id: "sess-1" } };
 
@@ -184,6 +185,12 @@ describe("template/article/carousel · 动作体传给 requireFreshAdminServiceM
       () => deleteManualCarouselSlotAction({ requestId: "r1", id: "slot-1", locale: "en" }),
     ],
     ["admin.home_carousel.compute", () => enqueueCarouselComputeAction({ requestId: "r1", locale: "en" })],
+    // 海阅收益看板：动作体里写死的 "revenue:view" 必须与 registry 登记一致（本 action 的写入前
+    // 重验在 action 体内、而不是 service 内，所以和 catalog-sync 一样在这里抓传给守卫的字面量）。
+    [
+      "admin.revenue.sync.enqueue",
+      () => enqueueRevenueSyncAction({ requestId: "r1", beginDate: "2026-10-01", endDate: "2026-10-07" }),
+    ],
   ] as const)("%s", async (actionId, run) => {
     const declared = resolveAdminAction(actionId, P2_04_ADMIN_REGISTRY);
     expect(declared, `${actionId} must be registered`).toBeDefined();

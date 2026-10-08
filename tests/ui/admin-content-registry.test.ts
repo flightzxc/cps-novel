@@ -148,7 +148,8 @@ describe("P2-04 内容路由登记", () => {
         !action.id.startsWith("admin.catalog_batch.") &&
         !action.id.startsWith("admin.article_template.") &&
         !action.id.startsWith("admin.home_carousel.") &&
-        !action.id.startsWith("admin.security."),
+        !action.id.startsWith("admin.security.") &&
+        !action.id.startsWith("admin.revenue."),
     );
     expect(p204Actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
     for (const action of p204Actions) {
@@ -201,6 +202,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.security.two_factor.start",
       "admin.security.two_factor.confirm",
       "admin.security.recovery_codes.regenerate",
+      "admin.revenue.sync.enqueue",
     ]);
     expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
@@ -266,6 +268,12 @@ describe("P2-04 内容路由登记", () => {
     expect(resolveAdminAction("admin.article.generate_candidates", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
       mutation: false,
+    });
+    // 海阅账号级收益看板：手动同步是写操作（建 generic_task + 审计），能力位 `revenue:view`
+    // （要求 2FA、默认无人拥有）；`mutation: true` 让同源 / 限流 / 请求标识都生效。
+    expect(resolveAdminAction("admin.revenue.sync.enqueue", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "revenue:view",
+      mutation: true,
     });
   });
 });

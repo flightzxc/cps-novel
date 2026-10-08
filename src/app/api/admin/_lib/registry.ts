@@ -373,6 +373,21 @@ export const ADMIN_SECURITY_ACTIONS = [
   { id: "admin.security.recovery_codes.regenerate", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * 海阅账号级小说收益看板（`/revenue`）的手动同步触发。
+ *
+ * 一个 action、一个能力位：`revenue:view`（`requiresTwoFactor: true`，默认无人拥有，只能靠
+ * `REVENUE_VIEW_ROLES` / `REVENUE_VIEW_USER_IDS` 显式授予）。同步是写操作（建一条
+ * `generic_task` + 审计），所以 `mutation: true`——同源校验、限流、请求标识都生效；
+ * action 体里再走一次 `requireFreshAdminServiceMutation(…, "revenue:view", …)`，与
+ * `tests/ui/admin-actions-capability.test.ts` 核对"动作体要的能力位 === 这里登记的"。
+ *
+ * 不新增 `/api/admin/**` 路由：页面用 server component 取数，写入只走这个 server action。
+ */
+export const ADMIN_REVENUE_ACTIONS = [
+  { id: "admin.revenue.sync.enqueue", capability: "revenue:view", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   // Routes: the union of every composed group. P1-08B's credential surface,
@@ -407,5 +422,6 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_ARTICLE_BATCH_REBIND_ACTIONS,
     ...ADMIN_HOME_CAROUSEL_ACTIONS,
     ...ADMIN_SECURITY_ACTIONS,
+    ...ADMIN_REVENUE_ACTIONS,
   ]),
 });
