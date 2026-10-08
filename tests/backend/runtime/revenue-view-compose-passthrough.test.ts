@@ -73,7 +73,7 @@ function renderEnvironment(extra: Record<string, string> = {}): NodeJS.ProcessEn
     CPS_NOVEL_APP_IMAGE: "cps-novel:revenue-view-test", APP_VERSION: "0.5.10", GIT_COMMIT: "a".repeat(40),
     SITE_URL: "https://example.test", TZ: "Asia/Tokyo", BUILD_DATE: "2026-10-08T00:00:00Z",
     WORKER_ID: "main-test", WORKER_LIGHT_ID: "light-test", WORKER_LANE: "main",
-    WORKER_TASK_ALLOWLIST: "catalog_scan,moboreader.revenue_sync.v1",
+    WORKER_TASK_ALLOWLIST: "catalog_scan,changdu.revenue_sync.v1",
     WORKER_LIGHT_TASK_ALLOWLIST: APPROVED_LIGHT_TASK_TYPES.join(","),
   }, extra);
 }

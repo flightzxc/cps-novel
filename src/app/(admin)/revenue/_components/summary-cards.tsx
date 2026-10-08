@@ -1,3 +1,4 @@
+import { multiAppTotalHint } from "../_lib/copy";
 import { formatAverage, formatCount, formatUsd, PLACEHOLDER } from "../_lib/format";
 import type { RevenueDashboardView } from "@/server/revenue";
 
@@ -27,13 +28,27 @@ function Card({
  * 一个容易误导的点：一天都没被同步覆盖时，读服务的合计是 `"0.0000"` / `0`——那是"没有数据可加"，
  * 不是"收入为 0"。所以这种情况下合计显示 `—`；只要有任何一天被覆盖（有记录或上游无记录），
  * 合计就是真实的求和（含"确实是 0"）。有未同步的天时，卡片下方明说"合计偏小"。
+ *
+ * 账号级：同一畅读账号下有 ≥ 2 个网文应用时（`novelAppCount`），卡片上方加一句灰字提示，说明数字是这些应用的合计。
  */
-export function SummaryCards({ summary }: { summary: RevenueDashboardView["summary"] }) {
+export function SummaryCards({
+  summary,
+  novelAppCount = null,
+}: {
+  summary: RevenueDashboardView["summary"];
+  /** 该账号所在 channel 下 active 的网文应用数；没有可用账号时为 null。 */
+  novelAppCount?: number | null;
+}) {
   const covered = summary.reportedDays + summary.noUpstreamRowDays;
   const hasData = covered > 0;
 
   return (
     <section aria-label="区间指标" data-testid="revenue-summary" className="space-y-2">
+      {novelAppCount !== null && novelAppCount >= 2 && (
+        <p data-testid="revenue-multi-app-hint" className="text-xs text-gray-500">
+          {multiAppTotalHint(novelAppCount)}
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card
           testId="revenue-card-income"

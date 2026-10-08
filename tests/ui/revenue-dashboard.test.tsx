@@ -55,7 +55,7 @@ vi.mock("@/server/revenue", async (importOriginal) => {
 
 const { default: RevenuePage } = await import("@/app/(admin)/revenue/page");
 const { defaultRevenueRange } = await import("@/server/revenue");
-const { REVENUE_METHODOLOGY_TEXT } = await import("@/app/(admin)/revenue/_components/methodology-note");
+const { revenueMethodologyText } = await import("@/app/(admin)/revenue/_components/methodology-note");
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -118,7 +118,7 @@ function batch(overrides: Partial<RevenueBatchRow> = {}): RevenueBatchRow {
 function view(overrides: Partial<RevenueDashboardView> = {}): RevenueDashboardView {
   const days = [REPORTED, NO_UPSTREAM, NOT_SYNCED];
   return {
-    account: { id: ACCOUNT_ID, label: "ch***@qq.com" },
+    account: { id: ACCOUNT_ID, label: "ch***@qq.com", novelAppCount: 1 },
     range: { dateFrom: "2026-10-05", dateTo: "2026-10-07", dayCount: 3 },
     summary: {
       shareIncomeUsdTotal: "28.8750",
@@ -160,18 +160,34 @@ describe("/revenue · 守卫与口径说明", () => {
     expect(requireContentPage).toHaveBeenCalledWith("/revenue", "revenue:view");
   });
 
-  it("口径说明条常驻页面顶部，文案逐字固定", async () => {
+  it("口径说明条常驻页面顶部，文案逐字固定（账号级 · 该账号下全部网文应用合计 · 当前 N 个应用）", async () => {
     await renderPage();
     const note = screen.getByTestId("revenue-methodology-note");
     expect(note.textContent).toBe(
-      "账号级 · 仅网文（projectType=1）· 达人凭证 · 北京时间日期。"
+      "账号级 · 该畅读账号下全部网文应用合计（当前 1 个应用）· 仅网文（projectType=1）· 达人凭证 · 北京时间日期。"
         + "上游次日可查，近几天会被上游回补，建议每次同步至少覆盖最近 7 天。"
         + "暂不支持按书、按推广码拆分。",
     );
-    expect(REVENUE_METHODOLOGY_TEXT).toBe(note.textContent);
+    expect(revenueMethodologyText(1)).toBe(note.textContent);
     // 页面上没有按书 / 按推广码的占位图表或假数据
     expect(document.querySelector("svg")).toBeNull();
     expect(document.querySelector("canvas")).toBeNull();
+  });
+
+  it("口径说明条的应用数跟着读服务走（2 个应用写“当前 2 个应用”）；没有可用账号时不编数字", async () => {
+    loadRevenueDashboard.mockResolvedValue(view({ account: { id: ACCOUNT_ID, label: "ch***@qq.com", novelAppCount: 2 } }));
+    await renderPage();
+    expect(screen.getByTestId("revenue-methodology-note").textContent).toContain("该畅读账号下全部网文应用合计（当前 2 个应用）");
+    expect(revenueMethodologyText(2)).toBe(screen.getByTestId("revenue-methodology-note").textContent);
+  });
+
+  it("没有可用账号：口径说明条仍在，但不写“当前 N 个应用”", async () => {
+    loadRevenueDashboard.mockResolvedValue(view({ account: null }));
+    await renderPage();
+    const text = screen.getByTestId("revenue-methodology-note").textContent ?? "";
+    expect(text).toContain("账号级 · 该畅读账号下全部网文应用合计 · 仅网文（projectType=1）");
+    expect(text).not.toContain("当前");
+    expect(revenueMethodologyText(null)).toBe(text);
   });
 
   it("无权限：渲染缺少能力位面板，且不调用 loadRevenueDashboard（变异目标⑤）", async () => {
@@ -489,7 +505,7 @@ describe("/revenue · 同步面板与活跃任务", () => {
 
     const warning = screen.getByTestId("revenue-worker-claim-warning");
     expect(warning.textContent).toContain(
-      "任务排队超过 10 分钟仍未被 worker 认领。请确认生产环境主通道 WORKER_TASK_ALLOWLIST 已包含 moboreader.revenue_sync.v1。",
+      "任务排队超过 10 分钟仍未被 worker 认领。请确认生产环境主通道 WORKER_TASK_ALLOWLIST 已包含 changdu.revenue_sync.v1。",
     );
     // 漏配白名单的后果与出路也要说出来：之后每次发起都被挡住，需到任务中心中止该任务。
     expect(warning.textContent).toContain("已有同步任务");
@@ -606,5 +622,30 @@ describe("/revenue · 不泄露敏感信息", () => {
     for (const forbidden of ["encrypted", "ciphertext", "token", "secret", "promo_code", "promocode"]) {
       expect(html, `页面不应出现 ${forbidden}`).not.toContain(forbidden);
     }
+  });
+});
+
+describe("/revenue · 多网文应用的合计提示（账号级口径）", () => {
+  it("1 个应用：指标卡上方没有合计提示", async () => {
+    await renderPage();
+    expect(screen.queryByTestId("revenue-multi-app-hint")).toBeNull();
+  });
+
+  it("2 个应用：指标卡上方出现灰字提示，说明是合计、按应用拆分需另行接入上游“授权产品”维度", async () => {
+    loadRevenueDashboard.mockResolvedValue(view({ account: { id: ACCOUNT_ID, label: "ch***@qq.com", novelAppCount: 2 } }));
+    await renderPage();
+    const hint = screen.getByTestId("revenue-multi-app-hint");
+    expect(hint.textContent).toBe('上游收益接口不区分应用，以下为 2 个网文应用的合计；按应用拆分需另行接入上游"授权产品"维度。');
+    // 在指标卡之前（同一个 section 里排在卡片网格前面），且是灰字而不是告警色。
+    const summary = screen.getByTestId("revenue-summary");
+    expect(summary.contains(hint)).toBe(true);
+    expect(hint.compareDocumentPosition(screen.getByTestId("revenue-card-income")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hint.className).toContain("text-gray-500");
+  });
+
+  it("没有可用账号：不显示合计提示", async () => {
+    loadRevenueDashboard.mockResolvedValue(view({ account: null }));
+    await renderPage();
+    expect(screen.queryByTestId("revenue-multi-app-hint")).toBeNull();
   });
 });

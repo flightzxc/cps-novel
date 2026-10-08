@@ -1,6 +1,17 @@
 /**
  * 收益看板读服务（后台 `/revenue` 页用）：网文（projectType=1）账号级每日汇总的只读视图。
  *
+ * ── 账号级口径与多剧场（多应用）扩展路径 ──────────────────────────────────────
+ * 上游 `GetReport` 是**账号级**的：同一畅读账号、同一 projectType 下所有应用合计，响应里没有应用字段。
+ * 今天只有一个网文应用（MoboReader），以后畅读渠道可能在同一账号下再增加别的网文应用；视图里的
+ * `account.novelAppCount` 是该账号所在 channel 下 active 的网文应用数，页面据此写“当前 N 个应用”，
+ * N ≥ 2 时额外提示“以下为 N 个网文应用的合计”。
+ *   1. 同账号多应用：现状即可工作——选账号时按账号 id 去重（`./account.ts`），看板显示合计；
+ *   2. 按应用拆分：需先由 Owner 在上游后台日报页选“授权产品”维度并抓取一次真实请求，拿到维度编码；
+ *      原始行表已有 `dimension` 列可容纳非日期维度，按应用的日汇总另建一张表（只新增），不改现有表；
+ *   3. 多个畅读账号：数据模型已支持（作用域 = 账号 × projectType），但当前页面与入队只支持唯一账号，
+ *      多账号时会明确提示 `channel_account_ambiguous`，届时再加账号选择器。
+ *
  * 只用 web_app 有权限的表：revenue 四表 SELECT、generic_task、channel_account / channel_app / channel
  * （经 `./account`）、channel_account_credential 的**元数据列**（经 `listCredentialMetadata`）。
  * **绝不读取、绝不解密凭证密文**（`tests/backend/auth/credential-contracts.test.ts` 守卫）。
@@ -76,7 +87,11 @@ export type RevenueBatchRow = {
 };
 
 export type RevenueDashboardView = {
-  account: { id: string; label: string /* 脱敏，如 ch***@qq.com */ } | null;
+  account: {
+    id: string;
+    label: string; /* 脱敏，如 ch***@qq.com */
+    novelAppCount: number; /* 该账号所在 channel 下 active 的网文应用数（≥ 1）；收益是这些应用的合计 */
+  } | null;
   range: { dateFrom: string; dateTo: string; dayCount: number };
   summary: {
     shareIncomeUsdTotal: string; // reported 天的合计
@@ -299,7 +314,11 @@ export async function loadRevenueDashboard(
   const credential = credentials.find((item) => item.status === "active") ?? credentials[0] ?? null;
 
   return {
-    account: { id: resolution.channelAccountId, label: maskRevenueAccountLabel(resolution.accountName) },
+    account: {
+      id: resolution.channelAccountId,
+      label: maskRevenueAccountLabel(resolution.accountName),
+      novelAppCount: resolution.novelAppCount,
+    },
     range,
     summary: summarizeRevenueDays(days),
     days,

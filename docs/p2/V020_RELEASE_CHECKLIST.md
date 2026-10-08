@@ -161,10 +161,10 @@
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
       一起改）。
-- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.revenue_sync.v1`
+- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,changdu.revenue_sync.v1`
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
-      `moboreader.revenue_sync.v1`（收益看板的手动同步，调用上游 GetReport）只在主通道白名单；
+      `changdu.revenue_sync.v1`（收益看板的手动同步，调用上游 GetReport）只在主通道白名单；
       它没有 feature flag，由 `revenue:view` 能力位控制谁能触发（Owner 2026-10-08 决定：默认授予 `super_admin`，仍要求 2FA；
       `REVENUE_VIEW_ROLES` / `REVENUE_VIEW_USER_IDS` 可覆盖 / 追加）。
 - [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist

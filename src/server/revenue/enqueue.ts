@@ -1,20 +1,26 @@
 /**
  * 收益同步入队（web 侧，给 server action 调用）。只建任务，**不碰凭证**：凭证的读取与解密只在 worker
- * 的 `moboreader.revenue_sync.v1` handler 里发生（`tests/backend/auth/credential-contracts.test.ts` 守卫）。
+ * 的 `changdu.revenue_sync.v1` handler 里发生（`tests/backend/auth/credential-contracts.test.ts` 守卫）。
  *
  * 返回 `{ ok: true; taskId; duplicate } | { ok: false; code; existingTaskId? }`，`code` 枚举：
  *
  *   - `invalid_request`              requestToken / actor 缺失或超长
  *   - `invalid_date_range`           日期不是真实存在的 YYYY-MM-DD、begin 晚于 end、跨度 > 92 天、
  *                                    或 end 晚于上海时区的今天
- *   - `channel_account_unavailable`  没有可用的渠道账号（网文 channel_app 下没有 active 且未删除的账号）
- *   - `channel_account_ambiguous`    候选账号不止一个——不替运营挑，要先把账号收敛到恰好一个
+ *   - `channel_account_unavailable`  没有可用的渠道账号（网文 channel_app 所在 channel 下没有 active 且未删除的账号）
+ *   - `channel_account_ambiguous`    候选的**不同账号**不止一个——不替运营挑，要先把账号收敛到恰好一个
+ *                                    （同一账号下挂多个网文应用不算歧义：账号按 id 去重，见 `./account.ts`）
  *   - `revenue_sync_already_active`  该账号已有 pending / processing 的收益同步任务（带 `existingTaskId`）
  *   - `request_token_conflict`       同一个 requestToken 已用于另一份不同的请求
  *
  * 幂等：同一个 requestToken、同一份请求再次提交，返回既有任务（`duplicate: true`），不会建第二个。
- * “同一账号同一时刻只有一个活跃收益同步任务”由 `generic_task_active_scope_uidx` 在数据库层保证
- * （`operation_scope_hash` 固定为 revenue_sync 的作用域哈希），应用层的先查只是为了给出友好的返回。
+ * “同一账号同一时刻只有一个活跃收益同步任务”由 `generic_task_active_scope_uidx` 在数据库层保证，应用层的
+ * 先查只是为了给出友好的返回。
+ *
+ * 账号级任务：`generic_task.channel_app_id` 写 **NULL**（收益接口是账号级的，同账号下所有网文应用合计，
+ * 任务不属于某一个应用）。该唯一索引是 `NULLS NOT DISTINCT`，所以 channel_app_id 为 NULL 时“同账号同时只有
+ * 一个活跃任务”依然成立（真实库用例 `tests/integration/revenue/revenue-dashboard-postgres.test.ts` 证明）；
+ * `operation_scope_hash` 把 projectType 折进去（`revenueSyncOperationScopeHash`），照 catalog_scan 的做法。
  *
  * generic_task + 唯一条目 + operation_audit 在同一个事务里写（照 `createMoboreaderCatalogScanTask`）。
  * 模式恒为 apply：本任务不支持 dry_run（dry_run 下带 protectedWrite 会被判失败）。
@@ -119,7 +125,7 @@ export async function enqueueRevenueSync(
     throw error;
   }
 
-  const operationScopeHash = revenueSyncOperationScopeHash();
+  const operationScopeHash = revenueSyncOperationScopeHash(params.projectType);
   const findByToken = async (): Promise<EnqueueRevenueSyncResult | null> => {
     const existing = await prisma.genericTask.findUnique({
       where: { requestToken },
@@ -136,7 +142,7 @@ export async function enqueueRevenueSync(
       where: {
         taskType: REVENUE_SYNC_TASK_TYPE,
         channelAccountId: account.channelAccountId,
-        channelAppId: account.channelAppId,
+        channelAppId: null,
         operationScopeHash,
         status: { in: [...ACTIVE_STATUSES] },
       },
@@ -160,7 +166,8 @@ export async function enqueueRevenueSync(
           id: taskId,
           taskType: REVENUE_SYNC_TASK_TYPE,
           channelAccountId: account.channelAccountId,
-          channelAppId: account.channelAppId,
+          // 账号级任务不属于某一个应用：NULL（唯一索引 NULLS NOT DISTINCT，仍保证同账号同时只有一个活跃任务）。
+          channelAppId: null,
           operationScopeHash,
           mode: "apply",
           status: "pending",

@@ -13,7 +13,7 @@ import { REVENUE_SYNC_TASK_TYPE } from "@/lib/tasks/revenue-sync";
 import { createWorkerHandlers, resolveWorkerStartupAllowlist } from "../../../worker";
 
 /**
- * `moboreader.revenue_sync.v1` 调用畅读 GetReport（上游），所以和 catalog_scan / 试读 / 领推广一样：
+ * `changdu.revenue_sync.v1` 调用畅读 GetReport（上游），所以和 catalog_scan / 试读 / 领推广一样：
  * 只能出现在**主通道**白名单，轻量通道不得出现，两条白名单不得重叠。
  */
 const TYPE = REVENUE_SYNC_TASK_TYPE;
@@ -31,9 +31,9 @@ function line(source: string, key: string): string {
   return match[1]!;
 }
 
-describe("moboreader.revenue_sync.v1 · 通道登记", () => {
+describe("changdu.revenue_sync.v1 · 通道登记", () => {
   it("登记为上游类任务（只能主通道），不在轻量批准清单里；已有 handler 注册", () => {
-    expect(TYPE).toBe("moboreader.revenue_sync.v1");
+    expect(TYPE).toBe("changdu.revenue_sync.v1");
     expect(MOBOREADER_UPSTREAM_TASK_TYPES).toContain(TYPE);
     expect(APPROVED_LIGHT_TASK_TYPES).not.toContain(TYPE);
     const registry = createWorkerHandlers({} as PrismaClient);
@@ -84,7 +84,7 @@ describe("moboreader.revenue_sync.v1 · 通道登记", () => {
   });
 });
 
-describe("moboreader.revenue_sync.v1 · 仓库里声明白名单的每个地方", () => {
+describe("changdu.revenue_sync.v1 · 仓库里声明白名单的每个地方", () => {
   const MAIN_EXAMPLES = [".env.example", "infra/preproduction/preprod.env.example", "infra/production-like/.env.uat.example"];
 
   it.each(MAIN_EXAMPLES)("%s：主通道白名单带该类型，轻量白名单不带，且整套配置通过校验", (file) => {

@@ -10,7 +10,7 @@
 -- （收益五表；本期不建 RevenueAttributionSnapshot——按书/按推广码的拆分上游暂不支持，
 --  GetMDetailsReport / GetMToTalReport 对网文无效，已实测）。
 --
--- 写入方：只有 worker（任务 `moboreader.revenue_sync.v1`，经 `protectedWrite` 在带
+-- 写入方：只有 worker（任务 `changdu.revenue_sync.v1`，经 `protectedWrite` 在带
 -- 租约围栏的 finalize 事务里落库）；web 只读（看板页）。授权见 infra/postgres/grants.sql。
 --
 -- 金额一律 numeric（Prisma Decimal），禁止浮点；主键 uuid 由 Prisma 客户端生成

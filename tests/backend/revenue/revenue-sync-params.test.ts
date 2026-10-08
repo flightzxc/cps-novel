@@ -162,15 +162,20 @@ describe("幂等键与作用域哈希", () => {
     expect(detail("2026-09-26")).toHaveLength(64);
   });
 
-  it("operation_scope_hash 是固定的 revenue_sync 作用域哈希（char(64)，不随调用变化）", async () => {
+  it("operation_scope_hash 是 revenue_sync 作用域哈希，且把 projectType 折进去（char(64)，同入参稳定）", async () => {
     const { createHash } = await import("node:crypto");
-    const hash = revenueSyncOperationScopeHash();
+    const hash = revenueSyncOperationScopeHash(1);
     expect(hash).toBe(createHash("sha256").update(JSON.stringify({ scope: "revenue_sync", projectType: 1 })).digest("hex"));
     expect(hash).toHaveLength(64);
+    expect(revenueSyncOperationScopeHash(1)).toBe(hash);
+    // 默认入参 = 网文 projectType=1。
     expect(revenueSyncOperationScopeHash()).toBe(hash);
+    // projectType 在哈希里：同账号别的业务线的同类任务不会与网文互相挤占活跃作用域。
+    expect(revenueSyncOperationScopeHash(2)).not.toBe(hash);
+    expect(revenueSyncOperationScopeHash(2)).toBe(createHash("sha256").update(JSON.stringify({ scope: "revenue_sync", projectType: 2 })).digest("hex"));
   });
 
   it("任务类型常量", () => {
-    expect(REVENUE_SYNC_TASK_TYPE).toBe("moboreader.revenue_sync.v1");
+    expect(REVENUE_SYNC_TASK_TYPE).toBe("changdu.revenue_sync.v1");
   });
 });

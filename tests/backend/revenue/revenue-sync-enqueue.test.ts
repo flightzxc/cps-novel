@@ -18,6 +18,8 @@ function app(id: string, accounts: Array<{ id: string; accountName: string }>): 
 
 function makeDb(options: {
   apps?: AppRow[];
+  /** 给了就用带过滤的 channel_app 假库（按 where 真实过滤夹具行），否则直接返回 `apps`。 */
+  fixtures?: FixtureApp[];
   byToken?: unknown;
   active?: unknown;
   createError?: unknown;
@@ -31,7 +33,9 @@ function makeDb(options: {
   if (options.createError) tx.genericTask.create = vi.fn<(...args: any[]) => Promise<any>>(async () => { throw options.createError; });
   let tokenLookups = 0;
   const db = {
-    channelApp: { findMany: vi.fn<(...args: any[]) => Promise<any>>(async () => apps) },
+    channelApp: options.fixtures
+      ? makeFilteringDb(options.fixtures).channelApp
+      : { findMany: vi.fn<(...args: any[]) => Promise<any>>(async () => apps) },
     genericTask: {
       findUnique: vi.fn<(...args: any[]) => Promise<any>>(async () => {
         tokenLookups += 1;
@@ -50,11 +54,43 @@ function uniqueViolation() {
   return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "6.19.2" });
 }
 
-describe("选账号：网文 active channel_app 下恰好一个 active 且未删除的 channel_account", () => {
-  it("恰好一个 → ok，带 channelAppId 与账号名；查询条件钉死 projectType=1 与各层 active", async () => {
+/**
+ * 带过滤能力的 channel_app 假库：`findMany` 按传入的 `where`（projectType / 应用 status / channel.status /
+ * sourceApp.status）真实过滤夹具行，所以“某个应用 disabled → 不计入”测的是查询条件本身，而不是夹具的预先筛选。
+ */
+type FixtureApp = {
+  id: string;
+  projectType?: number;
+  status?: string;
+  channelStatus?: string;
+  sourceAppStatus?: string;
+  accounts: Array<{ id: string; accountName: string }>;
+};
+
+function makeFilteringDb(fixtures: FixtureApp[]) {
+  const findMany = vi.fn<(...args: any[]) => Promise<any>>(async (args: { where: any }) => {
+    const where = args.where;
+    return fixtures
+      .filter((row) =>
+        (row.projectType ?? 1) === where.projectType
+        && (row.status ?? "active") === where.status
+        && (row.channelStatus ?? "active") === where.channel.status
+        && (row.sourceAppStatus ?? "active") === where.sourceApp.status)
+      .map((row) => app(row.id, row.accounts));
+  });
+  return { channelApp: { findMany } };
+}
+
+const OTHER_ACCOUNT_ID = "99999999-9999-4999-8999-999999999999";
+const APP_B_ID = "33333333-3333-4333-8333-333333333333";
+const ACCOUNT_A = { id: ACCOUNT_ID, accountName: "chenweifeng@qq.com" };
+
+describe("选账号：按账号去重，恰好一个 active 且未删除的 channel_account（账号级）", () => {
+  it("恰好一个 → ok，带账号名与 novelAppCount（不带 channelAppId）；查询条件钉死 projectType=1 与各层 active", async () => {
     const { db } = makeDb();
     const resolution = await resolveRevenueChannelAccount(db as never);
-    expect(resolution).toEqual({ status: "ok", channelAccountId: ACCOUNT_ID, channelAppId: APP_ID, accountName: "chenweifeng@qq.com" });
+    expect(resolution).toEqual({ status: "ok", channelAccountId: ACCOUNT_ID, accountName: "chenweifeng@qq.com", novelAppCount: 1 });
+    expect(resolution).not.toHaveProperty("channelAppId");
     const where = db.channelApp.findMany.mock.calls[0]![0].where;
     expect(where).toMatchObject({ projectType: 1, status: "active", channel: { status: "active" }, sourceApp: { status: "active" } });
     const accountsFilter = db.channelApp.findMany.mock.calls[0]![0].select.channel.select.channelAccounts.where;
@@ -66,11 +102,37 @@ describe("选账号：网文 active channel_app 下恰好一个 active 且未删
     expect(await resolveRevenueChannelAccount(makeDb({ apps: [app(APP_ID, [])] }).db as never)).toEqual({ status: "unavailable" });
   });
 
-  it("多个账号，或同一个账号挂在两个应用下 → ambiguous（不替运营挑）", async () => {
-    const twoAccounts = makeDb({ apps: [app(APP_ID, [{ id: ACCOUNT_ID, accountName: "a" }, { id: "99999999-9999-4999-8999-999999999999", accountName: "b" }])] });
-    expect(await resolveRevenueChannelAccount(twoAccounts.db as never)).toEqual({ status: "ambiguous" });
-    const twoApps = makeDb({ apps: [app(APP_ID, [{ id: ACCOUNT_ID, accountName: "a" }]), app("33333333-3333-4333-8333-333333333333", [{ id: ACCOUNT_ID, accountName: "a" }])] });
-    expect(await resolveRevenueChannelAccount(twoApps.db as never)).toEqual({ status: "ambiguous" });
+  it("同一个账号下挂两个 active 网文应用 → ok（不是 ambiguous），novelAppCount = 2", async () => {
+    const db = makeFilteringDb([
+      { id: APP_ID, accounts: [ACCOUNT_A] },
+      { id: APP_B_ID, accounts: [ACCOUNT_A] },
+    ]);
+    expect(await resolveRevenueChannelAccount(db as never)).toEqual({
+      status: "ok", channelAccountId: ACCOUNT_ID, accountName: "chenweifeng@qq.com", novelAppCount: 2,
+    });
+  });
+
+  it("两个不同的 active 账号（同一应用下，或分挂在不同应用下）→ ambiguous（不替运营挑）", async () => {
+    const sameApp = makeDb({ apps: [app(APP_ID, [ACCOUNT_A, { id: OTHER_ACCOUNT_ID, accountName: "b" }])] });
+    expect(await resolveRevenueChannelAccount(sameApp.db as never)).toEqual({ status: "ambiguous" });
+    const differentApps = makeFilteringDb([
+      { id: APP_ID, accounts: [ACCOUNT_A] },
+      { id: APP_B_ID, accounts: [{ id: OTHER_ACCOUNT_ID, accountName: "b" }] },
+    ]);
+    expect(await resolveRevenueChannelAccount(differentApps as never)).toEqual({ status: "ambiguous" });
+  });
+
+  it("应用 inactive（或 channel / source_app 非 active，或不是网文 projectType）→ 不计入 novelAppCount", async () => {
+    const db = makeFilteringDb([
+      { id: APP_ID, accounts: [ACCOUNT_A] },
+      { id: APP_B_ID, status: "inactive", accounts: [ACCOUNT_A] },
+      { id: "44444444-4444-4444-8444-444444444444", projectType: 2, accounts: [ACCOUNT_A] },
+      { id: "55555555-5555-4555-8555-555555555555", sourceAppStatus: "inactive", accounts: [ACCOUNT_A] },
+    ]);
+    expect(await resolveRevenueChannelAccount(db as never)).toMatchObject({ status: "ok", novelAppCount: 1 });
+    // 唯一的应用被停用 → 没有任何网文应用 → unavailable。
+    const onlyDisabled = makeFilteringDb([{ id: APP_ID, status: "inactive", accounts: [ACCOUNT_A] }]);
+    expect(await resolveRevenueChannelAccount(onlyDisabled as never)).toEqual({ status: "unavailable" });
   });
 
   it("账号标签脱敏", () => {
@@ -83,7 +145,7 @@ describe("选账号：网文 active channel_app 下恰好一个 active 且未删
 });
 
 describe("入队成功", () => {
-  it("同一事务写 generic_task + 唯一条目 + operation_audit；账号 / 应用 / 作用域哈希 / 模式 / 状态正确", async () => {
+  it("同一事务写 generic_task + 唯一条目 + operation_audit；账号级：channel_app_id 为 NULL，作用域哈希折进 projectType，模式 / 状态正确", async () => {
     const { db, tx } = makeDb();
     const result = await enqueueRevenueSync(asPrisma(db), INPUT, { now: NOW });
 
@@ -93,10 +155,10 @@ describe("入队成功", () => {
     const task = tx.genericTask.create.mock.calls[0]![0].data;
     expect(task).toMatchObject({
       id: taskId,
-      taskType: "moboreader.revenue_sync.v1",
+      taskType: "changdu.revenue_sync.v1",
       channelAccountId: ACCOUNT_ID,
-      channelAppId: APP_ID,
-      operationScopeHash: revenueSyncOperationScopeHash(),
+      channelAppId: null,
+      operationScopeHash: revenueSyncOperationScopeHash(1),
       mode: "apply",
       status: "pending",
       requestToken: "req-token-1",
@@ -112,6 +174,14 @@ describe("入队成功", () => {
       requestId: "req-token-1", taskType: REVENUE_SYNC_TASK_TYPE, taskId,
     });
     expect(audit.afterSnapshot).toMatchObject({ projectType: 1, beginDate: "2026-10-01", endDate: "2026-10-07", mode: "apply" });
+  });
+
+  it("同一账号下挂两个 active 网文应用 → 照常入队（不是 channel_account_ambiguous），任务不属于任何一个应用", async () => {
+    const { db, tx } = makeDb({ fixtures: [{ id: APP_ID, accounts: [ACCOUNT_A] }, { id: APP_B_ID, accounts: [ACCOUNT_A] }] });
+    const result = await enqueueRevenueSync(asPrisma(db), INPUT, { now: NOW });
+    expect(result).toMatchObject({ ok: true, duplicate: false });
+    const task = tx.genericTask.create.mock.calls[0]![0].data;
+    expect(task).toMatchObject({ channelAccountId: ACCOUNT_ID, channelAppId: null });
   });
 
   it("入队永远是 apply、projectType 永远是 1：调用方没有任何入参能改它们", async () => {
@@ -175,8 +245,8 @@ describe("入队拒绝", () => {
     expect(filter).toMatchObject({
       taskType: REVENUE_SYNC_TASK_TYPE,
       channelAccountId: ACCOUNT_ID,
-      channelAppId: APP_ID,
-      operationScopeHash: revenueSyncOperationScopeHash(),
+      channelAppId: null,
+      operationScopeHash: revenueSyncOperationScopeHash(1),
       status: { in: ["pending", "processing"] },
     });
   });

@@ -68,7 +68,7 @@ export default async function RevenuePage({
       description={`${view.range.dateFrom} ~ ${view.range.dateTo}，共 ${view.range.dayCount} 天（北京时间）`}
     >
       <div className="space-y-6">
-        <MethodologyNote />
+        <MethodologyNote novelAppCount={view.account?.novelAppCount ?? null} />
         <AdminTimeZoneNote />
 
         {range.fallbackNotice && (
@@ -90,7 +90,7 @@ export default async function RevenuePage({
           dateTo={view.range.dateTo}
           today={today}
         />
-        <SummaryCards summary={view.summary} />
+        <SummaryCards summary={view.summary} novelAppCount={view.account?.novelAppCount ?? null} />
         <DailyTable days={view.days} />
         <BatchTable batches={view.batches} />
       </div>

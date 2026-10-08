@@ -7,6 +7,7 @@ import type { TaskLease, TaskOutcome } from "@/lib/tasks";
 import {
   REVENUE_SYNC_TARGET_TYPE,
   REVENUE_SYNC_TASK_TYPE,
+  revenueSyncOperationScopeHash,
   revenueBatchFingerprint,
   revenueRawDedupeKey,
 } from "@/lib/tasks/revenue-sync";
@@ -54,7 +55,7 @@ function makeDb(overrides: { task?: unknown; account?: unknown; scope?: unknown;
       findUnique: vi.fn(async () =>
         "task" in overrides
           ? overrides.task
-          : { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, channelApp: { projectType: 1 } }),
+          : { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, operationScopeHash: revenueSyncOperationScopeHash(1) }),
     },
     channelAccount: { findFirst: vi.fn(async () => ("account" in overrides ? overrides.account : { id: ACCOUNT_ID })) },
     revenueSyncScope: { findUnique: vi.fn(async () => ("scope" in overrides ? overrides.scope : null)) },
@@ -420,16 +421,35 @@ describe("前置校验：不合规就不动上游，也不写批次（任务行 
 
   it.each([
     ["任务行不存在", { task: null }],
-    ["任务类型不对", { task: { taskType: "catalog_scan", channelAccountId: ACCOUNT_ID, channelApp: { projectType: 1 } } }],
-    ["任务行账号与参数不一致", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: "99999999-9999-4999-8999-999999999999", channelApp: { projectType: 1 } } }],
-    ["绑定的 channel_app 不是网文 projectType", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, channelApp: { projectType: 2 } } }],
-    ["没有绑定 channel_app", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, channelApp: null } }],
+    ["任务类型不对", { task: { taskType: "catalog_scan", channelAccountId: ACCOUNT_ID, operationScopeHash: revenueSyncOperationScopeHash(1) } }],
+    ["任务行账号与参数不一致", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: "99999999-9999-4999-8999-999999999999", operationScopeHash: revenueSyncOperationScopeHash(1) } }],
+    // 账号级任务的 channel_app_id 是 NULL，业务线靠 operation_scope_hash（折进 projectType）自描述：
+    ["作用域哈希对应的不是网文 projectType=1", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, operationScopeHash: revenueSyncOperationScopeHash(2) } }],
+    ["作用域哈希被篡改", { task: { taskType: REVENUE_SYNC_TASK_TYPE, channelAccountId: ACCOUNT_ID, operationScopeHash: "0".repeat(64) } }],
   ])("%s → revenue_sync_scope_invalid，不发请求，不写批次", async (_name, overrides) => {
     const { handler, fetchReport } = build({ db: makeDb(overrides) });
     const outcome = await run(handler);
     expect(outcome).toMatchObject({ status: "failed", error: { code: "revenue_sync_scope_invalid" } });
     expect(outcome.protectedWrite).toBeUndefined();
     expect(fetchReport).not.toHaveBeenCalled();
+  });
+
+  it("账号级任务：任务行 channel_app_id 为 NULL 也是合法的（不再从应用上读业务线）；账号核对带上“channel 下有 active 网文应用”", async () => {
+    const db = makeDb();
+    const { handler } = build({ db });
+    await run(handler);
+    expect(db.genericTask.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: { taskType: true, channelAccountId: true, operationScopeHash: true },
+    }));
+    expect(db.channelAccount.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: ACCOUNT_ID, status: "active", deletedAt: null,
+        channel: {
+          status: "active",
+          channelApps: { some: { projectType: 1, status: "active", sourceApp: { status: "active" } } },
+        },
+      },
+    }));
   });
 
   it("账号已不再 active / 已删除 → failed channel_account_unavailable（落批次），不读凭证、不发请求", async () => {
@@ -454,10 +474,10 @@ describe("前置校验：不合规就不动上游，也不写批次（任务行 
 });
 
 describe("注册", () => {
-  it("任务类型 moboreader.revenue_sync.v1：family generic、maxAttempts 1", () => {
+  it("任务类型 changdu.revenue_sync.v1：family generic、maxAttempts 1", () => {
     const registry = createRevenueSyncWorkerHandlers({} as PrismaClient);
-    expect(Object.keys(registry)).toEqual(["moboreader.revenue_sync.v1"]);
-    expect(registry["moboreader.revenue_sync.v1"]).toMatchObject({ family: "generic", maxAttempts: 1 });
-    expect(REVENUE_SYNC_TASK_TYPE).toBe("moboreader.revenue_sync.v1");
+    expect(Object.keys(registry)).toEqual(["changdu.revenue_sync.v1"]);
+    expect(registry["changdu.revenue_sync.v1"]).toMatchObject({ family: "generic", maxAttempts: 1 });
+    expect(REVENUE_SYNC_TASK_TYPE).toBe("changdu.revenue_sync.v1");
   });
 });

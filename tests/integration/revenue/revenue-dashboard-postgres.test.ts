@@ -22,11 +22,14 @@ import { buildWorkerAllowlist, createHandlerRegistry, type TaskLease } from "@/l
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { REVENUE_SYNC_TARGET_TYPE, REVENUE_SYNC_TASK_TYPE, addDaysToDate, shanghaiToday } from "@/lib/tasks/revenue-sync";
 import { enqueueRevenueSync, loadRevenueDashboard } from "@/server/revenue";
+import { abortTask, getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
+import type { AdminAuthContext } from "@/lib/auth/types";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createRevenueSyncHandler, createRevenueSyncWorkerHandlers } from "../../../worker/handlers/revenue-sync";
 import { processOneWorkerCycle } from "../../../worker/runtime/worker";
 
 import { detailRow, envelope, fakeAggregateJwt, fakeStarJwt, jsonResponse, totalRow } from "../../backend/revenue/support";
+import { issueTaskAuthorization, newStores, NOW as ADMIN_NOW, seedTaskAdmin } from "../../backend/task-admin/test-support";
 
 const enabled = process.env.REVENUE_DASHBOARD_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.REVENUE_DASHBOARD_OWNER_DATABASE_URL });
@@ -180,7 +183,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const task = await owner.genericTask.findUniqueOrThrow({ where: { id: taskId }, include: { items: true } });
       expect(task).toMatchObject({
         taskType: REVENUE_SYNC_TASK_TYPE, status: "pending", mode: "apply",
-        channelAccountId: foundation.account, channelAppId: foundation.app, totalCount: 1,
+        channelAccountId: foundation.account, channelAppId: null, totalCount: 1,
       });
       expect(task.items).toHaveLength(1);
       expect(task.items[0]).toMatchObject({ targetType: REVENUE_SYNC_TARGET_TYPE, status: "pending" });
@@ -241,7 +244,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
 
       // web_app 读服务：三态 + 精确金额 + 凭证元数据 + 脱敏标签。
       const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
-      expect(view.account).toEqual({ id: foundation.account, label: "ch***@qq.com" });
+      expect(view.account).toEqual({ id: foundation.account, label: "ch***@qq.com", novelAppCount: 1 });
       expect(view.days).toHaveLength(7);
       const byDate = Object.fromEntries(view.days.map((day) => [day.date, day]));
       expect(byDate[D1]).toEqual({ date: D1, coverage: "reported", activeUsers: 5, newUsers: 2, newUserRatio: "0.4", shareIncomeUsd: "28.8800" });
@@ -408,10 +411,75 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(await enqueue({ requestToken, beginDate: D3 })).toMatchObject({ ok: false, code: "request_token_conflict" });
     });
 
+    it("账号级任务（channel_app_id 为 NULL）：同账号连续入队两次，第二次 revenue_sync_already_active；唯一索引是 NULLS NOT DISTINCT；同账号再挂一个 active 网文应用不影响", async () => {
+      await resetDatabase();
+      const [{ nullsNotDistinct }] = await owner.$queryRaw<Array<{ nullsNotDistinct: boolean }>>`
+        SELECT indnullsnotdistinct AS "nullsNotDistinct" FROM pg_index WHERE indexrelid = 'generic_task_active_scope_uidx'::regclass`;
+      expect(nullsNotDistinct).toBe(true);
+
+      const first = await enqueue();
+      expect(first).toMatchObject({ ok: true, duplicate: false });
+      const firstId = (first as { taskId: string }).taskId;
+      const row = await owner.genericTask.findUniqueOrThrow({ where: { id: firstId } });
+      expect(row.channelAppId).toBeNull();
+      expect(row.channelAccountId).toBe(foundation.account);
+      // 同账号连续入队第二次：被挡住，带着第一次的任务 id（不同令牌、不同区间也一样）。
+      expect(await enqueue({ beginDate: D3 })).toEqual({ ok: false, code: "revenue_sync_already_active", existingTaskId: firstId });
+      expect(await owner.genericTask.count({ where: { taskType: REVENUE_SYNC_TASK_TYPE } })).toBe(1);
+
+      // 同一账号 / channel 下再挂一个 active 的网文应用（畅读多剧场场景）：不是“账号不唯一”，看板显示合计。
+      const secondSource = await owner.sourceApp.create({ data: { code: "second-novel-app", name: "second" } });
+      await owner.channelApp.create({
+        data: { channelId: foundation.channel, sourceAppId: secondSource.id, externalAppId: "second", projectType: 1 },
+      });
+      const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
+      expect(view.account).toMatchObject({ id: foundation.account, novelAppCount: 2 });
+      expect(view.activeTask).toMatchObject({ id: firstId });
+      expect(await enqueue({ beginDate: D2 })).toEqual({ ok: false, code: "revenue_sync_already_active", existingTaskId: firstId });
+
+      // 第一个任务结束后，两个应用的同一账号仍然可以入队（不会被判 channel_account_ambiguous），且仍是 NULL 应用。
+      await owner.genericTask.update({ where: { id: firstId }, data: { status: "completed" } });
+      const next = await enqueue();
+      expect(next).toMatchObject({ ok: true, duplicate: false });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: (next as { taskId: string }).taskId } })).channelAppId).toBeNull();
+
+      // 应用被停用后不再计入 novelAppCount。
+      await owner.channelApp.updateMany({ where: { externalAppId: "second" }, data: { status: "inactive" } });
+      expect((await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END })).account).toMatchObject({ novelAppCount: 1 });
+    });
+
+    it("同账号两个应用 + 账号级任务：真实 worker 周期照常领取执行并写入；所有网文应用都被停用后，执行期核对失败（channel_account_unavailable，零上游请求）", async () => {
+      await resetDatabase();
+      const secondSource = await owner.sourceApp.create({ data: { code: "second-novel-app", name: "second" } });
+      await owner.channelApp.create({
+        data: { channelId: foundation.channel, sourceAppId: secondSource.id, externalAppId: "second", projectType: 1 },
+      });
+      const okTaskId = await enqueueOk();
+      const okUpstream = upstream([detailRow(D1, { realDevNum: 5, newRealDevNum: 2, realDevNumRate: "40%", realIncome: "28.88" }), totalRow({ realIncome: "28.88" })]);
+      expect(await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(okUpstream.fetchReport))).toBe(true);
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: okTaskId } })).status).toBe("completed");
+      expect(okUpstream.fetchReport).toHaveBeenCalledTimes(1);
+      const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
+      expect(view.account).toMatchObject({ novelAppCount: 2 });
+      expect(view.summary.shareIncomeUsdTotal).toBe("28.8800");
+
+      // 入队之后、执行之前，账号所在 channel 下所有网文应用都被停用：任务行里已经没有应用可以证明“这是网文业务线”，
+      // handler 在执行期核对，失败并落一条 failed 批次，不发任何上游请求。
+      const laterTaskId = await enqueueOk({ beginDate: D2 });
+      await owner.channelApp.updateMany({ data: { status: "inactive" } });
+      const blocked = upstream([]);
+      await runHandlerDirect(laterTaskId, blocked.fetchReport);
+      expect(blocked.fetchReport).not.toHaveBeenCalled();
+      const failedBatch = await owner.revenueSyncBatch.findFirstOrThrow({ where: { genericTaskId: laterTaskId } });
+      expect(failedBatch).toMatchObject({ status: "failed", errorCode: "channel_account_unavailable" });
+    });
+
     it("活跃作用域唯一索引在数据库层兜底：绕过应用层先查，直接插第二个 pending 任务被 23505 拒绝", async () => {
       await resetDatabase();
       const taskId = await enqueueOk();
       const existing = await owner.genericTask.findUniqueOrThrow({ where: { id: taskId } });
+      // 账号级任务不属于某个应用：channel_app_id 是 NULL，唯一性靠 NULLS NOT DISTINCT 兜底。
+      expect(existing.channelAppId).toBeNull();
       await expect(
         owner.genericTask.create({
           data: {
@@ -450,6 +518,53 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       await enqueueOk();
       const task = await owner.genericTask.findFirstOrThrow();
       expect(JSON.stringify(task)).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}|Bearer\s|secret|encrypted/i);
+    });
+  });
+
+  describe("任务中心服务对账号级任务（channel_app_id 为 NULL）的读与中止（web_app 真实角色）", () => {
+    function adminContext(): AdminAuthContext {
+      const { identity, session } = seedTaskAdmin(newStores());
+      return { identity, session, twoFactorCompleted: true };
+    }
+    const env = {} as NodeJS.ProcessEnv;
+
+    it("listAdminTasks / getAdminTaskDetail / getAdminTaskProgress 能正常列出、读出这条任务；执行完成后状态同步；pending 时可以被中止，之后能再次入队", async () => {
+      await resetDatabase();
+      const taskId = await enqueueOk();
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: taskId } })).channelAppId).toBeNull();
+      const context = adminContext();
+
+      const listed = await listAdminTasks(web, context, { family: "generic", limit: 100 }, env);
+      expect(listed.items.find((item) => item.taskId === taskId)).toMatchObject({
+        family: "generic", taskType: REVENUE_SYNC_TASK_TYPE, status: "pending", totalCount: 1,
+      });
+      const pendingOnly = await listAdminTasks(web, context, { family: "generic", status: "pending", limit: 100 }, env);
+      expect(pendingOnly.items.map((item) => item.taskId)).toContain(taskId);
+
+      const detail = await getAdminTaskDetail(web, context, { family: "generic", taskId }, env);
+      expect(detail).toMatchObject({ taskId, taskType: REVENUE_SYNC_TASK_TYPE, status: "pending", channelAccountId: foundation.account });
+      const progress = await getAdminTaskProgress(web, context, { taskId }, env);
+      expect(progress).toMatchObject({ taskType: REVENUE_SYNC_TASK_TYPE, status: "pending", total: 1 });
+
+      // 真实 worker 执行完成之后，任务中心里看到的是 completed。
+      const { fetchReport } = upstream([]);
+      expect(await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(fetchReport))).toBe(true);
+      const completed = await listAdminTasks(web, context, { family: "generic", status: "completed", limit: 100 }, env);
+      expect(completed.items.find((item) => item.taskId === taskId)).toMatchObject({ status: "completed", successCount: 1 });
+      expect(await getAdminTaskDetail(web, context, { family: "generic", taskId }, env)).toMatchObject({ status: "completed" });
+
+      // “漏配白名单 → 一直 pending → 到任务中心中止”这条运营路径对 NULL 应用的任务同样走得通。
+      const stuckId = await enqueueOk({ beginDate: D2 });
+      const stores = newStores();
+      const admin = seedTaskAdmin(stores);
+      const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/abort" });
+      const aborted = await abortTask(
+        { ...ticket, family: "generic", taskId: stuckId, reason: "revenue null-app abort" },
+        { db: web, identities: stores, sessions: stores, now: ADMIN_NOW },
+      );
+      expect(aborted).toMatchObject({ status: "cancelled", wrote: true });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: stuckId } })).status).toBe("cancelled");
+      expect(await enqueue({ beginDate: D3 })).toMatchObject({ ok: true });
     });
   });
 
