@@ -27,7 +27,7 @@
  *      不是每个请求都调用），命中共同标签的候选在请求时于内存里筛出来。
  *      标签数据仍然只有唯一真源（`loadPublicTaxonomyByNovelIds`），没有
  *      第二处重新实现归属判定。候选池仍然是**有界**的（`take: poolSize`），
- *      不是 `category-queries.ts` 那种"整表读入内存再过滤"。
+ *      不是"整表读入内存再过滤"。
  *
  *   2. **取样方式**：CPS 用 `ORDER BY RANDOM() LIMIT poolSize` 在 SQL 层做
  *      随机取样，池子覆盖整个候选空间。Prisma 的类型化查询 API 没有随机排序
@@ -36,7 +36,7 @@
  *      第 1 条要避免的"同一个可见性判定被复制出第二份"。
  *
  *      改为 `orderBy: [{ publishedAt: "desc" }, ...] take: poolSize`（与
- *      `listPublicArticles` 已经在用的排序完全一致，直接复用
+ *      公开列表（`public-list.ts`）用的排序完全一致，直接复用
  *      `buildPublicListArticleWhere` 这个唯一真源），池子因此是"最近发布的
  *      前 poolSize 本"而不是"全量随机 poolSize 本"。当已发布小说页总数
  *      ≤ poolSize（当前生产 15 本，默认 poolSize 500）时两者等价；总数一旦

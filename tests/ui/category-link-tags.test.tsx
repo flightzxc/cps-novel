@@ -61,7 +61,7 @@ describe("TagList：有 href 渲染成链接，没有 href 渲染成纯文字", 
 });
 
 describe("详情页（NovelDetailScreen）", () => {
-  it("窗口之内的分类渲染为链接、窗口之外的渲染为纯文字", () => {
+  it("可链接集合里的分类渲染为链接、不在集合里的渲染为纯文字", () => {
     const { container } = render(
       <NovelDetailScreen locale="en" novel={restrictViewTagLinks(DETAIL, LINKABLE)} />,
     );
@@ -72,7 +72,7 @@ describe("详情页（NovelDetailScreen）", () => {
     expect(container.querySelector('a[href*="/category/adventure"]')).toBeNull();
   });
 
-  it("未收口的视图（对照）：两个标签都带 href，窗口之外的那个就是死链——这正是要收口的现象", () => {
+  it("未收口的视图（对照）：两个标签都带 href，不在集合里的那个就是死链——这正是要收口的现象", () => {
     const { container } = render(<NovelDetailScreen locale="en" novel={DETAIL} />);
     expect(container.querySelector('a[href="/category/adventure"]')).not.toBeNull();
   });
@@ -92,7 +92,7 @@ describe("详情页（NovelDetailScreen）", () => {
 });
 
 describe("推荐卡片（BookCard 非 minimal 档）同理", () => {
-  it("收口后的卡片：窗口之内是链接，窗口之外是没有 href 的纯文字", () => {
+  it("收口后的卡片：可链接集合里的是链接，不在集合里的是没有 href 的纯文字", () => {
     const { container } = render(<BookCard locale="en" novel={restrictViewTagLinks(CARD, LINKABLE)} />);
     expect(tagNodes(container)).toEqual([
       { text: "Adventure", tag: "span", href: null },

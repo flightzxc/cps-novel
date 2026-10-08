@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
 import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailableScreen";
+import { pagedNovels, pagedPosts } from "../fixtures/paged-results";
 
 /**
  * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.6 item 2): "语种
@@ -92,17 +93,14 @@ vi.mock("next/headers", () => ({
   headers: async () => ({ get: () => notFoundHeaderState.headerValue }),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
-}));
-
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
@@ -113,6 +111,13 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadBlogList: vi.fn(),
   loadBlogAccess: vi.fn(),
   loadBlogDetail: vi.fn(),
+}));
+
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 // Wraps (does not replace) the real guard: the default `vi.fn()` behavior is
@@ -128,8 +133,6 @@ vi.mock("@/app/[locale]/_guard", async (importOriginal) => {
   };
 });
 
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
@@ -137,7 +140,8 @@ const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
@@ -267,18 +271,18 @@ beforeEach(() => {
   loadHomeCarousel.mockResolvedValue([]);
   loadPublicCategories.mockReset();
   loadPublicCategories.mockResolvedValue([]);
-  loadBrowseNovels.mockReset();
-  loadBrowseNovels.mockResolvedValue([CARD]);
+  loadBrowsePage.mockReset();
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
   loadArticleAccess.mockReset();
   loadNovelDetail.mockReset();
   loadChapterView.mockReset();
   loadHreflangSiblings.mockReset();
   loadHreflangSiblings.mockResolvedValue([]);
   loadBlogList.mockReset();
-  loadBlogList.mockResolvedValue([BLOG_POST]);
+  loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([BLOG_POST], page));
   loadBlogAccess.mockReset();
   loadBlogDetail.mockReset();
-  getPublicCategoryPage.mockReset();
+  loadCategoryPage.mockReset();
 });
 
 afterEach(() => {
@@ -326,7 +330,7 @@ describe("browse: bare-path and [locale]-prefixed shells agree", () => {
   });
 
   it("category branch: generateMetadata/default agree, and the category's own description takes precedence over the site description — this is the check this file's load-bearing verification exercises: flip buildBrowseMetadata's title ternary or `||` precedence and this assertion (not the bare-vs-prefixed one above it) goes red, because both shells share the same _pages/browse.tsx body and would still agree with each other even if that body were wrong", async () => {
-    getPublicCategoryPage.mockResolvedValue(CATEGORY_PAGE);
+    loadCategoryPage.mockResolvedValue(CATEGORY_PAGE);
     const bare = await import("@/app/browse/page");
     const prefixed = await import("@/app/[locale]/browse/page");
     const searchParams = Promise.resolve({ category: "fantasy" });
@@ -344,7 +348,7 @@ describe("browse: bare-path and [locale]-prefixed shells agree", () => {
   });
 
   it("404s for page=2 with zero novels on both shells (C-29 review low fix)", async () => {
-    loadBrowseNovels.mockResolvedValue([]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([], page));
     const bare = await import("@/app/browse/page");
     const prefixed = await import("@/app/[locale]/browse/page");
     const searchParams = Promise.resolve({ page: "2" });
@@ -356,7 +360,7 @@ describe("browse: bare-path and [locale]-prefixed shells agree", () => {
 
 describe("category: bare-path and [locale]-prefixed shells agree", () => {
   beforeEach(() => {
-    getPublicCategoryPage.mockResolvedValue(CATEGORY_PAGE);
+    loadCategoryPage.mockResolvedValue(CATEGORY_PAGE);
   });
 
   // 2026-10-08（运营反馈、Owner 确认）：分类页标题 = 分类名 + Novels（`collection.categoryHeading`）。
@@ -378,7 +382,7 @@ describe("category: bare-path and [locale]-prefixed shells agree", () => {
   });
 
   it("404s when the category does not exist, on both shells", async () => {
-    getPublicCategoryPage.mockResolvedValue(null);
+    loadCategoryPage.mockResolvedValue(null);
     const bare = await import("@/app/category/[slug]/page");
     const prefixed = await import("@/app/[locale]/category/[slug]/page");
     const params = Promise.resolve({ slug: "missing" });
@@ -710,7 +714,7 @@ describe("blog list: bare-path and [locale]-prefixed shells agree", () => {
   });
 
   it("404s for page=2 with zero posts on both shells", async () => {
-    loadBlogList.mockResolvedValue([]);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
     const bare = await import("@/app/blog/page");
     const prefixed = await import("@/app/[locale]/blog/page");
     const searchParams = Promise.resolve({ page: "2" });

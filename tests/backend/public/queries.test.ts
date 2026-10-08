@@ -1,14 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BROWSE_PAGE_SIZE,
+  getPublicBrowsePage,
   getPublicNovelDetail,
-  listPublicArticles,
+  HOME_GRID_LIMIT,
+  listHomeNovels,
   listPublicCategories,
-  paginateCards,
   resolvePublicArticleBySlugParam,
 } from "@/lib/site/queries";
-import { buildPublicListArticleWhere } from "@/server/publication/visibility";
+import { clearPublicCategoryCountsCacheForTest } from "@/lib/site/public-list";
+
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
 const READY_PROMO = { status: "fetched", webUrl: "https://upstream.example/x", appUrl: null };
 const BLANK_PROMO = { status: "fetched", webUrl: "   ", appUrl: " " };
@@ -190,87 +194,120 @@ describe("resolvePublicArticleBySlugParam", () => {
 });
 
 /**
- * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
- * a `findMany` fake that actually *applies* the `where.seoVisibility`
- * sub-clause from `buildPublicListArticleWhere`, unlike this file's plain
- * `vi.fn().mockResolvedValue(rows)` doubles elsewhere — needed so the
- * exclusion tests below prove real end-to-end behavior (call args in, rows
- * out) rather than only asserting "called with the right where object" (that
- * shape-level proof already lives in `tests/backend/publication/
- * visibility.test.ts`'s C-25 truth table).
+ * B-38（v0.5.13）：列表 / 分类 / 首页作品格不再把"最新 240 本"读进内存再在程序里过滤——它们是数据库分页，
+ * 筛选语义（C-25 的 seo_only / hidden 排除、推广链接去空白等价、排序、并列、分类归属）由 `public-list.ts` 的 SQL 承担，
+ * 单元层钉 SQL 形状（`tests/backend/site/public-list.test.ts`），语义由真实库用例证明
+ * （`tests/integration/site/list-equivalence-postgres.test.ts`，含 seo_only / hidden 两种开关状态）。
+ * 这里只钉 `queries.ts` 这一层的胶水：首页取前 HOME_GRID_LIMIT 本、全部作品页的页大小与页码、页脚分类的取法。
  */
-function findManyApplyingSeoVisibility(rows: ReturnType<typeof listed>[]) {
-  return vi.fn(async ({ where }: { where: { AND: [Record<string, unknown>, unknown] } }) => {
-    const clause = where.AND[0].seoVisibility as string | { not?: string } | undefined;
-    const seoVisibilityOf = (row: ReturnType<typeof listed>) => (row as { seoVisibility?: string }).seoVisibility;
-    if (clause === undefined) return rows;
-    if (typeof clause === "string") return rows.filter((row) => seoVisibilityOf(row) === clause);
-    return rows.filter((row) => seoVisibilityOf(row) !== clause.not);
-  });
+function listDb(options: { total?: number; ids?: string[]; rows?: Array<ReturnType<typeof listed>> } = {}) {
+  const kinds: string[] = [];
+  const db = {
+    article: { findMany: vi.fn().mockResolvedValue(options.rows ?? []) },
+    $queryRaw: vi.fn(async (query: { text: string; values: readonly unknown[] }) => {
+      const kind = classifyPublicListQuery(query);
+      kinds.push(kind);
+      if (kind === "page-ids") return (options.ids ?? []).map((id) => ({ id }));
+      if (kind === "page-count") return [{ total: options.total ?? 0 }];
+      return [];
+    }),
+  } as unknown as PrismaClient;
+  return { db, kinds };
 }
 
-describe("listPublicArticles", () => {
-  it("pre-filters with buildPublicListArticleWhere then drops rows that fail isPromoReady", async () => {
-    const findMany = vi.fn().mockResolvedValue([listed(), listed({ id: "article-2", promoLink: BLANK_PROMO })]);
-    const db = { article: { findMany }, $queryRaw: vi.fn().mockResolvedValue([]) } as unknown as PrismaClient;
+describe("全部作品页 / 首页作品格（数据库分页）", () => {
+  afterEach(() => vi.unstubAllEnvs());
 
-    const cards = await listPublicArticles(db, "en");
-    // C-25: on-site listing calls the stricter "list" fragment, not the
-    // collectability one sitemap/IndexNow use — see `visibility.ts`'s header
-    // for why these are two different functions now.
-    expect(findMany.mock.calls[0][0].where).toEqual(buildPublicListArticleWhere({ locale: "en" }));
-    expect(cards).toHaveLength(1);
-    expect(cards[0]?.id).toBe("biz-1");
-    expect(JSON.stringify(cards)).not.toMatch(/webUrl|upstreamCode/);
+  it("getPublicBrowsePage：页大小 BROWSE_PAGE_SIZE（20）；编号 + 总数两条原生 SQL，再按编号补全卡片", async () => {
+    const { db, kinds } = listDb({ total: 21, ids: ["article-1"], rows: [listed()] });
+    const page = await getPublicBrowsePage(db, "en", 2);
+    expect(BROWSE_PAGE_SIZE).toBe(20);
+    expect(kinds.filter((kind) => kind !== "taxonomy").sort()).toEqual(["page-count", "page-ids"]);
+    expect(page).toMatchObject({ page: 2, totalPages: 2, totalCount: 21 });
+    expect(page.novels.map((card) => card.id)).toEqual(["biz-1"]);
+    expect(JSON.stringify(page.novels)).not.toMatch(/webUrl|upstreamCode/); // 卡片不携带上游链接
+    expect(vi.mocked(db.article.findMany).mock.calls[0]![0]).toMatchObject({ where: { id: { in: ["article-1"] } } });
   });
 
-  /**
-   * C-25: "公开侧改动…列表五个调用点…全部改走新的「列表用」片段" — this is the
-   * headline self-check for that change: with the flag on, only the
-   * `public` row survives `where.seoVisibility` filtering and reaches the
-   * returned cards; `seo_only` and `hidden` are both gone from on-site
-   * listing (unlike sitemap, which keeps `seo_only`).
-   */
-  describe("C-25: excludes seo_only and hidden (flag on)", () => {
-    afterEach(() => {
-      delete process.env.FEATURE_ARTICLE_SEO_VISIBILITY;
-    });
+  it("listHomeNovels：只取列表前 HOME_GRID_LIMIT 本（直接 LIMIT），不数总数、没有'先取一批再切片'", async () => {
+    const { db, kinds } = listDb({ ids: ["article-1"], rows: [listed()] });
+    const cards = await listHomeNovels(db, "en");
+    expect(HOME_GRID_LIMIT).toBe(20);
+    expect(cards).toHaveLength(1);
+    expect(kinds).not.toContain("page-count");
+    const idsCall = vi.mocked(db.$queryRaw).mock.calls.find((call) => classifyPublicListQuery(call[0] as never) === "page-ids")!;
+    expect((idsCall[0] as { values: readonly unknown[] }).values.slice(-2)).toEqual([HOME_GRID_LIMIT, 0]);
+  });
 
-    it("only the public row is returned", async () => {
-      process.env.FEATURE_ARTICLE_SEO_VISIBILITY = "true";
-      const rows = [
-        listed({ id: "pub", seoVisibility: "public", novel: { id: "novel-pub", businessId: "biz-pub", title: "Pub", description: "d", coverUrl: "/c.jpg", locale: "en", totalChapterCount: 1 } }),
-        listed({ id: "seo-only", seoVisibility: "seo_only", slug: "seo-only", novel: { id: "novel-seo-only", businessId: "biz-seo-only", title: "SeoOnly", description: "d", coverUrl: "/c.jpg", locale: "en", totalChapterCount: 1 } }),
-        listed({ id: "hidden", seoVisibility: "hidden", slug: "hidden", novel: { id: "novel-hidden", businessId: "biz-hidden", title: "Hidden", description: "d", coverUrl: "/c.jpg", locale: "en", totalChapterCount: 1 } }),
-      ];
-      const db = {
-        article: { findMany: findManyApplyingSeoVisibility(rows) },
-        $queryRaw: vi.fn().mockResolvedValue([]),
-      } as unknown as PrismaClient;
-
-      const cards = await listPublicArticles(db, "en");
-
-      expect(cards.map((card) => card.id)).toEqual(["biz-pub"]);
-    });
+  it("没有书：第 1 页 200（空列表、totalPages 1），第 2 页由页面据 requested > totalPages 判 404", async () => {
+    const { db } = listDb({ total: 0 });
+    expect(await getPublicBrowsePage(db, "en", 1)).toMatchObject({ novels: [], page: 1, totalPages: 1, totalCount: 0 });
+    expect(await getPublicBrowsePage(db, "en", 2)).toMatchObject({ novels: [], page: 2, totalPages: 1, totalCount: 0 });
   });
 });
 
 describe("listPublicCategories", () => {
+  beforeEach(() => clearPublicCategoryCountsCacheForTest());
+  afterEach(() => clearPublicCategoryCountsCacheForTest());
+
   /**
-   * C-25: "分类" enumeration must use the same stricter list-layer fragment
-   * as `listPublicArticles` — a category that only exists because of a
-   * `seo_only`/`hidden` Article's novel must not appear in `/category`'s own
-   * filter chips (the deep per-row proof lives in `listPublicArticles`'s own
-   * C-25 block above; `loadPublicTaxonomyByNovelIds` itself is a raw-SQL
-   * `$queryRaw` call this file's fakes do not re-implement).
+   * 页脚 / 首页题材导航 / 详情页可链接分类集合：读每语种每分类本数矩阵里该语种本数 > 0 的分类，再现读分类名
+   * （请求语种 → en → zh → slug，链接带语种前缀），排序同 `listDistinctPublicTaxonomy`（sort_order，再 slug 按 en）。
    */
-  it("uses buildPublicListArticleWhere, not the collectability fragment", async () => {
-    const findMany = vi.fn().mockResolvedValue([]);
-    const db = { article: { findMany }, $queryRaw: vi.fn().mockResolvedValue([]) } as unknown as PrismaClient;
+  it("该语种矩阵里的分类 → 现读分类名；其它语种的分类不出现；按 sort_order 再 slug 排序；链接带语种前缀", async () => {
+    const tag = (id: string, slug: string, sortOrder: number, requested: string | null = null, zh: string | null = null) => ({
+      id, slug, requested_display_name: requested, en_display_name: null, zh_display_name: zh,
+      sort_order: sortOrder, updated_at: new Date("2026-09-01T00:00:00Z"),
+    });
+    const tagRows = [tag("t-b", "beta", 2, "베타"), tag("t-a", "alpha", 2, null, "阿尔法"), tag("t-z", "zeta", 1)];
+    const queried: Array<{ kind: string; values: readonly unknown[] }> = [];
+    const db = {
+      $queryRaw: vi.fn(async (query: { text: string; values: readonly unknown[] }) => {
+        const kind = classifyPublicListQuery(query);
+        queried.push({ kind, values: query.values });
+        if (kind === "matrix") {
+          return [
+            { locale: "ko", canonical_tag_id: "t-b", slug: "beta", n: 3 },
+            { locale: "ko", canonical_tag_id: "t-a", slug: "alpha", n: 1 },
+            { locale: "ko", canonical_tag_id: "t-z", slug: "zeta", n: 9 },
+            { locale: "en", canonical_tag_id: "t-other", slug: "only-en", n: 5 },
+          ];
+        }
+        if (kind === "totals") return [{ locale: "ko", n: 12 }, { locale: "en", n: 5 }];
+        if (kind === "category-names") {
+          const wanted = new Set(query.values.flat(Infinity) as unknown[]);
+          return tagRows.filter((row) => wanted.has(row.id));
+        }
+        return [];
+      }),
+    } as unknown as PrismaClient;
 
-    await listPublicCategories(db, "en");
+    const categories = await listPublicCategories(db, "ko");
+    expect(categories.map((category) => [category.slug, category.label, category.href])).toEqual([
+      ["zeta", "zeta", "/ko/category/zeta"], // sort_order 1，没有译名 → slug
+      ["alpha", "阿尔法", "/ko/category/alpha"], // 并列 sort_order 2 → 按 slug；请求语种无译名 → zh
+      ["beta", "베타", "/ko/category/beta"],
+    ]);
+    // 名字只查了本语种有书的分类（only-en 没有被取名），且是现读（每次调用一条）。
+    const names = queried.find((call) => call.kind === "category-names")!;
+    expect(names.values.flat(Infinity)).toEqual(expect.arrayContaining(["t-b", "t-a", "t-z"]));
+    expect(names.values.flat(Infinity)).not.toContain("t-other");
+    await listPublicCategories(db, "ko");
+    expect(queried.filter((call) => call.kind === "matrix")).toHaveLength(1); // 矩阵缓存命中
+    expect(queried.filter((call) => call.kind === "category-names")).toHaveLength(2); // 名字不缓存
+  });
 
-    expect(findMany.mock.calls[0][0].where).toEqual(buildPublicListArticleWhere({ locale: "en" }));
+  it("该语种没有书：空集合，不查分类名", async () => {
+    const queried: string[] = [];
+    const db = {
+      $queryRaw: vi.fn(async (query: { text: string }) => {
+        const kind = classifyPublicListQuery(query);
+        queried.push(kind);
+        return kind === "matrix" ? [{ locale: "en", canonical_tag_id: "t1", slug: "romance", n: 4 }] : [];
+      }),
+    } as unknown as PrismaClient;
+    expect(await listPublicCategories(db, "ja")).toEqual([]);
+    expect(queried).not.toContain("category-names");
   });
 });
 
@@ -282,20 +319,5 @@ describe("getPublicNovelDetail", () => {
     } as unknown as PrismaClient;
     await expect(getPublicNovelDetail(db, "article-1")).resolves.toBeNull();
     expect(db.novelChapter.findMany).not.toHaveBeenCalled();
-  });
-});
-
-describe("paginateCards", () => {
-  it("pages a bounded list", () => {
-    const cards = Array.from({ length: 21 }, (_, index) => ({
-      id: `n${index}`,
-      title: `Book ${index}`,
-      tags: [],
-      href: `/novel/book-${index}-pxx`,
-    }));
-    const page2 = paginateCards(cards, 2);
-    expect(page2.page).toBe(2);
-    expect(page2.totalPages).toBe(2);
-    expect(page2.novels).toHaveLength(1);
   });
 });

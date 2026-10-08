@@ -30,17 +30,20 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
+  loadCategoryPage: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const { buildCategoryMetadata } = await import("@/app/_pages/category");
 const { generateSeoMeta } = await import("@/lib/seo/seo-meta-generator");
 
@@ -100,7 +103,7 @@ afterEach(() => {
 
 describe("分类页标题：标题形式（分类名 + Novels）+ 第 2 页起的翻页后缀", () => {
   it("第 1 页是 'Romance Novels'（en，不含品牌名），og/twitter 同", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, null));
     const metadata = await buildCategoryMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({ slug: "romance" }), Promise.resolve({}));
     expect(titleOf(metadata)).toBe("Romance Novels");
     expect(metadata.openGraph?.title).toBe("Romance Novels");
@@ -109,7 +112,7 @@ describe("分类页标题：标题形式（分类名 + Novels）+ 第 2 页起�
   });
 
   it("第 2 页起是 '标题形式 - Page N'（en），og:title/twitter:title 同带后缀、都不带品牌名", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(2, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(2, null));
     const metadata = await buildCategoryMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({ slug: "romance" }), Promise.resolve({ page: "2" }));
     expect(titleOf(metadata)).toBe("Romance Novels - Page 2");
     expect(metadata.openGraph?.title).toBe("Romance Novels - Page 2");
@@ -119,7 +122,7 @@ describe("分类页标题：标题形式（分类名 + Novels）+ 第 2 页起�
   });
 
   it("翻页后缀按语种本地化（ja/fr/ru/ar），标题形式也是各语种自己的译文，不是写死的英文", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(3, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(3, null));
     for (const locale of ["ja", "fr", "ru", "ar"] as const) {
       const t = getPublicT(locale);
       const metadata = await buildCategoryMetadata(locale, Promise.resolve({ slug: "romance" }), Promise.resolve({ page: "3" }));
@@ -133,14 +136,14 @@ describe("分类页标题：标题形式（分类名 + Novels）+ 第 2 页起�
 
 describe("分类页描述：分类自己的描述 || 固定的本地化兜底句", () => {
   it("分类有自己的描述：用它（不被后台站点描述或兜底句覆盖）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Own Romance description."));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Own Romance description."));
     const metadata = await buildCategoryMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({ slug: "romance" }), Promise.resolve({}));
     expect(metadata.description).toBe("Own Romance description.");
     expect(metadata.openGraph?.description).toBe("Own Romance description.");
   });
 
   it("分类没有描述：用本地化兜底句（en 为 'Discover {name} novels on PulseNovel.'），og/twitter 同", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, null));
     const metadata = await buildCategoryMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({ slug: "romance" }), Promise.resolve({}));
     expect(metadata.description).toBe("Discover Romance novels on PulseNovel.");
     expect(metadata.openGraph?.description).toBe("Discover Romance novels on PulseNovel.");
@@ -153,7 +156,7 @@ describe("分类页描述：分类自己的描述 || 固定的本地化兜底句
   });
 
   it("分类没有描述：14 个非英语语种都走各自的兜底句（不出现英文句子）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, null));
     for (const locale of ["es", "pt-BR", "id", "vi", "th", "ja", "ko", "zh-Hant", "ar", "fr", "de", "pl", "cs", "ru"] as const) {
       const metadata = await buildCategoryMetadata(locale, Promise.resolve({ slug: "romance" }), Promise.resolve({}));
       expect(metadata.description, locale).toBe(getPublicT(locale)("meta.categoryDescriptionFallback", { name: "Romance" }));
@@ -202,7 +205,7 @@ describe("CollectionPage JSON-LD（category 模板）", () => {
   });
 
   it("页面层：分类无描述时 JSON-LD description 是本语种兜底句（en/ja）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, null));
     const { CategoryBody } = await import("@/app/_pages/category");
     for (const locale of ["en", "ja"] as const) {
       const tree = await CategoryBody({ locale, params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
@@ -214,7 +217,7 @@ describe("CollectionPage JSON-LD（category 模板）", () => {
   });
 
   it("页面层：CollectionPage.name 与面包屑第 2 项 name 都是标题形式（en 'Romance Novels'），描述兜底句仍是纯名", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, null));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, null));
     const { CategoryBody } = await import("@/app/_pages/category");
     for (const locale of ["en", "ja"] as const) {
       const heading = getPublicT(locale)("collection.categoryHeading", { name: "Romance" });

@@ -1,8 +1,30 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { expect } from "vitest";
 import { loadPublicTaxonomyByNovelIds } from "@/lib/site/public-taxonomy";
+import { reconcileAllEffectiveTags, refreshEffectiveTagsForNovels } from "@/server/tagging/effective-tag-projection";
 
-/** Synthetic load only, called after the runner has verified an isolated DB. */
+type PlanNode = { "Node Type": string; "Relation Name"?: string; "Index Name"?: string; "Index Cond"?: string; Plans?: PlanNode[] };
+
+function planNodes(node: PlanNode): PlanNode[] {
+  return [node, ...(node.Plans ?? []).flatMap(planNodes)];
+}
+
+async function explainJson(db: PrismaClient, statement: Prisma.Sql): Promise<PlanNode[]> {
+  const rows = await db.$queryRaw<Array<{ "QUERY PLAN": Array<{ Plan: PlanNode }> }>>(Prisma.sql`EXPLAIN (FORMAT JSON) ${statement}`);
+  return planNodes(rows[0]!["QUERY PLAN"][0]!.Plan);
+}
+
+/**
+ * Synthetic load only, called after the runner has verified an isolated DB.
+ *
+ * B-38: card tags are no longer computed on the spot -- `loadPublicTaxonomyByNovelIds` reads the materialised
+ * `novel_effective_tag`. What this fixture (80,000 novels, 1.76M label links) guards now:
+ *   1. the card-tag read for 25 books is a primary-key range lookup on the projection table (never a table scan);
+ *   2. the RULE SQL (which still runs in `refreshEffectiveTagsForNovels`, the write path) keeps the shape the
+ *      2026-09-20 production incident forced on it: its `target_source_item` CTE is driven by `novel_id IN (…)`
+ *      through an index, with `channel_app` statistics missing AND present -- never a scan over all source items.
+ * The first full build of the projection over this fixture also has to finish (the migration does it in production).
+ */
 export async function verifyPublicAutoPlans(owner: PrismaClient, web: PrismaClient, fixture: { app: string; admin: string; mappedTag: string; textTag: string; templateNovel: string; rawScope: string }) {
   await owner.$executeRawUnsafe("ALTER TABLE channel_app SET (autovacuum_enabled = false)");
   await owner.$executeRawUnsafe(`INSERT INTO novel (id, business_id, title, description, locale, slug, updated_at)
@@ -30,21 +52,44 @@ export async function verifyPublicAutoPlans(owner: PrismaClient, web: PrismaClie
   for (const table of ["novel", "novel_source_item", "source_label", "source_label_mapping", "novel_source_item_label", "novel_tag_state", "novel_canonical_tag", "canonical_tag"]) {
     await owner.$executeRawUnsafe(`ANALYZE ${table}`);
   }
+  // Materialise the projection for all 80,000 synthetic books (production does this in the migration).
+  const startedAt = performance.now();
+  const built = await reconcileAllEffectiveTags(web);
+  console.log(`WO7_PROJECTION_BUILD novels=80000 inserted=${built.inserted} ms=${Math.round(performance.now() - startedAt)}`);
+  expect(built.inserted).toBeGreaterThanOrEqual(80_000);
+  await owner.$executeRawUnsafe("ANALYZE novel_effective_tag");
+
   for (const stats of ["channel-app-missing-stats", "all-analyzed"]) {
     if (stats === "all-analyzed") await owner.$executeRawUnsafe("ANALYZE channel_app");
     const statsRows = await owner.$queryRaw<Array<{ count: bigint }>>`SELECT count(*) FROM pg_stats WHERE schemaname = 'public' AND tablename = 'channel_app'`;
     expect(Number(statsRows[0].count) > 0).toBe(stats === "all-analyzed");
+
+    // 1. Card-tag read (flag on and off): primary-key / index lookup on the projection, no scan over all of it.
     for (const flag of ["false", "true"]) {
       let query: Prisma.Sql | undefined;
       await loadPublicTaxonomyByNovelIds({ $queryRaw: async (sql: Prisma.Sql) => { query = sql; return []; } } as unknown as PrismaClient, targets.map(row => row.id), "en", { NODE_ENV: "test", FEATURE_NOVEL_TAG_AUTO: flag });
       const plan = await web.$queryRaw<Array<Record<string, string>>>(Prisma.sql`EXPLAIN (ANALYZE, BUFFERS) ${query!}`);
       const text = plan.map(row => row["QUERY PLAN"]).join("\n");
-      console.log(`WO7_EXPLAIN stats=${stats} auto=${flag} novels=80000 label_links=1760000 targets=25\n${text}\nWO7_EXPLAIN_END`);
-      // Target CTE may not degenerate into millions of per-row source probes.
-      const sourceScans = text.split("\n").filter(line => /(?:Index|Seq|Bitmap Heap).* on novel_source_item nsi /.test(line));
-      expect(sourceScans.length).toBeGreaterThan(0);
-      for (const line of sourceScans) expect(Number(line.match(/loops=(\d+)/)?.[1] ?? "0")).toBeLessThanOrEqual(25);
-      expect(text).toContain("CTE target_source_item");
+      console.log(`WO7_EXPLAIN kind=card-tags stats=${stats} auto=${flag} novels=80000 targets=25\n${text}\nWO7_EXPLAIN_END`);
+      const nodes = await explainJson(web, query!);
+      const onProjection = nodes.filter(node => node["Relation Name"] === "novel_effective_tag");
+      expect(onProjection.length).toBeGreaterThan(0);
+      for (const node of onProjection) expect(node["Node Type"], "projection must be reached through an index").not.toBe("Seq Scan");
+    }
+
+    // 2. The rule SQL for 25 targets (write path): capture the apply statement through a recording transaction client.
+    const recorded: Prisma.Sql[] = [];
+    const recordingTx = { $queryRaw: async (sql: Prisma.Sql) => { recorded.push(sql); return recorded.length >= 3 ? [{ inserted: 0, updated: 0, deleted: 0 }] : []; } };
+    await refreshEffectiveTagsForNovels(recordingTx as never, targets.map(row => row.id));
+    const apply = recorded.find(sql => sql.sql.includes("INSERT INTO novel_effective_tag"));
+    expect(apply, "the per-novel recompute statement").toBeTruthy();
+    const nodes = await explainJson(web, apply!);
+    console.log(`WO7_EXPLAIN kind=rule-sql stats=${stats} nodes=${nodes.map(node => `${node["Node Type"]}${node["Relation Name"] ? `(${node["Relation Name"]})` : ""}`).join(">")}`);
+    // Source items are reached by novel_id through an index (the CTE named target_source_item), never by scanning all of them.
+    const sourceScans = nodes.filter(node => node["Relation Name"] === "novel_source_item");
+    expect(sourceScans.length).toBeGreaterThan(0);
+    for (const node of sourceScans) {
+      expect(node["Node Type"], "novel_source_item must not be sequentially scanned for 25 targets").not.toBe("Seq Scan");
     }
   }
 }

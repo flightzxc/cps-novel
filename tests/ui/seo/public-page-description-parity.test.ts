@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * 公开页 `<meta name="description">` CPS parity gate
@@ -44,7 +45,8 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
@@ -54,8 +56,11 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadBlogDetail: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -63,7 +68,8 @@ const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
@@ -72,8 +78,6 @@ const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 const loadBlogAccess = vi.mocked(publicLoad.loadBlogAccess);
 const loadBlogDetail = vi.mocked(publicLoad.loadBlogDetail);
 
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const { buildHomeMetadata } = await import("@/app/_pages/home");
 const { buildBrowseMetadata } = await import("@/app/_pages/browse");
@@ -162,7 +166,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
 
   it("browse (all works, no category filter): falls back to the message catalog when settings.siteDescription is empty", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_NO_DESCRIPTION, chrome: CHROME });
-    loadBrowseNovels.mockResolvedValue([CARD_WITH_COVER]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD_WITH_COVER], page));
 
     const metadata = await buildBrowseMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({}));
     assertNonEmptyConsistentDescription(metadata as Record<string, any>, "browse");
@@ -172,7 +176,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
   it("blog list: falls back to the message catalog when settings.siteDescription is empty", async () => {
     process.env.FEATURE_ARTICLE_BLOG = "true";
     loadChrome.mockResolvedValue({ settings: SETTINGS_NO_DESCRIPTION, chrome: CHROME });
-    loadBlogList.mockResolvedValue([
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([
       {
         id: "blog-1",
         title: "A blog post",
@@ -181,7 +185,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
         publishedAt: new Date("2026-08-05T12:30:00.000Z"),
         href: "/blog/a-blog-post",
       },
-    ]);
+    ], page));
 
     const metadata = await buildBlogListMetadata(PUBLIC_SITE_LOCALE, Promise.resolve({}));
     assertNonEmptyConsistentDescription(metadata as Record<string, any>, "blog list");
@@ -197,7 +201,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
     // 语种），loader 的 mock 必须返回数组而不是 undefined；这条用例只关心
     // description，取只有 en 的最简集合（没有其它语种要查）。
     vi.mocked(publicLoad.loadActiveLocales).mockResolvedValue(["en"]);
-    getPublicCategoryPage.mockResolvedValue({
+    loadCategoryPage.mockResolvedValue({
       novels: [CARD_WITH_COVER],
       page: 1,
       totalPages: 1,

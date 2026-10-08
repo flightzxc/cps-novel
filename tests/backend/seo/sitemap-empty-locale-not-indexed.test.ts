@@ -8,6 +8,8 @@ import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
+
 /**
  * 2026-09-30 sitemap 核查（开发单第 9 条）：生产上
  * `/sitemap/site_novelpage_en.xml` 返回 503。核查问题是"总索引有没有把空语种的
@@ -135,6 +137,19 @@ describe("category page URLs (now inside the mainpage shard) carry the shard's o
     updated_at: new Date("2026-09-02T00:00:00Z"),
   };
 
+  /**
+   * `$queryRaw` 的两类答复：卡片 / 候选的标签（读归属表）每本书一行；每语种每分类本数矩阵（分类网址"列不列、列几页"）
+   * 一个分类一行，本数 = 这个语种里有这个标签的书数。`books` = 这个语种里挂着该标签的书数。
+   */
+  function queryRawFor(locale: string, books: number) {
+    return vi.fn(async (query: { text: string }) => {
+      const kind = classifyPublicListQuery(query);
+      if (kind === "matrix") return [{ locale, canonical_tag_id: tagRow.id, slug: tagRow.slug, n: books }];
+      if (kind === "taxonomy") return Array.from({ length: books }, () => tagRow);
+      return [];
+    });
+  }
+
   function fixtureDb(locale: string) {
     return {
       article: {
@@ -146,7 +161,7 @@ describe("category page URLs (now inside the mainpage shard) carry the shard's o
         ]),
       },
       novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
-      $queryRaw: vi.fn().mockResolvedValue([tagRow]),
+      $queryRaw: queryRawFor(locale, 1),
       siteSetting: {
         findUnique: vi.fn().mockResolvedValue({
           siteName: "Fixture",
@@ -193,9 +208,7 @@ describe("category page URLs (now inside the mainpage shard) carry the shard's o
         novel: { id: tagRow.novel_id, status: "published", deletedAt: null, coverUrl: "/covers/x.webp" },
       })),
     );
-    many.$queryRaw.mockResolvedValue(
-      Array.from({ length: 21 }, () => tagRow),
-    );
+    many.$queryRaw = queryRawFor("ko", 21);
     const paged = await createSitemapFamilyBuilder(many as never)({ type: "mainpage", locale: "ko" });
     expect(paged[0]!.entries.map((entry) => entry.loc)).toEqual([
       "https://novel.example/ko",

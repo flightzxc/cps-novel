@@ -2,16 +2,24 @@
  * CPS v8.3.6 category-page semantics, adapted from Drama/Article.categoryId
  * to Novel's CanonicalTag membership: active category, published-only cards,
  * stable pagination, and an empty category treated as not found rather than
- * publishing a thin page. Membership is supplied by public-taxonomy.ts and
- * therefore respects manual FULL_SNAPSHOT and the shared auto feature gate.
+ * publishing a thin page.
+ *
+ * B-38 (v0.5.13): "which books are in this category, how many, which page" is a database question now —
+ * `src/lib/site/public-list.ts` is the ONE definition of it (the list-visibility predicate, the
+ * `novel_effective_tag` membership, the order, the page/count queries, the per-locale-per-category count
+ * matrix). This file only adds what is category-specific: resolving the slug to an active `canonical_tag`,
+ * the category's display name, and the 404 rules (zero books → null, page beyond the last → null).
+ * There is no list window any more: every book in the category is reachable, and `totalCount` is the real
+ * total. Membership respects the manual FULL_SNAPSHOT and the shared auto-tag gate because the table does
+ * (see `effective-tag-projection.ts`).
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { NovelCardView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { resolveCanonicalTagLabel } from "./canonical-tag-label";
-import { listPublicArticles, paginateCards, type BrowsePageResult } from "./queries";
+import { categoryCountsForLocale, listPublicNovelPage, queryPublicCategoryCounts } from "./public-list";
+import { BROWSE_PAGE_SIZE, type BrowsePageResult } from "./queries";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -33,54 +41,26 @@ export type PublicCategoryPage = BrowsePageResult & Readonly<{
   };
 }>;
 
-function hasCategory(card: NovelCardView, slug: string): boolean {
-  return card.tags.some((tag) => tag.slug === slug);
-}
-
-/**
- * 分类页展示的卡片 = 列表（`listPublicArticles`，最新 `PUBLIC_LIST_CAP` 本）里挂着这个分类的那些。
- *
- * 🔴 这是"分类下有没有书"的**唯一定义**：`getPublicCategoryPage`（页面返回 200 还是 404）与
- * `listPublicCategoryPageCounts`（站点地图该列哪些分类网址）都经由它，不得在别处另写一份——
- * 否则站点地图与页面会再次漂移（B-38：站点地图按全量书目列分类，页面只看最新 240 本，
- * 冷门分类在最新 240 本里一本都没有时，站点地图列了、页面 404）。
- *
- * 站内链接（B-38 第二部分，`@/lib/site/category-links`）是这条谓词的第三个消费者：详情页标签只有在
- * 分类页返回 200 时才保留 `href`。那边取的"可链接分类集合"是页脚用的 `listPublicCategories`
- * （同一窗口、同一标签投影，新增 0 次查询），其 slug 集合与本函数族恒等，由
- * `tests/backend/site/category-link-set-equality.test.ts` 与真实库用例钉死。
- */
-function cardsInCategory(cards: readonly NovelCardView[], slug: string): NovelCardView[] {
-  return cards.filter((card) => hasCategory(card, slug));
-}
-
 /**
  * 一个语种里"分类页会返回 200"的分类及其总页数：slug → `totalPages`。站点地图 mainpage 用它决定
  * 列哪些 `/category/{slug}`（含 `?page=N`，N 取 1..totalPages，与页面 `page > totalPages → 404` 同口径）。
  *
- * 每个语种只调用**一次** `listPublicArticles`（页面自己的列表查询：可见性、排序、`PUBLIC_LIST_CAP`
- * 截断、标签成员规则都跟着页面走），然后在内存里按 `cardsInCategory` / `paginateCards` 逐分类求出；
- * 不是每个分类查一次库。没有书的分类不在返回里。
- *
- * 分类 slug 取自卡片标签：`loadPublicTaxonomyByNovelIds` 只投影 `status = 'active'` 的标签，且库里
- * `canonical_tag.slug` 受 CHECK `^[a-z0-9]+(?:-[a-z0-9]+)*$` 约束（小写、≤160），所以页面入口的
- * `trim().toLowerCase()` 与长度判定、`canonicalTag.findFirst({ status: 'active' })` 对这些 slug 恒为恒等/命中。
+ * 读每语种每分类本数矩阵，**不带缓存**（站点地图在 worker 里跑，要刷新时刻的真实快照）。矩阵与
+ * `getPublicCategoryPage` 用同一段列表可见性 / 分类归属 SQL（`public-list.ts`），所以"有书的分类"和每个分类的
+ * 页数与页面本身恒等；真实库用例 `tests/integration/site/consistency-invariants-postgres.test.ts` 逐个
+ * (slug, page) 验证站点地图集合 = 页面返回 200 的集合，且第 N+1 页必为 null。没有书的分类不在返回里。
  */
 export async function listPublicCategoryPageCounts(
   db: Db,
   locale: SiteLocale,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ReadonlyMap<string, number>> {
-  const cards = await listPublicArticles(db, locale);
-  const slugs = new Set<string>();
-  for (const card of cards) {
-    for (const tag of card.tags) slugs.add(tag.slug);
+  const counts = await queryPublicCategoryCounts(db, env, { locales: [locale] });
+  const pages = new Map<string, number>();
+  for (const { slug, count } of categoryCountsForLocale(counts, locale).values()) {
+    pages.set(slug, Math.max(1, Math.ceil(count / BROWSE_PAGE_SIZE)));
   }
-  const counts = new Map<string, number>();
-  for (const slug of slugs) {
-    const members = cardsInCategory(cards, slug);
-    if (members.length > 0) counts.set(slug, paginateCards(members, 1).totalPages);
-  }
-  return counts;
+  return pages;
 }
 
 export async function getPublicCategoryPage(
@@ -88,6 +68,7 @@ export async function getPublicCategoryPage(
   locale: SiteLocale,
   slug: string,
   page: number,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<PublicCategoryPage | null> {
   const normalizedSlug = slug.trim().toLowerCase();
   if (!normalizedSlug || normalizedSlug.length > 160) return null;
@@ -98,9 +79,8 @@ export async function getPublicCategoryPage(
   });
   if (!tag) return null;
 
-  const cards = cardsInCategory(await listPublicArticles(db, locale), tag.slug);
-  if (cards.length === 0) return null;
-  const paged = paginateCards(cards, page);
+  const paged = await listPublicNovelPage(db, { locale, tagId: tag.id, page, pageSize: BROWSE_PAGE_SIZE, env });
+  if (paged.totalCount === 0) return null;
   if (page > paged.totalPages) return null;
   const requested = tag.translations.find((translation) => translation.locale === locale);
   const en = tag.translations.find((translation) => translation.locale === "en");

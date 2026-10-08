@@ -36,7 +36,7 @@ import {
 } from "@/lib/seo/sitemap";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
-import { PUBLIC_LIST_CAP } from "@/lib/site/queries";
+import { reconcileAllEffectiveTags } from "@/server/tagging/effective-tag-projection";
 import {
   applyBulkNoise,
   createChannelFixture,
@@ -198,6 +198,8 @@ describe.skipIf(!enabled).sequential("sitemap scale on disposable PostgreSQL 16.
         { slug: "mystery", displayName: "Mystery" },
       ],
     });
+    // 分类归属表（B-38）：夹具由 owner 直接写真源表，要显式对账一次，前台与站点地图才读得到这些分类。
+    await reconcileAllEffectiveTags(worker);
     // 另加适量其它语种：它们的数据绝不能混进 en 的分片，反过来也一样。
     await seedBulkPublicArticles(owner, { prefix: "ko", locale: "ko", count: 1_200, channel, baseUpdatedAt });
     await applyBulkNoise(owner, { prefix: "ko", count: 1_200 });
@@ -303,11 +305,11 @@ describe.skipIf(!enabled).sequential("sitemap scale on disposable PostgreSQL 16.
     expect(firstMismatch(files.flatMap((file) => file.entries), expected)).toBeNull();
   }, 600_000);
 
-  it("场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开两条 SQL 各一遍），首页 + 分类页条目与独立预期一致", async () => {
-    // B-38：分类网址只列分类页会返回 200 的——页面只看最新 PUBLIC_LIST_CAP 本，所以每个分类的页数按"页面列表里的本数"算，
-    // 不再按全量（改前每个分类可达数百页的 `?page=N`，页面一律 404）。页面列表的独立预期见 `oracleListedArticles`。
+  it("场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开各一遍），首页 + 分类页条目与独立预期一致", async () => {
+    // B-38：分类网址只列分类页会返回 200 的，每个分类的页数 = ceil(页面列表里的本数 / 20)（数据库分页，没有任何上限）。
+    // 页面列表的独立预期见 `oracleListedArticles`（独立 SQL，不设上限）。
     const listedByCategory = new Map<string, number>();
-    for (const row of await oracleListedArticles(owner, BIG_LOCALE, PUBLIC_LIST_CAP)) {
+    for (const row of await oracleListedArticles(owner, BIG_LOCALE)) {
       const slug = categories[ordinalOf(BIG_PREFIX, row.slug) % categories.length]!.slug;
       listedByCategory.set(slug, (listedByCategory.get(slug) ?? 0) + 1);
     }
@@ -323,7 +325,8 @@ describe.skipIf(!enabled).sequential("sitemap scale on disposable PostgreSQL 16.
     const setting = await owner.siteSetting.findUniqueOrThrow({ where: { id: 1 } });
     const latestArticle = bigOracle.rows.reduce((max, row) => Math.max(max, row.updated_at.valueOf()), 0);
 
-    // 分类归属的原生 SQL 里小说 id 重复出现：自动标签关 = 2 次，开 = 3 次（`FEATURE_NOVEL_TAG_AUTO`，读 process.env）。
+    // 卡片 / 候选的分类归属现在读 `novel_effective_tag`，小说 id 在语句里只出现一次、按 2,000 本一块分批（3 万个 id 不会撞
+    // 绑定变量上限）；自动标签开关（`FEATURE_NOVEL_TAG_AUTO`，读 process.env）只决定 auto 来源的行算不算。
     for (const autoTagging of ["false", "true"]) {
       process.env.FEATURE_NOVEL_TAG_AUTO = autoTagging;
       try {
@@ -388,6 +391,7 @@ describe.skipIf(!enabled).sequential("sitemap 小规模输出与分块大小无�
       prefix: SMALL_PREFIX, count: SMALL_COUNT,
       categories: [{ slug: "fantasy", displayName: "Fantasy" }, { slug: "romance", displayName: "Romance" }],
     });
+    await reconcileAllEffectiveTags(worker);
     await seedBulkPublicArticles(owner, { prefix: "smallko", locale: "ko", count: 9, channel, baseUpdatedAt });
     await seedBulkBlogArticles(owner, { prefix: "smallblog", locale: "en", count: SMALL_BLOG, baseUpdatedAt });
   }, 120_000);

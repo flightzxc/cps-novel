@@ -36,6 +36,11 @@ function transactionDb(activeId?: string, activeStatus: "pending" | "processing"
   return tx;
 }
 
+/** B-38：这些既有用例关心的是站点地图本身；兜底检查 / 对账用无操作替身，免得对 `{}` 假库真去跑一遍再刷出错误日志。 */
+const noReconcile = vi.fn().mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 });
+const cleanCheck = vi.fn().mockResolvedValue({ missing: 0, extra: 0, changed: 0, samples: [] });
+const noEffectiveTagWork = { checkEffectiveTags: cleanCheck, reconcileEffectiveTags: noReconcile };
+
 function state(task: SitemapRefreshState["task"], active: SitemapRefreshState["active"] = null): SitemapRefreshState {
   return {
     rootDir: "/tmp/sitemaps",
@@ -161,6 +166,7 @@ describe("Sitemap refresh worker handler", () => {
   it("keeps filesystem generation off while the independent Worker write gate is closed", async () => {
     const refresh = vi.fn();
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: enabledEnv,
       refresh,
@@ -184,6 +190,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "success", runId: manifest.runId, manifest }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -205,6 +212,7 @@ describe("Sitemap refresh worker handler", () => {
     });
     const releaseLock = vi.fn();
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -224,6 +232,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "running" }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -259,6 +268,7 @@ describe("Sitemap refresh worker handler", () => {
       });
     const releaseLock = vi.fn().mockResolvedValue(undefined);
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -280,6 +290,7 @@ describe("Sitemap refresh worker handler", () => {
       state: state({ status: "failed", runId: "failed-run", errorSummary: "render failed" }, manifest),
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
+      ...noEffectiveTagWork,
       buildFamily: vi.fn(),
       env: workerEnabledEnv,
       refresh,
@@ -292,9 +303,225 @@ describe("Sitemap refresh worker handler", () => {
   });
 
   it("registers sitemap_refresh as a GenericTask handler", () => {
-    const registry = createSitemapRefreshWorkerHandlers({} as never, { buildFamily: vi.fn() });
+    const registry = createSitemapRefreshWorkerHandlers({} as never, { buildFamily: vi.fn(), ...noEffectiveTagWork });
     expect(registry[SITEMAP_REFRESH_TASK_TYPE]).toMatchObject({ family: "generic", maxAttempts: 3 });
     expect(createWorkerHandlers({} as never)[SITEMAP_REFRESH_TASK_TYPE])
       .toMatchObject({ family: "generic", maxAttempts: 3 });
+  });
+});
+
+describe("Sitemap refresh worker handler · B-38 构建前兜底：先只读检查，有差异才对账分类归属表", () => {
+  const manifest = {
+    runId: "run-success",
+    releaseName: "run-success",
+    rootDir: "/tmp/sitemaps",
+    releaseDir: "/tmp/sitemaps/releases/run-success",
+    generatedAt: "2026-08-18T00:00:00.000Z",
+    promotedAt: "2026-08-18T00:00:01.000Z",
+    durationMs: 1_000,
+    fileCount: 3,
+    urlCount: 42,
+    sitemapFiles: ["sitemap/site_mainpage_en.xml"],
+  };
+  const success = {
+    ok: true,
+    status: "success" as const,
+    message: "ok",
+    state: state({ status: "success", runId: manifest.runId, manifest }, manifest),
+  };
+  const quietLog = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
+  const clean = () => vi.fn().mockResolvedValue({ missing: 0, extra: 0, changed: 0, samples: [] });
+  const drifted = (missing = 1, extra = 0, changed = 0) => vi.fn().mockResolvedValue({ missing, extra, changed, samples: [] });
+  const reconciled = (inserted = 0, updated = 0, deleted = 0) => vi.fn().mockResolvedValue({ inserted, updated, deleted });
+
+  it("先检查、后构建：检查在 refresh（站点地图生成）之前，且用的是 worker 自己的 db", async () => {
+    const order: string[] = [];
+    const db = { marker: "worker-db" };
+    const check = vi.fn(async (received: unknown) => {
+      order.push("check");
+      expect(received).toBe(db);
+      return { missing: 0, extra: 0, changed: 0, samples: [] };
+    });
+    const reconcile = reconciled();
+    const refresh = vi.fn(async () => { order.push("refresh"); return success; });
+    const outcome = await createSitemapRefreshHandler(db as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, checkEffectiveTags: check, reconcileEffectiveTags: reconcile, reconcileLog: quietLog(),
+    })(context());
+    expect(order).toEqual(["check", "refresh"]);
+    expect(outcome.status).toBe("success");
+  });
+
+  it("🔴 差异为 0（稳定状态）：不对账——也就不拿独占咨询锁，后台人工改标签不会被站点地图刷新卡住；落一行 info 检查日志", async () => {
+    const log = quietLog();
+    const reconcile = reconciled();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+      checkEffectiveTags: clean(), reconcileEffectiveTags: reconcile, reconcileLog: log,
+    })(context());
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(log.error).not.toHaveBeenCalled();
+    const event = JSON.parse(log.info.mock.calls[0]![0] as string);
+    expect(event).toMatchObject({ schemaVersion: 1, event: "effective_tag_check", level: "info", missing: 0, extra: 0, changed: 0, reconcile: false });
+    expect(Number.isInteger(event.ms) && event.ms >= 0).toBe(true);
+  });
+
+  it("有差异才对账：检查升级成 warn（说明有漏掉的写入点或发生过并发），再对账，对账结果再落一行日志", async () => {
+    const log = quietLog();
+    const reconcile = reconciled(2, 0, 1);
+    const check = drifted(2, 1, 0);
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+      checkEffectiveTags: check, reconcileEffectiveTags: reconcile, reconcileLog: log,
+    })(context());
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(log.info).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(log.warn.mock.calls[0]![0] as string)).toMatchObject({
+      event: "effective_tag_check", level: "warn", missing: 2, extra: 1, changed: 0, reconcile: true,
+    });
+    expect(JSON.parse(log.warn.mock.calls[1]![0] as string)).toMatchObject({
+      event: "effective_tag_reconcile", level: "warn", inserted: 2, updated: 0, deleted: 1,
+    });
+  });
+
+  it("三个差异计数里任何一个不为 0 都触发对账（缺失 / 多余 / 内容不同各自独立）", async () => {
+    for (const [missing, extra, changed] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as const) {
+      const reconcile = reconciled();
+      await createSitemapRefreshHandler({} as never, {
+        buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+        checkEffectiveTags: drifted(missing, extra, changed), reconcileEffectiveTags: reconcile, reconcileLog: quietLog(),
+      })(context());
+      expect(reconcile, `${missing}/${extra}/${changed}`).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("检查发现差异而对账什么也没写（并发已经被别处修好）→ 对账那行是 info", async () => {
+    const log = quietLog();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh: vi.fn().mockResolvedValue(success),
+      checkEffectiveTags: drifted(), reconcileEffectiveTags: reconciled(0, 0, 0), reconcileLog: log,
+    })(context());
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.info.mock.calls[0]![0] as string)).toMatchObject({ event: "effective_tag_reconcile", level: "info", inserted: 0 });
+  });
+
+  it("检查抛错 → 只记错误日志，不去拿独占锁对账，站点地图照常构建并成功，不中断", async () => {
+    const log = quietLog();
+    const reconcile = reconciled();
+    const refresh = vi.fn().mockResolvedValue(success);
+    const outcome = await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh,
+      checkEffectiveTags: vi.fn().mockRejectedValue(new Error("canceling statement due to statement timeout")),
+      reconcileEffectiveTags: reconcile, reconcileLog: log,
+    })(context());
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(outcome).toMatchObject({ status: "success", result: { urlCount: 42 } });
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(log.error).toHaveBeenCalledTimes(1);
+    const event = JSON.parse(log.error.mock.calls[0]![0] as string);
+    expect(event).toMatchObject({ schemaVersion: 1, event: "effective_tag_check_failed", level: "error" });
+    expect(event.error.message).toContain("statement timeout");
+  });
+
+  it("对账抛错 → 只记错误日志，站点地图照常构建并成功，不中断", async () => {
+    const log = quietLog();
+    const refresh = vi.fn().mockResolvedValue(success);
+    const outcome = await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh,
+      checkEffectiveTags: drifted(), reconcileEffectiveTags: vi.fn().mockRejectedValue(new Error("deadlock detected")), reconcileLog: log,
+    })(context());
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(outcome).toMatchObject({ status: "success", result: { urlCount: 42 } });
+    expect(log.error).toHaveBeenCalledTimes(1);
+    const event = JSON.parse(log.error.mock.calls[0]![0] as string);
+    expect(event).toMatchObject({ schemaVersion: 1, event: "effective_tag_reconcile_failed", level: "error" });
+    expect(event.error.message).toContain("deadlock detected");
+  });
+
+  it("功能开关 / 写闸关闭时一律不检查也不对账（没有任何数据库访问）", async () => {
+    const check = clean();
+    const reconcile = reconciled();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: enabledEnv, refresh: vi.fn(), checkEffectiveTags: check, reconcileEffectiveTags: reconcile,
+    })(context());
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: {} as NodeJS.ProcessEnv, refresh: vi.fn(), checkEffectiveTags: check, reconcileEffectiveTags: reconcile,
+    })(context());
+    expect(check).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it("每次任务执行只检查一次、至多对账一次（即使遇到过期文件锁、重试一次生成）", async () => {
+    const now = new Date("2026-08-18T01:00:00.000Z");
+    const refresh = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: "running", message: "running",
+        state: state({ status: "running", runId: "stale-run", startedAt: new Date(now.valueOf() - SITEMAP_FILE_LOCK_STALE_MS - 1).toISOString() }),
+      })
+      .mockResolvedValueOnce(success);
+    const check = drifted();
+    const reconcile = reconciled();
+    await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, releaseLock: vi.fn().mockResolvedValue(undefined),
+      now: () => now, rootDir: "/tmp/sitemaps", checkEffectiveTags: check, reconcileEffectiveTags: reconcile, reconcileLog: quietLog(),
+    })(context());
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it("生产默认走真实检查 / 对账：差异为 0 时处理器只开一个只读事务（READ ONLY），一条写入、一把咨询锁都没有", async () => {
+    const seen: string[] = [];
+    const tx = {
+      $executeRawUnsafe: vi.fn(async (statement: string) => { seen.push(statement); return 0; }),
+      $queryRaw: vi.fn(async (statement: { sql: string }) => {
+        if (statement.sql.includes("'summary'::text")) {
+          seen.push("check");
+          return [{ kind: "summary", novel_id: null, canonical_tag_id: null, missing: 0, extra: 0, changed: 0 }];
+        }
+        seen.push(statement.sql.includes("pg_advisory_xact_lock") ? "lock" : statement.sql.includes("INSERT INTO novel_effective_tag") ? "apply" : "other");
+        return [];
+      }),
+    };
+    const db = { $transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) => callback(tx)) };
+    const log = quietLog();
+    const refresh = vi.fn(async () => { seen.push("refresh"); return success; });
+    await createSitemapRefreshHandler(db as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, reconcileLog: log,
+    })(context());
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(["SET TRANSACTION READ ONLY", "check", "refresh"]);
+    expect(JSON.parse(log.info.mock.calls[0]![0] as string)).toMatchObject({ event: "effective_tag_check", missing: 0, reconcile: false });
+  });
+
+  it("生产默认走真实检查 / 对账：有差异时先检查（只读）、再在新事务里先拿独占咨询锁、再比对写入", async () => {
+    const seen: string[] = [];
+    const makeTx = () => ({
+      $executeRawUnsafe: vi.fn(async (statement: string) => { seen.push(statement); return 0; }),
+      $queryRaw: vi.fn(async (statement: { sql: string }) => {
+        if (statement.sql.includes("'summary'::text")) {
+          seen.push("check");
+          return [{ kind: "summary", novel_id: null, canonical_tag_id: null, missing: 1, extra: 0, changed: 0 }];
+        }
+        if (statement.sql.includes("INSERT INTO novel_effective_tag")) {
+          seen.push("apply");
+          return [{ inserted: 1, updated: 0, deleted: 0 }];
+        }
+        seen.push(statement.sql.includes("pg_advisory_xact_lock(") ? "lock_exclusive" : "other");
+        return [];
+      }),
+    });
+    const db = { $transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) => callback(makeTx())) };
+    const log = quietLog();
+    const refresh = vi.fn(async () => { seen.push("refresh"); return success; });
+    await createSitemapRefreshHandler(db as never, {
+      buildFamily: vi.fn(), env: workerEnabledEnv, refresh, reconcileLog: log,
+    })(context());
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual(["SET TRANSACTION READ ONLY", "check", "lock_exclusive", "apply", "refresh"]);
+    expect(log.warn).toHaveBeenCalledTimes(2);
   });
 });

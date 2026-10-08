@@ -56,12 +56,22 @@ import {
 
 import { loadKeywordRuleArtifactFromDb } from "./auto-classification";
 import {
+  lockEffectiveTagProjectionExclusive,
+  reconcileAllEffectiveTags,
+} from "./effective-tag-projection";
+import {
   exitManualTagMode,
   replaceManualTagSnapshot,
   resolveEffectiveTags,
 } from "./service";
 
 type QueryDb = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * B-38：分类停用/启用、改映射会在同一事务里做一次全量对账（生产约 1 秒），Prisma 交互式事务默认
+ * 只有 5 秒，余量太薄，这两个后台事务显式放宽到 30 秒。
+ */
+const PROJECTION_RECONCILE_TRANSACTION_TIMEOUT_MS = 30_000;
 type MutationDependencies = Readonly<{
   db: PrismaClient;
   identities: AdminIdentityStore;
@@ -766,6 +776,10 @@ export async function mutateAdminCanonicalTag(
         if (prior.action !== action) throw new TaggingAdminError("idempotency_conflict", 409);
         return replayAudit(prior, payloadFingerprint);
       }
+      // B-38：停用/启用要在本事务里全量对账。先拿投影的独占咨询锁、后拿 `canonical_tag` 行锁——
+      // 反过来会和正在重算的事务互相等待成死锁（重算持共享锁并要给投影行做外键检查，
+      // 外键检查要 `canonical_tag` 行的 KEY SHARE，而 FOR UPDATE 与它冲突）。
+      if (mutation.action === "set_status") await lockEffectiveTagProjectionExclusive(tx);
       const [locked] = await tx.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`
         SELECT id, updated_at FROM canonical_tag WHERE id = ${canonicalTagId}::uuid FOR UPDATE
       `);
@@ -785,6 +799,8 @@ export async function mutateAdminCanonicalTag(
         before.status = tag.status;
         after.status = mutation.status;
         await tx.canonicalTag.update({ where: { id: canonicalTagId }, data: { status: mutation.status } });
+        // B-38：分类启用/停用改变"哪些分类算数"，同一事务里全量对账归属表（改译名/别名/关键词不触发）。
+        await reconcileAllEffectiveTags(tx);
       } else if (mutation.action === "replace_translations") {
         const translations = validateTranslations(mutation.translations);
         before.translations = tag.translations.map((item) => ({ locale: item.locale, displayName: item.displayName }));
@@ -860,7 +876,10 @@ export async function mutateAdminCanonicalTag(
         },
       } });
       return result;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      timeout: PROJECTION_RECONCILE_TRANSACTION_TIMEOUT_MS,
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new TaggingAdminError(mutation.action === "replace_keywords" ? "keyword_collision" : "alias_collision", 409);
@@ -917,6 +936,8 @@ export async function mutateAdminSourceLabelMapping(
         if (prior.action !== action) throw new TaggingAdminError("idempotency_conflict", 409);
         return replayAudit(prior, payloadFingerprint);
       }
+      // B-38：改映射要在本事务里全量对账。先拿独占咨询锁、后拿行锁（锁顺序纪律见 effective-tag-projection.ts 文件头）。
+      await lockEffectiveTagProjectionExclusive(tx);
 
       let mappingId: string;
       let before: Prisma.InputJsonObject;
@@ -980,6 +1001,8 @@ export async function mutateAdminSourceLabelMapping(
         mappingId = updated.id;
       }
 
+      // B-38：映射边新增/改版/停用改变"哪些书属于哪些分类"，同一事务里全量对账归属表。
+      await reconcileAllEffectiveTags(tx);
       const mapping = await tx.sourceLabelMapping.findUniqueOrThrow({ where: { id: mappingId } });
       const result = { id: mapping.id, updatedAt: mapping.updatedAt.toISOString(), replayed: false };
       await tx.operationAudit.create({ data: {
@@ -1002,7 +1025,10 @@ export async function mutateAdminSourceLabelMapping(
         },
       } });
       return result;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      timeout: PROJECTION_RECONCILE_TRANSACTION_TIMEOUT_MS,
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new TaggingAdminError("mapping_identity_conflict", 409);

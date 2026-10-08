@@ -1002,7 +1002,10 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
    * them: task-row `FOR UPDATE` lock, then the `beforeStop` `SUM(...)`, then
    * the `afterStop` pending/processing/failed counts.
    */
-  function fakeCatalogPageTx() {
+  function fakeCatalogPageTx(options: { novelIdForBook?: (bookIndex: number) => string | null } = {}) {
+    // B-38：投影重算发出的 SQL 按文本认出来单独记账，不占用下面按固定顺序回答的队列。
+    const events: string[] = [];
+    const refreshedNovelIds: string[][] = [];
     const queryRawResponses: unknown[] = [
       [{ id: "task-1" }], // FOR UPDATE lock
       [{ total: 0n }], // beforeStop: no prior successful pages
@@ -1014,11 +1017,24 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
     let genericTaskUpdateArgs: { data: { result: Record<string, unknown> } } | null = null;
 
     const tx = {
-      $queryRaw: async () => queryRawResponses[queryRawCall++],
+      $queryRaw: async (statement?: { sql?: string; values?: unknown[] }) => {
+        const sql = statement?.sql ?? "";
+        if (sql.includes("pg_advisory_xact_lock_shared")) { events.push("refresh.lockShared"); return []; }
+        if (sql.includes("FOR NO KEY UPDATE") && sql.includes("FROM novel n")) {
+          events.push("refresh.lockNovels");
+          refreshedNovelIds.push([...(statement?.values ?? [])] as string[]);
+          return [];
+        }
+        if (sql.includes("INSERT INTO novel_effective_tag")) { events.push("refresh.apply"); return [{ inserted: 0, updated: 0, deleted: 0 }]; }
+        events.push("queryRaw");
+        return queryRawResponses[queryRawCall++];
+      },
       novelSourceItem: {
         upsert: async (args: { create: Record<string, unknown> }) => {
           upsertCreateCalls.push(args.create);
-          return { id: `source-${upsertCreateCalls.length}` };
+          events.push("upsert");
+          const index = upsertCreateCalls.length - 1;
+          return { id: `source-${upsertCreateCalls.length}`, novelId: options.novelIdForBook?.(index) ?? null, status: "linked" };
         },
       },
       genericTask: {
@@ -1047,6 +1063,8 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
     return {
       tx: tx as unknown as Prisma.TransactionClient,
       upsertCreateCalls,
+      events,
+      refreshedNovelIds,
       getGenericTaskItemUpdateArgs: () => genericTaskItemUpdateArgs,
       getGenericTaskUpdateArgs: () => genericTaskUpdateArgs,
     };
@@ -1178,6 +1196,65 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
         }
         expect(getGenericTaskItemUpdateArgs()?.data.result.unknownLocaleCount).toBe(0);
         expect(getGenericTaskItemUpdateArgs()?.data.result.suspendedLanguageCodes).toEqual([]);
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+
+  // B-38（方案 §4.3 写入点表「上游目录同步」）：目录同步每页在本页事务里重算本页涉及的已绑定小说。
+  // 这条用例钉住三件事：①只在写完本页所有书目之后、聚合查询之前重算（真源先写完）；②只重算已绑定
+  // 小说的书目（novelId 为空的不参与），同一本小说的多个书目只算一次；③本页没有已绑定书目时一条
+  // 投影 SQL 都不发。
+  it("persistCatalogPage refreshes the effective tags of the page's bound novels once, after every row is written and before the aggregates", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const books = suspensionBooks(10, 0);
+        const response: ListBooksResponse = {
+          items: books,
+          totalCount: 100,
+          rawEvidence: { totalCount: 100, __boundary: "approved_raw_evidence" } as const,
+        };
+        const adapter = { listBooks: vi.fn(async () => response), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() };
+        const handler = createMoboreaderCatalogHandler(fakeOuterDb(encryptedSecret), {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+        const outcome = await handler({
+          lease: {
+            family: "generic", taskType: "catalog_scan", mode: "apply", itemId: "item-1", taskId: "task-1",
+            workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(),
+            payload: suspensionPayload,
+          },
+          mode: "apply", signal: new AbortController().signal, heartbeat: async () => true,
+        });
+
+        const novelA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+        const novelB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+        // 第 0、2 本绑定到小说 A（同一本小说的两个书目），第 5 本绑定到小说 B，其余未绑定。
+        const bound = fakeCatalogPageTx({ novelIdForBook: (index) => (index === 0 || index === 2 ? novelA : index === 5 ? novelB : null) });
+        await outcome.protectedWrite!(bound.tx);
+
+        expect(bound.refreshedNovelIds).toEqual([[novelA, novelB]]);
+        expect(bound.events.filter((event) => event.startsWith("refresh."))).toEqual([
+          "refresh.lockShared", "refresh.lockNovels", "refresh.apply",
+        ]);
+        const lastUpsert = bound.events.lastIndexOf("upsert");
+        const firstRefresh = bound.events.indexOf("refresh.lockShared");
+        expect(bound.events.filter((event) => event === "upsert")).toHaveLength(10);
+        expect(firstRefresh).toBeGreaterThan(lastUpsert);
+        // 聚合查询（FOR UPDATE 任务行除外）都在重算之后
+        const aggregateQueries = bound.events.slice(firstRefresh).filter((event) => event === "queryRaw");
+        expect(aggregateQueries.length).toBeGreaterThanOrEqual(2);
+
+        // 本页没有任何已绑定书目：不发任何投影 SQL
+        const unbound = fakeCatalogPageTx();
+        await outcome.protectedWrite!(unbound.tx);
+        expect(unbound.events.some((event) => event.startsWith("refresh."))).toBe(false);
       });
     } finally {
       keys.cleanup();

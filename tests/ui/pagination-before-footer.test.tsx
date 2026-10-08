@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import { BlogListScreen } from "@/features/public-ui/blog/BlogListScreen";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import type { NovelCardView } from "@/features/public-ui/types";
+import { pagedNovels, pagedPosts } from "../fixtures/paged-results";
 
 /**
  * PN-06（`评估_PulseNovel前端SEO审计_2026-10-07.md` 施工单四）：书库 / 分类 / 博客列表三类页面，
@@ -29,22 +30,18 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadBlogList: vi.fn(),
-}));
-
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const { BrowseBody } = await import("@/app/_pages/browse");
 const { CategoryBody } = await import("@/app/_pages/category");
@@ -152,9 +149,9 @@ beforeEach(() => {
   process.env.FEATURE_ARTICLE_BLOG = "true";
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
   loadActiveLocales.mockResolvedValue(["en"]);
-  loadBrowseNovels.mockResolvedValue(Array.from({ length: 21 }, (_, i) => card(String(i))));
-  loadBlogList.mockResolvedValue(posts(21));
-  getPublicCategoryPage.mockReset();
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(Array.from({ length: 21 }, (_, i) => card(String(i))), page));
+  loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(posts(21), page));
+  loadCategoryPage.mockReset();
 });
 
 afterEach(() => {
@@ -170,7 +167,7 @@ describe("PN-06 · 分页条在作品网格之后、页脚之前", () => {
   });
 
   it("书库 /browse?category=：同样在网格之后、页脚之前，且分类参数照常带进翻页链接", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage());
+    loadCategoryPage.mockResolvedValue(categoryPage());
     const tree = await BrowseBody({
       locale: "en",
       searchParams: Promise.resolve({ page: "1", category: "fantasy" }),
@@ -182,7 +179,7 @@ describe("PN-06 · 分页条在作品网格之后、页脚之前", () => {
   });
 
   it("分类 /category/[slug]：分页条在 book-grid 之后、footer 之前，且在 main 之内", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage());
+    loadCategoryPage.mockResolvedValue(categoryPage());
     const tree = await CategoryBody({
       locale: "en",
       params: Promise.resolve({ slug: "fantasy" }),
@@ -207,7 +204,7 @@ describe("PN-06 · 分页条在作品网格之后、页脚之前", () => {
   });
 
   it("单页时不渲染分页条（插槽收到 null 的 Pagination，不留空壳）", async () => {
-    loadBrowseNovels.mockResolvedValue([card("1")]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([card("1")], page));
     const tree = await BrowseBody({ locale: "en", searchParams: Promise.resolve({}) });
     const { container } = render(tree);
     expect(container.querySelector('[data-testid="pagination"]')).toBeNull();

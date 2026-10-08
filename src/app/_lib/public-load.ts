@@ -10,15 +10,16 @@ import {
   listPublicBlogArticles,
 } from "@/lib/site/blog-queries";
 import {
+  getPublicBrowsePage,
   getPublicChapterView,
   getPublicNovelDetail,
   listHomeNovels,
   listPublicCategories as queryPublicCategories,
-  listPublicArticles,
   loadPublicChrome,
   resolvePublicArticleBySlugParam,
   type PublicChromeCurrent,
 } from "@/lib/site/queries";
+import { getPublicCategoryPage } from "@/lib/site/category-queries";
 import type { PublicTaxonomyTag } from "@/lib/site/public-taxonomy";
 import { restrictViewTagLinks, toLinkableCategorySlugs } from "@/lib/site/category-links";
 import { asSiteLocale } from "@/lib/site/locale-label";
@@ -27,8 +28,12 @@ import { getRelatedAndNewReleaseNovels } from "@/lib/site/related-novels";
 import { checkBlogArticlePublicAccess } from "@/server/publication/access";
 
 /**
- * 该语种"列表窗口"（最新 `PUBLIC_LIST_CAP` 本）里出现过的分类：页脚、首页题材导航，以及
- * B-38 第二部分里详情页的"可链接分类集合"都取这一份（同一请求内去重，见 `loadChrome`）。
+ * 该语种有书的全部分类（列表可见的书至少一本）：页脚、首页题材导航，以及详情页的"可链接分类集合"
+ * 都取这一份（同一请求内去重，见 `loadChrome`）。
+ *
+ * B-38（v0.5.13）：数据来自每语种每分类本数矩阵（`@/lib/site/public-list`，进程内缓存 60 秒，一次查询覆盖
+ * 全部语种），所以页脚、首页导航、详情页标签可不可点、分类页 hreflang 最多晚 60 秒；列表、作品数、分页、
+ * 404 判定不走这条缓存，实时。
  * 定义在 `loadChrome` 之前，因为 `loadChrome` 在没有传入 `categories` 时自己落到这里。
  */
 export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPublicCategories(prisma, locale));
@@ -38,8 +43,8 @@ export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPub
  * caller that has already computed the taxonomy list via
  * `loadPublicCategories` for its own purposes (`src/app/page.tsx`'s
  * `HomeScreen` `categories` prop) can pass it straight through, and
- * `loadPublicChrome` skips re-running `listPublicCategories`'s
- * `article.findMany` + taxonomy lookup a second time for the footer. Every
+ * `loadPublicChrome` skips re-running `listPublicCategories` (count-matrix
+ * read + a fresh category-name read, since B-38) a second time for the footer. Every
  * other caller (`category/[slug]`, `novel/[slugParam]`, its
  * `chapter/[chapterNumber]`, `browse`) keeps calling this without
  * `categories`; B-38 第二部分起，这时落到请求内去重的 `loadPublicCategories(locale)`
@@ -112,7 +117,21 @@ export const loadActiveLocales = cache(() => getActiveLocales());
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));
 export const loadHomeCarousel = cache(async (locale: SiteLocale) => getHomeCarouselItems(locale, prisma));
 
-export const loadBrowseNovels = cache(async (locale: SiteLocale) => listPublicArticles(prisma, locale));
+/**
+ * 全部作品页的一页（数据库分页 + 真实总数）。请求内去重：`generateMetadata` 与页面本体用同样的
+ * `(locale, page)` 调用，只查一次。
+ */
+export const loadBrowsePage = cache(async (locale: SiteLocale, page: number) =>
+  getPublicBrowsePage(prisma, locale, page),
+);
+
+/**
+ * 分类页的一页（`/category/{slug}` 与 `/browse?category=`）；分类不存在 / 没有书 / 页码超出 → `null`。
+ * 请求内去重，同上。`slug` 传原始值，规范化（trim / 小写 / 长度）在 `getPublicCategoryPage` 里。
+ */
+export const loadCategoryPage = cache(async (locale: SiteLocale, slug: string, page: number) =>
+  getPublicCategoryPage(prisma, locale, slug, page),
+);
 
 export const loadArticleAccess = cache(async (slugParam: string, locale: SiteLocale) =>
   resolvePublicArticleBySlugParam(prisma, slugParam, locale),
@@ -121,12 +140,11 @@ export const loadArticleAccess = cache(async (slugParam: string, locale: SiteLoc
 /**
  * B-38 第二部分：交给页面的视图里，标签只有在分类页确实返回 200 时才带 `href`。
  *
- * 详情页的标签来自**这本书**的全部 active 分类（不看列表窗口），而分类页只在最新
- * `PUBLIC_LIST_CAP` 本里过滤、结果为 0 就 404——窗口之外的书挂着窗口里没有的分类时，
- * `Tag` 渲染出来的 `<a href="/category/x">` 就是 404（见 `@/lib/site/category-links`）。
- * "可链接分类集合"取 `loadPublicCategories(locale)`——同一请求内页脚已经取过的那一份，
- * 所以判定新增 0 次数据库查询；书没有标签时连这一份都不碰。语种认不出来时按"都不可链接"
- * 处理（宁可纯文字，不出死链）。
+ * 详情页的标签来自**这本书**的全部 active 分类，而分类页在该语种没有书时返回 404（空分类即 404），所以
+ * 书挂着该语种里没有书的分类时，`Tag` 渲染出来的 `<a href="/category/x">` 就是 404（见
+ * `@/lib/site/category-links`）。"可链接分类集合"取 `loadPublicCategories(locale)`——同一请求内页脚已经取过的
+ * 那一份（每语种每分类本数矩阵，最多晚 60 秒），所以判定新增 0 次数据库查询；书没有标签时连这一份都不碰。
+ * 语种认不出来时按"都不可链接"处理（宁可纯文字，不出死链）。
  */
 async function withLinkableTagHrefs<V extends { tags: readonly SiteTag[] }>(
   view: V,
@@ -161,9 +179,9 @@ export const loadHreflangSiblings = cache(async (novelId: string) =>
 export const loadRelatedAndNewReleases = cache(
   async (locale: SiteLocale, articleId: string, novelId: string) => {
     const { related, newReleases } = await getRelatedAndNewReleaseNovels(prisma, locale, articleId, novelId);
-    // 候选池是最新 500 本，窗口（240）之外的卡片带着窗口里没有的分类；同详情页标签的规则
-    // （`loadNovelDetail` 的注释）。目前两个推荐区都用 `minimal` 卡片、不渲染标签，这里按数据层
-    // 一并收口，免得将来去掉 `minimal` 时悄悄冒出 404 链接。
+    // 候选池是最新 500 本，里面的卡片可能挂着该语种里没有书的分类（卡片标签来自这本书自己的全部分类）；
+    // 同详情页标签的规则（`loadNovelDetail` 的注释）。目前两个推荐区都用 `minimal` 卡片、不渲染标签，
+    // 这里按数据层一并收口，免得将来去掉 `minimal` 时悄悄冒出 404 链接。
     return {
       related: await Promise.all(related.map((card) => withLinkableTagHrefs(card, locale))),
       newReleases: await Promise.all(newReleases.map((card) => withLinkableTagHrefs(card, locale))),
@@ -176,7 +194,9 @@ export const loadRelatedAndNewReleases = cache(
 // blog family loaders, parallel to the Novel-article ones above.
 // ---------------------------------------------------------------------------
 
-export const loadBlogList = cache(async (locale: SiteLocale) => listPublicBlogArticles(prisma, locale));
+export const loadBlogList = cache(async (locale: SiteLocale, page: number) =>
+  listPublicBlogArticles(prisma, locale, page),
+);
 
 export const loadBlogAccess = cache(async (locale: string, slug: string) =>
   checkBlogArticlePublicAccess(prisma, { locale, slug }),

@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildHreflangAlternates } from "@/lib/seo/seo-utils";
 import { buildCategorySeoMeta } from "@/lib/seo/seo-templates/category";
+import { clearPublicCategoryCountsCacheForTest } from "@/lib/site/public-list";
+
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
 /**
  * 2026-09-30 分类页 hreflang（开发单第 8 条）：只列出该分类在该语种**确实有公开
@@ -13,6 +16,11 @@ import { buildCategorySeoMeta } from "@/lib/seo/seo-templates/category";
  * 而海阅的空分类是 404——生产实测 `/ko/category/female-audience` 的 hreflang 里
  * 有 `en=/category/female-audience`（404）和另外 13 个空语种，x-default 也指向
  * 那个 404。
+ *
+ * B-38（v0.5.13）：判定改读每语种每分类本数矩阵（一次查询，不再逐语种调页面查询——那是第 1 页要额外查十几个
+ * 语种的 400 毫秒），"该分类在某语种有书 ⟺ 页面返回 200"由真实库用例
+ * `tests/integration/site/consistency-invariants-postgres.test.ts` 逐语种证明；这里用一个按 SQL 结构分派的
+ * 假库验证元数据层怎样使用它。
  */
 
 const ORIGIN = "https://novel.example";
@@ -26,16 +34,16 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
+  loadCategoryPage: vi.fn(),
 }));
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
-}));
+// 假库：`$queryRaw` 只答每语种每分类本数矩阵（`categoryHasContentIn` 决定哪些语种里 romance 有书）。
+const fakeDb = vi.hoisted(() => ({ matrixLocales: [] as string[], statements: [] as string[], $queryRaw: null as unknown }));
+vi.mock("@/app/_lib/public-deps", () => ({ prisma: fakeDb }));
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const { listCategoryPublicLocales } = await import("@/lib/site/category-locales");
 const { buildCategoryMetadata } = await import("@/app/_pages/category");
 
@@ -75,11 +83,13 @@ function categoryPage(locale: string) {
   };
 }
 
-/** 假页面查询：只有 `withContent` 里的语种返回页面，其它语种返回 null（= 404）。 */
+/**
+ * `withContent` 里的语种：romance 在那里有列表可见的书——页面本身（加载器）返回页面，矩阵里也有它；
+ * 其它语种页面是 null（= 404），矩阵里没有。
+ */
 function categoryHasContentIn(withContent: readonly string[]) {
-  getPublicCategoryPage.mockImplementation(async (_db, locale) =>
-    withContent.includes(locale) ? categoryPage(locale) : null,
-  );
+  fakeDb.matrixLocales = [...withContent];
+  loadCategoryPage.mockImplementation(async (locale) => (withContent.includes(locale) ? categoryPage(locale) : null));
 }
 
 beforeEach(() => {
@@ -87,7 +97,18 @@ beforeEach(() => {
   loadChrome.mockReset();
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: { brandHref: "/", navItems: [] } });
   loadActiveLocales.mockReset();
-  getPublicCategoryPage.mockReset();
+  loadCategoryPage.mockReset();
+  clearPublicCategoryCountsCacheForTest();
+  fakeDb.matrixLocales = [];
+  fakeDb.statements = [];
+  fakeDb.$queryRaw = async (query: { text: string }) => {
+    const kind = classifyPublicListQuery(query);
+    fakeDb.statements.push(kind);
+    if (kind === "matrix") {
+      return fakeDb.matrixLocales.map((locale) => ({ locale, canonical_tag_id: "cat-1", slug: "romance", n: 1 }));
+    }
+    return [];
+  };
 });
 
 afterEach(() => {
@@ -132,22 +153,24 @@ describe("buildHreflangAlternates / buildCategorySeoMeta — 只枚举传入的�
   });
 });
 
-describe("listCategoryPublicLocales — 页面返回 200 的唯一定义是 getPublicCategoryPage(…, 1)", () => {
-  it("只保留页面查询非空的语种，并保持传入顺序；按第 1 页判定", async () => {
-    categoryHasContentIn(["es", "ru"]);
-    const found = await listCategoryPublicLocales({} as never, "romance", ["en", "es", "ko", "ru"]);
+describe("listCategoryPublicLocales — 读每语种每分类本数矩阵：该分类本数 > 0 的语种 ∩ 候选", () => {
+  it("只保留矩阵里有这个分类的语种，并保持传入顺序；一次矩阵读取，不逐语种探测、不调页面查询", async () => {
+    categoryHasContentIn(["es", "ru", "pl"]);
+    const found = await listCategoryPublicLocales(fakeDb as never, "romance", ["en", "es", "ko", "ru"]);
     expect(found).toEqual(["es", "ru"]);
-    expect(getPublicCategoryPage.mock.calls.map((call) => [call[1], call[2], call[3]])).toEqual([
-      ["en", "romance", 1],
-      ["es", "romance", 1],
-      ["ko", "romance", 1],
-      ["ru", "romance", 1],
-    ]);
+    expect(fakeDb.statements.filter((kind) => kind === "matrix")).toHaveLength(1);
+    expect(loadCategoryPage).not.toHaveBeenCalled();
+  });
+
+  it("slug 规范化与页面入口一致（大小写 / 首尾空白）；矩阵里没有的分类 → 空", async () => {
+    categoryHasContentIn(["es"]);
+    expect(await listCategoryPublicLocales(fakeDb as never, "  Romance ", ["en", "es"])).toEqual(["es"]);
+    expect(await listCategoryPublicLocales(fakeDb as never, "unknown", ["en", "es"])).toEqual([]);
   });
 
   it("没有候选语种就一次查询都不发", async () => {
-    await expect(listCategoryPublicLocales({} as never, "romance", [])).resolves.toEqual([]);
-    expect(getPublicCategoryPage).not.toHaveBeenCalled();
+    await expect(listCategoryPublicLocales(fakeDb as never, "romance", [])).resolves.toEqual([]);
+    expect(fakeDb.statements).toEqual([]);
   });
 });
 
@@ -183,15 +206,17 @@ describe("buildCategoryMetadata — hreflang 不再盲枚举 15 个语种", () =
     });
   });
 
-  it("不查当前语种自己（页面已经渲染出来了，它必然存在），也不查动态层之外的语种", async () => {
-    loadActiveLocales.mockResolvedValue(["en", "ko"]);
-    categoryHasContentIn(["en", "ko"]);
+  it("不逐语种探测：页面自己的加载器只调一次（当前语种），hreflang 只读一次矩阵；候选只含动态层活跃语种去掉当前语种", async () => {
+    loadActiveLocales.mockResolvedValue(["en", "ko", "fr"]);
+    categoryHasContentIn(["en", "ko", "ru"]);
 
-    await buildCategoryMetadata("ko", params, noQuery);
+    const metadata = await buildCategoryMetadata("ko", params, noQuery);
 
-    const queried = getPublicCategoryPage.mock.calls.map((call) => call[1]);
-    // 1 次是页面自己的 load（ko），1 次是候选里的 en；没有第二次 ko，也没有 fr/ru/… 这些没内容的语种。
-    expect(queried.sort()).toEqual(["en", "ko"]);
+    expect(loadCategoryPage).toHaveBeenCalledTimes(1);
+    expect(loadCategoryPage.mock.calls[0]).toEqual(["ko", "romance", 1]);
+    expect(fakeDb.statements.filter((kind) => kind === "matrix")).toHaveLength(1);
+    // 矩阵里有 ru，但 ru 不在动态层活跃语种里（候选之外）→ 不列；fr 活跃但矩阵里没有 → 不列。
+    expect(Object.keys(metadata.alternates?.languages as Record<string, string>).sort()).toEqual(["en", "ko", "x-default"]);
   });
 
   it("页面本身 404（分类在当前语种没内容）→ 走 notFound 元数据，不去算 hreflang", async () => {
@@ -200,7 +225,8 @@ describe("buildCategoryMetadata — hreflang 不再盲枚举 15 个语种", () =
 
     const metadata = await buildCategoryMetadata("ko", params, noQuery);
     expect(metadata.robots).toEqual({ index: false, follow: false });
-    expect(getPublicCategoryPage).toHaveBeenCalledTimes(1);
+    expect(loadCategoryPage).toHaveBeenCalledTimes(1);
+    expect(fakeDb.statements).toEqual([]);
   });
 });
 

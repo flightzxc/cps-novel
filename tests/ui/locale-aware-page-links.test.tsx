@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import type { NovelCardView } from "@/features/public-ui/types";
+import { pagedNovels, pagedPosts } from "../fixtures/paged-results";
 
 /**
  * WO-2 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.1): proves the
@@ -36,7 +37,8 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
@@ -46,23 +48,18 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadBlogDetail: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
-}));
-
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadHreflangSiblings = vi.mocked(publicLoad.loadHreflangSiblings);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 const loadBlogAccess = vi.mocked(publicLoad.loadBlogAccess);
 
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const { HomeBody } = await import("@/app/_pages/home");
 const { BrowseBody } = await import("@/app/_pages/browse");
@@ -117,13 +114,13 @@ beforeEach(() => {
   loadHomeNovels.mockResolvedValue([card("1")]);
   loadHomeCarousel.mockResolvedValue([]);
   loadPublicCategories.mockResolvedValue([]);
-  loadBrowseNovels.mockResolvedValue(Array.from({ length: 21 }, (_, i) => card(String(i))));
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(Array.from({ length: 21 }, (_, i) => card(String(i))), page));
   loadArticleAccess.mockReset();
   loadHreflangSiblings.mockReset();
   loadHreflangSiblings.mockResolvedValue([]);
   loadBlogList.mockReset();
   loadBlogAccess.mockReset();
-  getPublicCategoryPage.mockReset();
+  loadCategoryPage.mockReset();
 });
 
 afterEach(() => {
@@ -160,7 +157,7 @@ describe.each([
   { locale: "es" as const, prefix: "/es", name: "Siguiente" },
 ])("category.tsx · CategoryBody — Pagination basePath ($locale)", ({ locale, prefix, name }) => {
   it(`paginator's "${name}" link starts with ${prefix || ""}/category/fantasy`, async () => {
-    getPublicCategoryPage.mockResolvedValue({
+    loadCategoryPage.mockResolvedValue({
       novels: Array.from({ length: 20 }, (_, i) => card(`c${i}`)),
       page: 1,
       totalPages: 2,
@@ -232,7 +229,7 @@ describe.each([
   { locale: "es" as const, prefix: "/es", name: "Siguiente" },
 ])("blog-list.tsx · BlogListBody — Pagination basePath ($locale)", ({ locale, prefix, name }) => {
   it(`paginator's "${name}" link starts with ${prefix || ""}/blog`, async () => {
-    loadBlogList.mockResolvedValue(
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(
       Array.from({ length: 21 }, (_, i) => ({
         id: `p${i}`,
         title: `Post ${i}`,
@@ -241,7 +238,7 @@ describe.each([
         publishedAt: new Date("2026-08-01T00:00:00Z"),
         href: `/blog/post-${i}`,
       })),
-    );
+    page));
     const tree = await BlogListBody({ locale, searchParams: Promise.resolve({ page: "1" }) });
     render(tree);
     const next = screen.getByRole("link", { name });

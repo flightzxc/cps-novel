@@ -330,37 +330,39 @@ function buildNovelPageFiles(
 /**
  * 分类页条目（并入 mainpage，见 `SITEMAP_TYPES` 注释）。只列页面确实返回 200 的分类网址。
  *
- * 🔴 B-38：此前"有没有书"按该语种**全部**公开书目判定（`candidates`），而分类页
- * （`getPublicCategoryPage`）只在 `listPublicArticles` 的最新 `PUBLIC_LIST_CAP`（240）本里过滤；
- * en 有一万多本时，冷门分类在最新 240 本里一本都没有——站点地图列了 `/category/adventure`，
- * 页面 `notFound()`。`?page=N` 同理：此前页数按全量算（每分类可达数百页），页面按截断后的
- * 总页数判 404。现在**是否列、列几页**都改由 `listPublicCategoryPageCounts` 决定——它在每个语种里
- * 只调用一次页面自己的 `listPublicArticles`，再沿用页面的 `cardsInCategory` / `paginateCards`
- * 在内存里算出"有书的分类 slug → 总页数"，不另写第二份"分类下有没有书"的查询。
+ * 🔴 B-38：**是否列、列几页**由 `listPublicCategoryPageCounts` 决定——它读每语种每分类本数矩阵
+ * （不带缓存，刷新时刻的真实快照），与分类页（`getPublicCategoryPage`）、页脚、首页题材导航、
+ * 详情页的可链接分类集合、分类页 hreflang 用的是 `src/lib/site/public-list.ts` 里同一段列表可见性 /
+ * 分类归属 SQL，所以"列了、页面却 404"（历史上的 B-38 现象）与"页面是 200、站点地图没列"都不会发生；
+ * `?page=N` 的 N 取 1..总页数，与页面 `page > totalPages → 404` 同口径。真实库用例
+ * （`tests/integration/site/consistency-invariants-postgres.test.ts`）逐个 (slug, page) 验证。
+ * 候选里有、页面列表里没有的分类（例如只有 `seo_only` 书的分类：站点地图收，列表不收）不列。
  *
  * 分类的排序、`lastmod` 的取法**不变**（仍按全量候选算：分类自身 `updatedAt` 与全部归属
- * 候选文章 `updatedAt` 的最大值）、网址形状与 priority 也不变——本次改动的效果是删掉
- * 页面是 404 的分类网址与超出页面总页数的 `?page=N`，保留下来的条目与改前逐字相同。
+ * 候选文章 `updatedAt` 的最大值——归属读 `novel_effective_tag`，经 `loadPublicTaxonomyByNovelIds`）、
+ * 网址形状与 priority 也不变，保留下来的条目与改前逐字相同。
  */
 async function buildCategoryEntries(
   db: SitemapDb,
   locale: SiteLocale,
   candidates: readonly ArticleSitemapCandidateWithNovel[],
+  env: NodeJS.ProcessEnv,
 ): Promise<SitemapEntry[]> {
   const tagsByNovel = await loadPublicTaxonomyByNovelIds(
     db,
     candidates.map((candidate) => candidate.novel.id),
     locale,
+    env,
   );
   const categories = listDistinctPublicTaxonomy(tagsByNovel);
   if (categories.length === 0) return [];
 
-  // 页面认为"有书"的分类 → 总页数（每个语种一次 listPublicArticles，见函数注释）。
-  const listedPageCounts = await listPublicCategoryPageCounts(db, locale);
+  // 页面认为"有书"的分类 → 总页数（矩阵，一次查询，见函数注释）。
+  const listedPageCounts = await listPublicCategoryPageCounts(db, locale, env);
 
   const entries: SitemapEntry[] = [];
   for (const category of categories) {
-    // 页面会 404（该分类在最新 PUBLIC_LIST_CAP 本里没有书、或书只是 seo_only 不进列表）：不列。
+    // 页面会 404（该分类在列表里没有书，例如书只是 seo_only 不进列表）：不列。
     const pageCount = listedPageCounts.get(category.slug);
     if (pageCount === undefined) continue;
     const matching = candidates.filter((candidate) =>
@@ -571,7 +573,7 @@ export function createSitemapFamilyBuilder(
       priority: 1,
     }];
     if (candidates.length > 0) {
-      entries.push(...await buildCategoryEntries(db, locale, candidates));
+      entries.push(...await buildCategoryEntries(db, locale, candidates, env));
     }
 
     return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {

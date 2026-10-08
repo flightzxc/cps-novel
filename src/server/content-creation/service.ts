@@ -12,6 +12,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { withDbRetry } from "@/lib/db/db-retry";
 import { normalizeNovelTitle } from "@/lib/novel/novel-identity";
+import { refreshEffectiveTagsForNovels } from "@/server/tagging/effective-tag-projection";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
@@ -244,6 +245,11 @@ async function runMaterializeTransaction(
   if (link.count !== 1) {
     throw new ContentCreationConflictSignal();
   }
+
+  // B-38：新书刚绑定上游书目，"映射"那一支规则立刻对它生效——同一事务里重算这本书的分类归属
+  // （只写差异）。本函数既被后台（web_app，单本创建）也被批量任务（worker_app，novel.materialize.v1）
+  // 调用，两个角色都有 novel_effective_tag 的读写权限（infra/postgres/grants.sql）。
+  await refreshEffectiveTagsForNovels(tx as unknown as Prisma.TransactionClient, [novel.id]);
 
   await tx.operationAudit.create({
     data: {

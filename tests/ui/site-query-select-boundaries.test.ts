@@ -23,13 +23,20 @@ const QUERIES_SOURCE = readFileSync(
   path.join(process.cwd(), "src/lib/site/queries.ts"),
   "utf8",
 );
+// B-38 第二段：卡片 select 搬进了叶子文件 `article-card.ts`（避免 queries.ts ↔ public-list.ts 循环引用），
+// `queries.ts` 重新导出；详情 select 仍在 `queries.ts`。守卫两个文件都读，断言一条不放宽。
+const CARD_SOURCE = readFileSync(
+  path.join(process.cwd(), "src/lib/site/article-card.ts"),
+  "utf8",
+);
 
 function selectBlock(name: string): string {
-  const start = QUERIES_SOURCE.indexOf(`const ${name} = {`);
+  const source = name === "ARTICLE_CARD_SELECT" ? CARD_SOURCE : QUERIES_SOURCE;
+  const start = source.indexOf(`const ${name} = {`);
   expect(start, `${name} 未找到——select 常量被重命名或删除时必须同步本守卫`).toBeGreaterThan(-1);
-  const end = QUERIES_SOURCE.indexOf("} as const;", start);
+  const end = source.indexOf("} as const;", start);
   expect(end, `${name} 的 as const 结尾未找到`).toBeGreaterThan(start);
-  return QUERIES_SOURCE.slice(start, end);
+  return source.slice(start, end);
 }
 
 describe("public article select boundaries", () => {
@@ -39,6 +46,13 @@ describe("public article select boundaries", () => {
 
   it("card select 绝不携带 publicRedirectCode", () => {
     expect(selectBlock("ARTICLE_CARD_SELECT")).not.toMatch(/publicRedirectCode/);
+  });
+
+  it("queries.ts 仍然导出卡片 select（既有 import 不变），且卡片查询在 public-list 里走它", () => {
+    expect(QUERIES_SOURCE).toMatch(/export \{ ARTICLE_CARD_SELECT, filterPromoReady, toPublicArticle \}/);
+    const listSource = readFileSync(path.join(process.cwd(), "src/lib/site/public-list.ts"), "utf8");
+    expect(listSource).toMatch(/select: ARTICLE_CARD_SELECT/);
+    expect(listSource).not.toMatch(/ARTICLE_DETAIL_SELECT|publicRedirectCode/);
   });
 
   it("详情与章节查询都走 detail select", () => {

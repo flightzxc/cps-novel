@@ -1,11 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getPublicBlogDetail,
-  listPublicBlogArticles,
-  paginateBlogCards,
-} from "@/lib/site/blog-queries";
+import { getPublicBlogDetail, listPublicBlogArticles } from "@/lib/site/blog-queries";
 import { buildPublicListBlogArticleWhere } from "@/server/publication/visibility";
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -28,15 +24,22 @@ afterEach(() => {
   delete process.env.FEATURE_ARTICLE_SEO_VISIBILITY;
 });
 
-describe("listPublicBlogArticles", () => {
-  it("uses the blog-family list where fragment (excludes hidden AND seo_only)", async () => {
-    const findMany = vi.fn().mockResolvedValue([row()]);
-    const db = { article: { findMany } } as unknown as PrismaClient;
+/** 博客列表的数据库分页：`findMany(skip/take)` + `count`（同一个 where），B-38 起没有任何上限。 */
+function listDb(rows: unknown[], total: number) {
+  const findMany = vi.fn().mockResolvedValue(rows);
+  const count = vi.fn().mockResolvedValue(total);
+  return { db: { article: { findMany, count } } as unknown as PrismaClient, findMany, count };
+}
 
-    const cards = await listPublicBlogArticles(db, "en");
+describe("listPublicBlogArticles", () => {
+  it("uses the blog-family list where fragment (excludes hidden AND seo_only) for BOTH the page and the count", async () => {
+    const { db, findMany, count } = listDb([row()], 1);
+
+    const result = await listPublicBlogArticles(db, "en", 1);
 
     expect(findMany.mock.calls[0]![0].where).toEqual(buildPublicListBlogArticleWhere({ locale: "en" }));
-    expect(cards).toEqual([{
+    expect(count.mock.calls[0]![0].where).toEqual(buildPublicListBlogArticleWhere({ locale: "en" }));
+    expect(result.posts).toEqual([{
       id: "blog-1",
       title: "A blog post",
       slug: "a-blog-post",
@@ -44,53 +47,62 @@ describe("listPublicBlogArticles", () => {
       publishedAt: new Date("2026-08-05T12:30:00.000Z"),
       href: "/blog/a-blog-post",
     }]);
+    expect(result).toMatchObject({ page: 1, totalPages: 1, totalCount: 1 });
+  });
+
+  it("orders newest first (publishedAt desc, id asc) and pages with skip/take — no cap, no take: 240", async () => {
+    const { db, findMany } = listDb([row()], 45);
+    await listPublicBlogArticles(db, "en", 3);
+    expect(findMany.mock.calls[0]![0]).toMatchObject({
+      orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+      skip: 40,
+      take: 20,
+    });
+  });
+
+  it("page math: totalPages = ceil(total / 20); an invalid page number reads as page 1; always at least 1 total page", async () => {
+    for (const [total, pages] of [[0, 1], [1, 1], [20, 1], [21, 2], [45, 3], [4_801, 241]] as const) {
+      const { db } = listDb([], total);
+      expect((await listPublicBlogArticles(db, "en", 1)).totalPages, `total=${total}`).toBe(pages);
+    }
+    for (const page of [0, -1, 1.5, Number.NaN]) {
+      const { db, findMany } = listDb([], 0);
+      expect((await listPublicBlogArticles(db, "en", page)).page, String(page)).toBe(1);
+      expect(findMany.mock.calls[0]![0].skip, String(page)).toBe(0);
+    }
+  });
+
+  it("past the end: no posts but the real totalPages (the page 404s on that); a page number whose skip is not a safe integer never reaches the database", async () => {
+    const beyond = listDb([], 45);
+    expect(await listPublicBlogArticles(beyond.db, "en", 9)).toMatchObject({ posts: [], page: 9, totalPages: 3, totalCount: 45 });
+    const huge = listDb([row()], 45);
+    expect(await listPublicBlogArticles(huge.db, "en", 1e21)).toMatchObject({ posts: [], totalPages: 3, totalCount: 45 });
+    expect(huge.findMany).not.toHaveBeenCalled();
+    expect(huge.count).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to updatedAt when publishedAt is somehow null", async () => {
-    const findMany = vi.fn().mockResolvedValue([row({ publishedAt: null })]);
-    const db = { article: { findMany } } as unknown as PrismaClient;
+    const { db } = listDb([row({ publishedAt: null })], 1);
 
-    const cards = await listPublicBlogArticles(db, "en");
+    const { posts } = await listPublicBlogArticles(db, "en", 1);
 
-    expect(cards[0]!.publishedAt).toEqual(new Date("2026-08-06T00:00:00.000Z"));
+    expect(posts[0]!.publishedAt).toEqual(new Date("2026-08-06T00:00:00.000Z"));
   });
 
   it("omits summary when blank", async () => {
-    const findMany = vi.fn().mockResolvedValue([row({ summary: null })]);
-    const db = { article: { findMany } } as unknown as PrismaClient;
+    const { db } = listDb([row({ summary: null })], 1);
 
-    const cards = await listPublicBlogArticles(db, "en");
+    const { posts } = await listPublicBlogArticles(db, "en", 1);
 
-    expect(cards[0]!.summary).toBeUndefined();
-  });
-});
-
-describe("paginateBlogCards", () => {
-  it("slices into pages using BROWSE_PAGE_SIZE", () => {
-    const cards = Array.from({ length: 45 }, (_, index) => ({
-      id: `p${index}`,
-      title: `Post ${index}`,
-      slug: `post-${index}`,
-      publishedAt: new Date(),
-      href: `/blog/post-${index}`,
-    }));
-
-    const page1 = paginateBlogCards(cards, 1);
-    expect(page1.posts).toHaveLength(20);
-    expect(page1.totalPages).toBe(3);
-    expect(page1.totalCount).toBe(45);
-
-    const page3 = paginateBlogCards(cards, 3);
-    expect(page3.posts).toHaveLength(5);
+    expect(posts[0]!.summary).toBeUndefined();
   });
 
-  it("defaults to page 1 for an invalid page number", () => {
-    expect(paginateBlogCards([], 0).page).toBe(1);
-    expect(paginateBlogCards([], -1).page).toBe(1);
-  });
-
-  it("always reports at least 1 total page, even when empty", () => {
-    expect(paginateBlogCards([], 1).totalPages).toBe(1);
+  it("passes the SEO-visibility env through to the where fragment (flag on: only public rows)", async () => {
+    const { db, findMany } = listDb([], 0);
+    await listPublicBlogArticles(db, "en", 1, { NODE_ENV: "test", FEATURE_ARTICLE_SEO_VISIBILITY: "true" });
+    expect(JSON.stringify(findMany.mock.calls[0]![0].where)).toContain('"seoVisibility":"public"');
+    await listPublicBlogArticles(db, "en", 1, { NODE_ENV: "test", FEATURE_ARTICLE_SEO_VISIBILITY: "false" });
+    expect(JSON.stringify(findMany.mock.calls[1]![0].where)).not.toContain("seoVisibility");
   });
 });
 

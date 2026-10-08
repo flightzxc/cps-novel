@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPublicT } from "@/lib/locale/messages";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * TKD 对齐 CPS（Owner 2026-09-30）第二、三块：
@@ -31,12 +32,16 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadBlogList: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -44,10 +49,9 @@ const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const { buildHomeMetadata, HomeBody } = await import("@/app/_pages/home");
 const { buildBrowseMetadata } = await import("@/app/_pages/browse");
@@ -198,7 +202,7 @@ describe("首页 WebSite JSON-LD 与 meta 同一套取值（复核 A3）", () =>
 describe("浏览页/博客列表：描述只有默认语种读后台站点描述", () => {
   it("browse：en 读站点描述，ja 走文案", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_FILLED, chrome: CHROME });
-    loadBrowseNovels.mockResolvedValue([CARD]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
     const en = await buildBrowseMetadata("en", Promise.resolve({}));
     expect(en.description).toBe("ADMIN-SITE-DESCRIPTION");
     const ja = await buildBrowseMetadata("ja", Promise.resolve({}));
@@ -208,7 +212,7 @@ describe("浏览页/博客列表：描述只有默认语种读后台站点描述
 
   it("browse ?category=：分类自身的描述优先；没有时同样 en 读站点描述、ja 走文案", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_FILLED, chrome: CHROME });
-    getPublicCategoryPage.mockResolvedValue({
+    loadCategoryPage.mockResolvedValue({
       novels: [CARD],
       page: 1,
       totalPages: 1,
@@ -220,7 +224,7 @@ describe("浏览页/博客列表：描述只有默认语种读后台站点描述
     const ja = await buildBrowseMetadata("ja", Promise.resolve({ category: "fantasy" }));
     expect(ja.description).toBe(getPublicT("ja")("collection.browseSeoDescription"));
 
-    getPublicCategoryPage.mockResolvedValue({
+    loadCategoryPage.mockResolvedValue({
       novels: [CARD],
       page: 1,
       totalPages: 1,
@@ -233,9 +237,9 @@ describe("浏览页/博客列表：描述只有默认语种读后台站点描述
 
   it("blog list：en 读站点描述，ja 走文案", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_FILLED, chrome: CHROME });
-    loadBlogList.mockResolvedValue([
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([
       { id: "b1", title: "Post", slug: "post", summary: "s", publishedAt: new Date("2026-08-05T12:30:00.000Z"), href: "/blog/post" },
-    ]);
+    ], page));
     const en = await buildBlogListMetadata("en", Promise.resolve({}));
     expect(en.description).toBe("ADMIN-SITE-DESCRIPTION");
     const ja = await buildBlogListMetadata("ja", Promise.resolve({}));
@@ -257,7 +261,7 @@ describe("翻页后缀：浏览页/博客列表第 2 页起加，第 1 页不加
 
   it("browse：第 1 页无后缀，第 2 页 ' - Page 2'（en）/ ' - 2ページ'（ja），og:title 同带、都不带品牌名", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_EMPTY, chrome: CHROME });
-    loadBrowseNovels.mockResolvedValue(manyCards);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(manyCards, page));
     const page1 = await buildBrowseMetadata("en", Promise.resolve({}));
     expect(titleOf(page1)).toBe("All works");
     const page2 = await buildBrowseMetadata("en", Promise.resolve({ page: "2" }));
@@ -273,7 +277,7 @@ describe("翻页后缀：浏览页/博客列表第 2 页起加，第 1 页不加
 
   it("blog list：第 1 页 'Blog'，第 2 页 'Blog - Page 2'；ja 用译文与本地化后缀", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_EMPTY, chrome: CHROME });
-    loadBlogList.mockResolvedValue(manyPosts);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(manyPosts, page));
     const page1 = await buildBlogListMetadata("en", Promise.resolve({}));
     expect(titleOf(page1)).toBe("Blog");
     const page2 = await buildBlogListMetadata("en", Promise.resolve({ page: "2" }));

@@ -115,3 +115,46 @@ MOBOREADER_FOUNDATION_OPERATOR=<operator> \
 `scripts/run-tkd-repair-postgres-verification.sh`。模板引导脚本 `l10n/article-template-bootstrap.ts`
 的 dry-run 报告新增 `changes[]`，逐行列出将写入的行与差异字段——生产上 `--apply` 前应恰好是 15 行
 `update`、每行只有 `seoTemplate.metaTitle`。
+
+## 分类归属投影检查与对账（B-38，2026-10-09）
+
+`ops/effective-tag-projection.ts` 对应 CPS `scripts/backfill-effective-tags.ts`，操作小说分类归属派生表
+`novel_effective_tag`。规则、锁和"只写差异"的语义见 `src/server/tagging/effective-tag-projection.ts` 文件头；
+**那个文件是全仓库唯一允许写这张表的地方**。在 worker 层执行（`worker_app` 对该表有读写删权限），
+不打印连接串或密钥：
+
+```bash
+# 只读检查（默认）：全 0 退出 0，否则退出 3
+npx tsx scripts/ops/effective-tag-projection.ts check
+#   EFFECTIVE_TAG_CHECK missing=<n> extra=<n> changed=<n>
+# 全量对账：必须同时带 --apply 和确认短语，缺一个就只做上面的只读检查
+npx tsx scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS
+#   EFFECTIVE_TAG_RECONCILE inserted=<n> updated=<n> deleted=<n> ms=<n>
+```
+
+什么时候用：发版后验收（`check` 必须全 0，迁移里已经一次建好，不需要回填）；回滚到上一版再前滚之后
+（回滚期间旧代码不会重算）；以及**任何运维脚本直接改过映射 / 标签真源之后**（例如
+`p2-06-5-production/tagging-bootstrap.ts`）——它们绕过了"同事务重算"的写入点，必须 `reconcile` 一次。
+防漏登记用例 `tests/backend/tagging/effective-tag-write-path-registry.test.ts` 里这类脚本登记为
+`ops_script_requires_reconcile`。真实库验证：`scripts/run-effective-tag-projection-postgres-verification.sh`。
+
+## 公开列表规模检查与真实库验证（B-38 第二段，2026-10-09）
+
+公开列表（全部作品页、分类页、首页作品格、页脚分类、站点地图分类网址）改成数据库分页，不设上限；深翻页耗时随页数
+线性增长，所以带一个**规模触发器**（`src/lib/site/public-list.ts` 文件头）：任一语种任一分类的列表可见书超过
+40,000 本，或任一语种列表可见总数超过 60,000 本，就要改成游标翻页。**每次发版前跑**（只读，worker 层）：
+
+```bash
+npx tsx scripts/ops/effective-tag-projection.ts scale-check
+#   PUBLIC_LIST_SCALE_CHECK exceeded=false max_category_count=<n> max_locale_total=<n> category_threshold=40000 locale_threshold=60000
+# 超过阈值：退出 3，并逐条列出
+#   PUBLIC_LIST_SCALE_EXCEEDED kind=category locale=<l> slug=<s> count=<n> / kind=locale locale=<l> total=<n>
+```
+
+矩阵计算本身（站点地图刷新、web 侧 60 秒缓存加载）超过阈值时也会记一条结构化 warn：`public_list_scale_threshold_exceeded`。
+
+- 真实库验证：`scripts/run-public-list-postgres-verification.sh`（七个用例文件，skipped 必须为 0，最后一行
+  `B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS`）。
+- 规模 / 性能基准：`scripts/run-public-list-bench-postgres.sh`（英语约 4 万本合成数据；输出 `B38_BENCH name=… median_ms=…`
+  与 `B38_PLAN name=… top=… seq_scans=…`）。合成数据种子 `tests/integration/site/fixtures/scale-seed.ts` 只写表、不依赖新函数，
+  可原样拷进旧代码的 worktree 灌同一份数据做新旧对比（`B38_SEED_RUN=1 B38_SEED_DATABASE_URL=… npx vite-node …/scale-seed.ts`）。

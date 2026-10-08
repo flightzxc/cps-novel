@@ -7,6 +7,7 @@ import { buildCategorySeoMeta, type CategorySeoData } from "@/lib/seo/seo-templa
 import { buildCollectionSeoMeta, type CollectionSeoData } from "@/lib/seo/seo-templates/collection";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { shouldNoIndex } from "@/lib/seo/seo-utils";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * PN-01 剩余部分 + PN-08（2026-10-07，Owner 确认"分页页允许收录，对齐 CPS"）：
@@ -34,11 +35,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadBlogList: vi.fn(),
-}));
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
 }));
 vi.mock("@/lib/site/category-locales", () => ({
   listCategoryPublicLocales: vi.fn(),
@@ -47,10 +46,9 @@ vi.mock("@/lib/site/category-locales", () => ({
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 const categoryLocales = await import("@/lib/site/category-locales");
 const listCategoryPublicLocales = vi.mocked(categoryLocales.listCategoryPublicLocales);
 const { buildCategoryMetadata } = await import("@/app/_pages/category");
@@ -83,9 +81,9 @@ beforeEach(() => {
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: { brandHref: "/", navItems: [] } });
   loadActiveLocales.mockReset();
   loadActiveLocales.mockResolvedValue(["en", "ko", "es", "ja"] as never);
-  getPublicCategoryPage.mockReset();
+  loadCategoryPage.mockReset();
   listCategoryPublicLocales.mockReset();
-  loadBrowseNovels.mockReset();
+  loadBrowsePage.mockReset();
   loadBlogList.mockReset();
 });
 
@@ -551,7 +549,7 @@ describe("目标 4：第 1 页与改前逐字相同（BASE 实测输出，toStri
   });
 
   it("buildCategoryMetadata 第 1 页：hreflang 来自逐语种探测（照常调用一次），输出与改前相同（仅标题四处换成标题形式）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage("ko", 1));
+    loadCategoryPage.mockResolvedValue(categoryPage("ko", 1));
     listCategoryPublicLocales.mockResolvedValue(["en", "es"]);
 
     const metadata = await buildCategoryMetadata("ko", Promise.resolve({ slug: "romance" }), Promise.resolve({}));
@@ -628,7 +626,7 @@ describe("目标 1 + 2：模板第 2、3 页——可收录、canonical 自身�
 
 describe("目标 1 + 2：页面层元数据——书库页、博客列表页第 2 页", () => {
   it("/browse?page=2：可收录、canonical 自身、无 hreflang；/browse 第 1 页 hreflang 不变", async () => {
-    loadBrowseNovels.mockResolvedValue(Array.from({ length: 21 }, (_, index) => ({ ...NOVEL, id: `n-${index}` })));
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(Array.from({ length: 21 }, (_, index) => ({ ...NOVEL, id: `n-${index}` })), page));
 
     const page2 = await buildBrowseMetadata("en", Promise.resolve({ page: "2" }));
     expect(page2.robots).toEqual({ index: true, follow: true });
@@ -644,7 +642,7 @@ describe("目标 1 + 2：页面层元数据——书库页、博客列表页第 
   });
 
   it("/blog?page=2：可收录、canonical 自身、无 hreflang；/blog 第 1 页 hreflang 不变", async () => {
-    loadBlogList.mockResolvedValue(Array.from({ length: 21 }, (_, index) => ({ ...POST, id: `p-${index}`, slug: `a-${index}` })));
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(Array.from({ length: 21 }, (_, index) => ({ ...POST, id: `p-${index}`, slug: `a-${index}` })), page));
 
     const page2 = await buildBlogListMetadata("ko", Promise.resolve({ page: "2" }));
     expect(page2.robots).toEqual({ index: true, follow: true });
@@ -662,20 +660,20 @@ describe("目标 3：分类页第 2 页起不再逐语种探测", () => {
   const params = Promise.resolve({ slug: "romance" });
 
   it("第 2 页：listCategoryPublicLocales 调用 0 次；页面自己的查询只有 1 次；robots 可收录、canonical 自身、无 hreflang", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage("ko", 2));
+    loadCategoryPage.mockResolvedValue(categoryPage("ko", 2));
     listCategoryPublicLocales.mockResolvedValue(["en", "es"]);
 
     const metadata = await buildCategoryMetadata("ko", params, Promise.resolve({ page: "2" }));
 
     expect(listCategoryPublicLocales).not.toHaveBeenCalled();
-    expect(getPublicCategoryPage).toHaveBeenCalledTimes(1);
+    expect(loadCategoryPage).toHaveBeenCalledTimes(1);
     expect(metadata.robots).toEqual({ index: true, follow: true });
     expect(metadata.alternates?.canonical).toBe(`${ORIGIN}/ko/category/romance?page=2`);
     expect(metadata.alternates?.languages).toEqual({});
   });
 
   it("第 3 页同样 0 次探测", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage("en", 3));
+    loadCategoryPage.mockResolvedValue(categoryPage("en", 3));
     listCategoryPublicLocales.mockResolvedValue(["ko"]);
 
     const metadata = await buildCategoryMetadata("en", params, Promise.resolve({ page: "3" }));
@@ -686,7 +684,7 @@ describe("目标 3：分类页第 2 页起不再逐语种探测", () => {
   });
 
   it("第 1 页照常探测一次（对照：短路只作用于第 2 页起）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage("en", 1));
+    loadCategoryPage.mockResolvedValue(categoryPage("en", 1));
     listCategoryPublicLocales.mockResolvedValue(["ko"]);
 
     const metadata = await buildCategoryMetadata("en", params, Promise.resolve({}));

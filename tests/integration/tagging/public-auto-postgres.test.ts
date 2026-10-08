@@ -5,7 +5,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import * as projection from "@/lib/site/public-taxonomy";
 import * as legacy from "../../fixtures/public-taxonomy-before-wo7";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
-import { listPublicArticles, listPublicCategories, getPublicNovelDetail, loadPublicChrome } from "@/lib/site/queries";
+import { getPublicBrowsePage, listPublicCategories, getPublicNovelDetail, loadPublicChrome } from "@/lib/site/queries";
+import { clearPublicCategoryCountsCacheForTest } from "@/lib/site/public-list";
+import { reconcileAllEffectiveTags } from "@/server/tagging/effective-tag-projection";
 import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { initializeCreatedNovelTags, initializeCreatedNovelBatchTags, initializeMaterializedTaskTags } from "@/server/tagging/materialization";
 import { createTaggingAutoClassifyTask } from "@/server/tagging/tasks";
@@ -20,7 +22,7 @@ import { buildWorkerAllowlist } from "@/lib/tasks";
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 const shared = vi.hoisted(() => ({ web: null as PrismaClient | null }));
 vi.mock("@/app/_lib/public-deps", () => ({ prisma: new Proxy({}, { get: (_, key) => Reflect.get(shared.web!, key) }) }));
-import { loadPublicCategories, loadBrowseNovels, loadNovelDetail, loadChrome } from "@/app/_lib/public-load";
+import { loadPublicCategories, loadBrowsePage, loadNovelDetail, loadChrome } from "@/app/_lib/public-load";
 
 const enabled = process.env.P2_06_5_DATABASE_TEST === "1";
 function client(role: string) {
@@ -52,16 +54,26 @@ async function seedSource() {
 async function snapshot(id: string, values: Array<[number, number]>) {
   return replaceAutoTagSnapshot({ db: worker, novelId: id, tags: values.map(([i, score]) => ({ canonicalTagId: tags[i], score, evidence: {} })), runMetadata: metadata, contentSha: hash, requestId: randomUUID(), env });
 }
+/**
+ * B-38：这个文件里的夹具大多由 owner 直接写真源表（绕过写入点），而前台现在读物化好的归属表 `novel_effective_tag`
+ * （写入点会在同事务里重算，owner 直写不会）。所以每次 owner 直写之后、读取之前，显式对账一次——与生产里"站点地图刷新
+ * 前的兜底对账"同一个函数。矩阵的 60 秒缓存也一并清掉（测试里数据是在缓存期内被改的）。
+ */
+async function settle() {
+  await reconcileAllEffectiveTags(web);
+  clearPublicCategoryCountsCacheForTest();
+}
 async function surfaces() {
   invalidateSiteSettingCache();
+  clearPublicCategoryCountsCacheForTest();
   const categories = await listPublicCategories(web, "en");
   return {
-    categories, cards: await listPublicArticles(web, "en"), detail: await getPublicNovelDetail(web, article),
+    categories, cards: await getPublicBrowsePage(web, "en", 1), detail: await getPublicNovelDetail(web, article),
     category: await getPublicCategoryPage(web, "en", "text-z", 1),
     chrome: await loadPublicChrome(web, "en", "home", categories, ["en"]),
     // 运营 V2（Owner 2026-09-30）：分类页并入 mainpage，分类条目现在在 mainpage 分片里。
     sitemap: await createSitemapFamilyBuilder(web)({ type: "mainpage", locale: "en" }),
-    loaders: { categories: await loadPublicCategories("en"), cards: await loadBrowseNovels("en"), detail: await loadNovelDetail(article), chrome: await loadChrome("en", "home", categories, ["en"]) },
+    loaders: { categories: await loadPublicCategories("en"), cards: await loadBrowsePage("en", 1), detail: await loadNovelDetail(article), chrome: await loadChrome("en", "home", categories, ["en"]) },
   };
 }
 
@@ -87,6 +99,7 @@ describe.skipIf(!enabled).sequential("WO7 public auto real roles", () => {
     await owner.article.create({ data: { id: article, novelId: novel, promoLinkId: promo.id, locale: "en", slug: "tagged", publicPageShortId: "wo7tagged", title: "Tagged", body: "Body", status: "published", publishedAt: new Date("2026-09-01") } });
     await snapshot(novel, [[0, 1], [2, 50], [3, 50], [4, 100]]);
     await owner.canonicalTag.update({ where: { id: tags[4] }, data: { status: "inactive" } });
+    await settle();
   }, 30_000);
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
   afterAll(async () => { await Promise.all([owner, web, worker].map(db => db.$disconnect())); });
@@ -108,12 +121,14 @@ describe.skipIf(!enabled).sequential("WO7 public auto real roles", () => {
     vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", "false"); vi.stubEnv("SITE_URL", "https://example.test");
     for (const mode of ["automatic", "manual"] as const) {
       await owner.novelTagState.update({ where: { novelId: novel }, data: { mode } });
+      await settle();
       const actual = await surfaces();
       const spy = vi.spyOn(projection, "loadPublicTaxonomyByNovelIds").mockImplementation(legacy.loadPublicTaxonomyByNovelIds);
       const expected = await surfaces(); spy.mockRestore();
       expect(actual).toEqual(expected); expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
     }
     await owner.novelTagState.update({ where: { novelId: novel }, data: { mode: "automatic" } });
+    await settle();
   });
   it("auto-only category appears in category, cards, detail, home/footer and sitemap; off is 404", async () => {
     vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", "true"); vi.stubEnv("SITE_URL", "https://example.test");
@@ -129,16 +144,21 @@ describe.skipIf(!enabled).sequential("WO7 public auto real roles", () => {
   it("manual snapshot including empty overrides all; historical and null run pointers exclude auto", async () => {
     const original = await owner.novelTagState.findUniqueOrThrow({ where: { novelId: novel } });
     await owner.novelTagState.update({ where: { novelId: novel }, data: { currentAutoRunId: null } });
+    await settle();
     expect((await projection.loadPublicTaxonomyByNovelIds(web, [novel], "en", env)).get(novel)?.map(t => t.slug)).toEqual(["mapped-b", "mapped-a"]);
     const otherRun = await owner.tagClassificationRun.create({ data: { novelId: novel, ...metadata, contentSha256: hash, requestId: randomUUID(), resultSchemaVersion: 1 } });
     await owner.novelTagState.update({ where: { novelId: novel }, data: { currentAutoRunId: otherRun.id } });
+    await settle();
     expect((await projection.loadPublicTaxonomyByNovelIds(web, [novel], "en", env)).get(novel)?.map(t => t.slug)).toEqual(["mapped-b", "mapped-a"]);
     await owner.novelTagState.update({ where: { novelId: novel }, data: { currentAutoRunId: original.currentAutoRunId, mode: "manual" } });
+    await settle();
     expect((await projection.loadPublicTaxonomyByNovelIds(web, [novel], "en", env)).get(novel)).toBeUndefined();
     await owner.novelCanonicalTag.create({ data: { novelId: novel, canonicalTagId: tags[3], source: "manual", decidedBy: admin, evidence: {}, evidenceSchemaVersion: 1 } });
+    await settle();
     expect((await projection.loadPublicTaxonomyByNovelIds(web, [novel], "en", env)).get(novel)?.map(t => t.slug)).toEqual(["text-a"]);
     await owner.novelCanonicalTag.deleteMany({ where: { novelId: novel, source: "manual" } });
     await owner.novelTagState.update({ where: { novelId: novel }, data: { mode: "automatic" } });
+    await settle();
   });
   it("explicit segments exclude same-locale stock, filter initialized/manual, and replay concurrently", async () => {
     const stock = await seedNovel(), created = await Promise.all(Array.from({ length: 5 }, seedNovel));

@@ -7,6 +7,7 @@ import { buildHomeSeoMeta } from "@/lib/seo/seo-templates/home";
 import { buildCollectionSeoMeta } from "@/lib/seo/seo-templates/collection";
 
 import { resolveRouteMetadata, type ResolvedMetadata } from "./_helpers/next-metadata-merge";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * PN-09（Owner 2026-10-08：没有书时连入口也隐藏）——公开页元数据一侧。
@@ -61,12 +62,9 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadBlogList: vi.fn(),
-}));
-
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -75,7 +73,7 @@ const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 
 const { buildHomeMetadata, HomeBody } = await import("@/app/_pages/home");
@@ -117,8 +115,8 @@ beforeEach(() => {
   loadPublicCategories.mockResolvedValue([]);
   loadHomeNovels.mockResolvedValue([]);
   loadHomeCarousel.mockResolvedValue([]);
-  loadBrowseNovels.mockResolvedValue([]);
-  loadBlogList.mockResolvedValue([]);
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([], page));
+  loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
 });
 
 afterEach(() => {

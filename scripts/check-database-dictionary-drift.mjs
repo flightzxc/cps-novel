@@ -136,8 +136,9 @@ function assertStaticConsistency(schemaTables, records) {
   // 收益看板·账号级每日汇总 (20261008120000_revenue_account_level_dashboard) adds
   // revenue_sync_scope / revenue_sync_batch / revenue_raw_snapshot / revenue_daily_stat,
   // pushing 53 -> 57.
-  if (schemaTables.size !== 57) {
-    problems.push(`expected 57 Prisma models, found ${schemaTables.size}`);
+  // B-38 (20261009120000_b38_novel_effective_tag) adds novel_effective_tag: 57 -> 58.
+  if (schemaTables.size !== 58) {
+    problems.push(`expected 58 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -239,8 +240,9 @@ async function assertCatalogConsistency(records) {
     // live-catalog baseline from 49 to 52, mirroring the 52-model constant
     // assertStaticConsistency already carries above. Owner 2026-09-18 决策 2:
     // channel_account_hold pushes it to 53. 收益看板 (20261008120000_revenue_account_level_dashboard)
-    // adds four revenue_* tables: 53 -> 57.
-    if (actualTables.size !== 57) problems.push(`expected 57 database tables, found ${actualTables.size}`);
+    // adds four revenue_* tables: 53 -> 57. B-38 (20261009120000_b38_novel_effective_tag)
+    // adds novel_effective_tag: 57 -> 58.
+    if (actualTables.size !== 58) problems.push(`expected 58 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

@@ -34,6 +34,7 @@ import {
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
 import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
+import { refreshEffectiveTagsForNovels } from "../../src/server/tagging/effective-tag-projection";
 import { createHandlerRegistry, withTaskLeaseTransaction, type ProtectedWriteResult, type TaskHandler, type TaskLease } from "../../src/lib/tasks";
 import {
   buildPromoLinkIdempotencyKey,
@@ -601,6 +602,8 @@ async function persistCatalogPage(
   // in between. Folded into the one `result` write later in this function.
   const now = input.now;
   const sourceItemIds: string[] = [];
+  // B-38：本页涉及的、已绑定到小说的书目所对应的小说（去重由 refreshEffectiveTagsForNovels 负责）。
+  const boundNovelIds: string[] = [];
   const droppedLabels: DroppedLabelsSummary[] = [];
   const promoSummary: CatalogPromoSummary = {
     fetched: 0,
@@ -724,6 +727,7 @@ async function persistCatalogPage(
     }
     if (sourceLocale === null) pageUnknownLocaleCount += 1;
     sourceItemIds.push(source.id);
+    if (source.novelId) boundNovelIds.push(source.novelId);
     const promoResult = await persistExistingCatalogPromo(tx, {
       source,
       book,
@@ -743,6 +747,12 @@ async function persistCatalogPage(
     if (labelResult.incompleteLabelSnapshot) pageIncompleteLabelSnapshots += 1;
   }
   const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
+
+  // B-38：目录同步每页在本事务里重算本页涉及的已绑定小说的分类归属（只写差异，稳定状态零写入）。
+  // 不只在"出现新标签"时重算：同步除了新标签，还会更新书目的语言范围、撤销书目软删除，这两种
+  // 同样改变映射归属；按页把已绑定的书整体重算一遍（一页几十本、几毫秒），比逐项判断"变没变"
+  // 更不容易漏。上游书目尚未绑定小说的行没有归属可算，跳过。
+  await refreshEffectiveTagsForNovels(tx, boundNovelIds);
 
   const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
     SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS total

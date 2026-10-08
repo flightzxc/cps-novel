@@ -47,6 +47,16 @@ const READ_ENABLED_ENV = {
   FEATURE_ARTICLE_SEO_VISIBILITY: "true",
 } as unknown as NodeJS.ProcessEnv;
 
+/** B-38：博客列表是数据库分页（每页 20，无上限）——把所有页翻完再看某篇在不在列表里。 */
+async function listAllPublicBlogPosts() {
+  const first = await listPublicBlogArticles(prisma, "en", 1, READ_ENABLED_ENV);
+  const posts = [...first.posts];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    posts.push(...(await listPublicBlogArticles(prisma, "en", page, READ_ENABLED_ENV)).posts);
+  }
+  return posts;
+}
+
 async function createAndPublish(seoVisibility: "public" | "seo_only" | "hidden") {
   // slug 只允许小写字母数字用单个连字符连接（SLUG_FORMAT_RE），seoVisibility 的 "seo_only" 含下划线，必须先换成连字符。
   const slug = `c29-${seoVisibility.replaceAll("_", "-")}-${randomUUID().slice(0, 8)}`;
@@ -100,7 +110,7 @@ describe.skipIf(!enabled).sequential("C-29: real PostgreSQL — create blog → 
     const access = await checkBlogArticlePublicAccess(prisma, { locale: "en", slug }, READ_ENABLED_ENV);
     expect(access.kind).toBe("published");
 
-    const list = await listPublicBlogArticles(prisma, "en", READ_ENABLED_ENV);
+    const list = await listAllPublicBlogPosts();
     expect(list.some((post) => post.slug === slug)).toBe(true);
 
     process.env.SITE_URL ??= "https://c29-integration.example";
@@ -115,7 +125,7 @@ describe.skipIf(!enabled).sequential("C-29: real PostgreSQL — create blog → 
     const access = await checkBlogArticlePublicAccess(prisma, { locale: "en", slug }, READ_ENABLED_ENV);
     expect(access.kind).toBe("published");
 
-    const list = await listPublicBlogArticles(prisma, "en", READ_ENABLED_ENV);
+    const list = await listAllPublicBlogPosts();
     expect(list.some((post) => post.slug === slug)).toBe(false);
 
     process.env.SITE_URL ??= "https://c29-integration.example";
@@ -130,7 +140,7 @@ describe.skipIf(!enabled).sequential("C-29: real PostgreSQL — create blog → 
     const access = await checkBlogArticlePublicAccess(prisma, { locale: "en", slug }, READ_ENABLED_ENV);
     expect(access).toEqual({ kind: "not_found" });
 
-    const list = await listPublicBlogArticles(prisma, "en", READ_ENABLED_ENV);
+    const list = await listAllPublicBlogPosts();
     expect(list.some((post) => post.slug === slug)).toBe(false);
 
     process.env.SITE_URL ??= "https://c29-integration.example";

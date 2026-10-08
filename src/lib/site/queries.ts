@@ -5,39 +5,37 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { asSiteLocale } from "./locale-label";
 import { resolveNovelArticlePublicAccessByShortId } from "@/server/publication/access";
-import {
-  buildPrimaryArticleWhere,
-  buildPublicListArticleWhere,
-  isPromoReady,
-} from "@/server/publication/visibility";
+import { buildPrimaryArticleWhere, isPromoReady } from "@/server/publication/visibility";
 import { getSiteSetting, type SiteSettingSnapshot } from "@/server/site-settings/service";
 
+import { ARTICLE_CARD_SELECT, filterPromoReady, toPublicArticle } from "./article-card";
+import type { ListedArticle, ListedArticleWithNovel } from "./article-card";
 import { chromeFromSiteSetting, type PublicChromeCurrent } from "./chrome";
 import {
   toChapterView,
-  toNovelCardView,
   toNovelDetailView,
-  type PublicArticleRecord,
   type PublicArticleDetailRecord,
   type PreviewChapterRecord,
 } from "./mappers";
 import {
-  listDistinctPublicTaxonomy,
+  categoryCountsForLocale,
+  getPublicCategoryCounts,
+  listPublicNovelHead,
+  listPublicNovelPage,
+  type PublicNovelPage,
+} from "./public-list";
+import {
+  loadPublicCategoryTags,
   loadPublicTaxonomyByNovelIds,
   type PublicTaxonomyTag,
 } from "./public-taxonomy";
 
 export type { PublicChromeCurrent };
+// 卡片行的形状与最小转换住在 `./article-card`（叶子文件，避免与 `./public-list` 循环引用）；这里原样重新导出，
+// 所有既有的 `import … from "@/lib/site/queries"` 不变。
+export { ARTICLE_CARD_SELECT, filterPromoReady, toPublicArticle };
+export type { ListedArticle, ListedArticleWithNovel };
 
-/**
- * Hard cap on the public Article candidate set loaded into memory before
- * `isPromoReady` filtering and in-memory pagination.
- *
- * Impact if the catalog grows past this cap (accepted for V1, not fixed here):
- * - `paginateCards` `totalCount` / `totalPages` under-count (browse pager lies)
- * - sitemap may still emit URLs that `/browse` never lists (internal-link gap)
- */
-export const PUBLIC_LIST_CAP = 240;
 export const HOME_GRID_LIMIT = 20;
 export const BROWSE_PAGE_SIZE = 20;
 export const PREVIEW_CHAPTER_TAKE = 64;
@@ -56,36 +54,12 @@ export const PUBLIC_PREVIEW_CHAPTER_WHERE = {
   content: { isNot: null },
 } satisfies Prisma.NovelChapterWhereInput;
 
-export const ARTICLE_CARD_SELECT = {
-  id: true,
-  title: true,
-  slug: true,
-  locale: true,
-  publicPageShortId: true,
-  publishedAt: true,
-  summary: true,
-  novel: {
-    select: {
-      id: true,
-      businessId: true,
-      title: true,
-      description: true,
-      coverUrl: true,
-      locale: true,
-      totalChapterCount: true,
-    },
-  },
-  promoLink: {
-    select: { status: true, webUrl: true, appUrl: true },
-  },
-} as const;
-
 /**
  * Detail / chapter select. Extends the card select with `publicRedirectCode`
  * so the mapper can compute `readOnUpstreamHref`.
  *
- * 🔴 Deliberately NOT reused by `listPublicArticles`/`filterPromoReady` (the
- * card path) — `tests/backend/public/mappers.test.ts:41` asserts the card
+ * 🔴 Deliberately NOT reused by the list/card path (`public-list.ts`'s
+ * `hydratePublicListCards` / `filterPromoReady`) — `tests/backend/public/mappers.test.ts:41` asserts the card
  * JSON never carries the public redirect code, so the card query must keep
  * loading `ARTICLE_CARD_SELECT` as-is rather than sharing this wider shape.
  */
@@ -98,23 +72,9 @@ const ARTICLE_DETAIL_SELECT = {
   },
 } as const;
 
-export type ListedArticle = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_CARD_SELECT }>;
 type ListedArticleDetail = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_DETAIL_SELECT }>;
 
-/**
- * C-27: `Article.novel` is nullable as of this round (blog articles have
- * none). Every function in this module renders a `NovelCardView`/
- * `NovelDetailView`/`ChapterView` — all Novel-shaped view models — so a row
- * with no Novel is out of scope for all of them until C-29 gives blog its
- * own view model family. `listPublicArticles`/`listPublicCategories` get
- * this for free from `buildPublicListArticleWhere`'s own `novel: { is:
- * PUBLIC_NOVEL_RECORD }` requirement (a null-novel row cannot match);
- * `getPublicNovelDetail`/`getPublicChapterView` load by bare `articleId`
- * (`buildPrimaryArticleWhere` has no novel/status/promo requirement), so
- * they add an explicit `row.novel === null` check and return `null` — the
- * same "not this view model" answer they already give for promo-not-ready.
- */
-export type ListedArticleWithNovel = ListedArticle & { novel: NonNullable<ListedArticle["novel"]> };
+/** `ListedArticleWithNovel`（卡片行且必有小说）的定义与 C-27 说明见 `./article-card`。详情行同款：`novel` 非空。 */
 type ListedArticleDetailWithNovel = ListedArticleDetail & { novel: NonNullable<ListedArticleDetail["novel"]> };
 
 export type PublicArticleAccess =
@@ -203,23 +163,6 @@ export async function resolvePublicArticleBySlugParam(
   return isCanonicalUrl ? { kind: access.kind, title: access.title } : { kind: "not_found" };
 }
 
-export function toPublicArticle(
-  row: ListedArticleWithNovel,
-  tags: readonly PublicTaxonomyTag[] = [],
-): PublicArticleRecord {
-  return {
-    id: row.id,
-    title: row.title,
-    slug: row.slug,
-    locale: row.locale,
-    publicPageShortId: row.publicPageShortId,
-    publishedAt: row.publishedAt,
-    summary: row.summary,
-    tags,
-    novel: row.novel,
-  };
-}
-
 function toPublicArticleDetail(
   row: ListedArticleDetailWithNovel,
   tags: readonly PublicTaxonomyTag[] = [],
@@ -232,91 +175,47 @@ function toPublicArticleDetail(
   };
 }
 
-// C-27: also excludes a null `novel` — see `ListedArticleWithNovel`'s doc
-// comment above. `buildPublicListArticleWhere`'s own `novel: { is:
-// PUBLIC_NOVEL_RECORD }` requirement already makes this unreachable for
-// `listPublicArticles`/`listPublicCategories`'s query today; the check here
-// is what lets the type checker see that instead of a `!` assertion.
-export function filterPromoReady(rows: ListedArticle[]): ListedArticleWithNovel[] {
-  return rows.filter((row): row is ListedArticleWithNovel => row.novel !== null && isPromoReady(row.promoLink));
-}
-
-export async function listPublicArticles(
-  db: PrismaClient | Prisma.TransactionClient,
-  locale: SiteLocale,
-): Promise<NovelCardView[]> {
-  const rows = await db.article.findMany({
-    // C-25: on-site listing excludes both `hidden` and `seo_only` — the
-    // stricter "list" fragment, distinct from `buildPublicArticleWhere`'s
-    // collectability fragment (sitemap/IndexNow/hreflang, which keep
-    // `seo_only`). See `@/server/publication/visibility.ts`'s header.
-    where: buildPublicListArticleWhere({ locale }),
-    orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
-    take: PUBLIC_LIST_CAP,
-    select: ARTICLE_CARD_SELECT,
-  });
-
-  const visibleRows = filterPromoReady(rows);
-  const tagsByNovel = await loadPublicTaxonomyByNovelIds(
-    db,
-    visibleRows.map((row) => row.novel.id),
-    locale,
-  );
-  const cards: NovelCardView[] = [];
-  for (const row of visibleRows) {
-    const card = toNovelCardView(toPublicArticle(row, tagsByNovel.get(row.novel.id) ?? []));
-    if (card) cards.push(card);
-  }
-  return cards;
-}
-
-export async function listPublicCategories(
-  db: PrismaClient | Prisma.TransactionClient,
-  locale: SiteLocale,
-): Promise<readonly PublicTaxonomyTag[]> {
-  const rows = await db.article.findMany({
-    // C-25: same "list" fragment as `listPublicArticles` above — the
-    // category enumeration must not surface a category that only exists
-    // because of a `seo_only`/`hidden` Article that never appears on-site.
-    where: buildPublicListArticleWhere({ locale }),
-    orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
-    take: PUBLIC_LIST_CAP,
-    select: ARTICLE_CARD_SELECT,
-  });
-  const visibleRows = filterPromoReady(rows);
-  return listDistinctPublicTaxonomy(await loadPublicTaxonomyByNovelIds(
-    db,
-    visibleRows.map((row) => row.novel.id),
-    locale,
-  ));
-}
-
+/**
+ * 首页作品格：该语种列表（发布时间新→旧）的前 `HOME_GRID_LIMIT` 本，数据库直接 LIMIT。
+ */
 export async function listHomeNovels(
   db: PrismaClient | Prisma.TransactionClient,
   locale: SiteLocale,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<NovelCardView[]> {
-  const cards = await listPublicArticles(db, locale);
-  return cards.slice(0, HOME_GRID_LIMIT);
+  return listPublicNovelHead(db, { locale, limit: HOME_GRID_LIMIT, env });
 }
 
-export type BrowsePageResult = {
-  novels: NovelCardView[];
-  page: number;
-  totalPages: number;
-  totalCount: number;
-};
+export type BrowsePageResult = PublicNovelPage;
 
-export function paginateCards(cards: NovelCardView[], page: number): BrowsePageResult {
-  const totalCount = cards.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / BROWSE_PAGE_SIZE) || 1);
-  const currentPage = Number.isInteger(page) && page > 0 ? page : 1;
-  const start = (currentPage - 1) * BROWSE_PAGE_SIZE;
-  return {
-    novels: cards.slice(start, start + BROWSE_PAGE_SIZE),
-    page: currentPage,
-    totalPages: totalCount === 0 ? 1 : totalPages,
-    totalCount,
-  };
+/**
+ * 全部作品页的一页：数据库分页 + 实时真实总数（`public-list.ts`，没有任何上限）。
+ * 页码超出范围时 `novels` 为空而 `totalPages` 是真实总页数，页面据此判 404；没有书时 `totalPages` 恒为 1。
+ */
+export async function getPublicBrowsePage(
+  db: PrismaClient | Prisma.TransactionClient,
+  locale: SiteLocale,
+  page: number,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<BrowsePageResult> {
+  return listPublicNovelPage(db, { locale, page, pageSize: BROWSE_PAGE_SIZE, env });
+}
+
+/**
+ * 该语种有书的全部分类（页脚、首页题材导航、详情页"可链接分类集合"共用），按分类自己的排序。
+ *
+ * 取数：每语种每分类本数矩阵（`public-list.ts`，60 秒进程内缓存）里该语种本数 > 0 的分类，再现读一次
+ * 分类名（请求语种 → en → zh → slug，链接带语种前缀，与卡片标签同一个投影函数）。
+ * 与分类页是否返回 200 用的是同一段筛选条件，所以这份集合与"分类页会返回 200 的分类"恒等
+ * （真实库用例 `tests/integration/site/consistency-invariants-postgres.test.ts` 钉死；缓存让它最多晚 60 秒）。
+ */
+export async function listPublicCategories(
+  db: PrismaClient | Prisma.TransactionClient,
+  locale: SiteLocale,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<readonly PublicTaxonomyTag[]> {
+  const counts = await getPublicCategoryCounts(db, env);
+  return loadPublicCategoryTags(db, [...categoryCountsForLocale(counts, locale).keys()], locale);
 }
 
 export async function getPublicNovelDetail(
@@ -407,8 +306,8 @@ export async function getPublicChapterView(
  * N-9: `categories` is optional so a caller who already needs the full
  * taxonomy list for its own purposes (`src/app/page.tsx`'s `HomeScreen`
  * `categories` prop) can compute it once and pass it in here, instead of
- * this function re-running `listPublicCategories`'s `article.findMany` +
- * taxonomy lookup a second time for the footer. Every other caller
+ * this function re-running `listPublicCategories` (count-matrix read + a
+ * fresh category-name read, since B-38) a second time for the footer. Every other caller
  * (`novel/[slugParam]/page.tsx`, which only wants the footer) is unaffected
  * — it keeps calling this with two arguments and gets the original
  * self-fetching behavior.
@@ -439,8 +338,8 @@ export async function getPublicChapterView(
  * L10N P4: `activeLocales` (5th argument, optional) is the dynamic layer's
  * result (`getActiveLocales()`) — passed IN, not fetched here. This function
  * stays dependency-injected on `db` for testability
- * (`tests/backend/site/public-query-budget.test.ts` counts exact
- * `article.findMany` calls against a fixture db); `getActiveLocales()` is a
+ * (`tests/backend/site/public-query-budget.test.ts` counts the exact
+ * statement list against a fixture db); `getActiveLocales()` is a
  * fixed, `unstable_cache`-wrapped singleton bound to the real production
  * `prisma` client with its own `Article.groupBy` call shape, which that
  * fixture db does not implement. `@/app/_lib/public-load`'s `loadChrome`

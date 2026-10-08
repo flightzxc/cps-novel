@@ -41,7 +41,7 @@ const SELECT = {
 async function fallbackRows(db: PrismaClient, locale: SiteLocale) {
   // C-25: the carousel is a list surface (it is a home-page listing, not a
   // detail/collectability boundary) — it uses the same stricter "list"
-  // fragment as `listPublicArticles`, excluding both `hidden` and `seo_only`.
+  // fragment as the public list (`public-list.ts`), excluding both `hidden` and `seo_only`.
   return db.article.findMany({ where: { ...buildPublicListArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
 }
 

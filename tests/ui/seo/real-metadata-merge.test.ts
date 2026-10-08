@@ -5,6 +5,7 @@ import { toChapterView } from "@/lib/site/mappers";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 
 import { resolveNotFoundMetadata, resolveRouteMetadata, type ResolvedMetadata } from "./_helpers/next-metadata-merge";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * 真实合并验证（TKD 对齐 CPS，Owner 2026-09-30，施工工单第七节"必须真实渲染验证"）。
@@ -63,7 +64,8 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
@@ -74,8 +76,11 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadBlogDetail: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -83,7 +88,8 @@ const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
@@ -92,8 +98,6 @@ const loadRelatedAndNewReleases = vi.mocked(publicLoad.loadRelatedAndNewReleases
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 const loadBlogAccess = vi.mocked(publicLoad.loadBlogAccess);
 const loadBlogDetail = vi.mocked(publicLoad.loadBlogDetail);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
 const rootNotFound = await import("@/app/not-found");
 const novelNotFound = await import("@/app/novel/[slugParam]/not-found");
@@ -414,12 +418,12 @@ describe("分类页：标题形式（分类名 + Novels） | 站点名；第 2 �
   }
 
   it("第 1 页 'Romance Novels | PulseNovel'；第 2 页 'Romance Novels - Page 2 | PulseNovel'；og:title 不带品牌", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1));
+    loadCategoryPage.mockResolvedValue(categoryPage(1));
     const first = await resolve("/category/romance", { routeDir: "category/[slug]", params: { slug: "romance" } });
     expect(first.title.absolute).toBe("Romance Novels | PulseNovel");
     expectSocialTitlesWithoutSuffix(first, "Romance Novels");
 
-    getPublicCategoryPage.mockResolvedValue(categoryPage(2));
+    loadCategoryPage.mockResolvedValue(categoryPage(2));
     const second = await resolve("/category/romance?page=2", { routeDir: "category/[slug]", params: { slug: "romance" }, searchParams: { page: "2" } });
     expect(second.title.absolute).toBe("Romance Novels - Page 2 | PulseNovel");
     expectSocialTitlesWithoutSuffix(second, "Romance Novels - Page 2");
@@ -428,7 +432,7 @@ describe("分类页：标题形式（分类名 + Novels） | 站点名；第 2 �
   });
 
   it("/ja/category/...：翻页后缀是 ja 的 ' - 2ページ'", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(2));
+    loadCategoryPage.mockResolvedValue(categoryPage(2));
     const second = await resolve("/ja/category/romance?page=2", {
       routeDir: "[locale]/category/[slug]",
       params: { locale: "ja", slug: "romance" },
@@ -443,7 +447,7 @@ describe("分类页：标题形式（分类名 + Novels） | 站点名；第 2 �
 
 describe("浏览页 / 博客列表 / 博客详情", () => {
   it("浏览页：'All works | PulseNovel'，第 2 页 'All works - Page 2 | PulseNovel'", async () => {
-    loadBrowseNovels.mockResolvedValue(MANY_CARDS);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(MANY_CARDS, page));
     const first = await resolve("/browse", { routeDir: "browse" });
     expect(first.title.absolute).toBe("All works | PulseNovel");
     expectSocialTitlesWithoutSuffix(first, "All works");
@@ -453,7 +457,7 @@ describe("浏览页 / 博客列表 / 博客详情", () => {
   });
 
   it("博客列表：'Blog | PulseNovel'，第 2 页 'Blog - Page 2 | PulseNovel'；ja 是译文加 ja 后缀", async () => {
-    loadBlogList.mockResolvedValue(MANY_POSTS);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(MANY_POSTS, page));
     const first = await resolve("/blog", { routeDir: "blog" });
     expect(first.title.absolute).toBe("Blog | PulseNovel");
     const second = await resolve("/blog?page=2", { routeDir: "blog", searchParams: { page: "2" } });
@@ -592,7 +596,7 @@ describe("助手自身的可信度（防止'合并'被悄悄换成假的）", ()
   it("合并确实在按 Next 的规则跑：同一个页面写成普通字符串标题，英文首页位置（同层）不被套、/browse 位置（隔层）被套", async () => {
     // 首页（与根布局同层）不套模板，浏览页（隔一个空段）套模板——两个都是 Next 合并规则的直接后果，
     // 不是页面函数自己拼的。上面各 describe 的期望值就是从这条规则来的。
-    loadBrowseNovels.mockResolvedValue([CARD]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
     const browse = await resolve("/browse", { routeDir: "browse" });
     expect(browse.title.template).toBeNull();
     expect(browse.title.absolute.endsWith(" | PulseNovel")).toBe(true);

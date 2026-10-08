@@ -20,9 +20,9 @@ import { getPublicT } from "@/lib/locale/messages";
  *
  * 标题下的作品数（运营 2026-10-08 反馈"第 2 页显示 20 works、最后一页显示 9 works"，Owner 拍板）：
  * 口径 = 这个列表**分页能翻到的总本数**（`totalCount`），不是当前页的本数（`novels.length`），
- * 也不是"分类在全部书目里的真实总数"。来源必须是 `paginateCards(...).totalCount`——和分页、
- * 站点地图（`listPublicCategoryPageCounts`）、页面 404 判定用的是同一份列表，不得在调用方另写一份
- * 计数；以后列表来源改成全量分页（B-38 根治）时，这个数会自动跟着变成真实总数。
+ * 也不是别处另算的某个数。来源必须是列表查询返回的 `totalCount`（`@/lib/site/public-list` 的
+ * `listPublicNovelPage`，数据库里数出来的真实总数）——和分页、站点地图（`listPublicCategoryPageCounts`）、
+ * 页面 404 判定用的是同一段筛选条件，不得在调用方另写一份计数。
  * 因此 `totalCount` 是**必填**、不给默认值：省略就编译失败，免得哪天又悄悄退回当前页本数。
  */
 export function CollectionScreen({
@@ -41,7 +41,7 @@ export function CollectionScreen({
   description?: string;
   /** 当前页要渲染的卡片（分页切片）。只用来画网格，**不**用来算标题下的作品数。 */
   novels: NovelCardView[];
-  /** 分页覆盖的总本数（`paginateCards(...).totalCount`），每一页显示同一个数；必填，见文件头注释。 */
+  /** 分页覆盖的总本数（列表查询的 `totalCount`），每一页显示同一个数；必填，见文件头注释。 */
   totalCount: number;
   chrome?: SiteChrome;
   emptyMessage?: string;

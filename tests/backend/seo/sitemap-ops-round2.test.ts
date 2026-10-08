@@ -20,7 +20,10 @@ import {
   PREVIEW_CHAPTER_TAKE,
   PUBLIC_PREVIEW_CHAPTER_WHERE,
 } from "@/lib/site/queries";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
+
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
 /**
  * 运营第二轮 · 站点地图（Owner 2026-09-30，运营《小说站调整V2.docx》）：
@@ -188,8 +191,24 @@ function makeDb(input: {
     article: { findMany: articleFindMany },
     novelChapter: { findMany: chapterFindMany },
     $queryRaw: vi.fn(async (query: unknown) => {
-      // 分类归属查询：把 novel_id IN (...) 里出现的 id 对应的标签行返回。
       const values = ((query as { values?: unknown[] }).values ?? []).flat(Infinity);
+      const kind = classifyPublicListQuery(query as { text: string });
+      if (kind === "matrix") {
+        // 每语种每分类本数矩阵：该语种里挂着标签的（列表可见）书数，按标签分组。
+        const locale = values.find((value) => typeof value === "string" && (SITE_LOCALES as readonly string[]).includes(value)) as string;
+        const tally = new Map<string, { id: string; slug: string; n: number }>();
+        for (const row of articles) {
+          if (row.locale !== locale) continue;
+          for (const tag of input.tagsByNovel?.[row.novel.id] ?? []) {
+            const entry = tally.get(tag.slug) ?? { id: tag.id, slug: tag.slug, n: 0 };
+            entry.n += 1;
+            tally.set(tag.slug, entry);
+          }
+        }
+        return [...tally.values()].map((entry) => ({ locale, canonical_tag_id: entry.id, slug: entry.slug, n: entry.n }));
+      }
+      if (kind !== "taxonomy") return [];
+      // 卡片 / 候选的标签（读归属表）：把 novel_id IN (...) 里出现的 id 对应的标签行返回。
       return Object.entries(input.tagsByNovel ?? {})
         .filter(([novelId]) => values.includes(novelId))
         .flatMap(([, rows]) => rows);
