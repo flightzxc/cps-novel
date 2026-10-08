@@ -26,7 +26,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - env仅两版本字段改变，其余字节cmp一致，两个任务白名单/nginx/业务开关不变，无新迁移；B两次READ ONLY在途0、备份SHA/restore-listPASS。
 - 自动F PASS：Naver200/67bytes/SHA一致无跳转；en189works/2/10、ko H1소설: 여성향、es译文、browse240works。共10外部请求全经代理，分类3次。F.4/F.5待Owner确认，71本待运营生成后核对，未代生成或刷新Sitemap。
 - 生产audit0critical/指定五high；全量2critical/12high/1moderate。裁定：vitest/tinypool**在镜像里但运行时不加载，与 v0.5.11 相同，B-40 在 v0.5.13 处理**；纠正第一阶段“不进镜像”，Final/归档不重做。B-38数据库分页/全量计数也排v0.5.13。
-- 本轮五组合入、公告、Owner译文和240上限决策见[发布记录](releases/v0.5.12-preproduction.md)；annotated tag固定Final、原生成CHANGELOG、唯一发版日志及ADR本地登记，Git/Notion收官收据随后补记。
+- 本轮五组合入、公告、Owner译文和240上限决策见[发布记录](releases/v0.5.12-preproduction.md)；annotated tag固定Final、原生成CHANGELOG、唯一发版日志及ADR完成；治理提交702dc7e/tag已推送回读PASS，Notion同步回读PASS（2026-10-08T16:52:10.946Z），原历史/规则/模板逐字节保留。
 
 ### v0.5.12 第一阶段准备快照（历史；后续部署及审计裁定已在上方更新）
 

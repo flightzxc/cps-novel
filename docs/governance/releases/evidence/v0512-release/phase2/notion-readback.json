@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "initialReadbackAt": "2026-10-08T16:51:23.569Z",
+  "finalReadbackAt": "2026-10-08T16:52:10.946Z",
+  "currentSnapshot": true,
+  "versionRow": true,
+  "detailedReleaseRecord": true,
+  "singleReleaseDevelopmentLog": true,
+  "historyBytePreserved": true,
+  "historyCharacters": 190759,
+  "templatesPreserved": true,
+  "allFiveSourcesPresent": true,
+  "firstGovernanceCommit": "702dc7e6d129844c405cd7251e51ceeb14ab9ba9",
+  "immutableFinal": "84af0d7ef5ef36b06fa9783c114fe831adab4e13"
+}
