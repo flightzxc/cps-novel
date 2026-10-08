@@ -11,8 +11,8 @@
  *   B38_BENCH name=<名字> median_ms=<毫秒>
  * 对每条原生 SQL 打印 EXPLAIN (FORMAT JSON) 的顶层计划类型
  *   B38_PLAN name=<名字> top=<Node Type> seq_scans=<被顺序扫描的表>
- * 并断言：单语种的列表 / 总数查询在 article 上没有 Seq Scan，读归属表的标签查询在 novel_effective_tag 上没有 Seq Scan。
- * （矩阵查询必须读完全部可见文章，在 article 上顺序扫描是它的正确计划，只打印不断言。）
+ * 并断言：每条读 article 的原生 SQL（单语种的列表 / 总数，以及全语种矩阵）在 article 上没有 Seq Scan，读归属表的标签查询
+ * 在 novel_effective_tag 上没有 Seq Scan。设 `B38_BENCH_EXPLAIN=1` 时再打印每条的 `EXPLAIN (ANALYZE, BUFFERS)` 全文。
  */
 import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -74,6 +74,10 @@ async function explain(name: string, statements: readonly Prisma.Sql[]): Promise
     const seqScans: string[] = [];
     walk(root, (node) => { if (node["Node Type"] === "Seq Scan" && node["Relation Name"]) seqScans.push(node["Relation Name"]); });
     console.log(`B38_PLAN name=${name}${statements.length > 1 ? `#${index + 1}` : ""} top=${root["Node Type"]} seq_scans=${seqScans.join(",") || "-"}`);
+    if (process.env.B38_BENCH_EXPLAIN === "1") {
+      const text = await web.$queryRaw<Array<Record<string, string>>>(Prisma.sql`EXPLAIN (ANALYZE, BUFFERS) ${statement}`);
+      console.log(`B38_EXPLAIN name=${name}#${index + 1}\n${text.map((row) => row["QUERY PLAN"]).join("\n")}\nB38_EXPLAIN_END`);
+    }
     out.push({ top: root["Node Type"], seqScans });
   }
   return out;
@@ -188,7 +192,10 @@ describe.skipIf(!benchEnabled).sequential("B-38 公开列表基准（接近生�
       }
     }
 
-    // 矩阵（两条）：只打印计划，不断言——它必须读完全部可见文章。
-    await explain("category_counts_matrix", await capture((db) => queryPublicCategoryCounts(db, env)));
+    // 矩阵（两条：本数 + 每语种总数）：它要读完全部可见文章，但读的是按语种 / 发布时间的部分索引，不是 article 的顺序扫描；
+    // 它在 novel_effective_tag / promo_link / canonical_tag 上顺序扫描是对的（整表参与聚合）。
+    for (const plan of await explain("category_counts_matrix", await capture((db) => queryPublicCategoryCounts(db, env)))) {
+      expect(plan.seqScans.filter((relation) => relation === "article"), "矩阵不应在 article 上顺序扫描").toEqual([]);
+    }
   }, 300_000);
 });
