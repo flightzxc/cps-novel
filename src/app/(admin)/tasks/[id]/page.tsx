@@ -39,6 +39,7 @@ import {
   taskControlKindLabel,
   taskFamilyLabel,
 } from "../_lib/task-copy";
+import { taskTypeDisplay } from "../_lib/task-type-label";
 import { ArticlePublishBatchSummary } from "./_components/article-publish-batch-summary";
 import { TaskConfigSummary } from "./_components/task-config-summary";
 import { TaskDetailProgress } from "./_components/task-detail-progress";
@@ -185,7 +186,7 @@ export default async function TaskDetailPage({
   return (
     <AdminShell
       session={sessionView(context)}
-      title={`任务详情 · ${detail.taskType}`}
+      title={`任务详情 · ${taskTypeDisplay(detail.taskType)}`}
       actions={
         <Link href="/tasks" className={buttonClassName("secondary")}>
           返回列表
@@ -207,7 +208,7 @@ export default async function TaskDetailPage({
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-lg font-bold text-gray-900">
-                {taskFamilyLabel(detail.family)} · {detail.taskType}
+                {taskFamilyLabel(detail.family)} · {taskTypeDisplay(detail.taskType)}
               </h1>
               <span
                 className={
@@ -365,7 +366,7 @@ export default async function TaskDetailPage({
               <ul className="mt-3 space-y-2 text-sm" data-testid="catalog-batch-child-tasks">
                 {detail.catalogBatch.childTasks?.map((child) => (
                   <li key={child.taskId} className="flex items-center justify-between rounded border border-gray-100 px-3 py-2">
-                    <span>{child.taskType} · {taskStatusLabel(child.status)}</span>
+                    <span>{taskTypeDisplay(child.taskType)} · {taskStatusLabel(child.status)}</span>
                     <Link href={`/tasks/${child.taskId}?family=generic`} className="text-blue-700 underline">查看子任务</Link>
                   </li>
                 ))}

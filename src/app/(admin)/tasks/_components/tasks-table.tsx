@@ -17,6 +17,7 @@ import {
   taskFamilyLabel,
   type TaskControlSummary,
 } from "../_lib/task-copy";
+import { taskTypeLabel } from "../_lib/task-type-label";
 
 export type TaskSummaryRow = {
   readonly family: string;
@@ -192,6 +193,11 @@ export function TasksTable({
             <tr key={`${task.family}:${task.taskId}`} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-gray-700">{taskFamilyLabel(task.family)}</td>
               <td className="px-4 py-3">
+                {taskTypeLabel(task.taskType) !== null && (
+                  <span className="mr-2 text-xs font-medium text-gray-900" data-testid={`task-type-label-${task.taskId}`}>
+                    {taskTypeLabel(task.taskType)}
+                  </span>
+                )}
                 <span className="font-mono text-xs text-gray-600">{task.taskType}</span>
                 <span className="ml-2 font-mono text-[11px] text-gray-400">{task.taskId}</span>
               </td>
