@@ -128,15 +128,17 @@ export async function queryActiveLocales(
  * outside the header", see the module header. Do not add another decision
  * consumer, and never re-derive "does this locale have books" from a second query.
  *
- * 2026-09-30 one bounded, cost-only exception (not a second decision
- * consumer): `src/app/_pages/category.tsx`'s `hreflangLocalesFor` uses this
- * set to bound WHICH locales get probed when computing a category page's
- * hreflang (each probe is a full `getPublicCategoryPage`). Correctness never
- * comes from this set — a locale is listed in hreflang only if
- * `getPublicCategoryPage(…, 1)` itself returns a page, i.e. the page really
- * is HTTP 200; a locale missing here merely postpones its hreflang entry by at
- * most this cache's 300s (the safe direction). The set is a superset of every
- * locale that can have a list-visible category (collectability ⊇ list).
+ * 2026-09-30 one bounded exception (not a second decision consumer):
+ * `src/app/_pages/category.tsx`'s `hreflangLocalesFor` uses this set as the
+ * CANDIDATE locales for a category page's hreflang. Correctness never comes
+ * from this set — since B-38 (v0.5.13) a candidate is listed only if the
+ * per-locale category-count matrix (`@/lib/site/public-list`, the same
+ * list-visibility + membership SQL the category page itself runs) says that
+ * category has list-visible books in it, i.e. the page really is HTTP 200
+ * (`listCategoryPublicLocales` reads the matrix once; there is no per-locale
+ * probe any more); a locale missing here merely postpones its hreflang entry
+ * by at most this cache's 300s (the safe direction). The set is a superset of
+ * every locale that can have a list-visible category (collectability ⊇ list).
  */
 export const getActiveLocales = unstable_cache(
   () => queryActiveLocales(),

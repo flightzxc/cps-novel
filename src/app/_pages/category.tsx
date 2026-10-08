@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import { prisma } from "@/app/_lib/public-deps";
-import { loadActiveLocales, loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadCategoryPage, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
@@ -12,7 +12,6 @@ import { getPublicT } from "@/lib/locale/messages";
 import { pageSuffixFor } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
-import { getPublicCategoryPage } from "@/lib/site/category-queries";
 import { listCategoryPublicLocales } from "@/lib/site/category-locales";
 
 /**
@@ -40,7 +39,7 @@ async function load(locale: SiteLocale, slug: string, rawPage: string | string[]
   if (!page) return null;
   const activeLocales = await loadActiveLocales();
   const [category, chrome] = await Promise.all([
-    getPublicCategoryPage(prisma, locale, slug, page),
+    loadCategoryPage(locale, slug, page),
     loadChrome(locale, undefined, undefined, activeLocales),
   ]);
   return category ? { category, activeLocales, ...chrome } : null;
@@ -84,9 +83,9 @@ function seoFor(
 /**
  * 2026-09-30：hreflang 只列这个分类**确实有公开内容**（页面返回 200）的语种，
  * 不再对 15 个已登记语种盲枚举——海阅的空分类是 404，盲枚举会把 404 地址当作
- * "其它语言版本"。当前语种恒在（自引用）；其它语种从动态层活跃语种里逐个用
- * 页面自己的查询确认。只有 `generateMetadata` 需要它（`alternates` 只出现在
- * 元数据里），页面本体不重复这份开销。
+ * "其它语言版本"。当前语种恒在（自引用）；其它语种从动态层活跃语种里，用每语种每分类本数矩阵
+ * （B-38：一次读取，不再逐语种查库；最多晚 60 秒）确认。只有 `generateMetadata` 需要它（`alternates`
+ * 只出现在元数据里），页面本体不重复这份开销。
  */
 async function hreflangLocalesFor(
   locale: SiteLocale,
@@ -111,9 +110,8 @@ export async function buildCategoryMetadata(
     return { title: getPublicT(locale)("meta.notFound"), robots: { index: false, follow: false } };
   }
   // PN-08（2026-10-07）：第 2 页起模板不输出任何跨语种 hreflang（`alternates.languages`
-  // 为 `{}`，见 `seo-templates/category.ts`），所以不必再逐语种探测"该分类在其它语种是否
-  // 有内容"——那组重查询（B-38 记录）的结果只用来生成此前那组指向第 1 页的错误 hreflang。
-  // 第 1 页照常探测，hreflang 输出不变。
+  // 为 `{}`，见 `seo-templates/category.ts`），所以第 2 页起不查"该分类在其它语种是否有内容"。
+  // 第 1 页照常判定（读矩阵），hreflang 输出不变。
   const hreflangLocales =
     loaded.category.page >= 2 ? [locale] : await hreflangLocalesFor(locale, loaded);
   return toNextMetadata(seoFor(locale, loaded, hreflangLocales));

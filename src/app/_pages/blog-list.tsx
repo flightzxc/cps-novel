@@ -13,7 +13,6 @@ import { withPageSuffix } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
-import { paginateBlogCards } from "@/lib/site/blog-queries";
 
 /**
  * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
@@ -56,12 +55,11 @@ async function loadBlogListPage(locale: SiteLocale, rawPage: string | string[] |
   if (requested === null) return null;
 
   const activeLocales = await loadActiveLocales();
-  const [{ settings, chrome }, cards] = await Promise.all([
+  const [{ settings, chrome }, paged] = await Promise.all([
     loadChrome(locale, undefined, undefined, activeLocales),
-    loadBlogList(locale),
+    loadBlogList(locale, requested),
   ]);
-  const paged = paginateBlogCards(cards, requested);
-  // C-29 review low: `paginateBlogCards` forces `totalPages` to 1 when
+  // C-29 review low: `listPublicBlogArticles` forces `totalPages` to 1 when
   // `totalCount === 0` (its own doc comment), so `requested > totalPages`
   // alone already 404s `page=2` against zero posts — the previous `&&
   // totalCount > 0` clause suppressed exactly that case (page 1 always

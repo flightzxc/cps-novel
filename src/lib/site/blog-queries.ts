@@ -5,8 +5,9 @@
  * branch grafted into the Novel-shaped one — `queries.ts`'s own
  * `ListedArticleWithNovel`/`toPublicArticle` etc. are all Novel-shaped and
  * a blog Article structurally cannot fill them, see that file's C-27
- * comments). Reuses `PUBLIC_LIST_CAP` from `./queries.ts` rather than a
- * second cap constant — same collection-size discipline, one source.
+ * comments). B-38 (v0.5.13): the list is database-paginated (`skip`/`take` +
+ * `count`, CPS `blog-queries` shape) with no cap — every published post is
+ * reachable and the total is the real total.
  *
  * `access.ts`'s `checkBlogArticlePublicAccess` (C-29) answers "is this
  * (locale, slug) reachable, and as what" — this module answers "load the
@@ -21,7 +22,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { buildBlogPath } from "@/lib/slug/article-path";
 import { buildPrimaryArticleWhere, buildPublicListBlogArticleWhere } from "@/server/publication/visibility";
 
-import { PUBLIC_LIST_CAP, BROWSE_PAGE_SIZE } from "./queries";
+import { BROWSE_PAGE_SIZE } from "./queries";
 
 const BLOG_CARD_SELECT = {
   id: true,
@@ -131,27 +132,6 @@ function toBlogDetailView(row: BlogDetailRow): BlogDetailView {
   };
 }
 
-/**
- * Full capped candidate set for one locale, newest first — same
- * "load-all-then-paginate-in-memory" shape `queries.ts`'s
- * `listPublicArticles`/`category-queries.ts`'s `getPublicCategoryPage` both
- * use (`PUBLIC_LIST_CAP`'s own doc comment: accepted V1 limitation, not
- * fixed here).
- */
-export async function listPublicBlogArticles(
-  db: PrismaClient | Prisma.TransactionClient,
-  locale: SiteLocale,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<BlogCardView[]> {
-  const rows = await db.article.findMany({
-    where: buildPublicListBlogArticleWhere({ locale }, env),
-    orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
-    take: PUBLIC_LIST_CAP,
-    select: BLOG_CARD_SELECT,
-  });
-  return rows.map(toBlogCardView);
-}
-
 export type BlogListPageResult = {
   posts: BlogCardView[];
   page: number;
@@ -159,16 +139,39 @@ export type BlogListPageResult = {
   totalCount: number;
 };
 
-/** Same in-memory slicing shape as `queries.ts`'s `paginateCards`, kept as its own function rather than genericizing that one — this round's file-boundary discipline (§C-29) keeps the blog family additive-only, never editing `queries.ts`'s existing exports. */
-export function paginateBlogCards(cards: BlogCardView[], page: number): BlogListPageResult {
-  const totalCount = cards.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / BROWSE_PAGE_SIZE) || 1);
+/**
+ * One page of the public blog list, newest first (`publishedAt` desc, `id` asc), with the real total —
+ * database `skip`/`take` plus a `count` over the same `where` (`buildPublicListBlogArticleWhere`: excludes
+ * `hidden` and `seo_only`). No cap: every published post is reachable. Same page semantics as the novel list
+ * (`public-list.ts`'s `listPublicNovelPage`): an invalid page number reads as page 1, a page past the end
+ * returns no posts with the real `totalPages` (the page 404s on that), and zero posts forces `totalPages` to 1.
+ */
+export async function listPublicBlogArticles(
+  db: PrismaClient | Prisma.TransactionClient,
+  locale: SiteLocale,
+  page: number,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<BlogListPageResult> {
+  const where = buildPublicListBlogArticleWhere({ locale }, env);
   const currentPage = Number.isInteger(page) && page > 0 ? page : 1;
-  const start = (currentPage - 1) * BROWSE_PAGE_SIZE;
+  const skip = (currentPage - 1) * BROWSE_PAGE_SIZE;
+  const [rows, totalCount] = await Promise.all([
+    // A page number so large that `skip` is no longer a safe integer is simply past the end.
+    Number.isSafeInteger(skip)
+      ? db.article.findMany({
+          where,
+          orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+          skip,
+          take: BROWSE_PAGE_SIZE,
+          select: BLOG_CARD_SELECT,
+        })
+      : Promise.resolve([] as BlogCardRow[]),
+    db.article.count({ where }),
+  ]);
   return {
-    posts: cards.slice(start, start + BROWSE_PAGE_SIZE),
+    posts: rows.map(toBlogCardView),
     page: currentPage,
-    totalPages: totalCount === 0 ? 1 : totalPages,
+    totalPages: totalCount === 0 ? 1 : Math.max(1, Math.ceil(totalCount / BROWSE_PAGE_SIZE)),
     totalCount,
   };
 }

@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { prisma } from "@/app/_lib/public-deps";
-import { loadActiveLocales, loadBrowseNovels, loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadBrowsePage, loadCategoryPage, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
@@ -13,8 +12,6 @@ import { withPageSuffix } from "@/lib/seo/page-suffix";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
-import { getPublicCategoryPage } from "@/lib/site/category-queries";
-import { paginateCards } from "@/lib/site/queries";
 
 /**
  * Browse page shared body (WO-1 §6.1): extracted verbatim out of
@@ -31,10 +28,20 @@ import { paginateCards } from "@/lib/site/queries";
  * are all otherwise untouched). `getPublicT(locale)` stays called inline in
  * the not-found branch (matching the original's `getPublicT(PUBLIC_SITE_
  * LOCALE)("meta.notFound")` call) and the `t` used by the success path is
- * declared after that branch, not hoisted above `loadBrowsePage` — WO-1's
+ * declared after that branch, not hoisted above `loadBrowseData` — WO-1's
  * verbatim extraction keeps the call at the literal's original spot; there
  * is no throw to scope by hoisting (WO-3's `loadMessages` deep-merges onto
  * `en` and never throws on an incomplete catalog).
+ *
+ * B-38 (v0.5.13): the list is database-paginated. `loadBrowsePage` /
+ * `loadCategoryPage` (`@/app/_lib/public-load`) are request-deduped
+ * (`React.cache()`), so `generateMetadata` and the page body — which ask for
+ * the same `(locale, page)` — hit the database once between them. Page 1 of
+ * `/browse` and of `?category=` is as fast as any page; there is no
+ * "newest N books" window, `totalCount` is the real total and every page up
+ * to `totalPages` is reachable. The 404 rules are unchanged: a page past the
+ * end, or a category with no books, is `notFound()`; zero books in the whole
+ * locale still renders page 1 (200, empty) and 404s page 2.
  */
 
 export type BrowseSearchParams = { page?: string | string[]; category?: string | string[] };
@@ -46,7 +53,7 @@ function parseBrowsePageParam(raw: string | string[] | undefined): number | null
   return Number(value);
 }
 
-async function loadBrowsePage(
+async function loadBrowseData(
   locale: SiteLocale,
   rawPage: string | string[] | undefined,
   rawCategory: string | string[] | undefined,
@@ -60,19 +67,18 @@ async function loadBrowsePage(
   if (category) {
     const [{ settings, chrome }, result] = await Promise.all([
       loadChrome(locale, "browse", undefined, activeLocales),
-      getPublicCategoryPage(prisma, locale, category, requested),
+      loadCategoryPage(locale, category, requested),
     ]);
     return result ? { settings, chrome, paged: result, category: result.category, activeLocales } : null;
   }
 
-  const [{ settings, chrome }, cards] = await Promise.all([
+  const [{ settings, chrome }, paged] = await Promise.all([
     loadChrome(locale, "browse", undefined, activeLocales),
-    loadBrowseNovels(locale),
+    loadBrowsePage(locale, requested),
   ]);
-  const paged = paginateCards(cards, requested);
   // C-29 review low (found while auditing this route's `/blog` counterpart):
-  // `paginateCards` forces `totalPages` to 1 when `totalCount === 0` (its
-  // own doc comment), so `requested > totalPages` alone already 404s
+  // the list query forces `totalPages` to 1 when `totalCount === 0` (see
+  // `listPublicNovelPage`), so `requested > totalPages` alone already 404s
   // `page=2` against zero novels — the previous `&& totalCount > 0` clause
   // suppressed exactly that case (page 1 always passes regardless, since
   // `1 > 1` is false). `getPublicCategoryPage`'s own guard above already
@@ -89,7 +95,7 @@ export async function buildBrowseMetadata(
   searchParams: Promise<BrowseSearchParams>,
 ): Promise<Metadata> {
   const { page, category } = await searchParams;
-  const loaded = await loadBrowsePage(locale, page, category);
+  const loaded = await loadBrowseData(locale, page, category);
   if (!loaded) {
     return {
       title: getPublicT(locale)("meta.notFound"),
@@ -138,7 +144,7 @@ export async function BrowseBody({
   searchParams: Promise<BrowseSearchParams>;
 }) {
   const { page, category } = await searchParams;
-  const loaded = await loadBrowsePage(locale, page, category);
+  const loaded = await loadBrowseData(locale, page, category);
   if (!loaded) notFound();
 
   const t = getPublicT(locale);
@@ -172,8 +178,8 @@ export async function BrowseBody({
             : t("collection.allWorksDescription")
         }
         novels={loaded.paged.novels}
-        // 标题下的作品数 = 分页覆盖的总本数（`paginateCards(...).totalCount`；带 ?category= 时是
-        // 分类页同一份列表的总数），不是当前页本数——见 `CollectionScreen` 文件头注释。
+        // 标题下的作品数 = 分页覆盖的总本数（数据库实时总数；带 ?category= 时是该分类的总数），
+        // 不是当前页本数——见 `CollectionScreen` 文件头注释。
         totalCount={loaded.paged.totalCount}
         emptyMessage={t("collection.allWorksEmpty")}
         // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
