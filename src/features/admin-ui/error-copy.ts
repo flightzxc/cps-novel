@@ -109,12 +109,13 @@ const REASON_COPY: Readonly<Record<string, string>> = Object.freeze({
  * REST envelope round-trip here, just a raw code string thrown by the service
  * and echoed back by the action's catch block. Extending `AdminErrorCode`
  * (and therefore `COPY`, which is typed as an exhaustive
- * `Record<AdminErrorCode, string>`) just to fit these ten codes in would drag
+ * `Record<AdminErrorCode, string>`) just to fit these eleven codes in would drag
  * an unrelated contract type into template-only territory; a second small
  * lookup table is cheaper and keeps `COPY`'s exhaustiveness meaningful.
  */
 const TEMPLATE_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
   template_key_invalid: "模板 Key 不能为空，且长度不能超过 96 个字符",
+  template_key_immutable: "模板 Key 创建后不能修改。想沿用原 Key 出新版本，请用相同 Key 新建模板；想换 Key，请新建一个模板",
   template_name_invalid: "模板名称不能为空，且长度不能超过 191 个字符",
   template_locale_invalid: "模板语种无效，请从下拉列表中选择",
   template_article_type_invalid: "适用文章类型无效，请从下拉列表中选择",

@@ -12,6 +12,7 @@ import {
   listActiveArticleTemplateOptions,
   listActiveArticleTemplateOptionsForLocales,
   selectActiveArticleTemplate,
+  updateArticleTemplate,
 } from "@/server/article-templates";
 import { DEFAULT_ARTICLE_TEMPLATE_KEY } from "@/server/content-creation/default-article-template";
 import { isTemplateRenderError } from "@/lib/seo/template";
@@ -373,6 +374,190 @@ describe("createArticleTemplate · 未登记变量必须被引擎拒绝", () => 
     expect(first.version).toBe(1);
     expect(second.version).toBe(2);
     expect(db.rows.filter((row) => row.templateKey === "tpl-versioned")).toHaveLength(2);
+  });
+});
+
+/**
+ * 服务端闸门：编辑已有模板时 `templateKey` 必须等于库里这一行原有的 key。
+ *
+ * 模型（以 `service.ts` 为准）：一个模板家族 = 同一 templateKey 下按 version 区分的多行；
+ * `updateArticleTemplate` 原地改这一行（`where: { id }`），从不产生新版本——新版本只来自
+ * `createArticleTemplate` 用已有 key 再建一条。所以闸门比对的是"这一行读出来的原 key"，
+ * 新建（含同 key 出新版本）根本不经过它。
+ *
+ * mutation target：删掉 `updateArticleTemplate` 里 `data.templateKey !== before.templateKey`
+ * 的抛错 → 本组"被拒"类用例全部变红。
+ */
+describe("updateArticleTemplate · 模板 Key 创建后不可改（服务端闸门）", () => {
+  async function seedFamily(
+    db: FakeArticleTemplateDb,
+    stores: ReturnType<typeof authFixture>,
+    templateKey: string,
+    versions: number,
+  ) {
+    const rows = [];
+    for (let i = 0; i < versions; i += 1) {
+      const guarded = await authorization(stores, "admin.article_template.create");
+      rows.push(
+        await createArticleTemplate(
+          { ...guarded, template: { ...VALID_TEMPLATE, templateKey, templateName: `${templateKey} v${i + 1}` } },
+          deps(db, stores),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  const rejectedAs = (code: string) => (error: unknown) =>
+    error instanceof ArticleTemplateInputError && error.code === code;
+
+  it("key 与原值相同：可以更新，version 与 key 不变，并写一条 update 审计", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-keep", 1);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    const row = await updateArticleTemplate(
+      { ...guarded, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "tpl-keep", templateName: "改名后" } },
+      deps(db, stores),
+    );
+
+    expect(row.templateKey).toBe("tpl-keep");
+    expect(row.version).toBe(1);
+    expect(row.templateName).toBe("改名后");
+    expect(db.rows).toHaveLength(1);
+    expect(db.rows[0]!.templateName).toBe("改名后");
+    expect(db.audits.filter((audit) => audit.action === "article_template.update")).toHaveLength(1);
+  });
+
+  it("key 不同：被拒绝（template_key_immutable），库里数据一行都不变，也不写审计", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-keep", 1);
+    const rowsBefore = structuredClone(db.rows);
+    const auditsBefore = structuredClone(db.audits);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    await expect(
+      updateArticleTemplate(
+        { ...guarded, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "tpl-renamed", templateName: "想顺手改 key" } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy(rejectedAs("template_key_immutable"));
+
+    expect(db.rows).toEqual(rowsBefore);
+    expect(db.rows[0]!.templateKey).toBe("tpl-keep");
+    expect(db.rows[0]!.templateName).toBe("tpl-keep v1");
+    expect(db.audits).toEqual(auditsBefore);
+  });
+
+  it("🔴 唯一约束拦不住的那条路：把高版本行改到别的家族的 key 上（版本号不撞）同样被拒，两个家族都不变", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    // tpl-a 有 v1/v2/v3，tpl-b 只有 v1：把 tpl-a v3 改成 tpl-b，(tpl-b, 3) 不与任何行冲突，
+    // 数据库唯一约束放行，只有这道闸能拦——不拦则 v3 并入 tpl-b 家族并成为它的"最新版本"。
+    const familyA = await seedFamily(db, stores, "tpl-a", 3);
+    await seedFamily(db, stores, "tpl-b", 1);
+    const rowsBefore = structuredClone(db.rows);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    await expect(
+      updateArticleTemplate(
+        { ...guarded, id: familyA[2]!.id, template: { ...VALID_TEMPLATE, templateKey: "tpl-b" } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy(rejectedAs("template_key_immutable"));
+
+    expect(db.rows).toEqual(rowsBefore);
+    expect(db.rows.filter((row) => row.templateKey === "tpl-a").map((row) => row.version)).toEqual([1, 2, 3]);
+    expect(db.rows.filter((row) => row.templateKey === "tpl-b").map((row) => row.version)).toEqual([1]);
+  });
+
+  it("多版本家族里更新任意一版（含 v2）：只要 key 是这一行自己的 key 就可以", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const family = await seedFamily(db, stores, "tpl-multi", 2);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    const row = await updateArticleTemplate(
+      { ...guarded, id: family[1]!.id, template: { ...VALID_TEMPLATE, templateKey: "tpl-multi", status: "draft" } },
+      deps(db, stores),
+    );
+
+    expect(row.version).toBe(2);
+    expect(row.status).toBe("draft");
+    expect(db.rows.map((r) => `${r.templateKey}#${r.version}`)).toEqual(["tpl-multi#1", "tpl-multi#2"]);
+  });
+
+  it("key 比对区分大小写：只改大小写也算改 key，被拒", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-case", 1);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    await expect(
+      updateArticleTemplate(
+        { ...guarded, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "TPL-CASE" } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy(rejectedAs("template_key_immutable"));
+    expect(db.rows[0]!.templateKey).toBe("tpl-case");
+  });
+
+  it("比对的是落库口径：提交的 key 只多了首尾空白（trim 后相同）不算改 key，落库仍是原 key", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-trim", 1);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    const row = await updateArticleTemplate(
+      { ...guarded, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "  tpl-trim  " } },
+      deps(db, stores),
+    );
+    expect(row.templateKey).toBe("tpl-trim");
+  });
+
+  it("格式校验先于闸门：空 key 仍报 template_key_invalid，不被说成「不可改」", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-keep", 1);
+    const guarded = await authorization(stores, "admin.article_template.update");
+
+    await expect(
+      updateArticleTemplate(
+        { ...guarded, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "   " } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy(rejectedAs("template_key_invalid"));
+  });
+
+  it("新建不受闸门影响：同 key 再建 → 下一个版本；全新 key → v1；更新过的行不影响后续建版", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const [v1] = await seedFamily(db, stores, "tpl-grow", 1);
+    const upd = await authorization(stores, "admin.article_template.update");
+    await updateArticleTemplate(
+      { ...upd, id: v1!.id, template: { ...VALID_TEMPLATE, templateKey: "tpl-grow", templateName: "已编辑" } },
+      deps(db, stores),
+    );
+
+    const create = await authorization(stores, "admin.article_template.create");
+    const v2 = await createArticleTemplate(
+      { ...create, template: { ...VALID_TEMPLATE, templateKey: "tpl-grow" } },
+      deps(db, stores),
+    );
+    const fresh = await createArticleTemplate(
+      { ...create, template: { ...VALID_TEMPLATE, templateKey: "tpl-brand-new" } },
+      deps(db, stores),
+    );
+
+    expect(v2.version).toBe(2);
+    expect(fresh.version).toBe(1);
+    expect(db.rows.map((r) => `${r.templateKey}#${r.version}`).sort()).toEqual([
+      "tpl-brand-new#1",
+      "tpl-grow#1",
+      "tpl-grow#2",
+    ]);
   });
 });
 

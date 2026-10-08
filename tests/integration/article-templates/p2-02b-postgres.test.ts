@@ -12,6 +12,10 @@
  *
  * 门禁：`P2_02B_DATABASE_TEST=1` 且提供 `P2_02B_WEB_DATABASE_URL`，否则整个 describe
  * 跳过（与 `tests/integration/tagging/p2-06-5-postgres.test.ts` 同一约定）。
+ *
+ * 用例数现为 8（含"编辑改 key 被服务端闸门拒绝"）；运行器
+ * `scripts/run-p2-02b-article-template-postgres-verification.sh` 钉死 `Tests 8 passed (8)`，
+ * 增删用例必须同步改运行器里的期望数，否则门禁变量拼错导致的整文件跳过会无声通过。
  */
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -72,6 +76,7 @@ describe.skipIf(!enabled).sequential("P2-02B 模板生命周期（真实 Postgre
   const deps = () => ({ db: web, identities: stores, sessions: stores, now: NOW });
   const key = `smoke-${Date.now()}`;
   let templateId = "";
+  let v2Id = "";
 
   beforeAll(async () => { await web.$connect(); });
   afterAll(async () => { await web.$disconnect(); });
@@ -119,6 +124,7 @@ describe.skipIf(!enabled).sequential("P2-02B 模板生命周期（真实 Postgre
       },
     }, deps());
     expect(row.version).toBe(2);
+    v2Id = row.id;
   });
 
   it("🔴 停用：真库上必须成功——修复前这里会以 23514 check_violation 失败", async () => {
@@ -163,6 +169,33 @@ describe.skipIf(!enabled).sequential("P2-02B 模板生命周期（真实 Postgre
         contentTemplate: [{ type: "paragraph", content: "{novel_description}" }],
       },
     }, deps())).rejects.toThrow("template_locale_invalid");
+  });
+
+  it("🔴 编辑改 key 被服务端闸门拒绝：v2 行整行不动，库里不出现新 key 的行，也不留 update 审计", async () => {
+    // (key, 2) → (renamed, 2)：新 key 下没有 v2，数据库唯一约束 (template_key, version) 放行这次改写，
+    // 只有应用层闸门能拦。不拦的话 v2 会静默脱离原家族、凭空开出一个新家族。
+    const renamed = `${key}-renamed`;
+    const before = await web.articleTemplate.findUniqueOrThrow({ where: { id: v2Id } });
+    const g = await authorize(stores, "admin.article_template.update");
+    await expect(updateArticleTemplate({
+      authorization: g.authorization, requestId: g.requestId, id: v2Id,
+      template: {
+        templateKey: renamed, templateName: "v2 想顺手改 key", locale: "en", status: "draft",
+        titleTemplate: "{novel_title}",
+        contentTemplate: [{ type: "paragraph", content: "{novel_description}" }],
+      },
+    }, deps())).rejects.toThrow("template_key_immutable");
+
+    const after = await web.articleTemplate.findUniqueOrThrow({ where: { id: v2Id } });
+    expect(after).toEqual(before);
+    expect(after.templateKey).toBe(key);
+    expect(await web.articleTemplate.count({ where: { templateKey: renamed } })).toBe(0);
+    expect(await web.articleTemplate.count({ where: { templateKey: key } })).toBe(2);
+    const audits = await web.operationAudit.findMany({
+      where: { entityType: "ArticleTemplate", entityId: v2Id },
+      select: { action: true },
+    });
+    expect(audits.map((a) => a.action)).toEqual(["article_template.create"]);
   });
 
   it("🔴 软删：真库上必须成功——修复前 softDelete 硬写 inactive 同样会撞 CHECK", async () => {

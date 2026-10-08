@@ -152,7 +152,7 @@ npx vitest run --project node tests/integration/article-templates/p2-02b-article
   | tee "$render_log" || render_exit=$?
 
 failed="no"
-suite_passed P2_02B_TEMPLATE_LIFECYCLE "$lifecycle_exit" "$lifecycle_log" 7 || failed="yes"
+suite_passed P2_02B_TEMPLATE_LIFECYCLE "$lifecycle_exit" "$lifecycle_log" 8 || failed="yes"
 suite_passed P2_02B_ARTICLE_RENDER "$render_exit" "$render_log" 5 || failed="yes"
 if [ "$failed" != "no" ]; then
   echo "P2_02B_ARTICLE_TEMPLATE_POSTGRES_VERIFICATION=FAIL" >&2
