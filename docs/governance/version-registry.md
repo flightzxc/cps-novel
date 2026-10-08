@@ -19,6 +19,17 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.12 —— 准备中（2026-10-09；第一阶段，尚未部署）
+
+- 唯一基线 `2763eeddcb3aeaa0719bdeab0ba12a4c669c6e28`，来自 `integration/v0.5.12-2026-10-08`，基于 v0.5.11 收官 `274b990`（Final `eb40756`）；主控已逐项复核（含独立变异）并集成。本次仅升版、门禁与发布，不开发功能。
+- 五组合入：分类页运营需求 `feat/category-page-ops-v0512@0ceac1d`（merge `87bfb79`）；新文章过短网址补词 `fix/article-short-slug-suffix-v0512@fa4cecf`（merge `c379da2`）；Next/Naver/任务中文名 `chore/v0512-next-naver-tasklabel@c111eb2`（merge `203a5a6`）；短语分类名文案 `fix/category-copy-phrase-names-v0512@82c87c0`（merge `89bbb83`）；第三方验收译文 `fix/category-copy-gpt-acceptance-v0512@e8fa978`（merge `2763eed`）。
+- Next、@next/third-parties、eslint-config-next 为 16.3.8；包含 Naver 验证文件与「畅读收益同步（changdu.revenue_sync.v1）」类型显示。无新迁移、grants、nginx 或环境变量变化，仍为 23 条迁移、57 张业务表；生产 env 仅第二阶段修改两个版本字段。
+- Owner 10-08 决定分类页标题加 Novels（含 H1/title/分享/面包屑），有意偏离 CPS 并推翻 09-30 决定；作品数显示可浏览总数且 /browse 同步；过短网址仅新生成时追加本地化词，正常及已有网址不变；追加两处短语分类名文案修改。
+- 第三方验收：网址后缀 15 词全部 PASS；分类三条文案 45 条中 32 PASS、13 NEEDS_CHANGE。Owner 10-09 保留 en 三条以贴近运营要求与搜索词，ru/th/ko/zh-Hant 十条照验收修改。可浏览 240 本上限源自 08-18 P2-08 Cursor 实现，Claude 复核登记但未写触发条件；B-38 根治排 v0.5.13，以数据库分页并计算总数。
+- 生产依赖 audit 门禁为 0 critical、恰好五项 high：@prisma/config、deepmerge-ts、effect、nanoid、prisma；其他 high/critical 必须停止。全量 audit 中 vitest/tinypool 开发依赖 critical 单列，不进镜像，后续单独处理。
+- 独立工作树 `release-v0.5.12`，分支 `release/v0.5.12-2026-10-09`；先本地提交六文件身份，再串行执行完整门禁与 33 个运行器（仅排除 p1-12）。全绿后推送 GitHub，构建并本地核验 linux/amd64 不可变归档；Final/tree 和归档身份以第一阶段实测交付为准。
+- 第一阶段不连接运维主机，归档交付后停止；第二阶段须 Owner 单独授权，仅限 haiyue-vps 低流量时段。正式 tag、生成 CHANGELOG、发版级开发日志与 Notion 收官待部署验收后完成；当前为已合入、尚未部署。
+
 ### v0.5.11 —— 已部署正式站（2026-10-08 17:15:56 +0800；Owner 操作项目待确认）
 
 - Final `eb40756416b186ca4b293ff57e24026af78cf4f9` / tree `b98d07a62c98196593a625c5cedcd2344a8e9220`；image cps-novel:0.5.11-eb40756，linux/amd64，归档331746262bytes / SHA256 `8bc4ac3787b801e8dab4744d4265b9971fd6fadd0e2a395f45923aeebe21291d`，服务器独立重算与原verify --load/OCI身份PASS；源码current/HEAD/tree干净核对通过。
@@ -390,6 +401,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | `release/v0.5.12-2026-10-09`；基线 `2763eed` | 准备中，尚未部署；第一阶段归档交付后停止，部署待 Owner 单独授权 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
 | `v0.5.10` | 2026-10-08 01:11:28 | PATCH | 书封、分类Sitemap/站内链接、分页SEO、阅读设置、阿语与运营后台；Turnstile合入关闭；无新迁移 | Final `7f955106a82f8dff82568e305ea35f1a68b8c934`；annotated `v0.5.10`；image `cps-novel:0.5.10-7f95510` | 正式站已部署，自动验收PASS；35分片115163、en分类1788→72；Owner浏览器/手机待确认 |
 | `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已于2026-10-07切换正式域名pulsenovels.com对外开放（19:39:17 JST确认）；同版Final不变；public配置/部署/live/外部/100x20/worker及当天sitemap计数通过；Owner接受已知B-38部分分类404，随v0.5.10修复；预生产E/F/5b/5c/5d为历史PASS；Owner登录/2FA与认证记录核对PASS，GSC/监控待做；Git已push核远端，Notion开放及Owner2FA完成状态同步回读PASS（19:49 JST） |
