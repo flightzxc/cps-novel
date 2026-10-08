@@ -400,7 +400,9 @@ describe("章节页：'章节名 · 书名 | 站点名'，没有章节名时按�
   });
 });
 
-describe("分类页：分类名 | 站点名；第 2 页起加翻页后缀", () => {
+// 2026-10-08（运营反馈、Owner 确认，有意偏离 CPS）：分类页标题是"标题形式"（分类名 + Novels，
+// `collection.categoryHeading`），不再是纯分类名；品牌后缀与翻页后缀的合并行为不变。
+describe("分类页：标题形式（分类名 + Novels） | 站点名；第 2 页起加翻页后缀", () => {
   function categoryPage(page: number) {
     return {
       novels: [CARD],
@@ -411,16 +413,17 @@ describe("分类页：分类名 | 站点名；第 2 页起加翻页后缀", () =
     };
   }
 
-  it("第 1 页 'Romance | PulseNovel'；第 2 页 'Romance - Page 2 | PulseNovel'；og:title 不带品牌", async () => {
+  it("第 1 页 'Romance Novels | PulseNovel'；第 2 页 'Romance Novels - Page 2 | PulseNovel'；og:title 不带品牌", async () => {
     getPublicCategoryPage.mockResolvedValue(categoryPage(1));
     const first = await resolve("/category/romance", { routeDir: "category/[slug]", params: { slug: "romance" } });
-    expect(first.title.absolute).toBe("Romance | PulseNovel");
-    expectSocialTitlesWithoutSuffix(first, "Romance");
+    expect(first.title.absolute).toBe("Romance Novels | PulseNovel");
+    expectSocialTitlesWithoutSuffix(first, "Romance Novels");
 
     getPublicCategoryPage.mockResolvedValue(categoryPage(2));
     const second = await resolve("/category/romance?page=2", { routeDir: "category/[slug]", params: { slug: "romance" }, searchParams: { page: "2" } });
-    expect(second.title.absolute).toBe("Romance - Page 2 | PulseNovel");
-    expectSocialTitlesWithoutSuffix(second, "Romance - Page 2");
+    expect(second.title.absolute).toBe("Romance Novels - Page 2 | PulseNovel");
+    expectSocialTitlesWithoutSuffix(second, "Romance Novels - Page 2");
+    // 描述兜底句仍用纯分类名（不是 "Romance Novels novels"）。
     expect(second.description).toBe("Discover Romance novels on PulseNovel.");
   });
 
@@ -431,7 +434,10 @@ describe("分类页：分类名 | 站点名；第 2 页起加翻页后缀", () =
       params: { locale: "ja", slug: "romance" },
       searchParams: { page: "2" },
     });
-    expect(second.title.absolute).toBe("Romance - 2ページ | PulseNovel");
+    // 标题形式是 ja 自己的译文（不是英文 Novels），后缀仍是 ja 的 ' - 2ページ'。
+    const heading = getPublicT("ja")("collection.categoryHeading", { name: "Romance" });
+    expect(second.title.absolute).toBe(`${heading} - 2ページ | PulseNovel`);
+    expect(second.title.absolute).not.toContain("Novels");
   });
 });
 

@@ -16,7 +16,7 @@
  *    可以不做逐语种探测（见 `_pages/category.tsx` 的 `buildCategoryMetadata`）。
  *
  * TKD 对齐 CPS（Owner 2026-09-30 裁定，照 CPS v8.5.1 `category.ts:29-31`）：
- *  - `<title>` = 分类名 + （第 2 页起）本地化翻页后缀，不加 "novels" 之类的词；
+ *  - `<title>` = 分类名 + （第 2 页起）本地化翻页后缀；
  *    品牌后缀由根布局的标题模板加，这里不含品牌名；og:title/twitter:title 同此。
  *  - `<meta description>` = 分类自己的描述 || 一句固定的本地化兜底文案（所有分类共用
  *    同一句式，不是逐个分类生成）。
@@ -25,9 +25,16 @@
  * 顾虑不存在了。翻页后缀与兜底句都由调用方按请求语种解析好再传进来
  * （`pageSuffix`/`descriptionFallback`），模板本身保持无文案目录依赖。
  *
+ * 2026-10-08 运营反馈、Owner 确认，**有意偏离 CPS**（CPS 分类页的 H1/标题是纯分类名）：
+ * 标题/og:title/twitter:title/CollectionPage `name`/面包屑第 2 项/分享图 alt 用
+ * `collection.categoryHeading`（分类名 + Novels，各语种按自己的词序）；描述兜底句
+ * （`meta.categoryDescriptionFallback`）仍用纯分类名——它自己已含 novels，用标题形式会重复。
+ * 所以调用方传进来的 `name` 是标题形式，描述兜底句是调用方另行用纯名算好再传的
+ * （见 `_pages/category.tsx` 的 `seoFor`）。本模板代码不关心 `name` 里有没有 Novels。
+ *
  * CollectionPage JSON-LD 的 `description` 与 meta 同源（复核 A2，照 CPS `category.ts:31`：
  * `rawDesc = description || fallback`，meta 与 JSON-LD 用同一个值）：分类自己的描述，
- * 没有时用兜底句。JSON-LD 的 `name` 仍是纯分类名，不带翻页后缀。
+ * 没有时用兜底句。JSON-LD 的 `name` 是标题形式（含 Novels，见上），不带翻页后缀。
  */
 import { getHomeName } from "../breadcrumb-i18n";
 import { buildHreflangAlternates } from "../seo-utils";
@@ -40,6 +47,11 @@ import {
 } from "./_shared";
 
 export interface CategorySeoData {
+  /**
+   * 调用方传的是**标题形式**（`collection.categoryHeading`，含 Novels，例如 "Romance Novels"），
+   * 不是纯分类名。用于 `<title>`/og/twitter 标题、CollectionPage `name`、面包屑第 2 项与
+   * 分享图 alt。纯分类名只用来算 `descriptionFallback`（见下）。
+   */
   name: string;
   slug: string;
   /**
