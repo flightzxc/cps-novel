@@ -176,6 +176,7 @@ describe("P2-06.5 Admin V1 UI 不越界", () => {
       "/tags",
       "/tasks",
       "/promo-links",
+      "/revenue",
       "/settings",
       "/settings/security",
     ]);

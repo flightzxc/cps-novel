@@ -90,6 +90,7 @@ describe("X1 worker startup allowlist", () => {
       "indexnow.sweep.v1",
       "indexnow_delivery",
       "moboreader.preview_refresh.v1",
+      "moboreader.revenue_sync.v1",
       "novel.materialize.v1",
       "promo_link.claim.v1",
       "sitemap.daily_fallback.v1",

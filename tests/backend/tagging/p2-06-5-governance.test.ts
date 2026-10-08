@@ -18,7 +18,8 @@ describe("P2-06.5 static database governance", () => {
     // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1) added three
     // more (ArticleNovelRebindPreview/Batch/BatchItem, 49 -> 52).
     // Owner 2026-09-18 决策 2 added ChannelAccountHold (52 -> 53).
-    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(53);
+    // 收益看板 (20261008120000_revenue_account_level_dashboard) added four revenue_* models (53 -> 57).
+    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(57);
   });
 
   it("keeps the migration structural and exact", () => {

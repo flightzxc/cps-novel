@@ -133,8 +133,11 @@ function assertStaticConsistency(schemaTables, records) {
   // 51->49 update Phase C's C-4 DROP made when it removed two models.
   // Owner 2026-09-18 决策 2: ChannelAccountHold
   // (20260918090000_preview_account_hold) pushes 52 -> 53.
-  if (schemaTables.size !== 53) {
-    problems.push(`expected 53 Prisma models, found ${schemaTables.size}`);
+  // 收益看板·账号级每日汇总 (20261008120000_revenue_account_level_dashboard) adds
+  // revenue_sync_scope / revenue_sync_batch / revenue_raw_snapshot / revenue_daily_stat,
+  // pushing 53 -> 57.
+  if (schemaTables.size !== 57) {
+    problems.push(`expected 57 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -235,8 +238,9 @@ async function assertCatalogConsistency(records) {
     // rebind tables (article_novel_rebind_preview/_batch/_batch_item) push the
     // live-catalog baseline from 49 to 52, mirroring the 52-model constant
     // assertStaticConsistency already carries above. Owner 2026-09-18 决策 2:
-    // channel_account_hold pushes it to 53.
-    if (actualTables.size !== 53) problems.push(`expected 53 database tables, found ${actualTables.size}`);
+    // channel_account_hold pushes it to 53. 收益看板 (20261008120000_revenue_account_level_dashboard)
+    // adds four revenue_* tables: 53 -> 57.
+    if (actualTables.size !== 57) problems.push(`expected 57 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

@@ -12,6 +12,12 @@ import { mergeTaskControlResult, type TaskControlMarker } from "./task-control";
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
   previewRefresh: "moboreader.preview_refresh.v1",
+  /**
+   * 收益看板·账号级每日汇总（网文 projectType=1）。后台手动触发，只在主通道白名单里
+   * （它调用上游，见 `worker-lanes.mjs` 的 `MOBOREADER_UPSTREAM_TASK_TYPES`），不设定时任务。
+   * 参数的单一真源在 `./revenue-sync.ts`。
+   */
+  revenueSync: "moboreader.revenue_sync.v1",
 });
 
 export const MOBOREADER_CATALOG_TARGET_TYPES = Object.freeze({

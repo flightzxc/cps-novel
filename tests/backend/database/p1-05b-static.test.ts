@@ -26,7 +26,9 @@ describe("P1-05B static database contracts", () => {
     // 2026-09-08.md §4A.1) adds three more (ArticleNovelRebindPreview/
     // Batch/BatchItem), bringing it to 52. Owner 2026-09-18 决策 2 adds
     // ChannelAccountHold (20260918090000_preview_account_hold), bringing it to 53.
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 53 });
+    // 收益看板 (20261008120000_revenue_account_level_dashboard) adds four
+    // (RevenueSyncScope/Batch/RawSnapshot/DailyStat), bringing it to 57.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 57 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {

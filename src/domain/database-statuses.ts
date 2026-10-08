@@ -123,6 +123,15 @@ export const CANONICAL_TAG_STATUSES = ["active", "inactive"] as const;
 export const NOVEL_TAG_MODES = ["automatic", "manual"] as const;
 export const NOVEL_TAG_SOURCES = ["manual", "auto"] as const;
 export const TAG_CLASSIFICATION_METHODS = ["deterministic_text", "offline_llm"] as const;
+/**
+ * 收益看板（账号级每日汇总，迁移 `20261008120000_revenue_account_level_dashboard`）。
+ * 三组取值域都有对应的数据库 CHECK（`revenue_sync_scope_status_check` /
+ * `revenue_sync_batch_status_check` / `revenue_sync_batch_reconciliation_status_check`），
+ * `tests/backend/revenue/revenue-migration-static.test.ts` 把迁移 SQL 里的 IN (...) 清单与这里逐值比对。
+ */
+export const REVENUE_SCOPE_STATUSES = ["active", "disabled"] as const;
+export const REVENUE_BATCH_STATUSES = ["pending", "running", "completed", "partial_failed", "failed"] as const;
+export const REVENUE_RECONCILIATION_STATUSES = ["matched", "mismatched", "not_applicable"] as const;
 
 const REGISTRY_STATUS_SEMANTICS = {
   active: "Registered and available for normal use.",
@@ -303,6 +312,25 @@ export const DATABASE_STATUS_SEMANTICS = {
     automatic: "Effective Tags are the union of exact read-derived mapped Tags and the current qualified auto snapshot.",
     manual: "The complete manual snapshot owns the effective result, including an explicit empty snapshot.",
   },
+  /** `revenue_sync_scope.status`（收益看板）。 */
+  revenue_sync_scope: {
+    active: "作用域启用：可被收益同步任务选用。",
+    disabled: "作用域停用：保留历史数据，不再接受新的同步。",
+  },
+  /** `revenue_sync_batch.status`（收益看板）。批次由 worker 在 finalize 事务里一次写成终态，pending/running 仅为将来分阶段写入预留。 */
+  revenue_sync_batch: {
+    pending: "批次已登记，尚未开始向上游取数（当前实现不会停留在此状态）。",
+    running: "批次正在向上游取数（当前实现不会停留在此状态）。",
+    completed: "取数成功并已落库；上游没有活动数据的空列表也是 completed（明细行数为 0），不是失败。",
+    partial_failed: "取数成功且数据已落库，但明细合计与上游总计行对不上（total_row_mismatch），需要人工核对。",
+    failed: "批次失败，没有写入任何日统计；错误码与脱敏后的错误信息在批次行上。",
+  },
+  /** `revenue_sync_batch.reconciliation_status`（收益看板，可空：尚未对账时为 NULL）。 */
+  revenue_sync_batch_reconciliation_status: {
+    matched: "明细行分成收入合计与上游总计行一致（差不超过 0.01）。",
+    mismatched: "明细行分成收入合计与上游总计行相差超过 0.01。",
+    not_applicable: "上游没有返回总计行，无从对账。",
+  },
   /** `article_novel_rebind_batch.status` (C-30A). See `article_type` above for why this is a top-level entry rather than nested under `article`. */
   article_novel_rebind_batch: {
     ready: "Batch was durably created from an owned, unexpired preview and has not started executing.",
@@ -373,3 +401,6 @@ export type CanonicalTagStatus = ValueOf<typeof CANONICAL_TAG_STATUSES>;
 export type NovelTagMode = ValueOf<typeof NOVEL_TAG_MODES>;
 export type NovelTagSource = ValueOf<typeof NOVEL_TAG_SOURCES>;
 export type TagClassificationMethod = ValueOf<typeof TAG_CLASSIFICATION_METHODS>;
+export type RevenueScopeStatus = ValueOf<typeof REVENUE_SCOPE_STATUSES>;
+export type RevenueBatchStatus = ValueOf<typeof REVENUE_BATCH_STATUSES>;
+export type RevenueReconciliationStatus = ValueOf<typeof REVENUE_RECONCILIATION_STATUSES>;

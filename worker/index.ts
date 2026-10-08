@@ -13,6 +13,7 @@ import { createCredentialWorkerHandlers } from "./handlers/credential";
 import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "./handlers/promo-link-claim";
+import { createRevenueSyncWorkerHandlers } from "./handlers/revenue-sync";
 import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
 import { createHomeCarouselWorkerHandlers } from "./handlers/home-carousel";
 import { createTaggingWorkerHandlers } from "./handlers/novel-tag-backfill";
@@ -85,6 +86,8 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createCredentialWorkerHandlers(prisma),
     ...createMoboreaderWorkerHandlers(prisma),
     ...createPromoLinkClaimWorkerHandlers(prisma),
+    // 收益看板·账号级每日汇总（后台手动触发，不设定时任务）。调用上游，所以只在主通道白名单里。
+    ...createRevenueSyncWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createIndexNowSweepWorkerHandlers(),
     ...createSitemapRefreshWorkerHandlers(prisma),

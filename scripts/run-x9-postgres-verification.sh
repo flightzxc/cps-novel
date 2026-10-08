@@ -111,13 +111,13 @@ SQL
 
   DATABASE_URL="$owner_url" npx prisma migrate deploy
   [[ "$(db_query 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')" == "$expected_total_migrations" ]] || { echo 'X9_MIGRATION_COUNT=FAIL'; exit 1; }
-  [[ "$(db_query "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'")" == 53 ]] || { echo 'X9_TABLE_COUNT=FAIL'; exit 1; }
+  [[ "$(db_query "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'")" == 57 ]] || { echo 'X9_TABLE_COUNT=FAIL'; exit 1; }
   if [[ "$scenario" == upgrade ]]; then
     [[ "$(db_query "$migration_digest_sql")" == "$before_migrations" ]] || { echo "X9_OLD_MIGRATION_DIGEST=FAIL"; exit 1; }
     [[ "$(db_query "$fixture_digest_sql")" == "$before_fixture" ]] || { echo "X9_UPGRADE_DATA_DIGEST=FAIL"; exit 1; }
     echo "X9_UPGRADE_OLD_MIGRATIONS_AND_DATA=UNCHANGED"
   fi
-  echo "X9_MIGRATION_${scenario}=PASS migrations=${expected_total_migrations} tables=53"
+  echo "X9_MIGRATION_${scenario}=PASS migrations=${expected_total_migrations} tables=57"
 
   for replay in 1 2; do
     docker exec -i "$container_name" psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 \
