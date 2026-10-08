@@ -50,7 +50,7 @@
  * degrade-when-off behavior — the split is only about the Novel/PromoLink
  * requirement, never about `seoVisibility` growing a second meaning.
  */
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
 import { isArticleSeoVisibilityEnabled } from "@/lib/flags";
@@ -107,16 +107,79 @@ function isNonBlank(value: string | null | undefined): boolean {
  * check always has the final word before anything is rendered, indexed, or
  * submitted to IndexNow.
  *
- * See {@link readyPromoLinkWhere} below (same module, deliberately) for this
- * predicate's SQL-level counterpart — a Prisma `where` fragment for
- * listing/counting a Novel's PromoLink rows without loading them into JS.
- * That fragment is a narrower-but-not-identical SUPERSET (see its own doc
- * comment for the one accepted gap); this function remains authoritative.
+ * B-38 (v0.5.13): the database side now has an EXACT-equivalent fragment,
+ * {@link promoReadySql} below (same module, deliberately): `btrim` with the
+ * very character set `String.prototype.trim` strips
+ * ({@link JS_TRIM_WHITESPACE_CHARACTERS}). Public list pages, category pages
+ * and the category-count matrix (`src/lib/site/public-list.ts`) use it to
+ * filter and count in the database. Equivalence is proven by
+ * `tests/backend/publication/js-trim-whitespace-set.test.ts` (the constant
+ * vs. the running Node's `trim`, every code point) and by the real-database
+ * case `tests/integration/site/promo-ready-sql-equivalence-postgres.test.ts`
+ * (every BMP character through both implementations). This function is
+ * STILL the authority: rows the database lets through are re-checked with it
+ * before rendering, and a disagreement is logged as an invariant violation.
+ *
+ * {@link readyPromoLinkWhere} below is a different, older fragment: a Prisma
+ * `where` for listing/counting a Novel's PromoLink rows without loading them
+ * into JS. It is a narrower-but-not-identical SUPERSET (see its own doc
+ * comment for the one accepted gap) and is left as is for its own callers.
  */
 export function isPromoReady(promoLink: PromoLinkReadinessState): boolean {
   if (!promoLink) return false;
   if (promoLink.status !== "fetched") return false;
   return isNonBlank(promoLink.webUrl) || isNonBlank(promoLink.appUrl);
+}
+
+/**
+ * The 25 characters `String.prototype.trim` removes (ECMAScript WhiteSpace +
+ * LineTerminator): U+0009–U+000D, U+0020, U+00A0, U+1680, U+2000–U+200A,
+ * U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF. PostgreSQL's default
+ * `btrim` only strips the space character, so {@link promoReadySql} passes
+ * this whole set explicitly.
+ *
+ * Deliberately NOT included: U+180E (Mongolian vowel separator), which
+ * `trim` has not treated as whitespace since Unicode 6.3.
+ * `tests/backend/publication/js-trim-whitespace-set.test.ts` walks every
+ * code point and fails the moment the running Node's `trim` disagrees with
+ * this list, so a Node upgrade that changes the set cannot slip through.
+ */
+export const JS_TRIM_WHITESPACE_CHARACTERS: string = [
+  ...range(0x0009, 0x000d),
+  0x0020,
+  0x00a0,
+  0x1680,
+  ...range(0x2000, 0x200a),
+  0x2028,
+  0x2029,
+  0x202f,
+  0x205f,
+  0x3000,
+  0xfeff,
+].map((codePoint) => String.fromCodePoint(codePoint)).join("");
+
+function range(from: number, to: number): number[] {
+  return Array.from({ length: to - from + 1 }, (_, index) => from + index);
+}
+
+const SQL_ALIAS_PATTERN = /^[a-z_][a-z0-9_]*$/;
+
+/**
+ * SQL counterpart of {@link isPromoReady}, exactly equivalent (not a
+ * superset): `status = 'fetched'` and at least one of web/app URL non-empty
+ * after trimming {@link JS_TRIM_WHITESPACE_CHARACTERS} from both ends. The
+ * character set travels as a bound parameter (the SQL text never contains the
+ * raw characters). `alias` is the table alias of the `promo_link` row in the
+ * caller's query; it is validated as a plain lowercase identifier because it
+ * is spliced into the statement text.
+ *
+ * Soft-delete (`deleted_at`) is deliberately not part of it, same as
+ * `isPromoReady` (which only sees status and URLs).
+ */
+export function promoReadySql(alias: string): Prisma.Sql {
+  if (!SQL_ALIAS_PATTERN.test(alias)) throw new Error("promoReadySql: alias must be a plain lowercase identifier");
+  const column = (name: string) => Prisma.raw(`${alias}.${name}`);
+  return Prisma.sql`${column("status")} = 'fetched' AND (coalesce(btrim(${column("web_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' OR coalesce(btrim(${column("app_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '')`;
 }
 
 /**
