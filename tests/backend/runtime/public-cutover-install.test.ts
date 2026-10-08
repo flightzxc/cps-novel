@@ -31,13 +31,17 @@ nth() { v=$(printf '%s' "$1" | awk -F, -v n="$2" '{ print $n }'); if [ -n "$v" ]
 `;
 const FAKE_COMMANDS: Record<string, string> = {
   systemctl: `case "$1" in
-  show) echo "MainPID=$(rd master 0)"; exit 0 ;;
+  show)
+    blip=$(rd blip 0)
+    if [ "$blip" -gt 0 ]; then wr blip $((blip - 1)); echo 'MainPID=0'; exit 0; fi
+    echo "MainPID=$(rd master 0)"; exit 0 ;;
   reload)
     n=$(( $(cat "$FIXTURE/reloads" 2>/dev/null || echo 0) + 1 )); printf '%s' "$n" > "$FIXTURE/reloads"
     if [ "$FAIL_RELOAD_AT" = "$n" ]; then exit 1; fi
     wr pending "$(nth "$READY_AFTER" "$n" 1)"
     wr behaviour "$(nth "$OLD_WORKERS" "$n" shutting)"
     if [ "$MASTER_CHANGES_AT" = "$n" ]; then wr master 5555; fi
+    if [ -n "$MASTER_BLIP" ]; then wr blip "$MASTER_BLIP"; fi
     exit 0 ;;
 esac
 exit 0
@@ -305,6 +309,20 @@ describe('candidate shape check', () => {
   ] as const)('%s: flags a missing %s', (mode, _what, tamper, code) => {
     expect(checkNginxCandidate(tamper(render(mode)), mode)).toContain(code);
   });
+  it('also knows the preprod and bootstrap-public shapes (installer --mode preprod / --bootstrap-public)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'cutover-shapes-'));
+    try {
+      const rendered = (args: string[]) => { const out = `${dir}/${args.join('_')}.conf`; execFileSync('/bin/bash', [path.join(repoRoot, 'scripts/preproduction/render-nginx.sh'), ...args, '--output', out]); return readFileSync(out, 'utf8'); };
+      const preprod = rendered(['--mode', 'preprod']);
+      expect(checkNginxCandidate(preprod, 'preprod')).toEqual([]);
+      expect(checkNginxCandidate(preprod.replaceAll('server_name zbcwf.bangbangji.cloud;', 'server_name zbcwf.example.test;'), 'preprod')).toEqual(['admin_http_redirect', 'admin_https_app']);
+      expect(checkNginxCandidate(preprod, 'rehearsal').length).toBeGreaterThan(5);
+      const bootstrap = rendered(['--bootstrap-public']);
+      expect(checkNginxCandidate(bootstrap, 'bootstrap-public')).toEqual([]);
+      expect(checkNginxCandidate(bootstrap.replace('listen 80;', 'listen 443 ssl;'), 'bootstrap-public')).toEqual(['bootstrap_server', 'bootstrap_http_only']);
+      expect(checkNginxCandidate(preprod, 'bootstrap-public').length).toBeGreaterThan(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
   it('verifier CLI runs through a symlinked path and prints only codes and a digest', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'cutover-verify-cli-'));
     try {
@@ -366,6 +384,27 @@ describe('public nginx transaction', () => {
       } finally { f.clean(); }
     }, SLOW);
   });
+});
+
+describe('other entry points keep working through the symlinked release', () => {
+  it('--mode preprod installs the preprod template with the same gates and readiness wait', () => {
+    const f = fixture(); try {
+      const r = f.run(['--mode', 'preprod']);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain('NGINX_CANDIDATE=PASS mode=preprod');
+      expect(r.stdout).toContain('NGINX_READY=PASS phase=install round=1 master=4242 listeners=80 443');
+      expect(readFileSync(`${f.dir}/etc/nginx/conf.d/cps-novel-preprod.conf`, 'utf8')).toContain('upstream cps_novel_preprod_web');
+    } finally { f.clean(); }
+  }, SLOW);
+  it.each([[[]], [['--bootstrap']]] as const)('legacy install-nginx.sh %j still installs and reloads', args => {
+    const f = fixture(); try {
+      const r = f.run([...args]);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain('NGINX_INSTALL=PASS');
+      expect(readFileSync(`${f.dir}/etc/nginx/conf.d/cps-novel-preprod.conf`, 'utf8')).not.toBe('old-site\n');
+      expect(readFileSync(`${f.dir}/reloads`, 'utf8')).toBe('1');
+    } finally { f.clean(); }
+  }, SLOW);
 });
 
 describe('candidate gate: nothing under /etc/nginx is touched when the candidate is wrong', () => {
@@ -473,7 +512,7 @@ describe('reload readiness wait', () => {
     const f = fixture(); try {
       const r = f.run(['--mode', 'public'], env);
       expect(r.status, r.stdout + r.stderr).toBe(73);
-      expect(r.stdout).toContain('NGINX_INSTALL=FAIL reason=ready_handoff_timeout phase=install rounds=10 handoff=pending');
+      expect(r.stdout).toContain('NGINX_INSTALL=FAIL reason=ready_handoff_timeout phase=install rounds=10 handoff=pending master=4242');
       expect(r.stderr).toContain('candidate_failed_restored');
       expectRestored(f);
       expect(readFileSync(`${f.dir}/reloads`, 'utf8')).toBe('2');
@@ -485,8 +524,16 @@ describe('reload readiness wait', () => {
     const f = fixture(); try {
       const r = f.run(['--mode', 'public'], { NO_443: '1' });
       expect(r.status, r.stdout + r.stderr).toBe(73);
-      expect(r.stdout).toContain('reason=ready_listener_missing phase=install rounds=10 handoff=ok missing_listeners=443');
+      expect(r.stdout).toContain('reason=ready_listener_missing phase=install rounds=10 handoff=ok master=4242 missing_listeners=443');
       expectRestored(f);
+    } finally { f.clean(); }
+  }, SLOW);
+  it('does not read a transiently unreadable master (systemctl show hiccup) as a restart', () => {
+    const f = fixture(); try {
+      const r = f.run(['--mode', 'public'], { MASTER_BLIP: '2', READY_AFTER: '1' });
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain('NGINX_READY=PASS phase=install round=3 master=4242');
+      expect(f.sleeps()).toBe(2);
     } finally { f.clean(); }
   }, SLOW);
   it('fails immediately when the master process changed during the reload', () => {

@@ -26,7 +26,10 @@ if [[ -n "$restore" ]] && { ((bootstrap_public)) || [[ "$mode" != preprod ]]; };
 # Everything the readiness wait observes must be present BEFORE anything is
 # written: discovering a missing tool after the reload would roll back a good
 # install for no reason.
-for tool in pgrep ps ss systemctl; do
+required_tools="pgrep ps ss systemctl"
+# The candidate check (and, for the site modes, the renderer) runs under Node.
+if [[ -z "$restore" ]]; then required_tools="$required_tools node"; fi
+for tool in $required_tools; do
   command -v "$tool" >/dev/null 2>&1 || { echo "NGINX_INSTALL=REFUSED reason=ready_tool_missing tool=$tool"; exit 69; }
 done
 command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || { echo 'NGINX_INSTALL=REFUSED reason=ready_tool_missing tool=sha256sum'; exit 69; }
@@ -123,12 +126,15 @@ wait_ready() {
   shift
   while :; do
     master="$(nginx_master_pid)"
-    if [[ "$master" != "$pre_master" ]]; then
-      echo "NGINX_INSTALL=FAIL reason=ready_master_changed phase=$phase before=$pre_master after=${master:-none} round=$round"
+    # A different master means nginx was restarted underneath us; fail at once.
+    # An unreadable master (a transient systemctl hiccup) is not evidence of
+    # anything: count the round as not yet ready and look again.
+    if [[ -n "$master" && "$master" != "$pre_master" ]]; then
+      echo "NGINX_INSTALL=FAIL reason=ready_master_changed phase=$phase before=$pre_master after=$master round=$round"
       return 73
     fi
-    handoff=ok
-    handoff_complete "$master" || handoff=pending
+    handoff=pending
+    if [[ -n "$master" ]] && handoff_complete "$master"; then handoff=ok; fi
     missing=""
     for port in "$@"; do
       port_listening "$port" || missing="$missing $port"
@@ -140,7 +146,7 @@ wait_ready() {
     if ((round >= ready_rounds)); then
       reason=ready_listener_missing
       if [[ "$handoff" != ok ]]; then reason=ready_handoff_timeout; fi
-      echo "NGINX_INSTALL=FAIL reason=$reason phase=$phase rounds=$ready_rounds handoff=$handoff missing_listeners=${missing# }"
+      echo "NGINX_INSTALL=FAIL reason=$reason phase=$phase rounds=$ready_rounds handoff=$handoff master=${master:-unreadable} missing_listeners=${missing# }"
       return 73
     fi
     round=$((round + 1))

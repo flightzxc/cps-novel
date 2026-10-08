@@ -25,6 +25,7 @@ const mutations=[
  {name:'ready_wait_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'  wait_ready "$phase" "$@"',to:'  true',cmd:'npm',args:[...installer,'-t','reload readiness wait']},
  {name:'ready_listener_probe_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'      port_listening "$port" || missing="$missing $port"',to:'      :',cmd:'npm',args:[...installer,'-t','443 is not listening']},
  {name:'ready_old_worker_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'case "$title" in *"shutting down"*|"") ;; *) return 1 ;; esac',to:'case "$title" in *) ;; esac',cmd:'npm',args:[...installer,'-t','without being told to quit']},
+ {name:'ready_master_blip_tolerance_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'if [[ -n "$master" && "$master" != "$pre_master" ]]; then',to:'if [[ "$master" != "$pre_master" ]]; then',cmd:'npm',args:[...installer,'-t','transiently unreadable master']},
  {name:'public_noindex',file:'scripts/preproduction/render-public-nginx.mjs',from:"PUBLIC_ROBOTS: live ? '' :",to:"PUBLIC_ROBOTS: live ? 'noindex, nofollow, noarchive' :",cmd:'/bin/bash',args:['scripts/preproduction/verify-nginx-matrix.sh','--mode','public']},
 ];
 // Optional names run a subset (keeps one foreground command short); a subset
