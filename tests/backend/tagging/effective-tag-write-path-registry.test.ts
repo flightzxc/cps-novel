@@ -416,23 +416,27 @@ describe("B-38 novel_effective_tag 写入点登记", () => {
     expect(problems).toEqual([]);
   });
 
-  it("inline_refresh / full_reconcile 的文件，真的包含对应的重算调用（登记不是空头支票）", () => {
-    const needs: Record<string, RegExp> = {
-      "src/server/tagging/service.ts": /refreshEffectiveTagsForNovels\(tx, \[input\.novelId\]\)/,
-      "src/server/content-creation/service.ts": /refreshEffectiveTagsForNovels\(tx as unknown as Prisma\.TransactionClient, \[novel\.id\]\)/,
-      "worker/handlers/moboreader.ts": /refreshEffectiveTagsForNovels\(tx, boundNovelIds\)/,
-      "src/server/tagging/admin-service.ts": /reconcileAllEffectiveTags\(tx\)/,
+  it("inline_refresh / full_reconcile 的文件，真的包含对应数量的重算调用（登记不是空头支票；少调一处立刻红）", () => {
+    // 每个文件里重算调用的确切个数：
+    //   tagging/service.ts           5 = 人工保存 1 + 退出人工 1 + 自动打标（重放分支、人工跳过分支、正常写入）3
+    //   content-creation/service.ts  1 = 绑定书目后重算新书
+    //   worker/handlers/moboreader.ts 1 = 目录同步每页末尾重算本页已绑定小说
+    //   tagging/admin-service.ts     2 = 分类启停 1 + 改映射 1（全量对账）
+    const needs: Record<string, { pattern: RegExp; count: number }> = {
+      "src/server/tagging/service.ts": { pattern: /await refreshEffectiveTagsForNovels\(tx, \[input\.novelId\]\)/g, count: 5 },
+      "src/server/content-creation/service.ts": { pattern: /await refreshEffectiveTagsForNovels\(tx as unknown as Prisma\.TransactionClient, \[novel\.id\]\)/g, count: 1 },
+      "worker/handlers/moboreader.ts": { pattern: /await refreshEffectiveTagsForNovels\(tx, boundNovelIds\)/g, count: 1 },
+      "src/server/tagging/admin-service.ts": { pattern: /await reconcileAllEffectiveTags\(tx\)/g, count: 2 },
     };
     const problems: string[] = [];
     for (const entry of REGISTRY) {
       if (!entry.sites.some((site) => site.category === "inline_refresh" || site.category === "full_reconcile")) continue;
-      const pattern = needs[entry.file];
-      if (!pattern) problems.push(`${entry.file}: 没有在 needs 里声明它的重算调用形态`);
-      else if (!pattern.test(readFileSync(path.join(root, entry.file), "utf8"))) problems.push(`${entry.file}: 找不到重算调用 ${pattern}`);
+      if (!needs[entry.file]) problems.push(`${entry.file}: 没有在 needs 里声明它的重算调用形态`);
     }
-    // admin-service 里 full_reconcile 有两处：分类启停 + 映射，各自都要调用一次
-    const adminService = readFileSync(path.join(root, "src/server/tagging/admin-service.ts"), "utf8");
-    expect(adminService.match(/await reconcileAllEffectiveTags\(tx\)/g) ?? []).toHaveLength(2);
+    for (const [file, { pattern, count }] of Object.entries(needs)) {
+      const found = (readFileSync(path.join(root, file), "utf8").match(pattern) ?? []).length;
+      if (found !== count) problems.push(`${file}: 重算调用应有 ${count} 处，实际 ${found} 处`);
+    }
     expect(problems).toEqual([]);
   });
 
