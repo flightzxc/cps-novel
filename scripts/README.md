@@ -115,3 +115,26 @@ MOBOREADER_FOUNDATION_OPERATOR=<operator> \
 `scripts/run-tkd-repair-postgres-verification.sh`。模板引导脚本 `l10n/article-template-bootstrap.ts`
 的 dry-run 报告新增 `changes[]`，逐行列出将写入的行与差异字段——生产上 `--apply` 前应恰好是 15 行
 `update`、每行只有 `seoTemplate.metaTitle`。
+
+## 分类归属投影检查与对账（B-38，2026-10-09）
+
+`ops/effective-tag-projection.ts` 对应 CPS `scripts/backfill-effective-tags.ts`，操作小说分类归属派生表
+`novel_effective_tag`。规则、锁和"只写差异"的语义见 `src/server/tagging/effective-tag-projection.ts` 文件头；
+**那个文件是全仓库唯一允许写这张表的地方**。在 worker 层执行（`worker_app` 对该表有读写删权限），
+不打印连接串或密钥：
+
+```bash
+# 只读检查（默认）：全 0 退出 0，否则退出 3
+npx tsx scripts/ops/effective-tag-projection.ts check
+#   EFFECTIVE_TAG_CHECK missing=<n> extra=<n> changed=<n>
+# 全量对账：必须同时带 --apply 和确认短语，缺一个就只做上面的只读检查
+npx tsx scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS
+#   EFFECTIVE_TAG_RECONCILE inserted=<n> updated=<n> deleted=<n> ms=<n>
+```
+
+什么时候用：发版后验收（`check` 必须全 0，迁移里已经一次建好，不需要回填）；回滚到上一版再前滚之后
+（回滚期间旧代码不会重算）；以及**任何运维脚本直接改过映射 / 标签真源之后**（例如
+`p2-06-5-production/tagging-bootstrap.ts`）——它们绕过了"同事务重算"的写入点，必须 `reconcile` 一次。
+防漏登记用例 `tests/backend/tagging/effective-tag-write-path-registry.test.ts` 里这类脚本登记为
+`ops_script_requires_reconcile`。真实库验证：`scripts/run-effective-tag-projection-postgres-verification.sh`。
+
