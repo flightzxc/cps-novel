@@ -108,8 +108,8 @@ describe.skipIf(!benchEnabled).sequential("B-38 公开列表基准（接近生�
     bigCount = big.count;
     bigLastPage = Math.ceil(bigCount / BROWSE_PAGE_SIZE);
     bigTagId = big.canonicalTagId;
-    // 小分类：英语里本数最接近 150 的分类。
-    const small = [...en].filter((row) => row.slug !== SCALE_BIG_TAG_SLUG).sort((a, b) => Math.abs(a.count - 150) - Math.abs(b.count - 150))[0]!;
+    // 小分类：英语里本数最接近 150 的分类（并列时按 slug，保证两次运行选的是同一个）。
+    const small = [...en].filter((row) => row.slug !== SCALE_BIG_TAG_SLUG).sort((a, b) => Math.abs(a.count - 150) - Math.abs(b.count - 150) || a.slug.localeCompare(b.slug))[0]!;
     smallSlug = small.slug;
     smallTagId = small.canonicalTagId;
     console.log(`B38_SCALE en_visible=${enTotal} en_categories=${en.length} big_slug=${SCALE_BIG_TAG_SLUG} big_count=${bigCount} (${Math.round((bigCount / enTotal) * 100)}%) small_slug=${smallSlug} small_count=${small.count} locales=${counts.visibleTotalByLocale.size}`);
