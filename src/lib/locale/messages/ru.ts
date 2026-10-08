@@ -157,10 +157,10 @@ const messages = {
     allWorksEmpty: "Пока нет публично доступных произведений.",
     genreDescription: "Произведения, которые можно прочитать в этой подборке.",
     genreEmpty: "В этой подборке пока нет произведений.",
-    categoryTitle: "Романы «{name}»",
-    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 与 categoryTitle 同形：引号把分类名隔开，对名词和短语都通顺（Романы «Для женской аудитории»）。
-    categoryHeading: "Романы «{name}»",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：«…» 会被读成书名，改用冒号隔开分类名（与 categoryHeading 同值）。
+    categoryTitle: "Романы: {name}",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：«…» 会被读成书名，改用冒号隔开分类名。
+    categoryHeading: "Романы: {name}",
     browseSeoDescription: "Опубликованные романы.",
     categoryEmpty: "В этой категории пока нет опубликованных романов.",
   },
@@ -216,7 +216,8 @@ const messages = {
     siteDescription: "Открывайте романы и начинайте читать бесплатные главы.",
     homeTitleFallback: "PulseNovel - открывайте романы и читайте книги бесплатно",
     pageSuffix: " - страница {page}",
-    categoryDescriptionFallback: "Открывайте романы в категории «{name}» на PulseNovel.",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：Открывайте 偏向“打开”，改用 Откройте для себя。
+    categoryDescriptionFallback: "Откройте для себя романы в категории «{name}» на PulseNovel.",
   },
 } satisfies LocaleMessages;
 
