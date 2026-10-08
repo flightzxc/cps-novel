@@ -945,6 +945,14 @@ CPS 参考：`getActiveLocales`（`3a76877:src/lib/active-locales.ts:12-41`，�
 | `runChangduTotalRevenueSync` → `createRevenueSyncHandler`（`worker/handlers/revenue-sync.ts`） | `src/lib/changdu-total-revenue/sync.ts` | `167-276` | `c8c7d4ed66c42395a44811262afdb84bf29a8405` | `PG_REIMPLEMENT` | 保留“失败也落一条 failed 批次（脱敏错误信息）”与“按日 upsert”的骨架；改动：全部写入放进 `protectedWrite`（finalize 事务，带租约围栏）而不是逐条裸写；批次终态一次写入、以 `request_fingerprint` upsert 保证同一任务重试幂等；取数前先过凭证口径校验（非达人凭证零上游请求）；增加原始行存档、总计行对账（`partial_failed` / `total_row_mismatch`）、凭证指纹前缀与 StarId 记录；失败路径不再 `throw`（CPS 重新抛出由 batch task 引擎记失败），而是返回 `failed` 条目并带 `protectedWrite` | Codex |
 | `ChangduTotalRevenueDaily` / `ChangduTotalRevenueSyncBatch` 的表形态 → `revenue_daily_stat` / `revenue_sync_batch`（迁移 `20261008120000_revenue_account_level_dashboard`） | `prisma/schema.prisma` | `1225-1251`、`1253-1292` | `c8c7d4ed66c42395a44811262afdb84bf29a8405` | `PG_REIMPLEMENT` | 保留“按（主体, 日期）唯一的日汇总 + 带区间 / 状态 / 错误信息的同步批次”两张表的分工；改动：`Float` 金额改 `numeric(18,4)`、比例改 `numeric(9,6)`，`report_date` 字符串改 `date`，`cuid` 改 uuid，`principal` 改“渠道账号 × projectType”作用域（`revenue_sync_scope`），批次新增指纹幂等 / 对账结论 / 凭证指纹前缀 / StarId / 终态形状 CHECK，原始行拆成独立的 `revenue_raw_snapshot`（CPS 把 `raw_payload_json` 文本塞在日表里），字典与授权按本仓 §3.7 登记 | Codex |
 
+### 2026-10-08 · 文章网址名过短只补一个本地化词（Owner 2026-10-08 拍板"本轮选乙"，`fix/article-short-slug-suffix-v0512`，独立 worktree `cps-novel-v0512-short-slug`，基线 `274b990`）
+
+CPS 参考：只读 `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin`，`git show v8.7.2:src/actions/article-actions.ts`（annotated tag `v8.7.2` 的 peeled commit 固定登记为 `c8c7d4ed66c42395a44811262afdb84bf29a8405`）。CPS 靠每个语种文章模板里的「网址模板」（`ArticleTemplate.slugTemplate`，生产库 13 个语种是"剧名-本地化词"，阿语与繁中只有剧名）给**全部**文章网址统一加词；海阅的模板表与后台编辑页虽然也有 `slugTemplate` 字段，但文章生成从来不读它。决策背景与取舍见 `开发单_Sonnet_文章网址过短追加本地化词_2026-10-08.md`。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| 文章网址名的"本地化词"→ `resolveArticleSlug` + `ARTICLE_SHORT_SLUG_SUFFIX_BY_LOCALE`（`src/server/content-creation/shared.ts`），仅 `generate.ts` 的文章生成调用（预览与正式生成共用同一次调用） | `src/actions/article-actions.ts` | `598-607`（`slugBase` 取自 `renderSlugTemplate(template.slugTemplate, …)`，无模板时退回 `title`） | `c8c7d4ed66c42395a44811262afdb84bf29a8405` | `NOVEL_ONLY` | **Owner 2026-10-08 明示例外**（有意偏离 CPS）：CPS 对**所有**文章网址统一按"网址模板"加本地化词；海阅**只对过短的**补词：先 `textToSlug`，`isHealthySlug` 为真则原样不动（与改前逐字节相同），不健康才在末尾追加该语种后缀（`Readonly<Record<SiteLocale, string>>`，存已归一化形态，每项归一化后 ≥3 字符且末尾非数字，保证 1 个字的书名补长后也健康），补长后再检查一次，然后沿用 `-2…-200` 去重；已有文章与软删文章在算网址名之前就返回，网址名不会被改。`resolveUniqueSlug`、小说建档调用（`validateHealth: false`）、`isHealthySlug`、`textToSlug` 一律不改。**「接通模板的网址模板字段」（让所有新文章网址统一加词）另作独立需求**，需单独评估并拍板：会改变以后所有新文章的网址格式，还要一并处理模板结构版本升级与初始化脚本里"各语种网址模板必须与英语逐字相同"的约束，本轮不做 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

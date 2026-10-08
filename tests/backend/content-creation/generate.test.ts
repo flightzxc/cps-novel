@@ -21,7 +21,11 @@ function seedReadyNovel(fake: FakeContentCreationDb, title = "Ready Novel") {
 }
 
 describe("generateArticleFromNovel", () => {
-  it("keeps the Article slug health check for a short title", async () => {
+  // 有意变更的契约：此用例原名 "keeps the Article slug health check for a short title"，
+  // 锁的是「过短的文章网址名直接 slug_unhealthy 拒绝」。Owner 2026-10-08 拍板改为
+  // 「过短才追加该语种的本地化词再生成」（开发单 附录 A），所以这里改成断言补长后的结果。
+  // 更完整的规则 1/2/4/5 见 article-slug-suffix.test.ts。
+  it("appends the locale suffix to a short Article slug instead of rejecting it (Owner 2026-10-08 rule change)", async () => {
     const fake = new FakeContentCreationDb();
     const { novel } = seedReadyNovel(fake, "Hi");
 
@@ -32,8 +36,9 @@ describe("generateArticleFromNovel", () => {
       requestId: "gen-short-title",
     });
 
-    expect(result).toEqual({ outcome: "slug_unhealthy", field: "article", baseSlug: "hi" });
-    expect(fake.articles.size).toBe(0);
+    expect(result).toMatchObject({ outcome: "created", articleSlug: "hi-novel" });
+    expect(fake.lastArticleCreateArgs?.slug).toBe("hi-novel");
+    expect(fake.articles.size).toBe(1);
   });
 
   it("creates a draft Article bound to the ready promo and selected template", async () => {
