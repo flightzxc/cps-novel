@@ -21,6 +21,10 @@
  *   10 — no busy loop: a held item is not written to at all across repeated
  *        claim attempts (same status/attempt_count/lease_epoch/updated_at),
  *        so there is no claim→requeue→claim cycle and nothing to undo
+ *
+ * B-36 (third describe block at the bottom): a Preview upstream read that the
+ * adapter rejects lands on the failed item with a content-free category in
+ * `error.detail`, written through the real worker lifecycle as `worker_app`.
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -29,12 +33,16 @@ import path from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { MoboreaderAdapterError, parsePreviewChaptersResponse } from "@/lib/adapters";
 import { PREVIEW_ACCOUNT_HOLD_SCOPE } from "@/lib/tasks/account-hold";
 import { MOBOREADER_TASK_TYPES } from "@/lib/tasks/moboreader";
+import { buildWorkerAllowlist, createHandlerRegistry } from "@/lib/tasks/registry";
 import { claimPendingItem } from "@/lib/tasks/store";
 
 import { releaseAccountHold } from "../../../scripts/preview-account-hold";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
+import { createMoboreaderPreviewHandler } from "../../../worker/handlers/moboreader";
+import { processOneWorkerCycle } from "../../../worker/runtime";
 
 const enabled = process.env.PREVIEW_HOLD_DATABASE_TEST === "1";
 const db = new PrismaClient({ datasourceUrl: process.env.PREVIEW_HOLD_DATABASE_URL });
@@ -308,5 +316,233 @@ describe.skipIf(!enabled)("Preview account hold · release is crash-resumable (r
       new Date(),
       keyEnv,
     )).resolves.toEqual({ status: "no_active_hold" });
+  });
+});
+
+
+/**
+ * B-36, against real SQL and the real worker lifecycle (`processOneWorkerCycle`
+ * → `claimPendingItem` → handler → `finalizeTaskItem`), connected as `worker_app`:
+ * a Preview upstream read that the adapter rejects must land on the failed item
+ * with a category in `error.detail` and nothing from the response.
+ *
+ * What only a database can answer here:
+ *   - `worker_app` really can write `error` (with `detail`) on
+ *     `channel_sync_task_item` — table-level UPDATE in `infra/postgres/grants.sql`,
+ *     proven by the write happening, not by reading the grant;
+ *   - the JSONB round trip keeps `detail` flat and queryable, so the read-only
+ *     diagnostic SQL an operator will run (below, verbatim) actually works.
+ *
+ * The adapter is a stub that throws what the real parser throws for a paid-looking
+ * chapter (`parsePreviewChaptersResponse` over a body whose `chapterContent` is
+ * empty); no network is involved, and the chapter text is a recognisable string so
+ * a leak into the stored row would be caught.
+ */
+describe.skipIf(!enabled)("Preview read failure · category lands on the failed item (real Postgres, worker_app)", () => {
+  const BODY = "CHAPTER-PROSE-THE-QUICK-BROWN-FOX-0xC0FFEE";
+  const CHANNEL_D = randomUUID();
+  const SOURCE_APP_D = randomUUID();
+  const SOURCE_APP_D_CODE = `sa-${SOURCE_APP_D.slice(0, 8)}`;
+  const CHANNEL_APP_D = randomUUID();
+  const ACCOUNT_D = randomUUID();
+  const CREDENTIAL_D = randomUUID();
+  const KEY_VARS = [
+    "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION",
+    "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE",
+    "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE",
+  ] as const;
+  const previousEnv = new Map<string, string | undefined>();
+  let keyDir: string;
+  let keyEnv: NodeJS.ProcessEnv;
+
+  async function seedItem(label: string): Promise<SeededTask> {
+    const novelId = randomUUID();
+    const sourceItemId = randomUUID();
+    const taskId = randomUUID();
+    const itemId = randomUUID();
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO novel (id, business_id, title, description, locale, slug, status, total_chapter_count, created_at, updated_at)
+      VALUES (${novelId}::uuid, ${`nv-${novelId.slice(0, 8)}`}, ${label}, 'd', 'en', ${`slug-${novelId.slice(0, 8)}`}, 'draft', 10, now(), now())`);
+    // raw_payload is the original getlistpc row: exactly what the scope loader
+    // turns into the getbydataid / getchapterinfo requests.
+    const rawPayload = JSON.stringify({ agencyId: "7", seriesId: label, language: "1", projectType: 1, materialType: "3" });
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO novel_source_item (id, channel_app_id, novel_id, external_book_id, external_agency_id, source_language_code, title, description, raw_payload, raw_payload_schema_version, created_at, updated_at)
+      VALUES (${sourceItemId}::uuid, ${CHANNEL_APP_D}::uuid, ${novelId}::uuid, ${label}, '7', '1', ${label}, 'd', ${rawPayload}::jsonb, 1, now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_sync_task (id, task_type, channel_account_id, channel_app_id, operation_scope_hash, mode, status, request_token, total_count, params, requested_at, created_at, updated_at)
+      VALUES (${taskId}::uuid, ${MOBOREADER_TASK_TYPES.previewRefresh}, ${ACCOUNT_D}::uuid, ${CHANNEL_APP_D}::uuid,
+              ${taskId.replace(/-/g, "").padEnd(64, "0").slice(0, 64)}, 'apply', 'pending', ${`tok-${taskId}`}, 1, '{}'::jsonb, now(), now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_sync_task_item (id, task_id, novel_source_item_id, status, attempt_count, lease_epoch, payload, created_at, updated_at)
+      VALUES (${itemId}::uuid, ${taskId}::uuid, ${sourceItemId}::uuid, 'pending', 0, 0,
+              '{"trigger":"auto","actorId":"probe","requestId":"probe"}'::jsonb, now(), now())`);
+    return { taskId, itemId };
+  }
+
+  async function runThroughWorker(
+    target: SeededTask,
+    adapter: { fetchBookMaterial: () => Promise<unknown>; fetchPreviewChapters: () => Promise<unknown> },
+  ) {
+    const handlers = createHandlerRegistry({
+      [MOBOREADER_TASK_TYPES.previewRefresh]: {
+        family: "channel_sync",
+        maxAttempts: 1,
+        handler: createMoboreaderPreviewHandler(db, {
+          adapter: { listBooks: async () => { throw new Error("unused"); }, ...adapter } as never,
+          env: {
+            FEATURE_NOVEL_CATALOG_SYNC: "true",
+            NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+            MOBOREADER_PREVIEW_SOURCE_APP_CODES: SOURCE_APP_D_CODE,
+            ...keyEnv,
+          },
+          // The structured log line is covered by the unit suite; keep this run quiet.
+          onPreviewReadFailure: () => undefined,
+        }),
+      },
+    });
+    const consumed = await processOneWorkerCycle({
+      prisma: db,
+      workerId: "b36-probe",
+      handlers,
+      allowlist: buildWorkerAllowlist(MOBOREADER_TASK_TYPES.previewRefresh, handlers),
+      signal: new AbortController().signal,
+      claimTarget: { family: "channel_sync", taskId: target.taskId, itemId: target.itemId },
+    });
+    expect(consumed).toBe(true);
+    const [row] = await db.$queryRaw<Array<{ status: string; error: Record<string, unknown> | null; leaked: boolean }>>(Prisma.sql`
+      SELECT status, error, COALESCE(error::text LIKE ${`%${BODY}%`}, false) AS leaked
+      FROM channel_sync_task_item WHERE id = ${target.itemId}::uuid`);
+    return row!;
+  }
+
+  beforeAll(async () => {
+    keyDir = mkdtempSync(path.join(tmpdir(), "cps-novel-b36-it-keys-"));
+    const v1 = path.join(keyDir, "v1");
+    const fingerprint = path.join(keyDir, "fingerprint");
+    writeFileSync(v1, randomBytes(32).toString("base64"), { mode: 0o600 });
+    writeFileSync(fingerprint, randomBytes(32).toString("base64"), { mode: 0o600 });
+    keyEnv = {
+      NODE_ENV: "test",
+      CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: v1,
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: fingerprint,
+    };
+    // `decryptCredentialSecretForWorker` inside the scope loader reads process.env.
+    for (const name of KEY_VARS) {
+      previousEnv.set(name, process.env[name]);
+      process.env[name] = keyEnv[name];
+    }
+
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel (id, code, name, status, created_at, updated_at)
+      VALUES (${CHANNEL_D}::uuid, ${`ch-${CHANNEL_D.slice(0, 8)}`}, 'b36 probe', 'active', now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO source_app (id, code, name, status, created_at, updated_at)
+      VALUES (${SOURCE_APP_D}::uuid, ${SOURCE_APP_D_CODE}, 'MoboReader', 'active', now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_app (id, channel_id, source_app_id, external_app_id, project_type, status, created_at, updated_at)
+      VALUES (${CHANNEL_APP_D}::uuid, ${CHANNEL_D}::uuid, ${SOURCE_APP_D}::uuid, ${`app-${CHANNEL_APP_D.slice(0, 8)}`}, 1, 'active', now(), now())`);
+    for (const capabilityKey of ["getbydataid", "getchapterinfo"]) {
+      await db.$executeRaw(Prisma.sql`
+        INSERT INTO channel_capability (id, channel_app_id, capability_key, status, side_effecting, evidence_level, config, created_at, updated_at)
+        VALUES (gen_random_uuid(), ${CHANNEL_APP_D}::uuid, ${capabilityKey}, 'enabled', false, 'probe', '{}'::jsonb, now(), now())`);
+    }
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_account (id, channel_id, business_id, account_name, status, created_at, updated_at)
+      VALUES (${ACCOUNT_D}::uuid, ${CHANNEL_D}::uuid, ${`acct-d-${ACCOUNT_D.slice(0, 8)}`}, 'acct-d', 'active', now(), now())`);
+    const secret = encryptCredentialSecretForWorker("jwt-secret", ACCOUNT_D, CREDENTIAL_D, 1, keyEnv);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_account_credential
+        (id, channel_account_id, credential_type, encrypted_secret, key_version, secret_fingerprint, fingerprint_prefix, status, created_at, updated_at)
+      VALUES (${CREDENTIAL_D}::uuid, ${ACCOUNT_D}::uuid, 'bearer_jwt', ${Buffer.from(secret)}, 1,
+              ${`hmac-sha256:v1:${randomBytes(32).toString("hex")}`}, '111111111111', 'active', now(), now())`);
+  });
+
+  afterAll(() => {
+    for (const [name, value] of previousEnv) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(keyDir, { recursive: true, force: true });
+  });
+
+  let validationFailure: SeededTask;
+  let materialFailure: SeededTask;
+
+  it("getchapterinfo validation failure: item is failed, error.detail carries the category, no chapter text is stored", async () => {
+    validationFailure = await seedItem("b36-paid-from-chapter-1");
+    const row = await runThroughWorker(validationFailure, {
+      fetchBookMaterial: async () => ({}),
+      fetchPreviewChapters: async () => parsePreviewChaptersResponse({
+        data: {
+          bookId: "b-1",
+          currentLanguage: 2,
+          chapterList: [
+            { i: 1, chapterID: "c-1", chapterName: BODY, chapterShowName: BODY, chapterContent: "" },
+            { i: 2, chapterID: "c-2", chapterName: BODY, chapterShowName: BODY, chapterContent: `${BODY} locked` },
+          ],
+        },
+      }),
+    });
+
+    expect(row.status).toBe("failed");
+    expect(row.error).toEqual({
+      code: "upstream_preview_read_failed",
+      message: "MoboReader Preview read failed",
+      detail: {
+        kind: "chapter_content_invalid",
+        stage: "getchapterinfo",
+        errorClass: "MoboreaderAdapterError",
+        adapterCode: "malformed_payload",
+        receivedType: "empty_string",
+        chapterIndex: 0,
+        chapterOrdinal: 1,
+        chapterCount: 2,
+      },
+    });
+    expect(row.leaked).toBe(false);
+  });
+
+  it("getbydataid failure and the read-only diagnostic query an operator will run", async () => {
+    materialFailure = await seedItem("b36-material-rejected");
+    const row = await runThroughWorker(materialFailure, {
+      fetchBookMaterial: async () => {
+        throw new MoboreaderAdapterError(
+          "malformed_payload",
+          false,
+          null,
+          `data: ${BODY}`,
+          { kind: "data_not_object", receivedType: "string" },
+        );
+      },
+      fetchPreviewChapters: async () => { throw new Error("must not be reached"); },
+    });
+    expect(row.status).toBe("failed");
+    expect(row.error).toMatchObject({
+      code: "upstream_material_read_failed",
+      detail: { kind: "data_not_object", stage: "getbydataid", receivedType: "string" },
+    });
+    expect(row.leaked).toBe(false);
+
+    // The same statement the B-36 hand-off recommends, restricted to this test's
+    // own items. Read-only; groups failed Preview items by where and why.
+    const groups = await db.$queryRaw<Array<{ code: string; stage: string; kind: string; received: string | null; n: bigint }>>(Prisma.sql`
+      SELECT i.error->>'code' AS code,
+             i.error->'detail'->>'stage' AS stage,
+             i.error->'detail'->>'kind' AS kind,
+             i.error->'detail'->>'receivedType' AS received,
+             count(*) AS n
+      FROM channel_sync_task_item i
+      JOIN channel_sync_task t ON t.id = i.task_id
+      WHERE t.task_type = ${MOBOREADER_TASK_TYPES.previewRefresh}
+        AND i.status = 'failed'
+        AND i.id IN (${validationFailure.itemId}::uuid, ${materialFailure.itemId}::uuid)
+      GROUP BY 1, 2, 3, 4
+      ORDER BY 1`);
+    expect(groups.map((group) => ({ ...group, n: Number(group.n) }))).toEqual([
+      { code: "upstream_material_read_failed", stage: "getbydataid", kind: "data_not_object", received: "string", n: 1 },
+      { code: "upstream_preview_read_failed", stage: "getchapterinfo", kind: "chapter_content_invalid", received: "empty_string", n: 1 },
+    ]);
   });
 });
