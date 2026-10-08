@@ -43,8 +43,8 @@ export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPub
  * caller that has already computed the taxonomy list via
  * `loadPublicCategories` for its own purposes (`src/app/page.tsx`'s
  * `HomeScreen` `categories` prop) can pass it straight through, and
- * `loadPublicChrome` skips re-running `listPublicCategories`'s
- * `article.findMany` + taxonomy lookup a second time for the footer. Every
+ * `loadPublicChrome` skips re-running `listPublicCategories` (count-matrix
+ * read + a fresh category-name read, since B-38) a second time for the footer. Every
  * other caller (`category/[slug]`, `novel/[slugParam]`, its
  * `chapter/[chapterNumber]`, `browse`) keeps calling this without
  * `categories`; B-38 第二部分起，这时落到请求内去重的 `loadPublicCategories(locale)`

@@ -74,6 +74,15 @@ type Db = PrismaClient | Prisma.TransactionClient;
 // 列表可见性 / 分类归属 SQL 片段
 // ---------------------------------------------------------------------------
 
+/**
+ * 🔴 `promo_link` 只按 id 连接，不要"补全"成 `AND p.novel_id = a.novel_id`：组合外键 `article_promo_link_novel_fkey`
+ * （`(promo_link_id, novel_id) → promo_link(id, novel_id)`）已经保证两者相等；多写这一条，规划器会把这个连接的行数
+ * 估成 1，选错计划（本机实测 20 毫秒对 0.2 毫秒之差）。
+ * 下面 WHERE 里的 `a.article_type = 'novel_article'` 与"必须有 Novel"等价（CHECK `article_novel_id_by_type_check`），
+ * 加它是为了命中部分索引 `article_public_list_order_idx`（谓词里有 article_type）。
+ * 与 `buildPublicListArticleWhere` + `isPromoReady` 的等价由真实库用例证明
+ * （`tests/integration/site/list-equivalence-postgres.test.ts` / `promo-ready-sql-equivalence-postgres.test.ts`）。
+ */
 const PUBLIC_LIST_FROM_SQL = Prisma.sql`
   FROM article a
   JOIN novel n ON n.id = a.novel_id

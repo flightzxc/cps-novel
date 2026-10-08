@@ -9,7 +9,7 @@
 # 输出：`B38_BENCH name=<名字> median_ms=<毫秒>`（每个被测函数 6 次取后 5 次中位数）和
 # `B38_PLAN name=<名字> top=<顶层计划类型> seq_scans=<被顺序扫描的表>`。
 # 旧代码（v0.5.12）的对比：把 scale-seed.ts 拷进旧 worktree，在同样配置的一次性库里用
-# `B38_SEED_DATABASE_URL=… npx vite-node tests/integration/site/fixtures/scale-seed.ts` 灌同一份数据
+# `B38_SEED_RUN=1 B38_SEED_DATABASE_URL=… npx vite-node tests/integration/site/fixtures/scale-seed.ts` 灌同一份数据
 # （种子只写表、不依赖新函数，不碰归属表），再用旧代码的函数跑同样的查询。
 # 最后一行：B38_PUBLIC_LIST_BENCH=PASS
 set -euo pipefail

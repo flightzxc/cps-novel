@@ -306,8 +306,8 @@ export async function getPublicChapterView(
  * N-9: `categories` is optional so a caller who already needs the full
  * taxonomy list for its own purposes (`src/app/page.tsx`'s `HomeScreen`
  * `categories` prop) can compute it once and pass it in here, instead of
- * this function re-running `listPublicCategories`'s `article.findMany` +
- * taxonomy lookup a second time for the footer. Every other caller
+ * this function re-running `listPublicCategories` (count-matrix read + a
+ * fresh category-name read, since B-38) a second time for the footer. Every other caller
  * (`novel/[slugParam]/page.tsx`, which only wants the footer) is unaffected
  * — it keeps calling this with two arguments and gets the original
  * self-fetching behavior.
@@ -338,8 +338,8 @@ export async function getPublicChapterView(
  * L10N P4: `activeLocales` (5th argument, optional) is the dynamic layer's
  * result (`getActiveLocales()`) — passed IN, not fetched here. This function
  * stays dependency-injected on `db` for testability
- * (`tests/backend/site/public-query-budget.test.ts` counts exact
- * `article.findMany` calls against a fixture db); `getActiveLocales()` is a
+ * (`tests/backend/site/public-query-budget.test.ts` counts the exact
+ * statement list against a fixture db); `getActiveLocales()` is a
  * fixed, `unstable_cache`-wrapped singleton bound to the real production
  * `prisma` client with its own `Article.groupBy` call shape, which that
  * fixture db does not implement. `@/app/_lib/public-load`'s `loadChrome`
