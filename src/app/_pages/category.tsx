@@ -137,12 +137,15 @@ export async function CategoryBody({
       description={loaded.category.category.description ?? undefined}
       novels={loaded.category.novels}
       emptyMessage={t("collection.categoryEmpty")}
-    />
-    <Pagination
-      locale={locale}
-      currentPage={loaded.category.page}
-      totalPages={loaded.category.totalPages}
-      basePath={`${localePrefix(locale)}/category/${loaded.category.category.slug}`}
+      // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
+      pagination={
+        <Pagination
+          locale={locale}
+          currentPage={loaded.category.page}
+          totalPages={loaded.category.totalPages}
+          basePath={`${localePrefix(locale)}/category/${loaded.category.category.slug}`}
+        />
+      }
     />
   </>;
 }

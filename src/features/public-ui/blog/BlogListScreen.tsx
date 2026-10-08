@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { Container } from "@/components/Container";
@@ -17,15 +18,21 @@ import { getPublicT } from "@/lib/locale/messages";
  * list, not a cover-grid, matches CPS's own blog list layout shape and
  * this round's "保持最小" discipline — no new card component family
  * beyond what `/blog` actually needs.
+ *
+ * PN-06（2026-10-08）：分页条走 `pagination` 插槽，渲染在列表之后、页脚之前
+ * （`SiteShell` 的 `<main>` 之内），理由同 `CollectionScreen`。
  */
 export function BlogListScreen({
   locale,
   posts,
   chrome,
+  pagination,
 }: {
   locale: SiteLocale;
   posts: readonly BlogCardView[];
   chrome?: SiteChrome;
+  /** 分页条（通常是 `<Pagination/>`，单页时它自己渲染为 null）。放在列表之后、页脚之前。 */
+  pagination?: ReactNode;
 }) {
   const t = getPublicT(locale);
 
@@ -71,6 +78,8 @@ export function BlogListScreen({
             </ul>
           )}
         </div>
+
+        {pagination}
       </Container>
     </SiteShell>
   );

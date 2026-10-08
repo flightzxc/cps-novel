@@ -170,13 +170,16 @@ export async function BrowseBody({
         }
         novels={loaded.paged.novels}
         emptyMessage={t("collection.allWorksEmpty")}
-      />
-      <Pagination
-        locale={locale}
-        currentPage={loaded.paged.page}
-        totalPages={loaded.paged.totalPages}
-        basePath={`${localePrefix(locale)}/browse`}
-        searchParams={loaded.category ? { category: loaded.category.slug } : undefined}
+        // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
+        pagination={
+          <Pagination
+            locale={locale}
+            currentPage={loaded.paged.page}
+            totalPages={loaded.paged.totalPages}
+            basePath={`${localePrefix(locale)}/browse`}
+            searchParams={loaded.category ? { category: loaded.category.slug } : undefined}
+          />
+        }
       />
     </>
   );
