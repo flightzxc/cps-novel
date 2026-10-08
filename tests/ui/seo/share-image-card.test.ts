@@ -277,7 +277,7 @@ describe("各模板统一走共享判定", () => {
   });
 
   it("blog 列表（collection，canonicalPath=/blog）：不传兜底书封 → 恒为默认图大卡片；默认图缺失才拿兜底封面 → summary", () => {
-    const base = { title: "Blog", description: "Posts.", canonicalPath: "/blog", items: [], siteName: "PulseNovel" };
+    const base = { title: "Blog", description: "Posts.", canonicalPath: "/blog", items: [], siteName: "PulseNovel", activeLocales: ["en"] };
     expectLarge(
       generateSeoMeta({ entity: "collection", data: { ...base, defaultOgImage: DEFAULT_IMAGE } }),
       DEFAULT_IMAGE,
