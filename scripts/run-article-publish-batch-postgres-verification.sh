@@ -106,11 +106,12 @@ if [ -n "${ARTICLE_PUBLISH_BATCH_TEST_PATTERN:-}" ]; then
   exit 0
 fi
 
-# 硬断言：不允许整文件跳过；通过数不得低于下限（= 该文件当前 it( 用例数）。
+# 硬断言：不允许整文件跳过；通过数不得低于下限（= 该文件当前实际执行的用例数：9 个基础用例 + B-34 的
+# 「出站双闸未同时打开」三种取值各一条 = 12）。
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs ARTICLE_PUBLISH_BATCH "$secret_dir/integration-result.json" \
-  tests/integration/tasks/article-publish-batch-postgres.test.ts=9
+  tests/integration/tasks/article-publish-batch-postgres.test.ts=12
 then
   echo "ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=FAIL (whole-file skip or not-executed assertion failed)" >&2
   exit 1

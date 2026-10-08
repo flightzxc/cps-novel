@@ -42,7 +42,15 @@ export const INDEXNOW_OUTBOX_ALLOW_WRITE_FLAG = "INDEXNOW_OUTBOX_ALLOW_WRITE";
 export const INDEXNOW_DELIVERY_FEATURE_FLAG = "FEATURE_INDEXNOW_DELIVERY";
 export const INDEXNOW_DELIVERY_ALLOW_WRITE_FLAG = "INDEXNOW_DELIVERY_ALLOW_WRITE";
 
-/** Gates whether `enqueueIndexNow`'s dispatcher handler does anything at all. Off by default: a safe no-op, matching `dispatcher.ts`'s "zero handlers is a safe no-op" contract. */
+/**
+ * Gates whether `enqueueIndexNow`'s dispatcher handler does anything at all. Off by default: a safe no-op, matching `dispatcher.ts`'s "zero handlers is a safe no-op" contract.
+ *
+ * B-34: this reads the *calling process's* env at call time (`env` defaults to `process.env`), and the only caller
+ * is the publish core (`applyPublishTransition`), which runs in web (the "发布" button) AND in worker processes
+ * (`article.publish.v1`, consumed by worker-light in deployment). Every process that can run it must therefore be
+ * handed the same pair of values by `docker-compose.yml`; `scheduler` never runs it and must not carry the pair.
+ * Enforced by `tests/backend/runtime/indexnow-outbox-passthrough-contract.test.ts`.
+ */
 export function isIndexNowOutboxEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[INDEXNOW_OUTBOX_FEATURE_FLAG] === "true";
 }

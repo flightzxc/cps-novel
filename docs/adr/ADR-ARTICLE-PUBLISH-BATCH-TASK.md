@@ -141,6 +141,15 @@ IndexNow 出站队列，与按钮不一致**。
   worker-light 环境逐项一致，所以要两个服务同时加），同步修改 p1-12 契约里"worker 不带 OUTBOX"的断言，
   并在 `x8-validate-compose.mjs` 里补断言。这一步应并入 WO6（IndexNow 生产开闸）的变更，而不是本次发版。
 
+**处置（B-34，本节所述差异已修，开闸仍未做）**：已把这两个开关透传给 worker 与 worker-light（`docker-compose.yml` 两个服务块，
+取值与 web 同源，没有新增变量，默认值仍是 `:-false`），并改写了 p1-12 契约里的 "worker 不带 OUTBOX"：现在是"会执行发布核心的服务
+必须带、取值逐字相同；不执行的服务不得带"。判定依据是源码——两个 worker 服务运行同一个入口 `worker/index.ts`，它在两条通道上都注册了
+`article.publish.v1` handler；scheduler 入口的导入闭包里没有发布核心，所以不带。派生式契约
+`tests/backend/runtime/indexnow-outbox-passthrough-contract.test.ts` 由源码导入关系派生服务清单，并把三套 compose 渲染后的取值逐字比对；
+`x8-validate-compose.mjs` 同步断言 worker / worker-light 与 web 一致、scheduler 不带。真实库运行器新增"开关为 true 时后台任务与按钮写出的
+出站记录逐列一致"和"双闸没同时打开时两条路径都不写"的用例。env 样例与生产取值均未改动（仍是 `false`）；打开 IndexNow 出站闸仍按
+`docs/operations/WO6_INDEXNOW_PRODUCTION_OPENING_DRAFT.md` 另行审批。
+
 ### 4.2 worker 里没有 Next 请求上下文，发布后的缓存失效是空操作
 
 `applyPublishTransition` 提交后调用的 `revalidatePath`/`revalidateTag` 在 worker 进程里必然抛出，被
