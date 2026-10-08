@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { resolveShareImage } from "@/lib/seo/seo-templates/_shared";
+import { pagedNovels, pagedPosts } from "../../fixtures/paged-results";
 
 /**
  * 分享图卡片口径（B-37 阶段 0，2026-10-07）。
@@ -309,14 +310,18 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadBlogList: vi.fn(),
   loadBlogAccess: vi.fn(),
   loadBlogDetail: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -324,9 +329,8 @@ const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const { buildHomeMetadata } = await import("@/app/_pages/home");
 const { buildBrowseMetadata } = await import("@/app/_pages/browse");
 const { buildCategoryMetadata } = await import("@/app/_pages/category");
@@ -369,8 +373,8 @@ describe("页面层：站点默认图与「第一本书封」兜底分开传给�
     loadActiveLocales.mockResolvedValue(["en"] as never);
     loadPublicCategories.mockResolvedValue([]);
     loadHomeNovels.mockResolvedValue([CARD]);
-    loadBrowseNovels.mockResolvedValue([CARD]);
-    getPublicCategoryPage.mockResolvedValue({
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
+    loadCategoryPage.mockResolvedValue({
       novels: [CARD],
       page: 1,
       totalPages: 1,
@@ -497,7 +501,7 @@ describe("页面层：博客详情与博客列表的分享图口径", () => {
 
   it("博客列表：文章卡片没有封面字段，分享图只看站点默认图 → 恒为默认图大卡片 + 1200×630（第 1 页与第 2 页一致）", async () => {
     loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
-    loadBlogList.mockResolvedValue(
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts(
       Array.from({ length: 30 }, (_, i) => ({
         id: `b${i}`,
         title: `Post ${i}`,
@@ -508,7 +512,7 @@ describe("页面层：博客详情与博客列表的分享图口径", () => {
         // 即便上游多带了 coverUrl（BlogCardView 并没有这个字段），页面也不会把它当分享图。
         coverUrl: BLOG_COVER_PATH,
       })) as never,
-    );
+    page));
 
     for (const page of [undefined, "2"]) {
       const metadata = await buildBlogListMetadata("en", Promise.resolve(page ? { page } : {}));
@@ -521,7 +525,7 @@ describe("页面层：博客详情与博客列表的分享图口径", () => {
 
   it("博客列表·空列表（没有任何文章，自然也没有封面）：同样是默认图大卡片", async () => {
     loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
-    loadBlogList.mockResolvedValue([]);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
     const metadata = await buildBlogListMetadata("en", Promise.resolve({}));
 
     expect(twitterCard(metadata)).toBe("summary_large_image");

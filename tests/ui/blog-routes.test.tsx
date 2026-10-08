@@ -2,6 +2,7 @@ import "./setup-cleanup";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { pagedPosts } from "../fixtures/paged-results";
 
 const NOT_FOUND = Symbol("next-not-found");
 
@@ -79,7 +80,7 @@ beforeEach(() => {
   loadChrome.mockReset();
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
   loadBlogList.mockReset();
-  loadBlogList.mockResolvedValue([POST]);
+  loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([POST], page));
   loadBlogAccess.mockReset();
   loadBlogDetail.mockReset();
 });
@@ -98,21 +99,21 @@ describe("/blog list route", () => {
   });
 
   it("renders the empty state when there are no posts", async () => {
-    loadBlogList.mockResolvedValue([]);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
     const tree = await listModule.default({ searchParams: Promise.resolve({}) });
     render(tree);
     expect(screen.getByTestId("blog-list-empty")).toBeTruthy();
   });
 
   it("C-29 review low fix: 404s for page=2 when there are zero posts, instead of silently rendering as page 1", async () => {
-    loadBlogList.mockResolvedValue([]);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
     await expect(
       listModule.default({ searchParams: Promise.resolve({ page: "2" }) }),
     ).rejects.toBe(NOT_FOUND);
   });
 
   it("page=1 with zero posts still renders the empty state (not a 404)", async () => {
-    loadBlogList.mockResolvedValue([]);
+    loadBlogList.mockImplementation(async (_locale, page) => pagedPosts([], page));
     const tree = await listModule.default({ searchParams: Promise.resolve({ page: "1" }) });
     render(tree);
     expect(screen.getByTestId("blog-list-empty")).toBeTruthy();

@@ -8,6 +8,7 @@ import { Pagination } from "@/features/public-ui/collection/Pagination";
 import { ReaderSettingsProvider } from "@/features/public-ui/chapter/ReaderSettingsProvider";
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import { pagedNovels } from "../fixtures/paged-results";
 
 const NOT_FOUND = Symbol("next-not-found");
 
@@ -23,7 +24,8 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
@@ -37,7 +39,7 @@ const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadHomeNovels = vi.mocked(publicLoad.loadHomeNovels);
 const loadHomeCarousel = vi.mocked(publicLoad.loadHomeCarousel);
 const loadPublicCategories = vi.mocked(publicLoad.loadPublicCategories);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
@@ -105,7 +107,7 @@ beforeEach(() => {
   loadHomeNovels.mockResolvedValue([CARD]);
   loadHomeCarousel.mockResolvedValue([]);
   loadPublicCategories.mockResolvedValue([]);
-  loadBrowseNovels.mockResolvedValue([CARD]);
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
   loadArticleAccess.mockReset();
   loadNovelDetail.mockReset();
   loadChapterView.mockReset();
@@ -141,9 +143,9 @@ describe("public home", () => {
 
 describe("public browse", () => {
   it("places Pagination in the page glue for a multi-page list", async () => {
-    loadBrowseNovels.mockResolvedValue(
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(
       Array.from({ length: 21 }, (_, index) => ({ ...CARD, id: `biz-${index}`, href: `/novel/n${index}-pxx` })),
-    );
+    page));
     const tree = await browseModule.default({ searchParams: Promise.resolve({ page: "1" }) });
     const { container } = render(tree);
     expect(container.querySelector('[data-testid="pagination"]')).toBeTruthy();
@@ -160,9 +162,9 @@ describe("public browse", () => {
   // （`paginatedRobots` 恒 undefined → `toNextMetadata` 落成 index,follow）。
   // 旧断言 `{ index: false, follow: true }` 是误接 `shouldNoIndex`（CPS 废弃函数）的结果。
   it("keeps page 2 indexable with a self canonical", async () => {
-    loadBrowseNovels.mockResolvedValue(
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels(
       Array.from({ length: 21 }, (_, index) => ({ ...CARD, id: `biz-${index}`, href: `/novel/n${index}-pxx` })),
-    );
+    page));
     const metadata = await browseModule.generateMetadata({
       searchParams: Promise.resolve({ page: "2" }),
     });
@@ -173,14 +175,14 @@ describe("public browse", () => {
   });
 
   it("C-29 review low fix: 404s for page=2 when there are zero novels, instead of silently rendering as page 1", async () => {
-    loadBrowseNovels.mockResolvedValue([]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([], page));
     await expect(
       browseModule.default({ searchParams: Promise.resolve({ page: "2" }) }),
     ).rejects.toBe(NOT_FOUND);
   });
 
   it("page=1 with zero novels still renders the empty state (not a 404)", async () => {
-    loadBrowseNovels.mockResolvedValue([]);
+    loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([], page));
     const tree = await browseModule.default({ searchParams: Promise.resolve({ page: "1" }) });
     render(tree);
     expect(screen.getByTestId("book-grid-empty")).toBeTruthy();

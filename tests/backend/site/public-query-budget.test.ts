@@ -9,7 +9,10 @@ import {
   loadPublicChrome,
 } from "@/lib/site/queries";
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
+import { clearPublicCategoryCountsCacheForTest } from "@/lib/site/public-list";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
 /**
  * N-9 (施工规格 / 交接提示词): a regression gate on how many DB round-trips
@@ -36,14 +39,9 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  * round-trip is gone.
  *
  * So this file does two things:
- *  1. Pins the *fixed* production call pattern's query count as a ceiling —
- *     "≤ this many", not "exactly this many" — so a regression still fails
- *     CI. Was ≤ 7 (pre-fix: `loadPublicChrome` without `categories` +
- *     a separate `listPublicCategories` + `listHomeNovels`, three
- *     `article.findMany` calls); now ≤ 5 (`listPublicCategories` once +
- *     `loadPublicChrome(..., categories)` + `listHomeNovels`, two
- *     `article.findMany` calls — see the test below for the exact
- *     before/after breakdown).
+ *  1. Pins the *fixed* production call pattern's query count (N-9 originally
+ *     as a ceiling: was ≤ 7 pre-fix, ≤ 5 after; B-38 re-pins it as the exact
+ *     statement list, see the update below) so a regression still fails CI.
  *  2. Proves the `loadPublicChrome(..., categories)` capability itself works
  *     in isolation (no second query when `categories` is supplied).
  *
@@ -60,16 +58,14 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  * coverage — deliberately excluded from this budget rather than
  * approximated.
  *
- * 🔴 Still open, not this lane's fix either: `listPublicArticles` (called by
- * `listHomeNovels`) and `listPublicCategories` independently run the *exact
- * same* `article.findMany` query (same `buildPublicArticleWhere({locale})`,
- * `ARTICLE_CARD_SELECT`, `take`) — visible below as the home page's remaining
- * two `article.findMany` calls for what is, on the wire, one query executed
- * twice. Collapsing it behind one cached fetch would need every current
- * caller of either function — including tests outside this lane's file
- * boundary that inject a fake `db: PrismaClient` per call — audited for
- * compatibility first, which is out of this lane's time budget too. Flagged
- * again in the lane report for whoever picks it up next.
+ * B-38 (v0.5.13) update — the numbers below are re-pinned for the database-paginated list:
+ * `listPublicArticles` (the "load the newest 240 rows" query that the footer and the home grid
+ * both ran) is gone. The footer categories now come from the per-locale-per-category count
+ * matrix (`@/lib/site/public-list`: one counts statement + one visible-totals statement, cached
+ * in-process for 60 seconds) plus a fresh read of the category names; the home grid is
+ * ids (LIMIT 20) -> hydrate by id -> card tags read from `novel_effective_tag`. Every number is
+ * now EXACT (not a ceiling) and given for both a cold matrix cache (first request after a
+ * restart / every 60s) and a warm one (the steady state).
  */
 
 type ArticleCardRow = {
@@ -123,11 +119,24 @@ const SITE_SETTING_ROW = {
   updatedAt: new Date("2026-09-01T00:00:00.000Z"),
 };
 
+const TAG_ROW = {
+  novel_id: NOVEL_ID,
+  id: "22222222-2222-4222-8222-222222222222",
+  slug: "fantasy",
+  requested_display_name: "Fantasy",
+  en_display_name: null,
+  zh_display_name: null,
+  sort_order: 1,
+  updated_at: new Date("2026-09-01T00:00:00.000Z"),
+};
+
 /**
  * Counts every DB round-trip by operation key. Returns the same fixture
  * row(s) regardless of the `where` clause content — this file measures
  * *call volume*, not filter correctness (that is `tests/backend/public/**`'s
- * job).
+ * and `tests/integration/site/**`'s job). Raw statements are told apart by
+ * their structure (`classifyPublicListQuery`), the same way the in-memory
+ * public db does.
  */
 class CountingFakeDb {
   readonly calls: string[] = [];
@@ -144,7 +153,7 @@ class CountingFakeDb {
           return structuredClone(ARTICLE_ROW);
         },
         findMany: async () => {
-          this.record("article.findMany");
+          this.record("article.findMany (hydrate cards by id)");
           return [structuredClone(ARTICLE_ROW)];
         },
       },
@@ -168,9 +177,18 @@ class CountingFakeDb {
           return structuredClone(SITE_SETTING_ROW);
         },
       },
-      $queryRaw: async () => {
-        this.record("$queryRaw (taxonomy)");
-        return [];
+      $queryRaw: async (query: { text: string }) => {
+        const kind = classifyPublicListQuery(query);
+        this.record(`$queryRaw (${kind})`);
+        switch (kind) {
+          case "matrix": return [{ locale: "en", canonical_tag_id: TAG_ROW.id, slug: TAG_ROW.slug, n: 1 }];
+          case "totals": return [{ locale: "en", n: 1 }];
+          case "category-names": return [TAG_ROW];
+          case "page-ids": return [{ id: ARTICLE_ROW.id }];
+          case "page-count": return [{ total: 1 }];
+          case "taxonomy": return [TAG_ROW];
+          default: return [];
+        }
       },
     } as unknown as PrismaClient;
   }
@@ -178,83 +196,120 @@ class CountingFakeDb {
   countOf(key: string): number {
     return this.calls.filter((call) => call === key).length;
   }
+
+  /** 每个 key 的次数，按 key 排序，便于整体断言。 */
+  histogram(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const call of [...this.calls].sort()) result[call] = (result[call] ?? 0) + 1;
+    return result;
+  }
 }
 
 beforeEach(() => {
   invalidateSiteSettingCache();
+  clearPublicCategoryCountsCacheForTest();
 });
 
 afterEach(() => vi.unstubAllEnvs());
 
-describe.each(["false", "true"])("公开侧一次渲染的查询数（cold cache, auto=%s）", (flag) => {
+/**
+ * The exact statements of each render. "cold" = matrix cache empty (first request after a restart, then once
+ * per 60 s); "warm" = matrix cache hit (the steady state: the counts + visible-totals statements disappear,
+ * the category-name read stays because names are never cached).
+ */
+const MATRIX = { "$queryRaw (matrix)": 1, "$queryRaw (totals)": 1 } as const;
+const NAMES = { "$queryRaw (category-names)": 1 } as const;
+const SETTINGS = { "siteSetting.findUnique": 1 } as const;
+const HOME_GRID = {
+  "$queryRaw (page-ids)": 1, // ids, LIMIT 20 — no total
+  "article.findMany (hydrate cards by id)": 1,
+  "$queryRaw (taxonomy)": 1, // card tags, read from the projection table
+} as const;
+const DETAIL = { "article.findFirst": 1, "novelChapter.findMany": 1, "$queryRaw (taxonomy)": 1 } as const;
+const CHAPTER = { "article.findFirst": 1, "novelChapter.findMany": 1, "novelChapter.findFirst": 1, "$queryRaw (taxonomy)": 1 } as const;
+const sumOf = (...parts: Array<Record<string, number>>) => {
+  const total: Record<string, number> = {};
+  for (const part of parts) for (const [key, value] of Object.entries(part)) total[key] = (total[key] ?? 0) + value;
+  return Object.fromEntries(Object.entries(total).sort(([a], [b]) => a.localeCompare(b)));
+};
+
+describe.each(["false", "true"])("公开侧一次渲染的查询数（auto=%s）", (flag) => {
   beforeEach(() => vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", flag));
-  it("首页（N-9 已接线，lane D）：categories 只查一次，合计 ≤ 5 次新增查询（原 ≤ 7）", async () => {
+  it("首页（N-9 已接线，lane D）：categories 只算一次（页脚 + 作品格共用），冷 7 条 / 暖 5 条", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
 
-    // Mirrors `src/app/page.tsx` as it now calls `@/app/_lib/public-load`
-    // after lane D's wiring: `loadPublicCategories(locale)` once, whose
-    // result is handed to `loadChrome(locale, "home", categories)` (here
-    // simulated directly against `queries.ts` as `loadPublicChrome(client,
-    // PUBLIC_SITE_LOCALE, "home", categories)`) instead of `loadChrome
-    // (locale, "home")` re-querying categories internally. `generateMetadata`
-    // and the page body both do this same pair of calls in production, but
-    // `React.cache()` request-scoping dedupes them to exactly the one
-    // round-trip each modelled here.
-    //
-    // WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3/§12.2):
-    // `loadPublicChrome` gained a required `locale` second positional
-    // argument (WO-1 §6.3's `src/lib/site/queries.ts` change) — the calls
-    // below are mechanically updated to pass `PUBLIC_SITE_LOCALE`; none of
-    // this file's assertion numbers changed.
+    // Mirrors `src/app/page.tsx` as it calls `@/app/_lib/public-load`: `loadPublicCategories(locale)` once, whose
+    // result is handed to `loadChrome(locale, "home", categories)` (here simulated directly against `queries.ts` as
+    // `loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories)`) instead of `loadChrome(locale, "home")`
+    // re-querying categories internally. `generateMetadata` and the page body both do this same pair of calls in
+    // production, but `React.cache()` request-scoping dedupes them to exactly the one round-trip modelled here.
     const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
     await loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories);
     await listHomeNovels(client, PUBLIC_SITE_LOCALE);
 
-    const settingAndCategoryCalls =
-      db.countOf("siteSetting.findUnique") + db.countOf("article.findMany") + db.countOf("$queryRaw (taxonomy)");
-    expect(settingAndCategoryCalls).toBeLessThanOrEqual(5);
-    // Pin the exact shape too, so a regression that trades one call for a
-    // different one still fails loudly instead of hiding under the sum.
-    expect(db.countOf("siteSetting.findUnique")).toBe(1);
-    // listPublicCategories once + listHomeNovels(->listPublicArticles) once:
-    // down from 3 (loadPublicChrome's own internal listPublicCategories call
-    // is gone now that `categories` is supplied). The remaining 2 are the
-    // still-open, separate duplication documented in this file's header —
-    // `listPublicCategories` and `listPublicArticles` run the identical
-    // `article.findMany` query for what are conceptually two different reads.
-    expect(db.countOf("article.findMany")).toBe(2);
-    expect(db.countOf("$queryRaw (taxonomy)")).toBe(2);
+    expect(db.histogram()).toEqual(sumOf(SETTINGS, MATRIX, NAMES, HOME_GRID));
+    expect(db.calls).toHaveLength(7);
+    // 列表窗口的"先取一批再切片"没有了：首页作品格不数总数，也没有 page-count。
+    expect(db.countOf("$queryRaw (page-count)")).toBe(0);
+
+    // 暖缓存（同一进程里 60 秒内的下一个请求）：矩阵的两条语句消失。
+    invalidateSiteSettingCache();
+    const warm = new CountingFakeDb();
+    const warmClient = warm.asPrismaClient();
+    const warmCategories = await listPublicCategories(warmClient, PUBLIC_SITE_LOCALE);
+    await loadPublicChrome(warmClient, PUBLIC_SITE_LOCALE, "home", warmCategories);
+    await listHomeNovels(warmClient, PUBLIC_SITE_LOCALE);
+    expect(warm.histogram()).toEqual(sumOf(SETTINGS, NAMES, HOME_GRID));
+    expect(warm.calls).toHaveLength(5);
   });
 
   it("loadPublicChrome(..., categories) 能力：预先算好的 categories 不触发第二次查询（该能力已由 lane D 接入 src/app/page.tsx，本用例单独验证能力本身）", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
     const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
-    expect(db.countOf("article.findMany")).toBe(1);
+    expect(db.histogram()).toEqual(sumOf(MATRIX, NAMES));
 
     await loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories);
-    // `loadPublicChrome` must not have queried categories again.
-    expect(db.countOf("article.findMany")).toBe(1);
+    // `loadPublicChrome` must not have queried categories again — only the site setting was added.
+    expect(db.histogram()).toEqual(sumOf(SETTINGS, MATRIX, NAMES));
   });
 
-  it("详情页：getPublicNovelDetail + loadPublicChrome（无预取 categories）的总查询数 ≤ 6", async () => {
+  it("详情页：getPublicNovelDetail + loadPublicChrome（无预取 categories）冷 7 条 / 暖 5 条", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
 
     await getPublicNovelDetail(client, "article-1");
     await loadPublicChrome(client, PUBLIC_SITE_LOCALE); // detail page's footer chrome call — no shared categories to pass in
 
-    expect(db.calls.length).toBeLessThanOrEqual(6);
+    expect(db.histogram()).toEqual(sumOf(DETAIL, SETTINGS, MATRIX, NAMES));
+    expect(db.calls).toHaveLength(7);
+
+    invalidateSiteSettingCache();
+    const warm = new CountingFakeDb();
+    const warmClient = warm.asPrismaClient();
+    await getPublicNovelDetail(warmClient, "article-1");
+    await loadPublicChrome(warmClient, PUBLIC_SITE_LOCALE);
+    expect(warm.histogram()).toEqual(sumOf(DETAIL, SETTINGS, NAMES));
+    expect(warm.calls).toHaveLength(5);
   });
 
-  it("章节页：getPublicChapterView + loadPublicChrome 的总查询数 ≤ 7", async () => {
+  it("章节页：getPublicChapterView + loadPublicChrome 冷 8 条 / 暖 6 条", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
 
     await getPublicChapterView(client, "article-1", 1);
     await loadPublicChrome(client, PUBLIC_SITE_LOCALE);
 
-    expect(db.calls.length).toBeLessThanOrEqual(7);
+    expect(db.histogram()).toEqual(sumOf(CHAPTER, SETTINGS, MATRIX, NAMES));
+    expect(db.calls).toHaveLength(8);
+
+    invalidateSiteSettingCache();
+    const warm = new CountingFakeDb();
+    const warmClient = warm.asPrismaClient();
+    await getPublicChapterView(warmClient, "article-1", 1);
+    await loadPublicChrome(warmClient, PUBLIC_SITE_LOCALE);
+    expect(warm.histogram()).toEqual(sumOf(CHAPTER, SETTINGS, NAMES));
+    expect(warm.calls).toHaveLength(6);
   });
 });

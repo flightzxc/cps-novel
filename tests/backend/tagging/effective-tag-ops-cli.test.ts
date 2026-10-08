@@ -12,6 +12,7 @@ import {
   parseEffectiveTagOpsArgs,
   runEffectiveTagOps,
 } from "../../../scripts/ops/effective-tag-projection";
+import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
 const PHRASE = "RECONCILE-EFFECTIVE-TAGS";
 
@@ -23,6 +24,11 @@ describe("parseEffectiveTagOpsArgs", () => {
   it("默认与 check 都是只读检查", () => {
     expect(parseEffectiveTagOpsArgs([])).toEqual({ mode: "check" });
     expect(parseEffectiveTagOpsArgs(["check"])).toEqual({ mode: "check" });
+  });
+
+  it("scale-check 是只读的规模检查（B-38 第二段，发版检查清单用），不带任何写参数", () => {
+    expect(parseEffectiveTagOpsArgs(["scale-check"])).toEqual({ mode: "scale-check" });
+    expect(parseEffectiveTagOpsArgs(["scale-check", "--apply", "--confirm", PHRASE])).toEqual({ mode: "scale-check" });
   });
 
   it("reconcile 必须同时带 --apply 和精确的确认短语才算 apply", () => {
@@ -127,6 +133,74 @@ describe("runEffectiveTagOps", () => {
       const result = await runEffectiveTagOps(db, { mode: "reconcile", apply: true });
       const output = [...result.lines, ...result.stderr].join("\n");
       expect(output).not.toMatch(/secret_pass|postgresql:|DATABASE_URL/);
+    } finally {
+      delete process.env.DATABASE_URL;
+    }
+  });
+});
+
+/** `scale-check`：只读，矩阵 + 阈值比较；超过退出 3，未超过退出 0（真实库的 60,001 本版本见 scale-trigger-postgres.test.ts）。 */
+describe("runEffectiveTagOps · scale-check", () => {
+  function scaleDb(rows: Array<{ locale: string; slug: string; n: number }>, totals: Array<{ locale: string; n: number }>) {
+    const statements: string[] = [];
+    const db = {
+      $queryRaw: vi.fn(async (statement: Prisma.Sql) => {
+        const kind = classifyPublicListQuery(statement);
+        statements.push(kind);
+        if (kind === "matrix") return rows.map((row) => ({ locale: row.locale, canonical_tag_id: `id-${row.slug}`, slug: row.slug, n: row.n }));
+        return kind === "totals" ? totals : [];
+      }),
+      $transaction: vi.fn(() => { throw new Error("scale-check must not open a transaction"); }),
+      $executeRawUnsafe: vi.fn(() => { throw new Error("scale-check must not write"); }),
+    };
+    return { db: db as never, statements };
+  }
+
+  it("未超过阈值 → 退出 0，只输出一行汇总（含实际最大值与阈值）；只发两条只读查询", async () => {
+    const { db, statements } = scaleDb([{ locale: "en", slug: "romance", n: 9_735 }], [{ locale: "en", n: 13_008 }]);
+    const result = await runEffectiveTagOps(db, { mode: "scale-check" });
+    expect(result.exitCode).toBe(EFFECTIVE_TAG_EXIT.clean);
+    expect(result.lines).toEqual([
+      "PUBLIC_LIST_SCALE_CHECK exceeded=false max_category_count=9735 max_locale_total=13008 category_threshold=40000 locale_threshold=60000",
+    ]);
+    expect(result.stderr).toEqual([]);
+    expect(statements.sort()).toEqual(["matrix", "totals"]);
+  });
+
+  it("恰好等于阈值 → 仍然退出 0（严格大于才算超过）", async () => {
+    const { db } = scaleDb([{ locale: "en", slug: "big", n: 40_000 }], [{ locale: "en", n: 60_000 }]);
+    const result = await runEffectiveTagOps(db, { mode: "scale-check" });
+    expect(result.exitCode).toBe(0);
+    expect(result.lines[0]).toContain("exceeded=false");
+  });
+
+  it("任一分类超过 → 退出 3，逐条列出（语种 / 分类 / 本数）", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { db } = scaleDb([{ locale: "en", slug: "big", n: 40_001 }, { locale: "ru", slug: "small", n: 10 }], [{ locale: "en", n: 50_000 }]);
+    const result = await runEffectiveTagOps(db, { mode: "scale-check" });
+    expect(result.exitCode).toBe(3);
+    expect(result.lines).toEqual([
+      "PUBLIC_LIST_SCALE_CHECK exceeded=true max_category_count=40001 max_locale_total=50000 category_threshold=40000 locale_threshold=60000",
+      "PUBLIC_LIST_SCALE_EXCEEDED kind=category locale=en slug=big count=40001",
+    ]);
+    warn.mockRestore();
+  });
+
+  it("任一语种总数超过 → 退出 3", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { db } = scaleDb([{ locale: "fr", slug: "a", n: 30_000 }, { locale: "fr", slug: "b", n: 30_001 }], [{ locale: "fr", n: 60_001 }]);
+    const result = await runEffectiveTagOps(db, { mode: "scale-check" });
+    expect(result.exitCode).toBe(3);
+    expect(result.lines).toContain("PUBLIC_LIST_SCALE_EXCEEDED kind=locale locale=fr total=60001");
+    warn.mockRestore();
+  });
+
+  it("输出里不含连接串、口令或环境变量名", async () => {
+    const { db } = scaleDb([], []);
+    process.env.DATABASE_URL = "postgresql://secret_user:secret_pass@db.invalid:5432/x";
+    try {
+      const result = await runEffectiveTagOps(db, { mode: "scale-check" });
+      expect([...result.lines, ...result.stderr].join("\n")).not.toMatch(/secret_pass|postgresql:|DATABASE_URL/);
     } finally {
       delete process.env.DATABASE_URL;
     }

@@ -6,6 +6,7 @@ import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { CATALOGS, getPublicT } from "@/lib/locale/messages";
 import { en } from "@/lib/locale/messages/en";
 import type { NovelCardView } from "@/features/public-ui/types";
+import { pagedNovels } from "../fixtures/paged-results";
 
 /**
  * 前台分类页标题 = 分类名 + Novels（运营 2026-10-08 反馈，Owner 确认范围含
@@ -34,19 +35,22 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
   loadActiveLocales: vi.fn(),
-  loadBrowseNovels: vi.fn(),
+  loadBrowsePage: vi.fn(),
+  loadCategoryPage: vi.fn(),
 }));
 
-vi.mock("@/lib/site/category-queries", () => ({
-  getPublicCategoryPage: vi.fn(),
+// B-38：分类页第 1 页的 hreflang 现在读每语种每分类本数矩阵（`listCategoryPublicLocales`，真实实现会连数据库）。
+// 这里替成"每个候选语种都有内容"——与这些用例此前 mock 掉的 `getPublicCategoryPage`（对任何语种都返回同一页）等价；
+// 矩阵本身与 hreflang 的一致性由 `tests/integration/site/consistency-invariants-postgres.test.ts` 证明。
+vi.mock("@/lib/site/category-locales", () => ({
+  listCategoryPublicLocales: vi.fn(async (_db: unknown, _slug: string, candidates: readonly string[]) => [...candidates]),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
 const loadChrome = vi.mocked(publicLoad.loadChrome);
 const loadActiveLocales = vi.mocked(publicLoad.loadActiveLocales);
-const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
-const categoryQueries = await import("@/lib/site/category-queries");
-const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
+const loadBrowsePage = vi.mocked(publicLoad.loadBrowsePage);
+const loadCategoryPage = vi.mocked(publicLoad.loadCategoryPage);
 const { CategoryBody, buildCategoryMetadata } = await import("@/app/_pages/category");
 const { BrowseBody, buildBrowseMetadata } = await import("@/app/_pages/browse");
 
@@ -97,7 +101,7 @@ beforeEach(() => {
   process.env.SITE_URL = "https://example.test";
   loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
   loadActiveLocales.mockResolvedValue(["en"] as never);
-  loadBrowseNovels.mockResolvedValue([CARD]);
+  loadBrowsePage.mockImplementation(async (_locale, page) => pagedNovels([CARD], page));
 });
 
 afterEach(() => {
@@ -189,7 +193,7 @@ describe("collection.categoryHeading 目录（15 语）", () => {
 
 describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 面包屑第 2 项 同一个值", () => {
   it("en 第 1 页：H1 = 'Romance Novels'，metadata.title / og:title / twitter:title 同", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
     const tree = await CategoryBody({ locale: "en", params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
     render(tree);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Romance Novels");
@@ -201,7 +205,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
   });
 
   it("en 第 2 页：H1 仍是 'Romance Novels'（后缀只进 <title>/og/twitter），标题 = 'Romance Novels - Page 2'", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(2, "Romance"));
+    loadCategoryPage.mockResolvedValue(categoryPage(2, "Romance"));
     const tree = await CategoryBody({ locale: "en", params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({ page: "2" }) });
     render(tree);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Romance Novels");
@@ -213,7 +217,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
   });
 
   it("ja：H1 / 标题用日语译文，不含英文 Novels", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
     const expected = getPublicT("ja")("collection.categoryHeading", { name: "Romance" });
     const tree = await CategoryBody({ locale: "ja", params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
     render(tree);
@@ -227,7 +231,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
   });
 
   it("en JSON-LD：CollectionPage.name 与 BreadcrumbList 第 2 项 name 都是 'Romance Novels'，描述兜底句仍是纯名（无 'Novels novels'）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
     const tree = await CategoryBody({ locale: "en", params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
     const { container } = render(tree);
     const script = container.querySelector('script[type="application/ld+json"]');
@@ -243,7 +247,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
   });
 
   it.each(OVERLAY_COLUMNS)("%s：H1 = metadata.title = og/twitter 标题 = CollectionPage.name = 面包屑第 2 项（第 1 页）", async (locale) => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Romance"));
     const expected = headingOf(locale, "Romance");
     const tree = await CategoryBody({ locale, params: Promise.resolve({ slug: "romance" }), searchParams: Promise.resolve({}) });
     const { container } = render(tree);
@@ -263,7 +267,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
   it.each(Object.entries(REAL_NAMES))("真实分类名 %s：15 语 H1 / 标题 / 描述兜底句各走各的键，分类名在标题里原样出现一次", async (slug, names) => {
     for (const [index, locale] of OVERLAY_COLUMNS.entries()) {
       const name = names[index]!;
-      getPublicCategoryPage.mockResolvedValue(categoryPage(1, name, slug));
+      loadCategoryPage.mockResolvedValue(categoryPage(1, name, slug));
       const tree = await CategoryBody({ locale, params: Promise.resolve({ slug }), searchParams: Promise.resolve({}) });
       const { unmount } = render(tree);
       const h1 = screen.getByRole("heading", { level: 1 }).textContent!;
@@ -281,7 +285,7 @@ describe("分类页：H1 / <title> / og·twitter 标题 / CollectionPage.name / 
 describe("范围守卫：浏览页 /browse?category= 不在本次范围，仍用 collection.categoryTitle", () => {
   // 若将来决定浏览页也改成标题形式，应连同本用例一起改（那是另一个 Owner 决定）。
   it("浏览页 <title> 仍是 'Fantasy novels'（小写 novels），不是 'Fantasy Novels'", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Fantasy", "fantasy"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Fantasy", "fantasy"));
     const metadata = await buildBrowseMetadata("en", Promise.resolve({ category: "fantasy" }));
     expect(titleOf(metadata)).toBe("Fantasy novels");
     const tree = await BrowseBody({ locale: "en", searchParams: Promise.resolve({ category: "fantasy" }) });
@@ -435,7 +439,7 @@ describe("追加：meta.categoryDescriptionFallback / collection.categoryTitle",
   });
 
   it("/browse?category= 的 <title>：非英语语种与分类页 H1 是同一个形式（ja/de/fr）", async () => {
-    getPublicCategoryPage.mockResolvedValue(categoryPage(1, "Fantasy", "fantasy"));
+    loadCategoryPage.mockResolvedValue(categoryPage(1, "Fantasy", "fantasy"));
     for (const locale of ["ja", "de", "fr"] as const) {
       const metadata = await buildBrowseMetadata(locale, Promise.resolve({ category: "fantasy" }));
       expect(titleOf(metadata), locale).toBe(headingOf(locale, "Fantasy"));
