@@ -21,10 +21,10 @@
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "0.8.13",
-    "@next/third-parties": "16.3.7",
+    "@next/third-parties": "16.3.8",
     "@prisma/client": "6.19.2",
     "intl-messageformat": "^11.2.3",
-    "next": "16.3.7",
+    "next": "16.3.8",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
@@ -40,7 +40,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5",
     "eslint": "^9",
-    "eslint-config-next": "16.3.7",
+    "eslint-config-next": "16.3.8",
     "jsdom": "^26",
     "prisma": "6.19.2",
     "tailwindcss": "^4",
