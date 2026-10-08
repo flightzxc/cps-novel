@@ -28,7 +28,7 @@ import {
   requireActor,
   requireRequestId,
   requireUuid,
-  resolveUniqueSlug,
+  resolveArticleSlug,
 } from "./shared";
 import type {
   ArticleGenerateResult,
@@ -199,7 +199,8 @@ async function runGenerate(
   const selected = await resolveTemplate(db as Pick<PrismaClient, "articleTemplate">, locale, input.templateKey);
   if (selected.outcome !== "ok") return selected;
 
-  const articleSlugResult = await resolveUniqueSlug(
+  // 预览（dryRun）与正式生成共用这一次调用：过短的网址名在此补该语种后缀（Owner 2026-10-08）。
+  const articleSlugResult = await resolveArticleSlug(
     novel.title,
     locale,
     existsCheck((args) => db.article.findFirst(args) as Promise<{ id: string } | null>, locale),
