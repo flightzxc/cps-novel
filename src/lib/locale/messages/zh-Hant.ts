@@ -143,10 +143,10 @@ const messages = {
     allWorksEmpty: "目前尚無公開作品。",
     genreDescription: "您可以在此合輯中閱讀的作品。",
     genreEmpty: "此合輯目前尚無作品。",
-    categoryTitle: "{name}小說",
-    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 与 categoryTitle 同形：中文"短语 + 小說"本来就通顺（女性向小說 / 先婚後愛小說）。
-    categoryHeading: "{name}小說",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用全角冒号隔开（与 categoryHeading 同值）。
+    categoryTitle: "小說：{name}",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用全角冒号隔开。
+    categoryHeading: "小說：{name}",
     browseSeoDescription: "已發布的小說。",
     categoryEmpty: "此分類目前尚無已發布的小說。",
   },
@@ -198,7 +198,8 @@ const messages = {
     siteDescription: "探索小說，開始閱讀免費章節。",
     homeTitleFallback: "PulseNovel - 探索小說，免費閱讀書籍",
     pageSuffix: " - 第{page}頁",
-    categoryDescriptionFallback: "在PulseNovel探索{name}小說。",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用「」隔开，PulseNovel 两侧留半角空格。
+    categoryDescriptionFallback: "在 PulseNovel 探索「{name}」分類的小說。",
   },
 } satisfies LocaleMessages;
 

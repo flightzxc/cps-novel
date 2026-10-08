@@ -203,7 +203,8 @@ const messages = {
     siteDescription: "ค้นพบนิยายและเริ่มอ่านตอนฟรี",
     homeTitleFallback: "PulseNovel - ค้นพบนิยายและอ่านหนังสือฟรี",
     pageSuffix: " - หน้า {page}",
-    categoryDescriptionFallback: "ค้นพบนิยาย{name}บน PulseNovel",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：บน 前补一个空格，把分类名与后文隔开。
+    categoryDescriptionFallback: "ค้นพบนิยาย{name} บน PulseNovel",
   },
 } satisfies LocaleMessages;
 

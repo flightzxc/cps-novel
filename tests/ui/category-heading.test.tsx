@@ -157,17 +157,23 @@ describe("collection.categoryHeading 目录（15 语）", () => {
    * 对"分类名是短语"的语种，译文必须把分类名和通用词隔开（冒号 / 引号 / 括号），不能把短语直接
    * 拼进名词短语里：es "Novelas de Para lectoras"、de "Für Leserinnen-Romane"、fr "Romans Public féminin"、
    * pl "Powieści Dla czytelniczek"、ja "全員から愛されるの小説" 都是旧 `categoryTitle` 套短语名的实际结果。
-   * 这条守卫防止以后有人为了"更自然"改回无分隔形式。无分隔的语种（th/ko/zh-Hant）靠语言本身的
-   * 名词+名词结构成立，不在此列。
+   * 这条守卫防止以后有人为了"更自然"改回无分隔形式。无分隔的语种只剩 th（泰语名词+名词结构成立）。
+   * 2026-10-09 第三方（GPT）验收 + Owner 裁定：ru（«…» 会被读成书名）、ko、zh-Hant 也改成冒号隔开，
+   * 所以 ru/ko 进了半角冒号清单，zh-Hant 用全角冒号（U+FF1A）单独断言。
    */
-  it.each(["es", "pt-BR", "id", "vi", "ar", "fr", "de", "pl", "cs"] as const)("%s：分类名与通用词之间用冒号隔开", (locale) => {
+  it.each(["es", "pt-BR", "id", "vi", "ar", "fr", "de", "pl", "cs", "ru", "ko"] as const)("%s：分类名与通用词之间用冒号隔开", (locale) => {
     const text = (CATALOGS[locale] as { collection: { categoryHeading: string } }).collection.categoryHeading;
     expect(text).toMatch(/^[^{}:：]+ ?: \{name\}$/);
   });
 
-  it.each([["ja", "「", "」"], ["ru", "«", "»"]] as const)("%s：分类名被引号括起来", (locale, open, close) => {
-    const text = (CATALOGS[locale] as { collection: { categoryHeading: string } }).collection.categoryHeading;
-    expect(text).toContain(`${open}{name}${close}`);
+  it("zh-Hant：分类名与通用词之间用全角冒号（U+FF1A）隔开", () => {
+    const text = (CATALOGS["zh-Hant"] as { collection: { categoryHeading: string } }).collection.categoryHeading;
+    expect(text).toMatch(/^[^{}:：]+\uFF1A\{name\}$/);
+  });
+
+  it("ja：分类名被「」括起来", () => {
+    const text = (CATALOGS.ja as { collection: { categoryHeading: string } }).collection.categoryHeading;
+    expect(text).toContain("「{name}」");
   });
 
   it.each(Object.entries(REAL_NAMES))("真实分类名 %s：15 语渲染结果都含该语种的分类名原文，且不是光秃秃的分类名", (_slug, names) => {
@@ -290,11 +296,16 @@ describe("范围守卫：浏览页 /browse?category= 不在本次范围，仍用
  * 在短语型分类名下不通顺——es "Descubre novelas de Para lectoras en PulseNovel."、de "Entdecke Für
  * Leserinnen-Romane auf PulseNovel."、fr "Découvrez des romans Public féminin sur PulseNovel."、
  * pl "…z kategorii Od nienawiści do miłości na PulseNovel."（分类名与后文连成一片）。
- * 只改了 es/pt-BR/id/vi/ja/ar/fr/de/pl/cs；th/ko/zh-Hant/ru 判断为已通顺，保持原值。
+ * 2026-10-08 追加单只改了 es/pt-BR/id/vi/ja/ar/fr/de/pl/cs；th/ko/zh-Hant/ru 当时判断为已通顺、保持原值。
+ * 2026-10-09 第三方（GPT）验收 + Owner 裁定后，ru/th/ko/zh-Hant 共 10 条按 GPT 模板逐字替换
+ * （en 与其它语种不动），见下方"逐字钉住"用例。
  */
 const NON_EN = SITE_LOCALES.filter((locale) => locale !== "en");
 
-/** 本次改写的语种：描述兜底句里分类名两侧的引号（与该语种习惯一致；ja 与 categoryHeading 同为「」）。 */
+/**
+ * 描述兜底句里分类名两侧的引号（与该语种习惯一致；ja 与 categoryHeading 同为「」）。
+ * 2026-10-09 起含 ko（‘ ’）、zh-Hant（「」）、ru（«»）；th 不用引号，单独断言。
+ */
 const REWRITTEN_DESCRIPTION_QUOTES: ReadonlyArray<readonly [SiteLocale, string, string]> = [
   ["es", "«", "»"],
   ["pt-BR", "“", "”"],
@@ -306,6 +317,9 @@ const REWRITTEN_DESCRIPTION_QUOTES: ReadonlyArray<readonly [SiteLocale, string, 
   ["de", "„", "“"],
   ["pl", "„", "”"],
   ["cs", "„", "“"],
+  ["ko", "\u2018", "\u2019"],
+  ["zh-Hant", "\u300C", "\u300D"],
+  ["ru", "«", "»"],
 ];
 
 function descriptionOf(locale: SiteLocale, name: string): string {
@@ -360,11 +374,64 @@ describe("追加：meta.categoryDescriptionFallback / collection.categoryTitle",
     }
   });
 
-  it("th / ko / zh-Hant / ru 判断为已通顺，描述兜底句保持原值", () => {
-    expect(descriptionOf("th", "แฟนตาซี")).toBe("ค้นพบนิยายแฟนตาซีบน PulseNovel");
-    expect(descriptionOf("ko", "판타지")).toBe("PulseNovel에서 판타지 소설을 만나보세요.");
-    expect(descriptionOf("zh-Hant", "奇幻")).toBe("在PulseNovel探索奇幻小說。");
-    expect(descriptionOf("ru", "Фэнтези")).toBe("Открывайте романы в категории «Фэнтези» на PulseNovel.");
+  /**
+   * 第三方（GPT）验收（45 条中 13 条 NEEDS_CHANGE）+ Owner 2026-10-09 裁定：en 3 条不改，其余 10 条
+   * 按 GPT 模板逐字替换。期望值写成字面量（特殊字符用码点转义），必须与源码逐字相等：
+   * ‘ ’ = U+2018/U+2019（不是 ASCII 撇号），： = U+FF1A，「」= U+300C/U+300D，空格 = U+0020。
+   */
+  describe("2026-10-09 第三方验收：4 个语种 10 条值逐字钉住", () => {
+    const catalog = (locale: SiteLocale) =>
+      CATALOGS[locale] as { collection: { categoryTitle: string; categoryHeading: string }; meta: { categoryDescriptionFallback: string } };
+
+    it("ru：标题/标题形式 'Романы: {name}'，描述 'Откройте для себя …'", () => {
+      expect(catalog("ru").collection.categoryHeading).toBe("Романы: {name}");
+      expect(catalog("ru").collection.categoryTitle).toBe("Романы: {name}");
+      expect(catalog("ru").meta.categoryDescriptionFallback).toBe("Откройте для себя романы в категории «{name}» на PulseNovel.");
+    });
+
+    it("th：描述只在 บน 前加一个普通空格；两个标题键不动", () => {
+      expect(catalog("th").meta.categoryDescriptionFallback).toBe("ค้นพบนิยาย{name} บน PulseNovel");
+      expect(catalog("th").collection.categoryHeading).toBe("นิยาย{name}");
+      expect(catalog("th").collection.categoryTitle).toBe("นิยาย{name}");
+    });
+
+    it("ko：'소설: {name}'，描述用 U+2018/U+2019 括分类名并补 카테고리", () => {
+      expect(catalog("ko").collection.categoryHeading).toBe("소설: {name}");
+      expect(catalog("ko").collection.categoryTitle).toBe("소설: {name}");
+      const description = catalog("ko").meta.categoryDescriptionFallback;
+      expect(description).toBe("PulseNovel에서 \u2018{name}\u2019 카테고리의 소설을 만나보세요.");
+      expect(description).not.toContain("'");
+    });
+
+    it("zh-Hant：'小說：{name}'（全角冒号），描述 PulseNovel 两侧各一个半角空格", () => {
+      expect(catalog("zh-Hant").collection.categoryHeading).toBe("小說\uFF1A{name}");
+      expect(catalog("zh-Hant").collection.categoryTitle).toBe("小說\uFF1A{name}");
+      const description = catalog("zh-Hant").meta.categoryDescriptionFallback;
+      expect(description).toBe("在 PulseNovel 探索\u300C{name}\u300D分類的小說。");
+      expect(description).toContain("\u0020PulseNovel\u0020");
+      expect(description).not.toMatch(/[\u00A0\u3000]/);
+    });
+
+    it("渲染：ko/zh-Hant/ru 套 female-audience / fantasy / from-hate-to-love", () => {
+      const ko = ["여성향", "판타지", "미움에서 사랑으로"];
+      const zh = ["女性向", "奇幻", "由恨生愛"];
+      const ru = ["Для женской аудитории", "Фэнтези", "От ненависти к любви"];
+      ko.forEach((name) => {
+        expect(headingOf("ko", name)).toBe(`소설: ${name}`);
+        expect(descriptionOf("ko", name)).toBe(`PulseNovel에서 \u2018${name}\u2019 카테고리의 소설을 만나보세요.`);
+      });
+      zh.forEach((name) => {
+        expect(headingOf("zh-Hant", name)).toBe(`小說\uFF1A${name}`);
+        expect(descriptionOf("zh-Hant", name)).toBe(`在 PulseNovel 探索\u300C${name}\u300D分類的小說。`);
+      });
+      ru.forEach((name) => {
+        expect(headingOf("ru", name)).toBe(`Романы: ${name}`);
+        expect(descriptionOf("ru", name)).toBe(`Откройте для себя романы в категории «${name}» на PulseNovel.`);
+      });
+      ["แฟนตาซี", "สำหรับผู้อ่านหญิง", "จากเกลียดกลายเป็นรัก"].forEach((name) => {
+        expect(descriptionOf("th", name)).toBe(`ค้นพบนิยาย${name} บน PulseNovel`);
+      });
+    });
   });
 
   it("/browse?category= 的 <title>：非英语语种与分类页 H1 是同一个形式（ja/de/fr）", async () => {

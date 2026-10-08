@@ -145,10 +145,10 @@ const messages = {
     allWorksEmpty: "공개된 작품이 아직 없습니다.",
     genreDescription: "이 컬렉션에서 읽을 수 있는 작품입니다.",
     genreEmpty: "이 컬렉션에는 아직 작품이 없습니다.",
-    categoryTitle: "{name} 소설",
-    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 与 categoryTitle 同形："{name} 소설" 对名词和短语名都通顺（여성향 소설 / 미움에서 사랑으로 소설）。
-    categoryHeading: "{name} 소설",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用冒号隔开（与 categoryHeading 同值）。
+    categoryTitle: "소설: {name}",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用冒号隔开。
+    categoryHeading: "소설: {name}",
     browseSeoDescription: "공개된 소설입니다.",
     categoryEmpty: "이 카테고리에는 아직 공개된 소설이 없습니다.",
   },
@@ -203,7 +203,8 @@ const messages = {
     siteDescription: "소설을 만나보고 무료 챕터부터 읽어보세요.",
     homeTitleFallback: "PulseNovel - 소설을 만나보고 무료로 읽어보세요",
     pageSuffix: " - {page}페이지",
-    categoryDescriptionFallback: "PulseNovel에서 {name} 소설을 만나보세요.",
+    // 第三方（GPT）验收 + Owner 2026-10-09 裁定：分类名用 ‘’ 隔开并补 카테고리。
+    categoryDescriptionFallback: "PulseNovel에서 ‘{name}’ 카테고리의 소설을 만나보세요.",
   },
 } satisfies LocaleMessages;
 

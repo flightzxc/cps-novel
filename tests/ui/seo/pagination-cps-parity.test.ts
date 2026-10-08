@@ -462,12 +462,14 @@ const GOLDEN_BLOG_EN = {
 };
 
 // 2026-10-08（运营反馈、Owner 确认，有意偏离 CPS）：页面层把分类名换成标题形式
-// `collection.categoryHeading`（ko 为 "{name} 소설"），所以 title / og:title / twitter:title /
-// 分享图 alt 四处从 "Romance (ko)" 变为 "Romance (ko) 소설"；描述兜底句仍用纯分类名，其余字段
-// （canonical / hreflang / robots / 描述）与改前逐字相同。
+// `collection.categoryHeading`，所以 title / og:title / twitter:title / 分享图 alt 四处从
+// "Romance (ko)" 变成标题形式；描述兜底句仍用纯分类名，其余字段（canonical / hreflang / robots）
+// 与改前逐字相同。
+// 2026-10-09 第三方（GPT）验收 + Owner 裁定：ko 标题形式改为 "소설: {name}"（即 "소설: Romance (ko)"），
+// 描述兜底句改为 "PulseNovel에서 ‘{name}’ 카테고리의 소설을 만나보세요."（‘ ’ = U+2018/U+2019）。
 const GOLDEN_CATEGORY_METADATA_KO = {
-  "title": "Romance (ko) 소설",
-  "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
+  "title": "소설: Romance (ko)",
+  "description": "PulseNovel에서 \u2018Romance (ko)\u2019 카테고리의 소설을 만나보세요.",
   "alternates": {
     "canonical": "https://novel.example/ko/category/romance",
     "languages": {
@@ -479,8 +481,8 @@ const GOLDEN_CATEGORY_METADATA_KO = {
   },
   "openGraph": {
     "type": "website",
-    "title": "Romance (ko) 소설",
-    "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
+    "title": "소설: Romance (ko)",
+    "description": "PulseNovel에서 \u2018Romance (ko)\u2019 카테고리의 소설을 만나보세요.",
     "url": "https://novel.example/ko/category/romance",
     "siteName": "PulseNovel",
     "locale": "ko_KR",
@@ -489,14 +491,14 @@ const GOLDEN_CATEGORY_METADATA_KO = {
         "url": "https://example.test/og.png",
         "width": 1200,
         "height": 630,
-        "alt": "Romance (ko) 소설"
+        "alt": "소설: Romance (ko)"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "title": "Romance (ko) 소설",
-    "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
+    "title": "소설: Romance (ko)",
+    "description": "PulseNovel에서 \u2018Romance (ko)\u2019 카테고리의 소설을 만나보세요.",
     "images": [
       "https://example.test/og.png"
     ]
