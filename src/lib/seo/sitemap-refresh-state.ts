@@ -4,6 +4,11 @@ import process from "node:process";
 
 import { getStaticSitemapRoot } from "@/lib/seo/static-sitemap-cache";
 import {
+  cleanupStaticSitemapReleases,
+  SITEMAP_RELEASE_CLEANUP_EVENT,
+  type SitemapReleaseCleanupOptions,
+} from "@/lib/seo/static-sitemap-retention";
+import {
   generateStaticSitemaps,
   type GenerateStaticSitemapsOptions,
   type GenerateStaticSitemapsResult,
@@ -60,6 +65,11 @@ export interface RefreshStaticSitemapOptions {
   startedAt?: Date;
   releasePid?: number;
   generate?: (options: GenerateStaticSitemapsOptions) => Promise<GenerateStaticSitemapsResult>;
+  /**
+   * B-33：promote 成功后清理旧版本目录。默认 `cleanupStaticSitemapReleases`；测试可注入。
+   * 无论它返回、抛错还是挂起之外的任何结果，都不改变本次刷新的结果。
+   */
+  cleanupReleases?: (options: SitemapReleaseCleanupOptions) => Promise<unknown>;
 }
 
 export interface RefreshStaticSitemapResult {
@@ -230,6 +240,54 @@ export async function releaseSitemapGenerationLock(
   await fs.rm(getLockPath(rootDir), { force: true });
 }
 
+/**
+ * 旧版本清理的"不能误删"输入：本次 runId，以及此刻锁文件里的 runId（锁在我们释放之后
+ * 若又被别人拿走，说明有另一次生成正在写它的目录）。锁文件在却读不出 runId => orphansUnsafe。
+ */
+async function readReleaseRetentionGuard(
+  rootDir: string,
+  runId: string,
+): Promise<Pick<SitemapReleaseCleanupOptions, "protectNames" | "orphansUnsafe">> {
+  const protectNames = [runId];
+  let raw: string;
+  try {
+    raw = await fs.readFile(getLockPath(rootDir), "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { protectNames, orphansUnsafe: false };
+    return { protectNames, orphansUnsafe: true };
+  }
+  try {
+    const lockRunId = (JSON.parse(raw) as { runId?: unknown }).runId;
+    if (typeof lockRunId === "string" && lockRunId) return { protectNames: [...protectNames, lockRunId], orphansUnsafe: false };
+  } catch {
+    // 落到下面的 orphansUnsafe。
+  }
+  return { protectNames, orphansUnsafe: true };
+}
+
+async function retainStaticSitemapReleases(
+  rootDir: string,
+  runId: string,
+  cleanup: (options: SitemapReleaseCleanupOptions) => Promise<unknown>,
+): Promise<void> {
+  try {
+    await cleanup({ rootDir, ...(await readReleaseRetentionGuard(rootDir, runId)) });
+  } catch (error) {
+    try {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      console.warn(JSON.stringify({
+        schemaVersion: 1,
+        event: SITEMAP_RELEASE_CLEANUP_EVENT,
+        outcome: "error",
+        reason: "cleanup_threw",
+        errorCodes: [typeof code === "string" ? code : "UNKNOWN"],
+      }));
+    } catch {
+      // 日志也写不出就算了，刷新结果不受影响。
+    }
+  }
+}
+
 export async function refreshStaticSitemap(
   options: RefreshStaticSitemapOptions,
 ): Promise<RefreshStaticSitemapResult> {
@@ -285,6 +343,8 @@ export async function refreshStaticSitemap(
       manifest: result.manifest,
     });
     await releaseSitemapGenerationLock(rootDir, runId);
+    // B-33：状态已落盘、锁已释放，刷新在这一刻已经成功；清理只尽力而为，失败只记日志。
+    await retainStaticSitemapReleases(rootDir, runId, options.cleanupReleases ?? cleanupStaticSitemapReleases);
     return {
       ok: true,
       status: "success",

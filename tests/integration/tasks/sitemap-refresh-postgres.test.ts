@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, readdir, readlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, readdir, readlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -208,6 +208,49 @@ describe.skipIf(!enabled).sequential("sitemap refresh on disposable PostgreSQL 1
     const secondXml = await xml(root);
     expect(secondXml).toContain(firstUrl);
     expect(secondXml).toContain(secondUrl);
+  });
+
+  // B-33：promote 成功之后清理旧版本目录。真实 worker 处理器 + 真实 promote + 真实 worker_app 读库生成；
+  // 旧版本是预置的（UUID 目录名 + manifest.promotedAt，与生产同形）。
+  it("B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune", async () => {
+    const root = await rootDir();
+    const run = handler(root);
+    await publishedKoreanArticle(1);
+    const hour = 3_600_000;
+    const base = Date.now() - 48 * hour;
+    const old: string[] = [];
+    for (let index = 0; index < 14; index += 1) {
+      const name = randomUUID();
+      const dir = path.join(root, "releases", name);
+      const when = new Date(base + index * hour);
+      await mkdir(path.join(dir, "sitemap"), { recursive: true });
+      await writeFile(path.join(dir, "sitemap.xml"), "<sitemapindex/>");
+      await writeFile(path.join(dir, "manifest.json"), JSON.stringify({ runId: name, releaseName: name, promotedAt: when.toISOString() }));
+      await utimes(path.join(dir, "sitemap"), when, when);
+      await utimes(path.join(dir, "manifest.json"), when, when);
+      await utimes(dir, when, when);
+      old.push(name);
+    }
+    const releases = async () => (await readdir(path.join(root, "releases"))).sort();
+
+    const first = standaloneLease();
+    expect((await run(context(first))).status).toBe("success");
+    expect(await readlink(path.join(root, "current"))).toBe(path.join("releases", first.taskId));
+    expect(await releases()).toEqual([first.taskId, ...old.slice(5)].sort());
+
+    const failedLease = standaloneLease();
+    const failed = await createSitemapRefreshHandler(worker, {
+      rootDir: root, env: enabledEnv, buildFamily: async () => { throw new Error("fixture build failure"); },
+    })(context(failedLease));
+    expect(failed.status).toBe("failed");
+    expect(await readlink(path.join(root, "current"))).toBe(path.join("releases", first.taskId));
+    expect(await releases()).toEqual([first.taskId, ...old.slice(5), failedLease.taskId].sort());
+
+    const second = standaloneLease();
+    expect((await run(context(second))).status).toBe("success");
+    expect(await readlink(path.join(root, "current"))).toBe(path.join("releases", second.taskId));
+    expect(await releases()).toEqual([second.taskId, first.taskId, ...old.slice(6), failedLease.taskId].sort());
+    expect(await xml(root)).toContain("/ko/novel/");
   });
 
   it("covers processing-time publications with exactly one queued follow-up", async () => {

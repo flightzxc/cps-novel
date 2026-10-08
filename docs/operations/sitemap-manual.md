@@ -49,6 +49,38 @@ Apply **只入队，不等待完成**，JSON `status` 是 `queued`、`coalesced`
 原子切换机制。CLI 没有直接文件发布分支，因此不会绕开 worker 的互斥策略。领取工作繁忙时
 sitemap 可能等待，勿另开一个 worker 或直接调用生成器。通过后台卡片/任务中心查看结束状态。
 
+## 发布版本保留（B-33）
+
+每次刷新在 `releases/<runId>/` 新建一个版本目录（worker 路径下 runId 是任务 UUID），promote 后 `current` 软链
+原子指向它；失败的刷新会留下写了一半的目录。此前这些目录只增不删。现在 worker 在**每次 promote 成功之后**
+（状态已落盘、文件锁已释放）清理一次，实现见 `src/lib/seo/static-sitemap-retention.ts`，常量写在代码里，没有环境变量：
+
+- `current` 指向的版本、本次刷新的 runId、锁文件里记录的 runId，永远保留。
+- 已 promote 的版本（`manifest.json` 的 `promotedAt` 有效）按 `promotedAt` 保留最近 10 个，其余删除。
+- 未 promote 的残留（没有 manifest、`promotedAt` 为空或 manifest 读不出）只有同时满足"早于 current"和
+  "最后一次写入距今 ≥ 2 小时"才删除；2 小时远大于实测 22 秒的生成耗时，也大于 worker 把文件锁判过期的 35 分钟。
+  锁文件在却读不出 runId 时，一律不删残留。
+- 名字既不是 UUID 也不是 `release-` 开头的目录、普通文件、隐藏条目不碰（日志里计入 `ignored`）。
+- `current` 不是指向 `releases/` 的软链、目标不存在时整次不删（`"outcome":"skipped"`）；每删一个目录前重读一次
+  `current`，被切走就立即停手（`"reason":"current_changed"`）。
+- 单次最多删 100 个目录、最多花 10 秒、连续 5 个删除失败就放弃本次，先删最旧的，剩下的下次刷新继续（日志 `deferred`）。
+  首次上线时存量几百个目录会在几次刷新内分批清完，不会让 worker-light 长时间卡在一次删除上。
+- 清理失败（权限、目录读不出……）只写日志，不改变这次刷新的成功状态，也不影响文件锁和状态文件。
+
+每次清理写一条 JSON 日志，`"event":"sitemap_release_cleanup"`：`outcome`（ok / partial / skipped / error）、
+`total`（清理前目录数）、`kept`、`removed`、`failed`、`deferred`、`freedBytes`（被删文件的逻辑大小之和）、
+`keptOrphans`、`ignored`、`durationMs`，失败时附 `failedReleases`（目录名）和 `errorCodes`（如 `EACCES`），
+不含错误消息。需要回退到旧版本时，可选的只有保留下来的这几个版本，保留数之外的旧版本已经被删除。
+
+上线后只读核对（在服务器上，`preprod_compose` 见 `scripts/preproduction/lib.sh`，不改任何东西）：
+
+```bash
+# 清理日志：最近几条，看 outcome / removed / deferred / freedBytes
+preprod_compose logs --since 24h worker-light 2>&1 | grep '"event":"sitemap_release_cleanup"' | tail -5
+# 版本目录数量与占用，current 指向谁
+preprod_compose exec -T worker-light sh -c 'ls -1 /app/runtime/static-sitemaps/releases | wc -l; du -sh /app/runtime/static-sitemaps/releases; readlink /app/runtime/static-sitemaps/current'
+```
+
 ## 本地验收
 
 ```bash

@@ -89,7 +89,7 @@ npm exec vitest run -- --project node \
 # 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs SITEMAP_REFRESH "$secret_dir/integration-result.json" \
-  tests/integration/tasks/sitemap-refresh-postgres.test.ts=14 \
+  tests/integration/tasks/sitemap-refresh-postgres.test.ts=15 \
   tests/integration/tasks/sitemap-scale-postgres.test.ts=8 \
   tests/integration/tasks/sitemap-category-cap-postgres.test.ts=11; then
   exit 1
