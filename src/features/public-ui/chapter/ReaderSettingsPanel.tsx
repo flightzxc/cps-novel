@@ -116,7 +116,7 @@ export function ReaderSettingsPanel({
         <button
           type="button"
           onClick={onClose}
-          className="-mr-2 inline-flex h-9 w-9 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg"
+          className="-me-2 inline-flex h-9 w-9 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg"
           aria-label={t("chapter.closeReaderSettings")}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

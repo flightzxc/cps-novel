@@ -141,7 +141,7 @@ export function SiteHeader({
           <button
             ref={toggleRef}
             type="button"
-            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg md:hidden"
+            className="-me-2 inline-flex h-10 w-10 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg md:hidden"
             aria-expanded={menuOpen}
             aria-controls={panelId}
             aria-label={menuOpen ? t("nav.closeMenu") : t("nav.openMenu")}

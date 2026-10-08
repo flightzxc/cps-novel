@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
+import { Pagination } from "@/features/public-ui/collection/Pagination";
 import { ChapterListBody } from "@/features/public-ui/novel/ChapterListBody";
 import {
   MOCK_CHAPTER,
@@ -13,6 +14,7 @@ import {
 } from "@/features/public-ui/fixtures/mock-content";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { LocaleSwitcher } from "@/features/public-ui/layout/LocaleSwitcher";
+import { SiteHeader } from "@/features/public-ui/layout/SiteHeader";
 import { SiteShell } from "@/features/public-ui/layout/SiteShell";
 import { renderWithMessages } from "./render-with-messages";
 
@@ -325,5 +327,47 @@ describe("6 · 层级：页头语言菜单 > 阅读设置面板 > 续读条", ()
     const { menu, panel } = renderBothOpen();
 
     expect(menu.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+/**
+ * 同类清查里「明显错误且改动极小」的三处（与上面第 1～6 条分开提交，便于单独取舍）：
+ * 贴边补偿用的负外边距要跟着方向走，翻页箭头要随方向镜像。
+ */
+describe("7 · 同类清查：贴边负外边距与翻页箭头随方向翻转", () => {
+  it("阅读设置面板的关闭按钮用 -me-2（末端补偿），不含 -mr-2", () => {
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
+    fireEvent.click(screen.getByTestId("reader-settings-toggle"));
+    const close = screen.getByRole("button", { name: "Close reading settings" });
+
+    expect(close.classList.contains("-me-2")).toBe(true);
+    expect(close.classList.contains("-mr-2")).toBe(false);
+    expect(physicalDirectionTokens(close)).toEqual([]);
+  });
+
+  it("页头移动端菜单开关用 -me-2（末端补偿），不含 -mr-2", () => {
+    renderWithMessages(<SiteHeader navItems={[{ label: "Home", href: "/dev-preview/home" }]} />);
+    const toggle = screen.getByRole("button", { name: "Open menu" });
+
+    expect(toggle.classList.contains("-me-2")).toBe(true);
+    expect(toggle.classList.contains("-mr-2")).toBe(false);
+    expect(physicalDirectionTokens(toggle)).toEqual([]);
+  });
+
+  it("翻页的上一页 / 下一页箭头都带 rtl:-scale-x-100，且没有无前缀的变换类（从左到右不变）", () => {
+    const { container } = render(
+      <Pagination locale="en" currentPage={2} totalPages={3} basePath="/browse" />,
+    );
+    const icons = container.querySelectorAll("nav svg");
+
+    // 上一页、下一页各一枚
+    expect(icons).toHaveLength(2);
+    for (const icon of Array.from(icons)) {
+      expect(icon.classList.contains("rtl:-scale-x-100")).toBe(true);
+      const unconditional = Array.from(icon.classList).filter((token) =>
+        /^-?(?:scale|rotate|translate|skew)(?:-|$)/.test(token),
+      );
+      expect(unconditional).toEqual([]);
+    }
   });
 });
