@@ -139,7 +139,8 @@ export interface ShareImageInput {
  *
  * 所有用到 `resolveOgImage` 语义的模板都走这一个函数，不要在模板里各写一份判断。
  * 两者都缺失时与 `resolveOgImage` 一样 fail closed。
- * 博客模板不在此列：博客封面是运营上传的，尺寸未知，仍沿用 `resolveOgImage` 与旧口径。
+ * 博客模板同样走本函数（PN-12）：博客封面是运营上传的，尺寸未知，按"非默认图"口径处理
+ * （`summary`、不声明尺寸）；没有封面才落到站点默认图的大卡片。
  */
 export function resolveShareImage(input: ShareImageInput): ShareImage {
   const cover = toAbsoluteUrl(input.coverUrl ?? undefined);

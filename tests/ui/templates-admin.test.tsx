@@ -343,9 +343,10 @@ describe("TemplateManager · 新建/编辑提交", () => {
     expect(routerRefresh).not.toHaveBeenCalled();
   });
 
-  it("已登记的十个 template_* 错误码全部渲染为中文", async () => {
+  it("已登记的十一个 template_* 错误码全部渲染为中文", async () => {
     const codes = [
       "template_key_invalid",
+      "template_key_immutable",
       "template_name_invalid",
       "template_locale_invalid",
       "template_article_type_invalid",
@@ -410,6 +411,24 @@ describe("TemplateManager · 新建/编辑提交", () => {
     expect(input.template.templateName).toBe("改过的名称");
     expect(actions.createTemplateAction).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("服务端以 template_key_immutable 拒绝改 key 时：编辑表单保持打开，回显中文说明（含「新建」指引），不刷新列表", async () => {
+    actions.updateTemplateAction.mockResolvedValue({ ok: false, code: "template_key_immutable" });
+    render(<TemplateManager rows={[ROW]} canWrite />);
+    fireEvent.click(screen.getByText("编辑"));
+    fireEvent.click(screen.getByText("保存并校验"));
+
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    const message = screen.getByRole("alert").textContent ?? "";
+    expect(message).not.toContain("template_key_immutable");
+    expect(message).toContain("模板 Key 创建后不能修改");
+    expect(message).toContain("新建");
+    // 仍在编辑表单里：Key 输入框依旧只读且值未变。
+    const keyInput = screen.getByLabelText("模板 Key") as HTMLInputElement;
+    expect(keyInput.readOnly).toBe(true);
+    expect(keyInput.value).toBe("tpl-1");
+    expect(routerRefresh).not.toHaveBeenCalled();
   });
 
   it("编辑内置默认模板同样提交它自己的 key", async () => {

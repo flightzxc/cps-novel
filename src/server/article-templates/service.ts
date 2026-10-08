@@ -445,6 +445,22 @@ export async function updateArticleTemplate(input: {
   const data = storage(input.template);
   return deps.db.$transaction(async (tx) => {
     const before = await tx.articleTemplate.findFirstOrThrow({ where: { id: input.id, deletedAt: null } });
+    // 模板 Key 创建后不可改（服务端闸门，不依赖前端把输入框锁成只读）。
+    //
+    // 模型：一个模板"家族" = 同一 templateKey 下的多行，行与行靠 version 区分
+    // （`@@unique([templateKey, version])`）。**更新是原地改这一行**（`where: { id }`），
+    // 从不产生新版本——新版本只来自 `createArticleTemplate`：用已有的 key 再建一条，
+    // version 自动 = 该 key 的 max + 1。因此"这一行原有的 key"同时就是它所属家族的 key，
+    // 与本事务里刚读出的 `before.templateKey` 比对即可，不会误伤新版本创建（那条路径
+    // 不经过本函数）。
+    //
+    // 不加这道闸，唯一约束只拦得住"撞上同一个 (key, version)"：把一个高版本行改到另一个
+    // 家族的 key 上，只要该家族没有同号版本，就会静默并入对方家族，并成为对方的"最新
+    // 版本"（`selectActiveArticleTemplate` 按 key 取 version 最大的启用行），原家族凭空缺一版。
+    // 比对用 `storage()` 已 trim 过的值——所有写入口都经 `storage()`，库里不会有首尾空白的 key。
+    if (data.templateKey !== before.templateKey) {
+      throw new ArticleTemplateInputError("template_key_immutable");
+    }
     const row = await tx.articleTemplate.update({
       where: { id: input.id },
       data: {

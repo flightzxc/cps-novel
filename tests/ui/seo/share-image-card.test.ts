@@ -14,7 +14,9 @@ import { resolveShareImage } from "@/lib/seo/seo-templates/_shared";
  *     `summary_large_image` + `width: 1200, height: 630`；
  *   - 最终分享图是书封：`summary`，og:image **不声明** width/height。
  * 适用：novel、chapter，以及会拿「列表第一本书封」兜底的 home、collection（browse）、category。
- * blog 不动：博客封面是运营上传的，尺寸未知，不在本单范围。
+ * blog（PN-12 遗留，v0.5.11）同样走这套判定：博客封面是运营上传的，尺寸未知，按「非默认图」
+ * 口径处理（`summary`、不声明尺寸）；文章没有封面才落到站点默认图的大卡片。博客列表 `/blog`
+ * 用的是 collection 模板，本来就在这套判定里。
  */
 
 const ORIGIN = "https://example.test";
@@ -215,19 +217,74 @@ describe("各模板统一走共享判定", () => {
     );
   });
 
-  it("blog 不动：博客封面尺寸未知，仍是旧口径（summary_large_image + 1200×630）", () => {
+  const blogData = (extra: { coverUrl?: string | null; defaultOgImage?: string | null }) => ({
+    title: "A post",
+    description: "Body.",
+    canonicalPath: "/blog/a-post",
+    siteName: "PulseNovel",
+    ...extra,
+  });
+
+  it("blog：文章有封面 → 按非默认图口径，summary 且不声明 width/height（封面尺寸未知，不谎报 1200×630）", () => {
+    expectSmall(
+      generateSeoMeta({
+        entity: "blog",
+        data: blogData({ coverUrl: "/uploads/blog-cover.jpg", defaultOgImage: DEFAULT_IMAGE }),
+      }),
+      `${ORIGIN}/uploads/blog-cover.jpg`,
+    );
+  });
+
+  it("blog：文章没有封面（null / 空串 / 未传）→ 站点默认图大卡片 + 1200×630", () => {
+    for (const coverUrl of [null, "", undefined]) {
+      expectLarge(
+        generateSeoMeta({ entity: "blog", data: blogData({ coverUrl, defaultOgImage: DEFAULT_IMAGE }) }),
+        DEFAULT_IMAGE,
+      );
+    }
+  });
+
+  it("blog：有封面但站点默认图缺失 → 仍用封面（小图卡片）；两者都缺失 fail closed", () => {
+    expectSmall(
+      generateSeoMeta({ entity: "blog", data: blogData({ coverUrl: "/uploads/blog-cover.jpg", defaultOgImage: null }) }),
+      `${ORIGIN}/uploads/blog-cover.jpg`,
+    );
+    expect(() => generateSeoMeta({ entity: "blog", data: blogData({ coverUrl: null, defaultOgImage: "" }) })).toThrow(
+      "OG image is required",
+    );
+  });
+
+  it("blog：Article JSON-LD 的 image 与 og:image 是同一张图（卡片口径变化不影响结构化数据）", () => {
+    const withCover = generateSeoMeta({
+      entity: "blog",
+      data: blogData({ coverUrl: "/uploads/blog-cover.jpg", defaultOgImage: DEFAULT_IMAGE }),
+    });
+    const [article] = JSON.parse(withCover.other!["application/ld+json"]) as Array<{ image: string }>;
+    expect(article.image).toBe(`${ORIGIN}/uploads/blog-cover.jpg`);
+
+    const withoutCover = generateSeoMeta({ entity: "blog", data: blogData({ defaultOgImage: DEFAULT_IMAGE }) });
+    const [fallbackArticle] = JSON.parse(withoutCover.other!["application/ld+json"]) as Array<{ image: string }>;
+    expect(fallbackArticle.image).toBe(DEFAULT_IMAGE);
+  });
+
+  it("blog：og:image 的 alt 仍是文章标题", () => {
     const seo = generateSeoMeta({
       entity: "blog",
-      data: {
-        title: "A post",
-        description: "Body.",
-        canonicalPath: "/blog/a-post",
-        coverUrl: "/uploads/blog-cover.jpg",
-        defaultOgImage: DEFAULT_IMAGE,
-        siteName: "PulseNovel",
-      },
+      data: blogData({ coverUrl: "/uploads/blog-cover.jpg", defaultOgImage: DEFAULT_IMAGE }),
     });
-    expectLarge(seo, `${ORIGIN}/uploads/blog-cover.jpg`);
+    expect(seo.openGraph.images[0]!.alt).toBe("A post");
+  });
+
+  it("blog 列表（collection，canonicalPath=/blog）：不传兜底书封 → 恒为默认图大卡片；默认图缺失才拿兜底封面 → summary", () => {
+    const base = { title: "Blog", description: "Posts.", canonicalPath: "/blog", items: [], siteName: "PulseNovel" };
+    expectLarge(
+      generateSeoMeta({ entity: "collection", data: { ...base, defaultOgImage: DEFAULT_IMAGE } }),
+      DEFAULT_IMAGE,
+    );
+    expectSmall(
+      generateSeoMeta({ entity: "collection", data: { ...base, defaultOgImage: "", fallbackCoverUrl: COVER_PATH } }),
+      COVER_ABS,
+    );
   });
 });
 
@@ -252,6 +309,9 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
   loadBrowseNovels: vi.fn(),
+  loadBlogList: vi.fn(),
+  loadBlogAccess: vi.fn(),
+  loadBlogDetail: vi.fn(),
 }));
 
 vi.mock("@/lib/site/category-queries", () => ({
@@ -269,6 +329,11 @@ const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 const { buildHomeMetadata } = await import("@/app/_pages/home");
 const { buildBrowseMetadata } = await import("@/app/_pages/browse");
 const { buildCategoryMetadata } = await import("@/app/_pages/category");
+const { buildBlogDetailMetadata } = await import("@/app/_pages/blog-detail");
+const { buildBlogListMetadata } = await import("@/app/_pages/blog-list");
+const loadBlogList = vi.mocked(publicLoad.loadBlogList);
+const loadBlogAccess = vi.mocked(publicLoad.loadBlogAccess);
+const loadBlogDetail = vi.mocked(publicLoad.loadBlogDetail);
 
 const CHROME = { brandHref: "/", navItems: [], footerNote: "© test" };
 const settings = (defaultOgImage: string) => ({
@@ -357,5 +422,108 @@ describe("页面层：站点默认图与「第一本书封」兜底分开传给�
     expect(twitterCard(withoutDefault)).toBe("summary");
     expect(openGraphImages(withoutDefault)[0]).not.toHaveProperty("width");
     expect(openGraphImages(withoutDefault)[0].url).toBe(COVER_ABS);
+  });
+});
+
+/**
+ * 页面层：博客详情 / 博客列表走真实的页面元数据函数（PN-12 遗留）。
+ *
+ * 详情页把「文章自己的封面」与「站点默认图」分开传给模板；列表页只传站点默认图
+ * （博客卡片没有封面字段，`BlogCardView` 里根本没有）。
+ */
+describe("页面层：博客详情与博客列表的分享图口径", () => {
+  const BLOG_COVER_PATH = "/uploads/blog-cover.jpg";
+  const BLOG_COVER_ABS = `${ORIGIN}${BLOG_COVER_PATH}`;
+
+  const detail = (coverUrl?: string) => ({
+    id: "blog-1",
+    title: "A post",
+    slug: "a-post",
+    summary: "Summary.",
+    publishedAt: new Date("2026-10-01T00:00:00Z"),
+    href: "/blog/a-post",
+    body: "<p>Body</p>",
+    updatedAt: new Date("2026-10-02T00:00:00Z"),
+    ...(coverUrl === undefined ? {} : { coverUrl }),
+  });
+
+  function mockPublishedPost(coverUrl?: string) {
+    loadBlogAccess.mockResolvedValue({ kind: "published", articleId: "blog-1", title: "A post" });
+    loadBlogDetail.mockResolvedValue(detail(coverUrl));
+  }
+
+  beforeEach(() => {
+    process.env.FEATURE_ARTICLE_BLOG = "true";
+    loadActiveLocales.mockResolvedValue(["en"] as never);
+  });
+
+  afterEach(() => {
+    delete process.env.FEATURE_ARTICLE_BLOG;
+    vi.clearAllMocks();
+  });
+
+  it("博客详情·有封面：twitter:card=summary，og:image 是文章封面且不声明 width/height", async () => {
+    loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
+    mockPublishedPost(BLOG_COVER_PATH);
+    const metadata = await buildBlogDetailMetadata("en", Promise.resolve({ slug: "a-post" }));
+
+    expect(twitterCard(metadata)).toBe("summary");
+    const [image] = openGraphImages(metadata);
+    expect(image).toEqual({ url: BLOG_COVER_ABS, alt: "A post" });
+    expect(image).not.toHaveProperty("width");
+    expect(image).not.toHaveProperty("height");
+    expect((metadata.twitter as { images: string[] }).images).toEqual([BLOG_COVER_ABS]);
+  });
+
+  it("博客详情·无封面：用站点默认图，twitter:card=summary_large_image，og:image 1200×630", async () => {
+    loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
+    mockPublishedPost(undefined);
+    const metadata = await buildBlogDetailMetadata("en", Promise.resolve({ slug: "a-post" }));
+
+    expect(twitterCard(metadata)).toBe("summary_large_image");
+    expect(openGraphImages(metadata)).toEqual([{ url: DEFAULT_IMAGE, width: 1200, height: 630, alt: "A post" }]);
+    expect((metadata.twitter as { images: string[] }).images).toEqual([DEFAULT_IMAGE]);
+  });
+
+  it("博客详情·站点设置里的默认图只有空白：有封面仍用封面（页面层把空白 trim 成 null 再交给模板）", async () => {
+    loadChrome.mockResolvedValue({ settings: settings("   "), chrome: CHROME });
+    mockPublishedPost(BLOG_COVER_PATH);
+    const metadata = await buildBlogDetailMetadata("en", Promise.resolve({ slug: "a-post" }));
+
+    expect(twitterCard(metadata)).toBe("summary");
+    expect(openGraphImages(metadata)[0]).toEqual({ url: BLOG_COVER_ABS, alt: "A post" });
+  });
+
+  it("博客列表：文章卡片没有封面字段，分享图只看站点默认图 → 恒为默认图大卡片 + 1200×630（第 1 页与第 2 页一致）", async () => {
+    loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
+    loadBlogList.mockResolvedValue(
+      Array.from({ length: 30 }, (_, i) => ({
+        id: `b${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+        summary: "s",
+        publishedAt: new Date("2026-10-01T00:00:00Z"),
+        href: `/blog/post-${i}`,
+        // 即便上游多带了 coverUrl（BlogCardView 并没有这个字段），页面也不会把它当分享图。
+        coverUrl: BLOG_COVER_PATH,
+      })) as never,
+    );
+
+    for (const page of [undefined, "2"]) {
+      const metadata = await buildBlogListMetadata("en", Promise.resolve(page ? { page } : {}));
+      expect(twitterCard(metadata), `page=${page}`).toBe("summary_large_image");
+      expect(openGraphImages(metadata), `page=${page}`).toEqual([
+        { url: DEFAULT_IMAGE, width: 1200, height: 630, alt: expect.any(String) },
+      ]);
+    }
+  });
+
+  it("博客列表·空列表（没有任何文章，自然也没有封面）：同样是默认图大卡片", async () => {
+    loadChrome.mockResolvedValue({ settings: settings(DEFAULT_IMAGE), chrome: CHROME });
+    loadBlogList.mockResolvedValue([]);
+    const metadata = await buildBlogListMetadata("en", Promise.resolve({}));
+
+    expect(twitterCard(metadata)).toBe("summary_large_image");
+    expect(openGraphImages(metadata)[0]).toMatchObject({ url: DEFAULT_IMAGE, width: 1200, height: 630 });
   });
 });
