@@ -24,6 +24,7 @@ import {
 } from "@/server/tagging";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { loadPublicTaxonomyByNovelIds } from "@/lib/site/public-taxonomy";
+import { reconcileAllEffectiveTags } from "@/server/tagging/effective-tag-projection";
 import type { AdminRegistry } from "@/server/auth/registry";
 import { createTaggingWorkerHandlers } from "../../../worker/handlers/novel-tag-backfill";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -246,7 +247,13 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
       decidedBy: ids.admin,
     } });
 
-    const slugs = async () => (await loadPublicTaxonomyByNovelIds(web, [ids.publicNovel], "zh")).get(ids.publicNovel)?.map((tag) => tag.slug) ?? [];
+    // B-38：前台标签读物化的归属表 `novel_effective_tag`（写入点会在同事务里重算）。这里每一步都是 owner 直写真源表、
+    // 绕过了写入点，所以读取前显式对账一次——与生产里"站点地图刷新前的兜底对账"同一个函数。被测的规则（FULL_SNAPSHOT
+    // 优先、空快照有效、缺状态行按自动处理）就是对账里的规则 SQL，断言一条不变。
+    const slugs = async () => {
+      await reconcileAllEffectiveTags(web);
+      return (await loadPublicTaxonomyByNovelIds(web, [ids.publicNovel], "zh")).get(ids.publicNovel)?.map((tag) => tag.slug) ?? [];
+    };
     expect(await slugs()).toEqual(["beta", "alpha"]); // missing state ignores stale manual
 
     await owner.novelTagState.create({ data: { novelId: ids.publicNovel, mode: "automatic", revision: 0n } });

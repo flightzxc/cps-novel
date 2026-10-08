@@ -225,33 +225,30 @@ export async function oracleVisibleBlogArticles(owner: PrismaClient, locale: str
 export type ListedArticleRow = { slug: string; id: string };
 
 /**
- * 公开列表（首页 / 浏览 / 分类页共用的 `listPublicArticles`）的**独立预期**：先在库里按页面自己的 where 取
- * 「已发布、未软删、小说已发布且未软删、推广链接状态 fetched」，按 `published_at DESC, id ASC` 只取前
- * `cap` 条（`PUBLIC_LIST_CAP`），**然后**再在应用层去掉推广地址去空白后为空的行（`filterPromoReady`
- * 在截断之后才执行，所以被去掉的行不会让后面的书补位进来）。注意它**不**排除推广链接软删的行
- * （列表 where 没有这一条）——与 `oracleVisibleArticles`（站点地图候选口径）有意不同。
- * 与被测代码完全不共用实现。
+ * 公开列表（首页 / 浏览 / 分类页共用，B-38 起是数据库分页的 `public-list.ts`）的**独立预期**：已发布、未软删、
+ * 小说已发布且未软删、推广链接状态 fetched 且两个地址去空白后至少一个非空；`seoVisibility` 为真时（
+ * `FEATURE_ARTICLE_SEO_VISIBILITY` 打开）再排除 hidden / seo_only。按 `published_at DESC, id ASC`，**没有任何上限**。
+ * 注意它**不**排除推广链接软删的行（列表条件里没有这一条）——与 `oracleVisibleArticles`（站点地图候选口径）有意不同。
+ * 与被测代码完全不共用实现（这里用 PostgreSQL 默认的 `btrim`，夹具里的空白噪声只有普通空格）。
  */
 export async function oracleListedArticles(
   owner: PrismaClient,
   locale: string,
-  cap: number,
+  options: { seoVisibility?: boolean } = {},
 ): Promise<ListedArticleRow[]> {
+  const seoOnly = options.seoVisibility === true;
   return owner.$queryRaw<ListedArticleRow[]>`
-    SELECT slug, id FROM (
-      SELECT a.slug, a.id::text AS id, a.published_at, p.web_url, p.app_url
-      FROM article a
-      JOIN novel n ON n.id = a.novel_id
-      JOIN promo_link p ON p.id = a.promo_link_id AND p.novel_id = a.novel_id
-      WHERE a.locale = ${locale} AND a.article_type = 'novel_article'
-        AND a.status = 'published' AND a.deleted_at IS NULL
-        AND n.status = 'published' AND n.deleted_at IS NULL
-        AND p.status = 'fetched'
-      ORDER BY a.published_at DESC, a.id ASC
-      LIMIT ${cap}::int
-    ) top
-    WHERE btrim(coalesce(web_url, '')) <> '' OR btrim(coalesce(app_url, '')) <> ''
-    ORDER BY published_at DESC, id ASC`;
+    SELECT a.slug, a.id::text AS id
+    FROM article a
+    JOIN novel n ON n.id = a.novel_id
+    JOIN promo_link p ON p.id = a.promo_link_id AND p.novel_id = a.novel_id
+    WHERE a.locale = ${locale} AND a.article_type = 'novel_article'
+      AND a.status = 'published' AND a.deleted_at IS NULL
+      AND (NOT ${seoOnly} OR a.seo_visibility = 'public')
+      AND n.status = 'published' AND n.deleted_at IS NULL
+      AND p.status = 'fetched'
+      AND (btrim(coalesce(p.web_url, '')) <> '' OR btrim(coalesce(p.app_url, '')) <> '')
+    ORDER BY a.published_at DESC, a.id ASC`;
 }
 
 export type ManualCategoryRange = {
@@ -306,7 +303,9 @@ export async function seedManualCategoryRanges(owner: PrismaClient, input: {
  * 把**已经存在**的分类（`canonical_tag`，按 slug 找）按序号区间挂到另一批书上——同一个分类同时出现在两个语种里
  * （分类是全局的，归属是按书的）。与 `seedManualCategoryRanges` 的区别：不新建 `canonical_tag`，所以不会撞 slug 唯一约束。
  * 同样走真实约束：`novel_tag_state.mode = 'manual'`、`novel_canonical_tag.source = 'manual'` 且带 `decided_by`。
- * 用来构造"某分类在 A 语种窗口里有书、在 B 语种窗口里没有"这类语种错配场景。
+ * 🔴 这些夹具函数都由 owner 直接写真源表（绕过写入点），写完之后调用方要对账一次归属表
+ * （`reconcileAllEffectiveTags`），前台才看得到这些分类。
+ * 用来构造"某分类在 A 语种里有进列表的书、在 B 语种里没有"这类语种错配场景。
  */
 export async function seedExistingCategoryRanges(owner: PrismaClient, input: {
   prefix: string;

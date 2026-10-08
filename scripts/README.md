@@ -138,3 +138,23 @@ npx tsx scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECO
 防漏登记用例 `tests/backend/tagging/effective-tag-write-path-registry.test.ts` 里这类脚本登记为
 `ops_script_requires_reconcile`。真实库验证：`scripts/run-effective-tag-projection-postgres-verification.sh`。
 
+## 公开列表规模检查与真实库验证（B-38 第二段，2026-10-09）
+
+公开列表（全部作品页、分类页、首页作品格、页脚分类、站点地图分类网址）改成数据库分页，不设上限；深翻页耗时随页数
+线性增长，所以带一个**规模触发器**（`src/lib/site/public-list.ts` 文件头）：任一语种任一分类的列表可见书超过
+40,000 本，或任一语种列表可见总数超过 60,000 本，就要改成游标翻页。**每次发版前跑**（只读，worker 层）：
+
+```bash
+npx tsx scripts/ops/effective-tag-projection.ts scale-check
+#   PUBLIC_LIST_SCALE_CHECK exceeded=false max_category_count=<n> max_locale_total=<n> category_threshold=40000 locale_threshold=60000
+# 超过阈值：退出 3，并逐条列出
+#   PUBLIC_LIST_SCALE_EXCEEDED kind=category locale=<l> slug=<s> count=<n> / kind=locale locale=<l> total=<n>
+```
+
+矩阵计算本身（站点地图刷新、web 侧 60 秒缓存加载）超过阈值时也会记一条结构化 warn：`public_list_scale_threshold_exceeded`。
+
+- 真实库验证：`scripts/run-public-list-postgres-verification.sh`（七个用例文件，skipped 必须为 0，最后一行
+  `B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS`）。
+- 规模 / 性能基准：`scripts/run-public-list-bench-postgres.sh`（英语约 4 万本合成数据；输出 `B38_BENCH name=… median_ms=…`
+  与 `B38_PLAN name=… top=… seq_scans=…`）。合成数据种子 `tests/integration/site/fixtures/scale-seed.ts` 只写表、不依赖新函数，
+  可原样拷进旧代码的 worktree 灌同一份数据做新旧对比（`B38_SEED_DATABASE_URL=… npx vite-node …/scale-seed.ts`）。

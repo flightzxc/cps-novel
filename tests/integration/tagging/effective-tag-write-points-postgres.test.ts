@@ -24,6 +24,7 @@ import { requireAdminRouteAccess } from "@/server/auth/guards";
 import type { AdminRegistry } from "@/server/auth/registry";
 import {
   checkEffectiveTags,
+  EFFECTIVE_TAG_PROJECTION_ADVISORY_LOCK,
   reconcileAllEffectiveTags,
 } from "@/server/tagging/effective-tag-projection";
 import {
@@ -524,7 +525,7 @@ describe.skipIf(!enabled).sequential("B-38 novel_effective_tag · 每个写入�
     await covered("catalog_scan", worker);
   }, 90_000);
 
-  it("站点地图刷新前的兜底对账（真实 createSitemapRefreshHandler 默认对账，worker_app）：修好被篡改的行并记录 inserted/updated/deleted；稳定后再跑为 0/0/0；对账失败不中断站点地图构建", async () => {
+  it("站点地图刷新前的兜底（真实 createSitemapRefreshHandler 默认检查 / 对账，worker_app）：先只读检查，有差异才对账（修好被篡改的行并记录）；差异为 0 时不拿独占咨询锁；检查 / 对账失败都不中断站点地图构建", async () => {
     const novel = await novelWithRomance();
     await baseline();
     const bare = await createNovel(owner);
@@ -554,31 +555,59 @@ describe.skipIf(!enabled).sequential("B-38 novel_effective_tag · 每个写入�
       mode: "apply" as const, signal: new AbortController().signal, heartbeat: vi.fn().mockResolvedValue(true),
     });
 
+    // 有差异：检查（warn）→ 对账（warn）→ 构建。
     expect((await buildHandler(worker)(context() as never)).status).toBe("success");
-    expect(warns).toHaveLength(1);
-    expect(JSON.parse(warns[0]!)).toMatchObject({ event: "effective_tag_reconcile", level: "warn", inserted: 1, updated: 1, deleted: 1 });
+    expect(warns).toHaveLength(2);
+    expect(JSON.parse(warns[0]!)).toMatchObject({ event: "effective_tag_check", level: "warn", missing: 1, extra: 1, changed: 1, reconcile: true });
+    expect(JSON.parse(warns[1]!)).toMatchObject({ event: "effective_tag_reconcile", level: "warn", inserted: 1, updated: 1, deleted: 1 });
     expect(await rowsOf(novel)).toEqual(MAPPED_ROMANCE);
     expect(await rowsOf(bare)).toEqual([]);
     await expectConsistent();
 
-    // 稳定后再跑：0/0/0
+    // 稳定后再跑：检查 0/0/0 → 不对账（只有一行 info，没有 reconcile 那一行）。
+    infos.length = 0;
     await buildHandler(worker)(context() as never);
     expect(infos).toHaveLength(1);
-    expect(JSON.parse(infos[0]!)).toMatchObject({ event: "effective_tag_reconcile", level: "info", inserted: 0, updated: 0, deleted: 0 });
+    expect(JSON.parse(infos[0]!)).toMatchObject({ event: "effective_tag_check", level: "info", missing: 0, extra: 0, changed: 0, reconcile: false });
+    expect(warns).toHaveLength(2);
 
-    // 对账失败（连接已断开的 client）→ 只记错误日志，站点地图构建照常成功
+    // 🔴 差异为 0 不拿独占咨询锁：另一个连接（owner）持有独占锁 50212 期间，刷新照样成功（只读检查不排队）。
+    // 若处理器无条件对账，它会在这把锁上排队直到我们释放——这里在锁没释放之前就要求它完成。
+    await owner.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${EFFECTIVE_TAG_PROJECTION_ADVISORY_LOCK.namespace}::int, ${EFFECTIVE_TAG_PROJECTION_ADVISORY_LOCK.scope}::int)::text AS lock_result`;
+      const finished = await Promise.race([
+        buildHandler(worker)(context() as never).then((outcome) => outcome.status),
+        new Promise<string>((resolve) => setTimeout(() => resolve("BLOCKED_ON_ADVISORY_LOCK"), 8_000)),
+      ]);
+      expect(finished).toBe("success");
+    }, { timeout: 30_000 });
+
+    // 有差异才对账，而对账确实要拿独占锁：锁被占着时处理器排队；锁一放开，行被修好。
+    await owner.$executeRaw`DELETE FROM novel_effective_tag WHERE novel_id = ${novel}::uuid AND canonical_tag_id = ${f.tags.alpha!}::uuid`;
+    let pendingOutcome: Promise<string> | undefined;
+    await owner.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${EFFECTIVE_TAG_PROJECTION_ADVISORY_LOCK.namespace}::int, ${EFFECTIVE_TAG_PROJECTION_ADVISORY_LOCK.scope}::int)::text AS lock_result`;
+      pendingOutcome = buildHandler(worker)(context() as never).then((outcome) => outcome.status);
+      const early = await Promise.race([pendingOutcome, new Promise<string>((resolve) => setTimeout(() => resolve("STILL_WAITING"), 1_500))]);
+      expect(early).toBe("STILL_WAITING");
+    }, { timeout: 30_000 });
+    expect(await pendingOutcome).toBe("success");
+    expect(await rowsOf(novel)).toEqual(MAPPED_ROMANCE);
+    await expectConsistent();
+
+    // 检查失败（连接已断开的 client）→ 只记错误日志，不去拿独占锁对账，站点地图构建照常成功
     const dead = new PrismaClient({ datasourceUrl: "postgresql://nobody:nothing@127.0.0.1:1/none?connect_timeout=1" });
     try {
       const outcome = await buildHandler(dead)(context() as never);
       expect(outcome.status).toBe("success");
       expect(errors).toHaveLength(1);
-      expect(JSON.parse(errors[0]!)).toMatchObject({ event: "effective_tag_reconcile_failed", level: "error" });
+      expect(JSON.parse(errors[0]!)).toMatchObject({ event: "effective_tag_check_failed", level: "error" });
       expect(errors[0]).not.toMatch(/nothing|postgresql:/);
     } finally {
       await dead.$disconnect().catch(() => undefined);
     }
     await covered("sitemap_refresh", worker);
-  }, 90_000);
+  }, 120_000);
 
   it("运维命令（worker 层，worker_app）：check 只读报差异并退出 3；reconcile 不带确认短语仍只读；带确认短语才修复，之后检查为 0 退出 0", async () => {
     const novel = await novelWithRomance();

@@ -75,6 +75,8 @@ import { randomUUID } from "node:crypto";
 
 import { PrismaClient } from "@prisma/client";
 
+import { reconcileAllEffectiveTags } from "../src/server/tagging/effective-tag-projection";
+
 import {
   buildCanonicalPlan,
   loadTaggingBootstrapArtifacts,
@@ -326,9 +328,14 @@ async function main(): Promise<void> {
       await seedNovelsForLocale(prisma, locale, mapping);
     }
     if (boilerplateLocale) await seedBoilerplateNovels(prisma, boilerplateLocale);
+    // B-38: public tags are read from the materialised `novel_effective_tag` (the migration builds it in production).
+    // These fixtures are written straight into the source tables, bypassing the write points that recompute it in the
+    // same transaction, so materialise it once here -- otherwise the preview would see "no tags yet" for the mapped books.
+    const projection = await reconcileAllEffectiveTags(prisma);
     console.log(JSON.stringify({
       result: "TAGGING_AUTO_PREVIEW_FIXTURES_OK",
       canonicalTagCount: idByStableId.size,
+      effectiveTagRowsInserted: projection.inserted,
       locales,
       novelsPerLocale: 20,
       ...(boilerplateLocale ? { boilerplateLocale, boilerplateNovels: 6, boilerplateExpectedImpact: BOILERPLATE_FIXTURE_EXPECTED } : {}),
