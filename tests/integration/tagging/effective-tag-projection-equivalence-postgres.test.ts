@@ -228,6 +228,35 @@ describe.skipIf(!enabled).sequential("B-38 novel_effective_tag · 与改造前�
     expect(await readProjectionRows(owner)).toEqual(reconciled);
   });
 
+  it("按书范围的规则（单本 / 单页重算用）与全量规则逐行一致：清空后按每 40 本一批、再整体一批做范围重算，结果与全量对账完全相同", async () => {
+    const reconciled = await readProjectionRows(owner);
+    expect(reconciled.length).toBeGreaterThan(300);
+    const ids = await allNovelIds(owner);
+
+    await owner.$executeRawUnsafe("TRUNCATE TABLE novel_effective_tag");
+    let inserted = 0;
+    for (let offset = 0; offset < ids.length; offset += 40) {
+      const batch = ids.slice(offset, offset + 40);
+      const summary = await web.$transaction((tx) => refreshEffectiveTagsForNovels(tx, batch));
+      expect(summary.updated + summary.deleted).toBe(0);
+      inserted += summary.inserted;
+    }
+    expect(inserted).toBe(reconciled.length);
+    expect(await readProjectionRows(owner)).toEqual(reconciled);
+    expect(await checkEffectiveTags(web)).toEqual({ missing: 0, extra: 0, changed: 0, samples: [] });
+
+    // 整体一批：稳定状态零变化
+    expect(await web.$transaction((tx) => refreshEffectiveTagsForNovels(tx, ids))).toEqual({ inserted: 0, updated: 0, deleted: 0 });
+
+    // 范围重算也会删多余行 / 改变了的行：篡改一本书的两行，只重算它
+    const victim = novels.mapped_only!;
+    await owner.$executeRaw`UPDATE novel_effective_tag SET rank = rank + 3 WHERE novel_id = ${victim}::uuid AND canonical_tag_id = ${foundation.tags.beta!}::uuid`;
+    await owner.$executeRaw`INSERT INTO novel_effective_tag (novel_id, canonical_tag_id, provenance, score, rank)
+      VALUES (${victim}::uuid, ${foundation.tags.omega!}::uuid, 'auto', 9, 9)`;
+    expect(await web.$transaction((tx) => refreshEffectiveTagsForNovels(tx, [victim]))).toEqual({ inserted: 0, updated: 1, deleted: 1 });
+    expect(await readProjectionRows(owner)).toEqual(reconciled);
+  });
+
   it("稳定状态零写入：连续对账两次，第二次计数全 0；对账事务没有被分配事务号（= 一次写入都没发生），投影表没有任何行被重写（xmin 不变）", async () => {
     await reconcileAllEffectiveTags(web);
     expect(await reconcileAllEffectiveTags(web)).toEqual({ inserted: 0, updated: 0, deleted: 0 });

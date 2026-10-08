@@ -122,6 +122,19 @@ describe("refreshEffectiveTagsForNovels · 执行顺序与分块", () => {
     expect(Math.max(...apply.map((statement) => statement.values.length))).toBeLessThan(32_767);
   });
 
+  it("比对写入语句用 FULL JOIN 求差异，只对差异行做 DELETE / UPDATE / INSERT（不是对全表的 NOT EXISTS）", async () => {
+    const { tx, statements } = fakeTx();
+    await refreshEffectiveTagsForNovels(tx, [uuid(1)]);
+    const apply = wsNormalize(statements.find((statement) => kindOf(statement.sql) === "apply")!.sql);
+    expect(apply).toContain("diff AS MATERIALIZED ( SELECT COALESCE(d.novel_id, c.novel_id) AS novel_id");
+    expect(apply).toContain("FROM desired d FULL JOIN cur c ON d.novel_id = c.novel_id AND d.canonical_tag_id = c.canonical_tag_id");
+    expect(apply).toMatch(/del AS \( DELETE FROM novel_effective_tag target USING diff x WHERE x\.only_current/);
+    expect(apply).toMatch(/upd AS \( UPDATE novel_effective_tag target SET provenance = x\.want_provenance, score = x\.want_score, rank = x\.want_rank, computed_at = now\(\) FROM diff x WHERE NOT x\.only_current AND NOT x\.only_desired/);
+    expect(apply).toMatch(/ins AS \( INSERT INTO novel_effective_tag \(novel_id, canonical_tag_id, provenance, score, rank\) SELECT x\.novel_id, x\.canonical_tag_id, x\.want_provenance, x\.want_score, x\.want_rank FROM diff x WHERE x\.only_desired/);
+    // 整条语句只剩人工模式排除这一处 NOT EXISTS
+    expect(apply.match(/NOT EXISTS/g)).toHaveLength(1);
+  });
+
   it("比对写入语句没返回汇总行 → 抛错（不是悄悄当成 0）", async () => {
     const { tx } = fakeTx({ apply: () => [] });
     await expect(refreshEffectiveTagsForNovels(tx, [uuid(1)])).rejects.toThrow("no summary row");
@@ -201,14 +214,32 @@ describe("规则 SQL · 不许被'优化'掉的关键文本（语义由真实库
     expect(sql).toContain("target_source_item AS MATERIALIZED (");
   });
 
-  it("映射比较保持 COLLATE \"C\" 逐字节比较（范围与原始词两处）", () => {
-    expect(sql).toContain('slm.raw_language_scope COLLATE "C" = tsi.raw_language_scope COLLATE "C"');
+  it("映射比较保持 COLLATE \"C\" 逐字节比较（范围与原始词两处，两侧都显式写）", () => {
+    expect(sql).toContain('e.raw_language_scope COLLATE "C" = il.raw_language_scope COLLATE "C"');
     expect(sql).toContain('slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"');
   });
 
-  it("只收启用中的分类；自动段只留 base 里没有的 (书, 分类)", () => {
+  it("只收启用中的分类；同一 (书, 分类) 在 base 与 auto 里都有时留 base（DISTINCT ON … ORDER BY source_rank）", () => {
     expect(sql).toContain("JOIN canonical_tag ct ON ct.id = membership.canonical_tag_id AND ct.status = 'active'");
-    expect(sql).toMatch(/SELECT automatic\.\* FROM auto_membership automatic WHERE NOT EXISTS \( SELECT 1 FROM base_membership mapped WHERE mapped\.novel_id = automatic\.novel_id AND mapped\.canonical_tag_id = automatic\.canonical_tag_id \)/);
+    expect(sql).toContain("SELECT DISTINCT ON (candidate.novel_id, candidate.canonical_tag_id)");
+    expect(sql).toContain("SELECT * FROM base_membership UNION ALL SELECT * FROM auto_membership");
+    expect(sql).toContain("ORDER BY candidate.novel_id, candidate.canonical_tag_id, candidate.source_rank");
+  });
+
+  it("计划稳定性：映射支路先物化 item_label 与很小的 active_edge，再做三列等值连接；整条 SQL 里只有一处 NOT EXISTS（人工模式排除），没有两个无统计 CTE 之间的反连接", () => {
+    expect(sql).toContain("item_label AS MATERIALIZED (");
+    expect(sql).toContain("active_edge AS MATERIALIZED (");
+    expect(sql).toContain("FROM item_label il JOIN active_edge e ON e.source_label_id = il.source_label_id AND e.channel_app_id = il.channel_app_id");
+    expect(sql.match(/NOT EXISTS/g)).toHaveLength(1);
+    expect(sql).toMatch(/NOT EXISTS \( SELECT 1 FROM novel_tag_state nts WHERE nts\.novel_id = il\.novel_id AND nts\.mode = 'manual' \)/);
+    // 旧写法的逐书目连接 mapping 已经不在了
+    expect(sql).not.toMatch(/FROM target_source_item tsi JOIN channel_app ca/);
+  });
+
+  it("映射边的启用渠道 / series_type / 同渠道 / 活跃条件都在 active_edge 里", () => {
+    expect(sql).toContain("JOIN channel_app ca ON ca.id = sl.channel_app_id AND ca.status = 'active'");
+    expect(sql).toContain("ON slm.channel_app_id = sl.channel_app_id");
+    expect(sql).toContain("AND slm.active IS TRUE WHERE sl.label_kind = 'series_type'");
   });
 
   it("rank 的排序表达式原样复制自改造前'自动开'分支（含 score DESC，不加 NULLS LAST）", () => {
@@ -224,7 +255,7 @@ describe("规则 SQL · 不许被'优化'掉的关键文本（语义由真实库
 
   it("人工模式的书只认人工行、其余书走映射（NOT EXISTS 人工状态）", () => {
     expect(sql).toContain("JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'");
-    expect(sql).toMatch(/WHERE NOT EXISTS \( SELECT 1 FROM novel_tag_state nts WHERE nts\.novel_id = tsi\.novel_id AND nts\.mode = 'manual' \)/);
+    expect(sql).toMatch(/WHERE NOT EXISTS \( SELECT 1 FROM novel_tag_state nts WHERE nts\.novel_id = il\.novel_id AND nts\.mode = 'manual' \)/);
   });
 
   it("自动段只认 mode = 'automatic' 且 classification_run_id = current_auto_run_id 且 source = 'auto'", () => {

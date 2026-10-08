@@ -24,6 +24,11 @@
 --                                         WHERE status = 'published' AND deleted_at IS NULL
 --                                           AND article_type = 'novel_article'
 --
+-- 首建耗时（PG16.14，合成 8 万本 / 8 万书目 / 16 万书目标签 / 21.5 万行归属，shared_buffers=512MB）：约 2 秒（含两个
+-- 索引与主键维护），产生约 38 MB 表+索引。规则 SQL 的形状是为"CTE 没有列统计时也不出坏计划"专门选的（item_label /
+-- active_edge 先物化再做三列等值连接、DISTINCT ON 去重而不是 NOT EXISTS 反连接）：实测换成"更直观"的旧写法，
+-- 同一份数据要跑 10 分钟以上。详见 src/server/tagging/effective-tag-projection.ts 文件头，请不要简化。
+--
 -- 不用 CREATE INDEX CONCURRENTLY：迁移在 Prisma 事务里执行，CONCURRENTLY 不能在事务块中运行；
 -- release.sh 的 migrate-approved 在维护模式（应用已停）下执行。
 --
@@ -90,29 +95,37 @@ target_source_item AS MATERIALIZED (
     AND nsi.deleted_at IS NULL
     AND nsi.raw_language_scope IS NOT NULL
 ),
+item_label AS MATERIALIZED (
+  SELECT tsi.novel_id, tsi.channel_app_id, tsi.raw_language_scope, nsil.source_label_id
+  FROM target_source_item tsi
+  JOIN novel_source_item_label nsil
+    ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
+),
+active_edge AS MATERIALIZED (
+  SELECT sl.id AS source_label_id, sl.channel_app_id, slm.raw_language_scope, slm.canonical_tag_id
+  FROM source_label sl
+  JOIN channel_app ca ON ca.id = sl.channel_app_id AND ca.status = 'active'
+  JOIN source_label_mapping slm
+    ON slm.channel_app_id = sl.channel_app_id
+   AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
+   AND slm.active IS TRUE
+  WHERE sl.label_kind = 'series_type'
+),
 base_membership AS MATERIALIZED (
   SELECT nct.novel_id, nct.canonical_tag_id, 'manual'::text AS provenance, 0 AS source_rank, NULL::integer AS score
   FROM novel_canonical_tag nct
   JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
   WHERE  nct.source = 'manual'
   UNION
-  SELECT tsi.novel_id, slm.canonical_tag_id, 'mapped'::text AS provenance, 0 AS source_rank, NULL::integer AS score
-  FROM target_source_item tsi
-  JOIN channel_app ca ON ca.id = tsi.channel_app_id AND ca.status = 'active'
-  JOIN novel_source_item_label nsil
-    ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
-  JOIN source_label sl
-    ON sl.id = nsil.source_label_id
-   AND sl.channel_app_id = tsi.channel_app_id
-   AND sl.label_kind = 'series_type'
-  JOIN source_label_mapping slm
-    ON slm.channel_app_id = tsi.channel_app_id
-   AND slm.raw_language_scope COLLATE "C" = tsi.raw_language_scope COLLATE "C"
-   AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
-   AND slm.active IS TRUE
+  SELECT il.novel_id, e.canonical_tag_id, 'mapped'::text AS provenance, 0 AS source_rank, NULL::integer AS score
+  FROM item_label il
+  JOIN active_edge e
+    ON e.source_label_id = il.source_label_id
+   AND e.channel_app_id = il.channel_app_id
+   AND e.raw_language_scope COLLATE "C" = il.raw_language_scope COLLATE "C"
   WHERE NOT EXISTS (
       SELECT 1 FROM novel_tag_state nts
-      WHERE nts.novel_id = tsi.novel_id AND nts.mode = 'manual'
+      WHERE nts.novel_id = il.novel_id AND nts.mode = 'manual'
     )
 ),
 auto_membership AS MATERIALIZED (
@@ -125,16 +138,15 @@ auto_membership AS MATERIALIZED (
   WHERE  nts.mode = 'automatic'
 ),
 public_membership AS (
-  SELECT * FROM base_membership
-  UNION ALL
-  SELECT automatic.* FROM auto_membership automatic
-  WHERE NOT EXISTS (
-    SELECT 1 FROM base_membership mapped
-    WHERE mapped.novel_id = automatic.novel_id
-      AND mapped.canonical_tag_id = automatic.canonical_tag_id
-  )
+  SELECT DISTINCT ON (candidate.novel_id, candidate.canonical_tag_id)
+         candidate.novel_id, candidate.canonical_tag_id, candidate.provenance, candidate.source_rank, candidate.score
+  FROM (
+    SELECT * FROM base_membership
+    UNION ALL
+    SELECT * FROM auto_membership
+  ) candidate
+  ORDER BY candidate.novel_id, candidate.canonical_tag_id, candidate.source_rank
 )
-
 
 SELECT membership.novel_id,
        membership.canonical_tag_id,

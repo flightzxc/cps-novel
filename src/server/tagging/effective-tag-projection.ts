@@ -59,14 +59,32 @@
  * 真源的同一事务里直接算完，不需要发件箱表和新的后台任务类型。**重算入口都收在本文件**——
  * 若 Owner 改判成发件箱，只改这一处。
  *
- * ## 🔴 `target_source_item AS MATERIALIZED` 必须保留
+ * ## 🔴 规则 SQL 的形状是为"统计信息缺失也不出坏计划"专门选的——不要"简化"
  *
- * 防"统计信息缺失时的坏计划"（`channel_app` 是一张从没被 analyze 过的 1 行表），完整的
- * 现象、数字和两条被证伪的归因见 `src/lib/site/public-taxonomy.ts` 里
- * `loadPublicTaxonomyByNovelIds` 上方的长注释。结论：不要为了"少一层 CTE"把它内联回去，
- * 也不要去掉 `MATERIALIZED`（PG12 起 CTE 默认可被内联）。`slm` 两列的 `COLLATE "C"` 同理不是
- * 冗余写法（`slm` 的两列本身是 `text COLLATE "C"`，对侧是默认排序规则，不显式指定会报
- * "无法确定排序规则"）。
+ * 规则 SQL 要在三种场景里跑：按页/按书重算（`IN` 列表 ≤ 2,000 本）、全量对账（站点地图刷新前、后台改映射）、
+ * 迁移首建（全部书）。里面的 CTE 都是 `MATERIALIZED`，**没有任何列统计**，规划器对它们的行数和连接选择率
+ * 全靠默认值瞎猜；`channel_app` 这张 1 行的注册表在生产里从没被 analyze 过，同样没有统计。这几处的形状都是
+ * 真实库（PG16，合成 8 万本、21.5 万行归属）上实测出来的，换一种"等价但更好看"的写法，实测会从 0.5 秒
+ * 变成 10 分钟以上：
+ *
+ * 1. `target_source_item AS MATERIALIZED`：按书范围版本里 `novel_id IN (…)` 直接写进 UNION 分支会被估成 9 行、
+ *    实际 178 万行（2026-09-20 生产事故，2,696ms；现象、两条被证伪的归因见 `src/lib/site/public-taxonomy.ts`
+ *    里 `loadPublicTaxonomyByNovelIds` 上方的长注释）。保留它，且不要去掉 `MATERIALIZED`（PG12 起 CTE 默认可内联）。
+ * 2. `item_label` 与 `active_edge` 两个 MATERIALIZED CTE：旧写法是 `tsi ⨝ nsil ⨝ sl ⨝ slm` 一串连接，规划器没有统计
+ *    时会先把"书目 × 同范围的全部映射边"连成 96 万行再去找标签（143M 次比较，11 秒）。现在先把"书目 → 标签"
+ *    物化成 `item_label`（16 万行），把"启用渠道下的活跃映射边 × 它的原始标签"物化成很小的 `active_edge`
+ *    （生产约 200 行），最后只剩一个"16 万行 × 200 行、三列等值"的连接，怎么选连接方式都不会爆。
+ *    语义与旧写法逐项等价：渠道启用、`label_kind = 'series_type'`、同渠道、范围与原始词按 `COLLATE "C"` 比较、
+ *    边与书目标签都要 active。`COLLATE "C"` 不是冗余写法（`slm` 两列本身是 `text COLLATE "C"`，对侧是默认排序规则，
+ *    不显式指定会报"无法确定排序规则"），别删。
+ * 3. `public_membership` 用 `DISTINCT ON … ORDER BY source_rank`（排序去重），而不是"自动段 NOT EXISTS 基础段"：
+ *    两个无统计的 CTE 做反连接，规划器估成 1×2 行就会选"嵌套循环 + 对 CTE 全扫"，实际各十几万行，首建跑了
+ *    10 分钟还没完。语义相同：同一 (书, 分类) 在 base 与 auto 里都有时留 base（`source_rank` 小的）。
+ * 4. 差异比对用 `FULL JOIN`（见 `buildDiffCtes`）而不是 `NOT EXISTS`，理由同 3：FULL JOIN 只能用哈希 / 归并实现，
+ *    不存在嵌套循环这条退路。
+ *
+ * 防回归：`tests/backend/tagging/effective-tag-projection.test.ts` 钉住上面这些关键文本；真实库用例
+ * `effective-tag-projection-equivalence-postgres.test.ts` 钉住语义（与改造前现场计算逐行相等）。
  */
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -147,29 +165,37 @@ function buildDesiredMembershipSql(scope: Scope): Readonly<{ ctes: Prisma.Sql; s
         AND nsi.deleted_at IS NULL
         AND nsi.raw_language_scope IS NOT NULL
     ),
+    item_label AS MATERIALIZED (
+      SELECT tsi.novel_id, tsi.channel_app_id, tsi.raw_language_scope, nsil.source_label_id
+      FROM target_source_item tsi
+      JOIN novel_source_item_label nsil
+        ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
+    ),
+    active_edge AS MATERIALIZED (
+      SELECT sl.id AS source_label_id, sl.channel_app_id, slm.raw_language_scope, slm.canonical_tag_id
+      FROM source_label sl
+      JOIN channel_app ca ON ca.id = sl.channel_app_id AND ca.status = 'active'
+      JOIN source_label_mapping slm
+        ON slm.channel_app_id = sl.channel_app_id
+       AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
+       AND slm.active IS TRUE
+      WHERE sl.label_kind = 'series_type'
+    ),
     base_membership AS MATERIALIZED (
       SELECT nct.novel_id, nct.canonical_tag_id, 'manual'::text AS provenance, 0 AS source_rank, NULL::integer AS score
       FROM novel_canonical_tag nct
       JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
       WHERE ${manualNovelFilter} nct.source = 'manual'
       UNION
-      SELECT tsi.novel_id, slm.canonical_tag_id, 'mapped'::text AS provenance, 0 AS source_rank, NULL::integer AS score
-      FROM target_source_item tsi
-      JOIN channel_app ca ON ca.id = tsi.channel_app_id AND ca.status = 'active'
-      JOIN novel_source_item_label nsil
-        ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
-      JOIN source_label sl
-        ON sl.id = nsil.source_label_id
-       AND sl.channel_app_id = tsi.channel_app_id
-       AND sl.label_kind = 'series_type'
-      JOIN source_label_mapping slm
-        ON slm.channel_app_id = tsi.channel_app_id
-       AND slm.raw_language_scope COLLATE "C" = tsi.raw_language_scope COLLATE "C"
-       AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
-       AND slm.active IS TRUE
+      SELECT il.novel_id, e.canonical_tag_id, 'mapped'::text AS provenance, 0 AS source_rank, NULL::integer AS score
+      FROM item_label il
+      JOIN active_edge e
+        ON e.source_label_id = il.source_label_id
+       AND e.channel_app_id = il.channel_app_id
+       AND e.raw_language_scope COLLATE "C" = il.raw_language_scope COLLATE "C"
       WHERE NOT EXISTS (
           SELECT 1 FROM novel_tag_state nts
-          WHERE nts.novel_id = tsi.novel_id AND nts.mode = 'manual'
+          WHERE nts.novel_id = il.novel_id AND nts.mode = 'manual'
         )
     ),
     auto_membership AS MATERIALIZED (
@@ -182,14 +208,14 @@ function buildDesiredMembershipSql(scope: Scope): Readonly<{ ctes: Prisma.Sql; s
       WHERE ${autoNovelFilter} nts.mode = 'automatic'
     ),
     public_membership AS (
-      SELECT * FROM base_membership
-      UNION ALL
-      SELECT automatic.* FROM auto_membership automatic
-      WHERE NOT EXISTS (
-        SELECT 1 FROM base_membership mapped
-        WHERE mapped.novel_id = automatic.novel_id
-          AND mapped.canonical_tag_id = automatic.canonical_tag_id
-      )
+      SELECT DISTINCT ON (candidate.novel_id, candidate.canonical_tag_id)
+             candidate.novel_id, candidate.canonical_tag_id, candidate.provenance, candidate.source_rank, candidate.score
+      FROM (
+        SELECT * FROM base_membership
+        UNION ALL
+        SELECT * FROM auto_membership
+      ) candidate
+      ORDER BY candidate.novel_id, candidate.canonical_tag_id, candidate.source_rank
     )
   `;
 
@@ -228,51 +254,73 @@ export function buildEffectiveTagFirstBuildSql(): string {
   `.sql;
 }
 
-/** 应有行 vs 表内现有行，只写差异；返回三个计数。`cur` 与 DML 同一条语句，同一个快照。 */
-function buildApplySql(scope: Scope): Prisma.Sql {
+/**
+ * 应有行 vs 表内现有行的差异（`desired` FULL JOIN `cur`，只留不同的）。
+ *
+ * 🔴 为什么是 FULL JOIN，而不是 `NOT EXISTS` / `LEFT JOIN … IS NULL`：`desired` 与 `cur` 都是
+ * `MATERIALIZED` CTE，没有任何列统计，规划器对它们的行数估计经常差好几个数量级（真实库实测，
+ * 8 万本规模：把 `base_membership` 估成 2 行、`auto_membership` 估成 1 行，实际各是十几万行）。
+ * 在这种估计下，反连接（anti join）会被规划成"嵌套循环 + 对 CTE 全扫"——十几万 × 十几万次比较，
+ * 首建跑了 10 分钟还没完。FULL JOIN 只能用哈希或归并实现，不存在嵌套循环这条退路，
+ * 所以无论估计多离谱都是一趟线性扫描。同理 `public_membership` 用 `DISTINCT ON`（排序去重）而不是
+ * "自动段 NOT EXISTS 基础段"。**不要把它们改回 NOT EXISTS。**
+ */
+function buildDiffCtes(scope: Scope): Prisma.Sql {
   const { ctes, select } = buildDesiredMembershipSql(scope);
   const currentFilter = scope.kind === "novels"
     ? Prisma.sql`WHERE existing.novel_id IN (${uuidList(scope.ids)})`
     : Prisma.empty;
   return Prisma.sql`
-    WITH ${ctes},
+    ${ctes},
     desired AS MATERIALIZED (${select}),
     cur AS MATERIALIZED (
       SELECT existing.novel_id, existing.canonical_tag_id, existing.provenance, existing.score, existing.rank
       FROM novel_effective_tag existing
       ${currentFilter}
     ),
+    diff AS MATERIALIZED (
+      SELECT COALESCE(d.novel_id, c.novel_id) AS novel_id,
+             COALESCE(d.canonical_tag_id, c.canonical_tag_id) AS canonical_tag_id,
+             d.provenance AS want_provenance, d.score AS want_score, d.rank AS want_rank,
+             (d.novel_id IS NULL) AS only_current,
+             (c.novel_id IS NULL) AS only_desired
+      FROM desired d
+      FULL JOIN cur c ON d.novel_id = c.novel_id AND d.canonical_tag_id = c.canonical_tag_id
+      WHERE d.novel_id IS NULL
+         OR c.novel_id IS NULL
+         OR d.provenance IS DISTINCT FROM c.provenance
+         OR d.score IS DISTINCT FROM c.score
+         OR d.rank IS DISTINCT FROM c.rank
+    )
+  `;
+}
+
+/** 只写差异：删多余、插缺失、改变了的；返回三个计数。差异为空时三条 DML 都是空操作（不分配事务号）。 */
+function buildApplySql(scope: Scope): Prisma.Sql {
+  return Prisma.sql`
+    WITH ${buildDiffCtes(scope)},
     del AS (
       DELETE FROM novel_effective_tag target
-      USING cur c
-      WHERE target.novel_id = c.novel_id
-        AND target.canonical_tag_id = c.canonical_tag_id
-        AND NOT EXISTS (
-          SELECT 1 FROM desired d
-          WHERE d.novel_id = c.novel_id AND d.canonical_tag_id = c.canonical_tag_id
-        )
+      USING diff x
+      WHERE x.only_current
+        AND target.novel_id = x.novel_id
+        AND target.canonical_tag_id = x.canonical_tag_id
       RETURNING 1 AS touched
     ),
     upd AS (
       UPDATE novel_effective_tag target
-      SET provenance = d.provenance, score = d.score, rank = d.rank, computed_at = now()
-      FROM cur c
-      JOIN desired d ON d.novel_id = c.novel_id AND d.canonical_tag_id = c.canonical_tag_id
-      WHERE target.novel_id = c.novel_id
-        AND target.canonical_tag_id = c.canonical_tag_id
-        AND (c.provenance IS DISTINCT FROM d.provenance
-          OR c.score IS DISTINCT FROM d.score
-          OR c.rank IS DISTINCT FROM d.rank)
+      SET provenance = x.want_provenance, score = x.want_score, rank = x.want_rank, computed_at = now()
+      FROM diff x
+      WHERE NOT x.only_current AND NOT x.only_desired
+        AND target.novel_id = x.novel_id
+        AND target.canonical_tag_id = x.canonical_tag_id
       RETURNING 1 AS touched
     ),
     ins AS (
       INSERT INTO novel_effective_tag (novel_id, canonical_tag_id, provenance, score, rank)
-      SELECT d.novel_id, d.canonical_tag_id, d.provenance, d.score, d.rank
-      FROM desired d
-      WHERE NOT EXISTS (
-        SELECT 1 FROM cur c
-        WHERE c.novel_id = d.novel_id AND c.canonical_tag_id = d.canonical_tag_id
-      )
+      SELECT x.novel_id, x.canonical_tag_id, x.want_provenance, x.want_score, x.want_rank
+      FROM diff x
+      WHERE x.only_desired
       RETURNING 1 AS touched
     )
     SELECT (SELECT count(*) FROM ins)::int AS inserted,
@@ -282,47 +330,21 @@ function buildApplySql(scope: Scope): Prisma.Sql {
 }
 
 function buildCheckSql(limit: number): Prisma.Sql {
-  const { ctes, select } = buildDesiredMembershipSql({ kind: "all" });
   return Prisma.sql`
-    WITH ${ctes},
-    desired AS MATERIALIZED (${select}),
-    cur AS MATERIALIZED (
-      SELECT existing.novel_id, existing.canonical_tag_id, existing.provenance, existing.score, existing.rank
-      FROM novel_effective_tag existing
-    ),
-    missing AS (
-      SELECT d.novel_id, d.canonical_tag_id FROM desired d
-      WHERE NOT EXISTS (
-        SELECT 1 FROM cur c WHERE c.novel_id = d.novel_id AND c.canonical_tag_id = d.canonical_tag_id
-      )
-    ),
-    extra AS (
-      SELECT c.novel_id, c.canonical_tag_id FROM cur c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM desired d WHERE d.novel_id = c.novel_id AND d.canonical_tag_id = c.canonical_tag_id
-      )
-    ),
-    changed AS (
-      SELECT d.novel_id, d.canonical_tag_id
-      FROM desired d
-      JOIN cur c ON c.novel_id = d.novel_id AND c.canonical_tag_id = d.canonical_tag_id
-      WHERE c.provenance IS DISTINCT FROM d.provenance
-         OR c.score IS DISTINCT FROM d.score
-         OR c.rank IS DISTINCT FROM d.rank
-    )
+    WITH ${buildDiffCtes({ kind: "all" })}
     SELECT 'summary'::text AS kind, NULL::uuid AS novel_id, NULL::uuid AS canonical_tag_id,
-           (SELECT count(*) FROM missing)::int AS missing,
-           (SELECT count(*) FROM extra)::int AS extra,
-           (SELECT count(*) FROM changed)::int AS changed
+           (SELECT count(*) FROM diff WHERE only_desired)::int AS missing,
+           (SELECT count(*) FROM diff WHERE only_current)::int AS extra,
+           (SELECT count(*) FROM diff WHERE NOT only_desired AND NOT only_current)::int AS changed
     UNION ALL
     (SELECT 'missing'::text, novel_id, canonical_tag_id, NULL::int, NULL::int, NULL::int
-       FROM missing ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
+       FROM diff WHERE only_desired ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
     UNION ALL
     (SELECT 'extra'::text, novel_id, canonical_tag_id, NULL::int, NULL::int, NULL::int
-       FROM extra ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
+       FROM diff WHERE only_current ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
     UNION ALL
     (SELECT 'changed'::text, novel_id, canonical_tag_id, NULL::int, NULL::int, NULL::int
-       FROM changed ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
+       FROM diff WHERE NOT only_desired AND NOT only_current ORDER BY novel_id, canonical_tag_id LIMIT ${limit}::int)
   `;
 }
 

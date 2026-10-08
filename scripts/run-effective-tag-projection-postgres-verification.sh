@@ -126,7 +126,7 @@ const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const files = report.testResults ?? [];
 const skipped = report.numPendingTests ?? -1;
 if (files.length !== 3 || files.some(f => f.status !== "passed" || !f.assertionResults?.length)
-    || skipped !== 0 || report.numFailedTests !== 0 || report.numPassedTests < 32) {
+    || skipped !== 0 || report.numFailedTests !== 0 || report.numPassedTests < 33) {
   throw new Error(`B38_EFFECTIVE_TAG_INTEGRATION=FAIL files=${files.length} passed=${report.numPassedTests} skipped=${skipped} failed=${report.numFailedTests}`);
 }
 console.log(`B38_EFFECTIVE_TAG_INTEGRATION=PASS files=${files.length} passed=${report.numPassedTests} skipped=${skipped} failed=${report.numFailedTests}`);

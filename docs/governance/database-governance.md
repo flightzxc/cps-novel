@@ -547,6 +547,7 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
     - 外键删除策略：`novel_effective_tag.novel_id` / `canonical_tag_id` 均 `ON DELETE CASCADE`（派生数据跟着真源走；软删除 / 停用不删行，由规则 SQL 与读取侧处理）。
     - 首次建表：迁移末尾 `B38_FIRST_BUILD_BEGIN … B38_FIRST_BUILD_END` 段是 `buildEffectiveTagFirstBuildSql()` 输出的逐字快照（空白归一后相等，`tests/backend/tagging/effective-tag-first-build-snapshot.test.ts` 钉住）；
       同事务一次算好全部归属，上线第一个请求起表就是满的。真实库运行器 `scripts/run-effective-tag-projection-postgres-verification.sh` 把这一段单独执行一遍，与 `reconcileAllEffectiveTags` 的结果逐行（含 `rank`、`score`）比对。
+    - 规则 SQL 的形状（不要"简化"）：CTE 没有列统计，规划器对它们的行数全靠猜，"直观"写法在 8 万本规模上实测要跑 10 分钟以上。所以映射支路先物化 `item_label` 与很小的 `active_edge`（生产约 200 行）再做三列等值连接，`public_membership` 用 `DISTINCT ON` 去重而不是 `NOT EXISTS`，差异比对用 `FULL JOIN`（只能哈希 / 归并，没有嵌套循环退路）；语义与改造前现场计算逐行等价（真实库用例证明）。合成 8 万本 / 21.5 万行归属实测（PG16.14）：首建约 2 秒（含索引）、无变化的全量对账 / 只读检查约 0.6 秒、有大量变化的对账约 0.8 秒、一页 50 本重算 9 毫秒、2000 本一块 73 毫秒。
     - 授权见 §7：`web_app`、`worker_app` 各 `SELECT, INSERT, UPDATE, DELETE`，`analyst_ro` 只 `SELECT`，`scheduler_app` 无；`infra/postgres/grants.sql` 已同步。
 
 ### P1-05B Migration 注意事项
