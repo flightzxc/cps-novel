@@ -60,7 +60,7 @@ sudo openssl x509 -in /etc/letsencrypt/live/pulsenovels.com/fullchain.pem -noout
 sudo rm -f /var/lib/letsencrypt/.well-known/acme-challenge/cutover-probe
 ```
 
-必过：三名 SAN、续期 dry-run 成功、timer active；新站普通 HTTP/HTTPS 无内容、旧站仍有密码。HTTPS bootstrap 这里只用 `-k` 检查默认拒绝；正式验收禁用 `-k`。失败保留旧站，通过安装器恢复输出的备份，不直接覆盖 conf 或跳过语法检查。
+必过：三名 SAN、续期 dry-run 成功、timer active；新站普通 HTTP/HTTPS 无内容、旧站仍有密码。HTTPS bootstrap 这里只用 `-k` 检查默认拒绝；正式验收禁用 `-k`。失败保留旧站，通过安装器恢复输出的备份，不直接覆盖 conf 或跳过语法检查。`--bootstrap-public` 与其余模式一样先做候选形状检查（只含 :80 的三名 server，无 TLS 与应用代理），装完等待 worker 交接并确认 :80 有监听，见第 3 步下的“安装器内置保护”。
 
 ### rehearsal 与容量
 
@@ -70,6 +70,8 @@ scripts/preproduction/verify-release.sh
 preprod_compose exec -T postgres psql --no-psqlrc -U postgres -d cps_novel -c \
   "SELECT name,setting,unit FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','max_connections','effective_io_concurrency','random_page_cost');"
 ```
+
+rehearsal 安装使用与第 3 步相同的安装器保护（候选检查、哈希核对、reload 就绪等待），不再需要额外的物理目录、候选检查或哈希包装。
 
 必过：旧域名密码、noindex、公开/后台隔离、健康接口、gzip/缓存均符合矩阵；参数与 v0.5.1 容量基线一致。目标机低流量窗口，用现有受控 curl config（0600，含 Basic Auth）从外部客户机做 HTTPS 压测：
 
@@ -183,6 +185,28 @@ curl --fail --config "$PREPROD_CURL_CONFIG" -sS https://zbcwf.pulsenovels.com/ap
 
 安装后须为维护 503；健康接口仍可达。此时容器尚未更新 env，健康检查允许暴露当前相同镜像身份，业务内容必须被维护挡住。失败使用安装器 `--restore-backup` 恢复，恢复 env，不继续部署。
 
+#### 安装器内置保护（v0.5.11 起）
+
+2026-10-05 第二段准备暴露的三个底层缺陷（软链目录下渲染出 0 字节站点文件、安装器不拦空候选、reload 返回后立即探测的竞态）已在安装器里修复；证据对应关系见 `PUBLIC_CUTOVER_EVIDENCE.md` 末尾“底层修复已落地（v0.5.11）”。`install-nginx.sh` 经 `--mode`、`--bootstrap-public`、`--restore-backup` 进入的路径现在自带：
+
+1. **软链安全的渲染**：渲染器按真实路径判断自己是不是 CLI 入口，脚本 root 取物理路径；在 `/opt/cps-novel/current` 下直接执行与在物理 release 目录下执行，渲染字节逐字节相同。渲染产物为空时 `render-nginx.sh` 自己就以 65 失败（`NGINX_RENDER=FAIL reason=empty_output`，原输出文件不动）。
+2. **候选门禁**（在写备份目录、`/etc/nginx` 文件、`nginx -t` 和 reload 之前）：候选必须非空，并按 `--mode` 具备应有的形状。public：公开主机与后台主机的 :80→https 301 与 :443 应用 server、后台 `auth_basic "CPS Novel Administration"` 与口令文件指令、公开主机开放（无 auth_basic 口令域）、`www.pulsenovels.com` 301、两个旧域名 301（:80 与 :443 各一）、:80 拒绝（444）、未知 Host 的 :443 拒绝（404）、robots 为空、HSTS 取值等于 `--hsts-max-age`。rehearsal：同一拓扑，公开主机为 rehearsal 口令域（`auth_basic "CPS Novel Rehearsal"`）、noindex、无 HSTS，不要求旧域名 301。不满足时只打印检查码（不打印候选内容），任何系统文件都未动。
+3. **安装后哈希核对**：站点文件与全部 snippet 的 SHA-256 必须等于候选/来源文件；不等则用本次备份回退并非零退出，且不一致的文件从未被 reload 加载。
+4. **reload 就绪等待**（成功安装、回退、`--restore-backup` 的 reload 均适用）：reload 前记录 nginx master PID 与子进程集合；reload 后最多 10 轮、每轮间隔 1 秒，要求 master PID 不变、出现 reload 前不存在的新子进程、reload 前的旧子进程已退出或进程标题为 `shutting down`、期望端口有 TCP 监听（site 模式 80+443，`--bootstrap-public` 仅 80，`--restore-backup` 不断言端口）。只用 `systemctl show`、`pgrep`、`ps`、`ss`，无需读 nginx 日志；不做业务 HTTP 探测，业务层验收仍由 `verify-release.sh` 与本手册各步骤负责。
+
+| 现象 | 输出 | 退出码 | 状态 |
+|---|---|---|---|
+| 候选为空 | `NGINX_INSTALL=REFUSED reason=candidate_empty` | 65 | 未动任何文件 |
+| 候选缺 server 或关键指令 | `NGINX_CANDIDATE=FAIL mode=… missing=<检查码>`，随后 `reason=candidate_incomplete` | 65 | 未动任何文件 |
+| 缺少 pgrep/ps/ss/systemctl/node/sha256 工具 | `reason=ready_tool_missing tool=…` | 69 | 未动任何文件 |
+| 安装后哈希不一致 | `reason=installed_hash_mismatch file=… installed_sha256=… expected_sha256=…` | 72 | 已用本次备份回退（stderr `candidate_failed_restored`） |
+| reload 后 10 轮内未交接 / 缺监听 / master 变化 | `reason=ready_handoff_timeout`、`ready_listener_missing`、`ready_master_changed`、`ready_master_missing` | 73 | 已用本次备份回退，回退的 reload 也等待交接 |
+| 回退本身未能确认 | stderr `reason=rollback_failed` | 71 | 保持维护，按 `NGINX_BACKUP` 目录人工核对 |
+
+成功时 stdout 依次含 `NGINX_CANDIDATE=PASS mode=… bytes=… sha256=…`（候选摘要，可直接记入证据）、`NGINX_BACKUP=…`、`NGINX_READY=PASS phase=install round=N master=PID listeners=80 443`、`NGINX_INSTALL=PASS …`。
+
+因此切换当天原先的包装规避可以去掉：必须在物理目录执行（保留 `cd -P` 无害）、安装前手工检查候选非空并含各 server、安装后手工核对站点文件哈希、reload 后手写的最多 10 轮 worker/监听交接等待。**仍须保留**的是业务层验收：公开/后台严格 HTTPS 探测（不用 `-k`）、维护 503 页、健康接口、`verify-release.sh`。
+
 ### 4：相同镜像发布
 
 ```bash
@@ -254,6 +278,8 @@ preprod_compose logs --since 10m worker-light
 PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --restore-backup "$cutover_nginx_backup"
 ```
 
+`--restore-backup` 同样等待 worker 交接（不断言端口，输出 `NGINX_READY=PASS phase=install … listeners=none`）；若 10 轮内没有交接，以 73 退出并自动回到恢复前的状态（该次恢复自己的安全备份），此时保持维护并按输出的备份目录人工核对。
+
 恢复旧域名密码和 noindex，新域名无业务内容；nginx-only **不会**恢复应用生成 URL 的正式域名，也不要为了验收旧域名临时改 SITE_URL 输入源。作为紧急关闭公网的步骤，保留维护状态；需要恢复旧站业务则继续下一档。
 
 **连 env 一起回**：保持维护，先恢复 nginx，然后恢复 env，同 manifest 再发一次：
@@ -270,5 +296,18 @@ scripts/preproduction/verify-release.sh --anonymous-only --expect-live
 **数据不回**：不还原数据库，不删除任务、outbox 或尝试记录；后台设置和 sitemap 按当前域名重做。核对 GSC 是否已提交：若已做步骤 8，则在 GSC 撤下错误 sitemap，不能声称从未提交；IndexNow 四项始终关闭，应无外部推送。监控恢复旧域名、确认三条绿。事件连接数若需恢复，单独按 nginx.conf 备份回退。
 
 第一周每天按 JSON 日志统计 429/499/5xx、request_time、upstream_response_time、两类限流 REJECTED，并看主机负载、数据库及两 worker 积压。稳定一周后用安装器 `--mode public --hsts-max-age 31536000` 提级；不加子域/preload。30 天后另行删除旧域名跳转与旧证书，先查续期引用；IndexNow 开闸按工单 6 单独审批。
+
+### HSTS 提级（稳定一周后）
+
+```bash
+cd /opt/cps-novel/current   # 软链目录即可，安装器自己取物理路径
+PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --mode public --hsts-max-age 31536000 | tee "$evidence_dir/nginx-hsts-install.log"
+scripts/preproduction/verify-release.sh --anonymous-only --expect-live
+for host in pulsenovels.com zbcwf.pulsenovels.com; do
+  curl -sSI "https://$host/" | grep -i '^strict-transport-security:'   # 期望 max-age=31536000，无 includeSubDomains/preload
+done
+```
+
+`$evidence_dir` 为本次证据目录。安装器自带候选、哈希与就绪保护，不再需要 `cd -P`、手工候选检查、手工哈希核对或手写等待循环。候选中的 HSTS 取值必须等于 `--hsts-max-age`（否则 `NGINX_CANDIDATE=FAIL … missing=hsts_value`，退出 65，未动任何文件）。退出码非零即安装器已用本次备份回退，只需保存 stdout 里的 `reason=` 行。注意：浏览器一旦缓存 HSTS 最长保留一年，回退 nginx 收不回已缓存的值，所以“稳定一周”的前置条件不变。
 
 Owner sudo 清单：ACME webroot/探针与 certbot；所有 nginx 安装和备份恢复；主配置连接数修改、检查和 reload；读取 root 备份证据。应用发布沿用现有 deploy 用户与 Docker 权限。切换前审阅手册和证据，本开发单不执行这些主机写步骤。
