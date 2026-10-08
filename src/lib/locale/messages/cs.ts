@@ -157,9 +157,11 @@ const messages = {
     allWorksEmpty: "Zatím nejsou žádná veřejně dostupná díla.",
     genreDescription: "Díla, která si můžete v této kolekci přečíst.",
     genreEmpty: "V této kolekci zatím nejsou žádná díla.",
-    categoryTitle: "Romány {name}",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "Romány {name}" 套短语型分类名会不通顺）。
+    categoryTitle: "Romány: {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "Romány {name}" 套短语名会变 "Romány Pro čtenářky"（句中大写），所以改成冒号隔开。
+    // 旧 categoryTitle "Romány {name}" 套短语名会变 "Romány Pro čtenářky"（句中大写），所以改成冒号隔开。
     categoryHeading: "Romány: {name}",
     browseSeoDescription: "Publikované romány.",
     categoryEmpty: "V této kategorii zatím nejsou žádné publikované romány.",
@@ -215,7 +217,8 @@ const messages = {
     siteDescription: "Objevujte romány a začněte číst bezplatné kapitoly.",
     homeTitleFallback: "PulseNovel - objevujte romány a čtěte knihy zdarma",
     pageSuffix: " - Strana {page}",
-    categoryDescriptionFallback: "Objevujte romány {name} na PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "Objevujte romány {name} na PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "Objevujte romány z kategorie „{name}“ na PulseNovel.",
   },
 } satisfies LocaleMessages;
 

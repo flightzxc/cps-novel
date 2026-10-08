@@ -164,9 +164,11 @@ const messages = {
     allWorksEmpty: "لا توجد أعمال متاحة للجميع بعد.",
     genreDescription: "أعمال يمكنك قراءتها في هذه المجموعة.",
     genreEmpty: "لا توجد أعمال في هذه المجموعة بعد.",
-    categoryTitle: "روايات {name}",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "روايات {name}" 套短语型分类名会不通顺）。
+    categoryTitle: "روايات: {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "روايات {name}" 是 idafa 连接，套 "موجه للنساء"（阳性形容词）与复数名词不一致，所以改成冒号隔开。
+    // 旧 categoryTitle "روايات {name}" 是 idafa 连接，套 "موجه للنساء"（阳性形容词）与复数名词不一致，所以改成冒号隔开。
     categoryHeading: "روايات: {name}",
     browseSeoDescription: "روايات منشورة.",
     categoryEmpty: "لا توجد روايات منشورة في هذه الفئة بعد.",
@@ -221,7 +223,8 @@ const messages = {
     siteDescription: "اكتشف الروايات وابدأ بقراءة فصول مجانية.",
     homeTitleFallback: "PulseNovel - اكتشف الروايات واقرأ الكتب مجانًا",
     pageSuffix: " - الصفحة {page}",
-    categoryDescriptionFallback: "اكتشف روايات {name} على PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "اكتشف روايات {name} على PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "اكتشف روايات ضمن فئة «{name}» على PulseNovel.",
   },
 } satisfies LocaleMessages;
 

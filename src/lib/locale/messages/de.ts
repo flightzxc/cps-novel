@@ -125,9 +125,11 @@ const messages = {
     allWorksEmpty: "Noch keine öffentlich verfügbaren Werke.",
     genreDescription: "Werke, die du in dieser Sammlung lesen kannst.",
     genreEmpty: "Noch keine Werke in dieser Sammlung.",
-    categoryTitle: "{name}-Romane",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "{name}-Romane" 套短语型分类名会不通顺）。
+    categoryTitle: "Romane: {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "{name}-Romane" 套短语名会变 "Für Leserinnen-Romane"，所以改成冒号隔开。
+    // 旧 categoryTitle "{name}-Romane" 套短语名会变 "Für Leserinnen-Romane"，所以改成冒号隔开。
     categoryHeading: "Romane: {name}",
     browseSeoDescription: "Veröffentlichte Romane.",
     categoryEmpty: "Noch keine veröffentlichten Romane in dieser Kategorie.",
@@ -175,7 +177,8 @@ const messages = {
     siteDescription: "Entdecke Romane und lies kostenlose Kapitel.",
     homeTitleFallback: "PulseNovel - Romane entdecken und Bücher kostenlos lesen",
     pageSuffix: " - Seite {page}",
-    categoryDescriptionFallback: "Entdecke {name}-Romane auf PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "Entdecke {name}-Romane auf PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "Entdecke Romane der Kategorie „{name}“ auf PulseNovel.",
   },
 } satisfies LocaleMessages;
 

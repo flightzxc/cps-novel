@@ -156,9 +156,11 @@ const messages = {
     allWorksEmpty: "Nie ma jeszcze publicznie dostępnych dzieł.",
     genreDescription: "Dzieła, które możesz przeczytać w tej kolekcji.",
     genreEmpty: "Nie ma jeszcze dzieł w tej kolekcji.",
-    categoryTitle: "Powieści {name}",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "Powieści {name}" 套短语型分类名会不通顺）。
+    categoryTitle: "Powieści: {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "Powieści {name}" 套短语名会变 "Powieści Dla czytelniczek"（句中大写），所以改成冒号隔开。
+    // 旧 categoryTitle "Powieści {name}" 套短语名会变 "Powieści Dla czytelniczek"（句中大写），所以改成冒号隔开。
     categoryHeading: "Powieści: {name}",
     browseSeoDescription: "Opublikowane powieści.",
     categoryEmpty: "Nie ma jeszcze opublikowanych powieści w tej kategorii.",
@@ -214,7 +216,8 @@ const messages = {
     siteDescription: "Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
     homeTitleFallback: "PulseNovel - odkrywaj powieści i czytaj książki za darmo",
     pageSuffix: " - strona {page}",
-    categoryDescriptionFallback: "Odkrywaj powieści z kategorii {name} na PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "Odkrywaj powieści z kategorii {name} na PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "Odkrywaj powieści z kategorii „{name}” na PulseNovel.",
   },
 } satisfies LocaleMessages;
 

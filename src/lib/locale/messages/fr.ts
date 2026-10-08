@@ -127,9 +127,11 @@ const messages = {
     allWorksEmpty: "Aucune œuvre publique disponible pour le moment.",
     genreDescription: "Œuvres que vous pouvez lire dans cette collection.",
     genreEmpty: "Aucune œuvre dans cette collection pour le moment.",
-    categoryTitle: "Romans {name}",
+    // 运营 2026-10-08（Owner 追加）：只用于 /browse?category= 的 <title>；与 categoryHeading 同值，
+    // 让浏览页和分类页的标题形式一致（旧值 "Romans {name}" 套短语型分类名会不通顺）。
+    categoryTitle: "Romans : {name}",
     // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
-    // 现有 categoryTitle "Romans {name}" 套短语名会变 "Romans Public féminin"（句中大写、不通顺），所以改成冒号隔开（法语冒号前带空格，同本目录其它键）。
+    // 旧 categoryTitle "Romans {name}" 套短语名会变 "Romans Public féminin"（句中大写、不通顺），所以改成冒号隔开（法语冒号前带空格，同本目录其它键）。
     categoryHeading: "Romans : {name}",
     browseSeoDescription: "Romans publiés.",
     categoryEmpty: "Aucun roman publié dans cette catégorie pour le moment.",
@@ -178,7 +180,8 @@ const messages = {
     siteDescription: "Découvrez des romans et commencez à lire des chapitres gratuits.",
     homeTitleFallback: "PulseNovel - Découvrez des romans et lisez gratuitement",
     pageSuffix: " - Page {page}",
-    categoryDescriptionFallback: "Découvrez des romans {name} sur PulseNovel.",
+    // 运营 2026-10-08（Owner 追加）：分类名是短语时旧句 "Découvrez des romans {name} sur PulseNovel." 不通顺，用该语种的引号把分类名隔开。
+    categoryDescriptionFallback: "Découvrez des romans de la catégorie « {name} » sur PulseNovel.",
   },
 } satisfies LocaleMessages;
 
