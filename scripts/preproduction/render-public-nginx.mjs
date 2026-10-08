@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -57,7 +57,22 @@ export function validateRenderedTopology(rendered, publicHost, adminHost) {
     if (!rendered.includes(`server_name ${host};`)) throw new Error('rendered host missing');
   }
 }
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try { process.stdout.write(renderPublicNginx(...process.argv.slice(2))); }
+// CLI entry detection must survive symlinked release directories: Node locates
+// the module by its real path while argv[1] keeps the path the caller typed
+// (e.g. /opt/cps-novel/current/...). Comparing the raw strings made the CLI
+// exit 0 without writing anything on 2026-10-05 (B second failure). Compare
+// real paths, and refuse to emit an empty body so a regression of this guard
+// can never again look like a successful render.
+function isCliEntry() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+if (isCliEntry()) {
+  try {
+    const rendered = renderPublicNginx(...process.argv.slice(2));
+    if (!rendered.trim()) throw new Error('empty render');
+    process.stdout.write(rendered);
+  }
   catch (error) { console.error(`NGINX_RENDER=FAIL ${error.message}`); process.exit(65); }
 }

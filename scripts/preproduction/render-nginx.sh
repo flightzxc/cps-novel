@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Physical root: under a symlinked release directory (/opt/cps-novel/current) a
+# logical pwd made the Node renderer's CLI entry check fail and render nothing.
+root="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 template="$root/infra/preproduction/nginx/cps-novel-preprod.conf.template"
 bootstrap=0
 bootstrap_public=0
@@ -51,6 +53,13 @@ elif ((bootstrap)); then
   cp "$template" "$temporary"
 else
   sed "s/__UPSTREAM__/$upstream/g" "$template" >"$temporary"
+fi
+# Fail closed on an empty body: nginx -t accepts an empty site file, and
+# installing it removes every 443 server (2026-10-05). The original output is
+# left untouched and the temporary file is removed by the trap.
+if ! [[ -s "$temporary" ]]; then
+  echo "NGINX_RENDER=FAIL reason=empty_output" >&2
+  exit 65
 fi
 mv "$temporary" "$output"
 trap - EXIT INT TERM

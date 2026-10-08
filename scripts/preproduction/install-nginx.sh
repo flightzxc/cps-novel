@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Physical root: through the /opt/cps-novel/current symlink a logical pwd made
+# the Node renderer render nothing (2026-10-05); resolve to the real release.
+root="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 [[ "${PREPROD_OWNER_SUDO_APPROVED:-}" == "YES" ]] || {
   echo "NGINX_INSTALL=REFUSED reason=owner_sudo_approval"; exit 65;
 }
@@ -81,6 +83,16 @@ if ((bootstrap)); then
   "$root/scripts/preproduction/render-nginx.sh" --bootstrap --output "$rendered" >/dev/null
 else
   "$root/scripts/preproduction/render-nginx.sh" --output "$rendered" >/dev/null
+fi
+
+# `nginx -t` accepts an empty site file, and installing one drops every
+# listener; refuse before anything under /etc/nginx is touched. (--mode,
+# --bootstrap-public and --restore-backup never reach here: they exec
+# install-public-nginx.sh, which also checks the candidate's server shape.)
+if ! [[ -s "$rendered" ]]; then
+  rmdir "$file_backup_dir" 2>/dev/null || true
+  echo "NGINX_INSTALL=REFUSED reason=candidate_empty"
+  exit 65
 fi
 
 # --- Back up everything this invocation is about to overwrite, so a failed
