@@ -165,6 +165,9 @@ const messages = {
     genreDescription: "أعمال يمكنك قراءتها في هذه المجموعة.",
     genreEmpty: "لا توجد أعمال في هذه المجموعة بعد.",
     categoryTitle: "روايات {name}",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "روايات {name}" 是 idafa 连接，套 "موجه للنساء"（阳性形容词）与复数名词不一致，所以改成冒号隔开。
+    categoryHeading: "روايات: {name}",
     browseSeoDescription: "روايات منشورة.",
     categoryEmpty: "لا توجد روايات منشورة في هذه الفئة بعد.",
   },

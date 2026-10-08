@@ -13,6 +13,7 @@ export default function EmptyCollectionPreviewPage() {
       title="Suspense"
       description={t("collection.genreDescription")}
       novels={[]}
+      totalCount={0}
       emptyMessage={t("collection.genreEmpty")}
     />
   );

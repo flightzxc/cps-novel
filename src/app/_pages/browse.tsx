@@ -172,6 +172,9 @@ export async function BrowseBody({
             : t("collection.allWorksDescription")
         }
         novels={loaded.paged.novels}
+        // 标题下的作品数 = 分页覆盖的总本数（`paginateCards(...).totalCount`；带 ?category= 时是
+        // 分类页同一份列表的总数），不是当前页本数——见 `CollectionScreen` 文件头注释。
+        totalCount={loaded.paged.totalCount}
         emptyMessage={t("collection.allWorksEmpty")}
         // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
         pagination={

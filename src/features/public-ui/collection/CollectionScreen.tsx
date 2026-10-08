@@ -17,6 +17,13 @@ import { getPublicT } from "@/lib/locale/messages";
  * （`SiteShell` 的 `<main>` 之内）。此前调用方把 `<Pagination/>` 写在整个页面壳**之外**，
  * DOM 顺序成了"网格 → 页脚 → 分页"，读者要滚过页脚才看得到下一页，键盘 Tab 也是先过页脚。
  * 插槽由调用方传入（页码、基础路径、查询参数都属于路由层），本组件不认识分页参数。
+ *
+ * 标题下的作品数（运营 2026-10-08 反馈"第 2 页显示 20 works、最后一页显示 9 works"，Owner 拍板）：
+ * 口径 = 这个列表**分页能翻到的总本数**（`totalCount`），不是当前页的本数（`novels.length`），
+ * 也不是"分类在全部书目里的真实总数"。来源必须是 `paginateCards(...).totalCount`——和分页、
+ * 站点地图（`listPublicCategoryPageCounts`）、页面 404 判定用的是同一份列表，不得在调用方另写一份
+ * 计数；以后列表来源改成全量分页（B-38 根治）时，这个数会自动跟着变成真实总数。
+ * 因此 `totalCount` 是**必填**、不给默认值：省略就编译失败，免得哪天又悄悄退回当前页本数。
  */
 export function CollectionScreen({
   locale,
@@ -24,6 +31,7 @@ export function CollectionScreen({
   description,
   novels,
   chrome,
+  totalCount,
   emptyMessage,
   pagination,
 }: {
@@ -31,7 +39,10 @@ export function CollectionScreen({
   title: string;
   /** 一句说明这个集合是什么。没有就不渲染。 */
   description?: string;
+  /** 当前页要渲染的卡片（分页切片）。只用来画网格，**不**用来算标题下的作品数。 */
   novels: NovelCardView[];
+  /** 分页覆盖的总本数（`paginateCards(...).totalCount`），每一页显示同一个数；必填，见文件头注释。 */
+  totalCount: number;
   chrome?: SiteChrome;
   emptyMessage?: string;
   /** 分页条（通常是 `<Pagination/>`，单页时它自己渲染为 null）。放在网格之后、页脚之前。 */
@@ -49,7 +60,7 @@ export function CollectionScreen({
             <p className="mt-4 max-w-[60ch] text-base text-novel-fg-muted">{description}</p>
           ) : null}
           <p className="mt-4 text-sm text-novel-fg-subtle tabular-nums">
-            {t("collection.workCount", { count: novels.length })}
+            {t("collection.workCount", { count: totalCount })}
           </p>
         </header>
 

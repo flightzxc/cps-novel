@@ -14,6 +14,7 @@ export default function CollectionPreviewPage() {
       title="Romance"
       description={t("collection.genreDescription")}
       novels={MOCK_NOVEL_CARDS}
+      totalCount={MOCK_NOVEL_CARDS.length}
     />
   );
 }

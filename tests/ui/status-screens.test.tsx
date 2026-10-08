@@ -66,11 +66,13 @@ describe("两种状态的共同纪律", () => {
 describe("聚合页", () => {
   it("语言与题材共用同一个屏幕和同一种卡片", () => {
     const { container } = render(
-      <CollectionScreen locale="en" title="言情" novels={MOCK_NOVEL_CARDS.slice(0, 4)} />,
+      <CollectionScreen locale="en" title="言情" novels={MOCK_NOVEL_CARDS.slice(0, 4)} totalCount={MOCK_NOVEL_CARDS.length} />,
     );
 
     expect(screen.getByRole("heading", { name: "言情", level: 1 })).toBeTruthy();
     expect(container.querySelectorAll('[data-testid="book-card"]')).toHaveLength(4);
+    // 标题下的作品数是调用方传入的总本数（分页覆盖的总数），不是当前页渲染的 4 张卡片。
+    expect(screen.getByText(`${MOCK_NOVEL_CARDS.length} works`)).toBeTruthy();
   });
 
   it("空集合有明确的空状态", () => {
@@ -79,6 +81,7 @@ describe("聚合页", () => {
         locale="en"
         title="悬疑"
         novels={[]}
+        totalCount={0}
         emptyMessage="这个题材下暂时没有可以阅读的作品。"
       />,
     );
@@ -88,7 +91,7 @@ describe("聚合页", () => {
   });
 
   it("说明文字未提供时不渲染空段落", () => {
-    const { container } = render(<CollectionScreen locale="en" title="言情" novels={[]} />);
+    const { container } = render(<CollectionScreen locale="en" title="言情" novels={[]} totalCount={0} />);
     // 页面壳自己有一个 <header>，这里要的是 main 里面那个集合头部
     const header = container.querySelector("main header") as HTMLElement;
     // 只剩「N 部作品」这一行，没有空的说明段落

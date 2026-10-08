@@ -124,6 +124,9 @@ const messages = {
     genreDescription: "Karya yang dapat Anda baca di koleksi ini.",
     genreEmpty: "Belum ada karya di koleksi ini.",
     categoryTitle: "Novel {name}",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "Novel {name}" 套短语名会变 "Novel Untuk pembaca wanita"（短语首字母大写在句中），所以改成冒号隔开。
+    categoryHeading: "Novel: {name}",
     browseSeoDescription: "Novel yang diterbitkan.",
     categoryEmpty: "Belum ada novel yang diterbitkan di kategori ini.",
   },

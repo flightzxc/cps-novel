@@ -157,6 +157,9 @@ const messages = {
     genreDescription: "Dzieła, które możesz przeczytać w tej kolekcji.",
     genreEmpty: "Nie ma jeszcze dzieł w tej kolekcji.",
     categoryTitle: "Powieści {name}",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "Powieści {name}" 套短语名会变 "Powieści Dla czytelniczek"（句中大写），所以改成冒号隔开。
+    categoryHeading: "Powieści: {name}",
     browseSeoDescription: "Opublikowane powieści.",
     categoryEmpty: "Nie ma jeszcze opublikowanych powieści w tej kategorii.",
   },

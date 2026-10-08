@@ -53,16 +53,23 @@ function seoFor(
 ) {
   const t = getPublicT(locale);
   const name = loaded.category.category.name;
+  // 2026-10-08 运营反馈（Owner 确认范围含 H1/标题/分享标题/面包屑）：分类名后面带上 "Novels"
+  // （各语种按自己的词序，见 `collection.categoryHeading`）。传给模板的 `name` 因此是
+  // 标题形式；模板里 title/og/twitter/CollectionPage name/面包屑第 2 项/分享图 alt 都用它。
+  const heading = t("collection.categoryHeading", { name });
   return generateSeoMeta({
     entity: "category",
     locale,
     pageNumber: loaded.category.page,
     data: {
-      name,
+      name: heading,
       slug: loaded.category.category.slug,
       description: loaded.category.category.description,
-      // TKD 对齐 CPS（Owner 2026-09-30，照 CPS 分类页）：标题 = 分类名 + 第 2 页起的本地化
-      // 翻页后缀；描述 = 分类描述 || 固定的本地化兜底句。品牌后缀由根布局模板加。
+      // TKD 对齐 CPS（Owner 2026-09-30，照 CPS 分类页）：标题 = 分类名（现为标题形式，含
+      // Novels）+ 第 2 页起的本地化翻页后缀；描述 = 分类描述 || 固定的本地化兜底句。品牌后缀
+      // 由根布局模板加。
+      // 兜底句仍用**纯分类名**算：句子本身已经带 novels，用标题形式会变成
+      // "Discover Female Audience Novels novels…"。
       descriptionFallback: t("meta.categoryDescriptionFallback", { name }),
       pageSuffix: pageSuffixFor(loaded.category.page, t),
       siteName: loaded.settings.siteName,
@@ -128,14 +135,20 @@ export async function CategoryBody({
   // 页面本体只读 `seo.other`（JSON-LD），不读 `alternates`——hreflang 只在
   // `generateMetadata` 里算，这里传自引用即可，不重复查其它语种。
   const seo = seoFor(locale, loaded, [locale]);
+  // H1 与 `<title>`/面包屑同一个标题形式（运营 2026-10-08）；浏览页的 `CollectionScreen`
+  // 用法不受影响（它仍用 `collection.categoryTitle`）。
+  const heading = t("collection.categoryHeading", { name: loaded.category.category.name });
   return <>
     {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
     <CollectionScreen
       locale={locale}
       chrome={loaded.chrome}
-      title={loaded.category.category.name}
+      title={heading}
       description={loaded.category.category.description ?? undefined}
       novels={loaded.category.novels}
+      // 标题下的作品数 = 这个分类分页能翻到的总本数（与分页、站点地图、404 判定同一份列表，
+      // 见 `CollectionScreen` 文件头注释），不是当前页本数。
+      totalCount={loaded.category.totalCount}
       emptyMessage={t("collection.categoryEmpty")}
       // PN-06：分页条进作品网格之后、页脚之前（原先写在整个页面壳之外，DOM 里落在页脚后面）。
       pagination={

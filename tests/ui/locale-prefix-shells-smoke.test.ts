@@ -359,7 +359,8 @@ describe("category: bare-path and [locale]-prefixed shells agree", () => {
     getPublicCategoryPage.mockResolvedValue(CATEGORY_PAGE);
   });
 
-  it("generateMetadata/default agree, title is the bare category name (no ' novels' suffix)", async () => {
+  // 2026-10-08（运营反馈、Owner 确认）：分类页标题 = 分类名 + Novels（`collection.categoryHeading`）。
+  it("generateMetadata/default agree, title is the category name plus 'Novels' (collection.categoryHeading)", async () => {
     const bare = await import("@/app/category/[slug]/page");
     const prefixed = await import("@/app/[locale]/category/[slug]/page");
     const params = Promise.resolve({ slug: "fantasy" });
@@ -369,7 +370,7 @@ describe("category: bare-path and [locale]-prefixed shells agree", () => {
     const fromBareMeta = await bare.generateMetadata({ params, searchParams });
     const fromPrefixedMeta = await prefixed.generateMetadata({ params: prefixedParams, searchParams });
     expect(fromPrefixedMeta).toEqual(fromBareMeta);
-    expect(fromBareMeta.title).toBe("Fantasy");
+    expect(fromBareMeta.title).toBe("Fantasy Novels");
 
     const fromBareTree = await bare.default({ params, searchParams });
     const fromPrefixedTree = await prefixed.default({ params: prefixedParams, searchParams });

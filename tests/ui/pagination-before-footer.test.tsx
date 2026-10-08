@@ -224,6 +224,7 @@ describe("PN-06 · 屏幕组件的 pagination 插槽", () => {
         locale="en"
         title="All"
         novels={[card("1")]}
+        totalCount={1}
         chrome={CHROME_WITH_FOOTER}
         pagination={<nav data-testid="slot-marker" />}
       />,
@@ -235,7 +236,7 @@ describe("PN-06 · 屏幕组件的 pagination 插槽", () => {
     withSlot.unmount();
 
     const without = render(
-      <CollectionScreen locale="en" title="All" novels={[card("1")]} chrome={CHROME_WITH_FOOTER} />,
+      <CollectionScreen locale="en" title="All" novels={[card("1")]} totalCount={1} chrome={CHROME_WITH_FOOTER} />,
     );
     expect(without.container.querySelector('[data-testid="slot-marker"]')).toBeNull();
     expect(without.container.querySelector('[data-testid="book-grid"]')).toBeTruthy();

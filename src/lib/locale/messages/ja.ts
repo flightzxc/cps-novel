@@ -148,6 +148,9 @@ const messages = {
     genreDescription: "このコレクションで読める作品です。",
     genreEmpty: "このコレクションにはまだ作品がありません。",
     categoryTitle: "{name}の小説",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "{name}の小説" 套动词结尾的分类名会不通（"全員から愛されるの小説"），所以用「」把分类名括起来，对名词和短语都成立。
+    categoryHeading: "「{name}」の小説",
     browseSeoDescription: "公開中の小説。",
     categoryEmpty: "このカテゴリーにはまだ公開中の小説がありません。",
   },

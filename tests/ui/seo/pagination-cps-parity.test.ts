@@ -461,8 +461,12 @@ const GOLDEN_BLOG_EN = {
   }
 };
 
+// 2026-10-08（运营反馈、Owner 确认，有意偏离 CPS）：页面层把分类名换成标题形式
+// `collection.categoryHeading`（ko 为 "{name} 소설"），所以 title / og:title / twitter:title /
+// 分享图 alt 四处从 "Romance (ko)" 变为 "Romance (ko) 소설"；描述兜底句仍用纯分类名，其余字段
+// （canonical / hreflang / robots / 描述）与改前逐字相同。
 const GOLDEN_CATEGORY_METADATA_KO = {
-  "title": "Romance (ko)",
+  "title": "Romance (ko) 소설",
   "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
   "alternates": {
     "canonical": "https://novel.example/ko/category/romance",
@@ -475,7 +479,7 @@ const GOLDEN_CATEGORY_METADATA_KO = {
   },
   "openGraph": {
     "type": "website",
-    "title": "Romance (ko)",
+    "title": "Romance (ko) 소설",
     "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
     "url": "https://novel.example/ko/category/romance",
     "siteName": "PulseNovel",
@@ -485,13 +489,13 @@ const GOLDEN_CATEGORY_METADATA_KO = {
         "url": "https://example.test/og.png",
         "width": 1200,
         "height": 630,
-        "alt": "Romance (ko)"
+        "alt": "Romance (ko) 소설"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "title": "Romance (ko)",
+    "title": "Romance (ko) 소설",
     "description": "PulseNovel에서 Romance (ko) 소설을 만나보세요.",
     "images": [
       "https://example.test/og.png"
@@ -544,7 +548,7 @@ describe("目标 4：第 1 页与改前逐字相同（BASE 实测输出，toStri
     expect(collection.robots).toBeUndefined();
   });
 
-  it("buildCategoryMetadata 第 1 页：hreflang 来自逐语种探测（照常调用一次），输出与改前逐字相同", async () => {
+  it("buildCategoryMetadata 第 1 页：hreflang 来自逐语种探测（照常调用一次），输出与改前相同（仅标题四处换成标题形式）", async () => {
     getPublicCategoryPage.mockResolvedValue(categoryPage("ko", 1));
     listCategoryPublicLocales.mockResolvedValue(["en", "es"]);
 

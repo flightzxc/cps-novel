@@ -150,6 +150,9 @@ const messages = {
     genreDescription: "Các tác phẩm bạn có thể đọc trong bộ sưu tập này.",
     genreEmpty: "Chưa có tác phẩm nào trong bộ sưu tập này.",
     categoryTitle: "Tiểu thuyết {name}",
+    // 运营 2026-10-08：前台分类页 H1/<title>/面包屑 = 分类名 + "小说"一词；分类名常是短语。
+    // 现有 categoryTitle "Tiểu thuyết {name}" 套短语名会变 "Tiểu thuyết Dành cho nữ"，所以改成冒号隔开。
+    categoryHeading: "Tiểu thuyết: {name}",
     browseSeoDescription: "Tiểu thuyết đã xuất bản.",
     categoryEmpty: "Chưa có tiểu thuyết nào được xuất bản trong danh mục này.",
   },
