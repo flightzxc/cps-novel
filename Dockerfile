@@ -13,6 +13,23 @@ RUN npm ci
 COPY prisma ./prisma
 RUN npx --no-install prisma generate
 
+# B-40：运行镜像只带生产依赖（对齐 CPS 的 deps 阶段）。prisma 在 dependencies 里，
+# 所以这里的 `npx --no-install prisma generate` 本身就是一道闸：prisma 若被挪回
+# devDependencies，构建会在这一步失败。Prisma Client 的生成产物在
+# node_modules/.prisma/client，随本阶段的 node_modules 一起进入运行镜像。
+FROM ${NODE_BASE_IMAGE} AS production-dependencies
+
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat openssl python3 make g++
+RUN npm install --global npm@11.6.2
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY prisma ./prisma
+RUN npx --no-install prisma generate
+
 FROM dependencies AS builder
 
 COPY . .
@@ -23,6 +40,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_BUILD_VERSION=${NEXT_PUBLIC_BUILD_VERSION}
 
 RUN npm run build
+
+# B-40：standalone 产物自带一份按追踪结果拼出的 node_modules。运行镜像的 node_modules 只能来自
+# production-dependencies 阶段：Next 把 semver 别名成 semver-noop，追踪结果里却仍会留下开发依赖
+# semver@6 的一个孤立 package.json。删掉整份追踪副本，杜绝开发依赖从这条路混进运行镜像。
+RUN rm -rf .next/standalone/node_modules
 
 FROM ${NODE_BASE_IMAGE} AS runner
 
@@ -50,7 +72,7 @@ LABEL org.opencontainers.image.title="cps-novel" \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
