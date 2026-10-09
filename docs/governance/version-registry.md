@@ -19,6 +19,25 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.13 —— 准备中（2026-10-09；主控直接发布，Owner 授权不经 Codex）
+
+- 唯一基线 `391cb0d361e067b3788e90854a7310d2c872a68a`，来自 `integration/v0.5.13-2026-10-09`。它基于 v0.5.12 收官 `12c08b5`（Final `84af0d7`），并已合入 v0.5.12 收官后的治理补记 `a42873d`。各组合入均经主控复核，含独立变异验证。
+- 本版合入：
+  - **B-38 根治公开列表 240 本上限**（`fix/b38-db-pagination-v0513@f7998b7`，merge `2f1dc03`；「再议 A」定案记录 `4a7ea47`，merge `6fb21b9`）：
+    - 新增分类归属表 `novel_effective_tag`，迁移 `20261009120000_b38_novel_effective_tag`，在迁移内完成首次建表；
+    - 迁移由 23 条变为 24 条，业务表由 57 张变为 58 张；
+    - grants：web_app、worker_app 读写，analyst_ro 只读；
+    - 分类页、/browse、博客列表、导航、站点地图、站内链接改为数据库分页和计数，删除 `PUBLIC_LIST_CAP`；
+    - Owner 10-09 定案「再议 A」：在同一事务里直接重算。
+  - **B-40 运行镜像只带生产依赖**（`chore/b40-slim-runtime-image-v0513@1442f71`，merge `4b03a06`）：
+    - prisma 移入 dependencies；
+    - 新增发版门禁 `RUNTIME_IMAGE_DEPS`；
+    - 镜像从 1.23GB 降到 952MB，vitest/tinypool 不再进入镜像。
+  - **集成修正** `8d94332`：p1-05b、p1-06 运行器的 prisma 前置检查改读 dependencies。
+- 没有新环境变量、新任务类型、worker 白名单变化或 nginx 变化。生产 env 只改两个版本字段。发版后先跑归属表只读检查（`tsx scripts/ops/effective-tag-projection.ts check`），差异为 0 即结束。
+- 生产依赖 audit 门禁：0 critical，恰好五项 high：@prisma/config、deepmerge-ts、effect、nanoid、prisma。
+- 发布方式：Owner 10-09 授权本版由主控（Claude）直接发布，不经 Codex。开发日志与 git 治理由主控完成；Notion 由主控留提示词，交 Codex 同步。
+
 ### v0.5.12 —— 已部署正式站、Owner 验收通过（2026-10-09）
 
 - Final `84af0d7ef5ef36b06fa9783c114fe831adab4e13` / tree `0367259156c20d30d2db02026c87827a4914bc97`，原 RELEASE=PASS/EXIT=0，维护51秒；Next16.3.8，health/metadata、五应用/backup、23迁移finished/0回滚、postgres CID、白名单/preflight、错误日志0全部PASS。
@@ -410,6 +429,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.13` | 2026-10-09 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | `release/v0.5.13-2026-10-09`；基线 `391cb0d` | 准备中，主控直接发布 |
 | `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
 | `v0.5.10` | 2026-10-08 01:11:28 | PATCH | 书封、分类Sitemap/站内链接、分页SEO、阅读设置、阿语与运营后台；Turnstile合入关闭；无新迁移 | Final `7f955106a82f8dff82568e305ea35f1a68b8c934`；annotated `v0.5.10`；image `cps-novel:0.5.10-7f95510` | 正式站已部署，自动验收PASS；35分片115163、en分类1788→72；Owner浏览器/手机待确认 |
