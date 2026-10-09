@@ -19,12 +19,12 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.12 —— 已部署正式站（2026-10-09 00:40:49 +0800 / 01:40:49 JST）
+### v0.5.12 —— 已部署正式站、Owner 验收通过（2026-10-09）
 
 - Final `84af0d7ef5ef36b06fa9783c114fe831adab4e13` / tree `0367259156c20d30d2db02026c87827a4914bc97`，原 RELEASE=PASS/EXIT=0，维护51秒；Next16.3.8，health/metadata、五应用/backup、23迁移finished/0回滚、postgres CID、白名单/preflight、错误日志0全部PASS。
 - 第一阶段45门禁/33运行器、9,269passed与交接一致、专项skipped0、proxy1742/known0、六Naver探测、23迁移/57表、drift0、B21/矩阵/15变异/真实品牌镜像/三Compose全部PASS。不可变归档331715760bytes、SHA `ed35a77cbefe12930cf166400d9d228bbf2ff98675fe2b909a28f3ebbde0e7ca`，本机/服务器独立SHA与原--load/OCI核验PASS。
 - env仅两版本字段改变，其余字节cmp一致，两个任务白名单/nginx/业务开关不变，无新迁移；B两次READ ONLY在途0、备份SHA/restore-listPASS。
-- 自动F PASS：Naver200/67bytes/SHA一致无跳转；en189works/2/10、ko H1소설: 여성향、es译文、browse240works。共10外部请求全经代理，分类3次。F.4/F.5待Owner确认，71本待运营生成后核对，未代生成或刷新Sitemap。
+- 自动F PASS：Naver200/67bytes/SHA一致无跳转；en189works/2/10、ko H1소설: 여성향、es译文、browse240works。共10外部请求全经代理，分类3次。Owner 2026-10-09 本会话确认“验收通过了”，F.4/F.5 按 Owner 确认通过；71本待运营生成后核对；验收补记Notion同步回读PASS（2026-10-08T17:03:49.589Z），未代生成或刷新Sitemap。
 - 生产audit0critical/指定五high；全量2critical/12high/1moderate。裁定：vitest/tinypool**在镜像里但运行时不加载，与 v0.5.11 相同，B-40 在 v0.5.13 处理**；纠正第一阶段“不进镜像”，Final/归档不重做。B-38数据库分页/全量计数也排v0.5.13。
 - 本轮五组合入、公告、Owner译文和240上限决策见[发布记录](releases/v0.5.12-preproduction.md)；annotated tag固定Final、原生成CHANGELOG、唯一发版日志及ADR完成；治理提交702dc7e/tag已推送回读PASS，Notion同步回读PASS（2026-10-08T16:52:10.946Z），原历史/规则/模板逐字节保留。
 
@@ -410,7 +410,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner F.4/F.5待确认、71本待运营生成后核对 |
+| `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
 | `v0.5.10` | 2026-10-08 01:11:28 | PATCH | 书封、分类Sitemap/站内链接、分页SEO、阅读设置、阿语与运营后台；Turnstile合入关闭；无新迁移 | Final `7f955106a82f8dff82568e305ea35f1a68b8c934`；annotated `v0.5.10`；image `cps-novel:0.5.10-7f95510` | 正式站已部署，自动验收PASS；35分片115163、en分类1788→72；Owner浏览器/手机待确认 |
 | `v0.5.9` | 2026-10-07 02:23:30 | PATCH | 领推广生命周期修复；上架时间筛选；站点地图规模修复；后台批量发布；B-8/B-31 覆盖及切换证据；source-map-js 1.2.2；无新迁移 | Final `6af0b2e5c79db932c4754a43580eed3729bd0334`；image `cps-novel:0.5.9-6af0b2e`；`release/v0.5.9-2026-10-07-redo`；基线 `59e84ef` | 已于2026-10-07切换正式域名pulsenovels.com对外开放（19:39:17 JST确认）；同版Final不变；public配置/部署/live/外部/100x20/worker及当天sitemap计数通过；Owner接受已知B-38部分分类404，随v0.5.10修复；预生产E/F/5b/5c/5d为历史PASS；Owner登录/2FA与认证记录核对PASS，GSC/监控待做；Git已push核远端，Notion开放及Owner2FA完成状态同步回读PASS（19:49 JST） |

@@ -3,7 +3,10 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-08 · 共 1191 个 commit
+生成时间：2026-10-08 · 共 1194 个 commit
+- `9f2adf1` 2026-10-09 docs: 补记海阅v0.5.12 Owner验收通过  — _codex · GPT-6_
+- `12c08b5` 2026-10-09 docs: 补记v0.5.12 Git与Notion收官回读  — _codex · GPT-6_
+- `702dc7e` 2026-10-09 docs: 登记海阅v0.5.12正式站部署与依赖裁定  — _codex · GPT-6_
 
 ## v0.5.12
 
