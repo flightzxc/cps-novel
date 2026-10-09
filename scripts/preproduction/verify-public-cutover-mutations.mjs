@@ -10,6 +10,10 @@ execFileSync('git',['diff','--cached','--quiet']);
 mkdirSync('.tmp/public-cutover',{recursive:true});
 const contract=['test','--','--maxWorkers=4','tests/backend/runtime/public-cutover-edge.test.ts'];
 const installer=['test','--','--maxWorkers=4','tests/backend/runtime/public-cutover-install.test.ts'];
+// PN-15 站内搜索 location：整段在模板里的原文，用来做"删掉整个 location"的变异（锚点不存在则报错，不会悄悄跳过）。
+const SITE_TEMPLATE='infra/preproduction/nginx/cps-novel-public.conf.template';
+const searchBlock=readFileSync(SITE_TEMPLATE,'utf8').match(/    location ~ "\^\/\(\?:\(\?:__SITE_LOCALES__\)\/\)\?search\$" \{\n[\s\S]*?\n    \}\n/)?.[0];
+if(!searchBlock)throw Error('mutation anchor missing: search location block');
 const mutations=[
  {name:'locale_omission',file:'scripts/preproduction/render-public-nginx.mjs',from:"locales.join('|')",to:"locales.filter(locale => locale !== 'ko').join('|')",cmd:'npm',args:[...contract,'-t','derives every registered locale']},
  {name:'crawler_ip_key',file:'infra/preproduction/nginx/cps-novel-public.conf.template',from:'limit_req_zone $cps_training_bot zone=cps_edge_bot_page',to:'limit_req_zone $binary_remote_addr zone=cps_edge_bot_page',cmd:'npm',args:[...contract,'-t','uses canonical bot names']},
@@ -26,6 +30,10 @@ const mutations=[
  {name:'ready_listener_probe_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'      port_listening "$port" || missing="$missing $port"',to:'      :',cmd:'npm',args:[...installer,'-t','443 is not listening']},
  {name:'ready_old_worker_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'case "$title" in *"shutting down"*|"") ;; *) return 1 ;; esac',to:'case "$title" in *) ;; esac',cmd:'npm',args:[...installer,'-t','without being told to quit']},
  {name:'ready_master_blip_tolerance_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'if [[ -n "$master" && "$master" != "$pre_master" ]]; then',to:'if [[ "$master" != "$pre_master" ]]; then',cmd:'npm',args:[...installer,'-t','transiently unreadable master']},
+ // PN-15 站内搜索 location：删掉整段 / 误挂全站页面额度 / 正则去掉引号，各自必须被契约用例（用例名以 "search location" 开头）抓到。
+ {name:'search_location_removed',file:SITE_TEMPLATE,from:searchBlock,to:'',cmd:'npm',args:[...contract,'-t','search location']},
+ {name:'search_location_page_rate',file:SITE_TEMPLATE,from:'        limit_req zone=cps_edge_search_all burst=__SEARCH_ALL_BURST__ nodelay;\n',to:'        limit_req zone=cps_edge_search_all burst=__SEARCH_ALL_BURST__ nodelay;\n        limit_req zone=cps_edge_page_rate burst=__PAGE_BURST__ nodelay;\n',cmd:'npm',args:[...contract,'-t','search location']},
+ {name:'search_regex_unquoted',file:SITE_TEMPLATE,from:'location ~ "^/(?:(?:__SITE_LOCALES__)/)?search$" {',to:'location ~ ^/(?:(?:__SITE_LOCALES__)/)?search$ {',cmd:'npm',args:[...contract,'-t','search location']},
  {name:'public_noindex',file:'scripts/preproduction/render-public-nginx.mjs',from:"PUBLIC_ROBOTS: live ? '' :",to:"PUBLIC_ROBOTS: live ? 'noindex, nofollow, noarchive' :",cmd:'/bin/bash',args:['scripts/preproduction/verify-nginx-matrix.sh','--mode','public']},
 ];
 // Optional names run a subset (keeps one foreground command short); a subset

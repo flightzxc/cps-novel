@@ -58,6 +58,76 @@ describe.each(['rehearsal','public'])('%s rendered route contract', mode => {
     for (const ua of ['Claude-User','ChatGPT-User','Googlebot','Bingbot']) expect(rules.some(([,p])=>new RegExp(p,'i').test(ua))).toBe(false);
   });
 });
+// PN-15 站内搜索的 nginx 段：独立的两层限流（每 IP + 全站），不占页面额度；正则必须加引号。
+// 用例名统一以 "search location" 开头——变异脚本（verify-public-cutover-mutations.mjs）按这个前缀选用例。
+describe.each(['rehearsal','public'])('%s search location', mode => {
+  const blockOf = (config: string) => {
+    const match = config.match(/location ~ "(\^\/\(\?:[^"\n]+)" \{\n([\s\S]*?)\n    \}/);
+    expect(match, 'search location block (quoted regex) not found').not.toBeNull();
+    return { regex: new RegExp(match![1]), source: match![1], body: match![2], index: match!.index! };
+  };
+  it('search location exists, is quoted, and only matches /search and /{locale}/search', () => {
+    const config = render(mode);
+    const { regex, source } = blockOf(config);
+    expect(source).toBe(`^/(?:(?:${SITE_LOCALES.join('|')})/)?search$`);
+    expect(config).toContain(`location ~ "${source}" {`);
+    for (const path of ['/search', ...SITE_LOCALES.map(locale => `/${locale}/search`)]) expect(regex.test(path), path).toBe(true);
+    for (const path of [
+      '/searchx', '/search/', '/search/foo', '/search//', '/ja/searchx', '/ja/search/', '/ja/search/foo', '/novel/search', '/novel/search-me',
+      '/category/search', '/blog/search', '/browse', '/ja/browse', '/browse/search', '/', '/ja', '/xx/search', '/en/en/search', '//search',
+      '/Search', '/SEARCH', '/ja/Search', '/searching', '/go/search', '/api/search', '/search.json', '/ja/novel/search',
+    ]) expect(regex.test(path), path).toBe(false);
+  });
+  it('search location does not capture any existing page, go, api or static path', () => {
+    const config = render(mode);
+    const { regex } = blockOf(config);
+    for (const locale of ['', ...SITE_LOCALES.map(l => `/${l}`)]) {
+      for (const suffix of ['', '/', '/novel/book', '/novel/book/chapter/1', '/browse', '/category/fiction', '/blog/post', '/go/code']) {
+        expect(regex.test(`${locale}${suffix}`), `${locale}${suffix}`).toBe(false);
+      }
+    }
+    for (const path of ['/robots.txt', '/sitemap.xml', '/sitemap/ko.xml', '/indexnow-key.txt', '/api/health', '/brand/og-default.png', '/_next/static/a.js']) expect(regex.test(path), path).toBe(false);
+  });
+  it('search location uses only its own two limits plus the training-crawler limit, never the page or prefetch budget', () => {
+    const { body } = blockOf(render(mode));
+    expect(body).toContain('limit_req zone=cps_edge_search_ip burst=10 nodelay;');
+    expect(body).toContain('limit_req zone=cps_edge_search_all burst=10 nodelay;');
+    expect(body).toContain('limit_req zone=cps_edge_bot_page burst=2 nodelay;');
+    expect([...body.matchAll(/limit_req zone=(\S+)/g)].map(m => m[1])).toEqual(['cps_edge_search_ip', 'cps_edge_search_all', 'cps_edge_bot_page']);
+    expect(body).not.toContain('cps_edge_page');
+    expect(body).not.toContain('cps_edge_prefetch');
+    expect(body).not.toContain('limit_conn');
+    expect(body).toContain('proxy_pass http://cps_novel_edge_web;');
+    expect(body).toContain('/etc/nginx/snippets/cps-novel-edge-maintenance.conf');
+    expect(body).toContain('/etc/nginx/snippets/cps-novel-edge-public-security.conf');
+    expect(body).toContain('/etc/nginx/snippets/cps-novel-preprod-proxy.conf');
+    expect(body).toContain(mode === 'public' ? 'auth_basic off;' : 'auth_basic "CPS Novel Rehearsal";');
+  });
+  it('search location has its own zones with the agreed numbers (per IP 20r/m burst 10, whole site 3r/s burst 10)', () => {
+    const config = render(mode);
+    expect(config).toContain('limit_req_zone $binary_remote_addr zone=cps_edge_search_ip:10m rate=20r/m;');
+    expect(config).toContain('limit_req_zone $server_name zone=cps_edge_search_all:1m rate=3r/s;');
+    const template = text('infra/preproduction/nginx/cps-novel-public.conf.template');
+    for (const line of ['# @SEARCH_IP_RATE=20r/m', '# @SEARCH_IP_BURST=10', '# @SEARCH_ALL_RATE=3r/s', '# @SEARCH_ALL_BURST=10']) expect(template).toContain(`\n${line}\n`);
+    // 页面额度的数值没有被动过。
+    expect(config).toContain('limit_req_zone $cps_page_key zone=cps_edge_page_rate:10m rate=12r/s;');
+    expect(config).toContain('limit_req_zone $cps_prefetch_ip zone=cps_edge_prefetch_rate:10m rate=5r/s;');
+  });
+  it('search location comes before the page-class regex and the catch-all, and leaves their blocks untouched', () => {
+    const config = render(mode);
+    const search = blockOf(config);
+    const pageBlock = [...config.matchAll(/location ~ (\^\/\(\?:[^\n]+) \{\n([\s\S]*?)\n    \}/g)].find(([, , body]) => body.includes('limit_conn cps_edge_page_conn'))!;
+    expect(search.index).toBeLessThan(pageBlock.index!);
+    const fallbackAt = config.indexOf('    location / {\n        ');
+    expect(search.index).toBeLessThan(fallbackAt);
+    // 页面类正则本身不匹配搜索，所以不会因为顺序而误吞。
+    expect(new RegExp(pageBlock[1]).test('/ja/search')).toBe(false);
+    expect(pageBlock[2]).toContain('limit_req zone=cps_edge_page_rate burst=30 nodelay;');
+    expect(pageBlock[2]).toContain('limit_conn cps_edge_prefetch_conn 4;');
+    expect(pageBlock[2]).not.toContain('cps_edge_search');
+    expect(config.slice(fallbackAt, fallbackAt + 600)).not.toContain('cps_edge_search');
+  });
+});
 it('keeps preprod template and its rendered bytes identical to the approved baseline', () => {
   const before = execFileSync('git', ['show','02f9996:infra/preproduction/nginx/cps-novel-preprod.conf.template'], { encoding:'utf8' });
   expect(text('infra/preproduction/nginx/cps-novel-preprod.conf.template')).toBe(before);

@@ -13,6 +13,11 @@
 # @BOT_PAGE_BURST=2
 # @BOT_GO_RATE=1r/m
 # @BOT_GO_BURST=1
+# PN-15 站内搜索（Owner 2026-10-09）：搜索有自己的两层限流（每 IP + 全站），不占页面额度。
+# @SEARCH_IP_RATE=20r/m
+# @SEARCH_IP_BURST=10
+# @SEARCH_ALL_RATE=3r/s
+# @SEARCH_ALL_BURST=10
 # @STATIC_RATE=50r/s
 # @STATIC_BURST=200
 map $http_user_agent $cps_training_bot {
@@ -36,6 +41,8 @@ limit_req_zone $cps_prefetch_ip zone=cps_edge_prefetch_rate:10m rate=__PREFETCH_
 limit_conn_zone $server_name zone=cps_edge_go_conn:10m;
 limit_req_zone $binary_remote_addr zone=cps_edge_go_rate:10m rate=__GO_RATE__;
 limit_req_zone $cps_training_bot zone=cps_edge_bot_page:10m rate=__BOT_PAGE_RATE__;
+limit_req_zone $binary_remote_addr zone=cps_edge_search_ip:10m rate=__SEARCH_IP_RATE__;
+limit_req_zone $server_name zone=cps_edge_search_all:1m rate=__SEARCH_ALL_RATE__;
 limit_req_zone $cps_training_bot zone=cps_edge_bot_go:10m rate=__BOT_GO_RATE__;
 limit_req_zone $binary_remote_addr zone=cps_edge_static:10m rate=__STATIC_RATE__;
 limit_req_zone $binary_remote_addr zone=cps_edge_admin_general:10m rate=30r/s;
@@ -197,6 +204,20 @@ server {
         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
         include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
         limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    # PN-15 站内搜索：只匹配 /search 与 /{语种}/search（不带末尾斜杠；/searchx、/search/foo、/novel/…、/browse 都不匹配）。
+    # 🔴 正则必须加引号：不加引号时 `{2}` 之类会被 nginx 当成块分隔符，`nginx -t` 直接失败（CPS 压测时踩过）。
+    # 🔴 只挂搜索自己的两层限流 + 训练类爬虫限流，不挂任何 cps_edge_page_* / cps_edge_prefetch_* 的区或并发限制：
+    #    刷搜索最多吃满搜索自己的额度，读者看书的额度不受影响。必须放在页面正则与 `location /` 之前。
+    location ~ "^/(?:(?:__SITE_LOCALES__)/)?search$" {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_req zone=cps_edge_search_ip burst=__SEARCH_IP_BURST__ nodelay;
+        limit_req zone=cps_edge_search_all burst=__SEARCH_ALL_BURST__ nodelay;
+        limit_req zone=cps_edge_bot_page burst=__BOT_PAGE_BURST__ nodelay;
         proxy_pass http://cps_novel_edge_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
