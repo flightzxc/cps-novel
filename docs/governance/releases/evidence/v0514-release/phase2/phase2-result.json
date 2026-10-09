@@ -57,5 +57,21 @@
     "ownerValidationRequired": false
   },
   "searchState": "已合入、开关关闭",
-  "rollback": "NOT_EXECUTED; compatibility approval required from Owner"
+  "rollback": "NOT_EXECUTED; compatibility approval required from Owner",
+  "status": "TECHNICAL_RELEASE_AND_GOVERNANCE_COMPLETE; OWNER_F4_PENDING",
+  "governance": {
+    "annotatedTag": "v0.5.14",
+    "tagObject": "a7c05661a7764ebe929bc90d1b932672ae63942b",
+    "peeledFinal": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+    "sourceCommit": "a73cf0f6259708e12c899f9511d0c275fa602295",
+    "githubPushReadback": "PASS",
+    "generatedChangelog": "PASS core.abbrev=7",
+    "versionRegistry": "PASS",
+    "releaseRecord": "PASS",
+    "uniqueDevelopmentLog": "PASS",
+    "notionReadback": "PASS",
+    "notionReadbackAt": "2026-10-09T15:25:22.862709+00:00",
+    "historyRulesTemplates": "UNCHANGED; ignore trailing whitespace",
+    "ownerLogin2FA": "PENDING_OWNER"
+  }
 }

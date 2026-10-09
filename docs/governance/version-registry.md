@@ -25,7 +25,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - A–E 与自动 F.1–F.3 PASS：env 仅两版本行、其余真实 cmp 一致，两白名单不变；在线逻辑备份 707,597,780 字节 / restore-list PASS；25 条迁移全部 finished / 0 rollback、58 表；搜索 false，web UPDATE=t / scheduler SELECT=f；标签投影 missing=0 extra=0 changed=0；health 0.5.14/Final/metadata passed，五应用和 postgres healthy、postgres CID 不变；四容器生产依赖门禁 PASS / Next16.3.8 / nanoid3.3.18；写闸相同、备份定时器 RUNNING、六服务错误及 permission denied 0。
 - F 外部 7 次全经代理：search404 / 英文首页 header 无搜索；一分类及一小说 URL/canonical/hreflang 前后相同。B-1 唯一 active 凭据 ok=t / same=f，无 credential_not_ready 暂停生命周期批次；不需 Owner 补点校验。F.4 Owner 正常后台登录及两步验证已请求、待反馈，未冒充完成。
 - **搜索已合入、开关关闭**；本版五组合入在正式站生效。nginx 未安装/修改、两原文件 SHA 不变；证书/DNS/NAS/业务开关/Turnstile/IndexNow/推广批次/文章/sitemap 均按授权边界保留。公开网址冻结持续执行；第三档与阿语双数排 v0.5.15。
-- annotated `v0.5.14` 固定 Final，原生成器七位 SHA CHANGELOG、台账、发布记录、唯一发版日志已登记；Git 推送回读和 Notion 回读按最终收官补记。完整 [发布记录](releases/v0.5.14-preproduction.md) 与 [phase2 证据](releases/evidence/v0514-release/phase2/phase2-result.json)。
+- annotated `v0.5.14` 固定 Final，原生成器七位 SHA CHANGELOG、台账、发布记录、唯一发版日志已登记；Git release 分支/tag 推送回读 PASS（peeled Final 一致）；Notion 四处同步回读 PASS（2026-10-09T15:25:22.862709+00:00），原历史/规则/模板保留，收据见 phase2/notion-readback.json；技术发版及治理完成，Owner F.4 待反馈。完整 [发布记录](releases/v0.5.14-preproduction.md) 与 [phase2 证据](releases/evidence/v0514-release/phase2/phase2-result.json)。
 
 #### v0.5.14 第一阶段交付快照（历史：当时尚未部署）
 

@@ -1,0 +1,25 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageURL": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2",
+  "readBackAt": "2026-10-09T15:25:22.862709+00:00",
+  "status": "PASS",
+  "sourceGovernanceCommit": "a73cf0f6259708e12c899f9511d0c275fa602295",
+  "final": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "sections": {
+    "currentSnapshot": "PASS",
+    "versionRow": "PASS",
+    "detailedHandbook": "PASS",
+    "uniqueDevelopmentLogMirror": "PASS"
+  },
+  "historyRulesTemplates": {
+    "comparison": "Remove only new v0514 snapshot, history-heading, table-row and appended handbook/log; rstrip trailing whitespace; all original content equal",
+    "normalizedOriginalSha256": "1266322251fef65e2a98453c643a172058f82a7d6691b8c84131a5bfcff039a6",
+    "recoveredOriginalSha256": "1266322251fef65e2a98453c643a172058f82a7d6691b8c84131a5bfcff039a6",
+    "unchanged": true
+  },
+  "originalChars": 218502,
+  "updatedChars": 230001,
+  "finalPageSha256": "0b0c662b3edd289484c83e0849907d3fa347fb2a389dcc1f1ed97a0ab26493ea",
+  "ownerLogin2FA": "PENDING_OWNER",
+  "pageLastEditedAt": "2026-10-09T15:24:35.492Z"
+}
