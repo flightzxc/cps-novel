@@ -203,6 +203,19 @@ describe("各状态文案", () => {
     expect(status(container).textContent).toBe("Enter no more than 500 characters.");
   });
 
+  it("cs / pl：名词形式随数字变（最短 2 → znaky / znaki，最长 500 → znaků / znaków），不是写死的复数属格", async () => {
+    const expected = {
+      cs: { tooShort: "Zadejte alespoň 2 znaky pro vyhledávání.", tooLong: "Zadejte nejvýše 500 znaků." },
+      pl: { tooShort: "Wpisz co najmniej 2 znaki, aby wyszukać.", tooLong: "Wpisz maksymalnie 500 znaków." },
+    } as const;
+    for (const locale of ["cs", "pl"] as const) {
+      loadSearchPage.mockResolvedValue(response({ status: "too_short", displayQuery: "a" }));
+      expect(status(await renderPage(locale, { q: "a" })).textContent, `${locale} too_short`).toBe(expected[locale].tooShort);
+      loadSearchPage.mockResolvedValue(response({ status: "too_long", displayQuery: "a".repeat(501) }));
+      expect(status(await renderPage(locale, { q: "a".repeat(501) })).textContent, `${locale} too_long`).toBe(expected[locale].tooLong);
+    }
+  });
+
   it("unavailable：暂时不可用，页面不报错", async () => {
     loadSearchPage.mockResolvedValue(response({ status: "unavailable", displayQuery: "alpha" }));
     const container = await renderPage("en", { q: "alpha" });

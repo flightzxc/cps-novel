@@ -209,7 +209,7 @@ const messages = {
     inputPlaceholder: "작품 제목으로 검색…",
     idle: "작품 제목을 입력해 검색을 시작하세요.",
     emptyHint: "대신 전체 작품을 둘러보세요.",
-    metaDescription: "PulseNovel의 \"{query}\" 검색 결과입니다. 소설을 만나보고 무료 챕터부터 읽어보세요.",
+    metaDescription: "PulseNovel에서 \"{query}\"에 대한 검색 결과입니다. 소설을 만나보고 무료 챕터부터 읽어보세요.",
   },
   meta: {
     notFound: "찾을 수 없음",

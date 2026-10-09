@@ -212,8 +212,12 @@ const messages = {
   search: {
     title: "Szukaj",
     submit: "Szukaj",
-    hintMinLength: "Wpisz co najmniej {min} znaków, aby wyszukać.",
-    hintMaxLength: "Wpisz maksymalnie {max} znaków.",
+    // 第三方 GPT 验收（v0.5.14，Owner 2026-10-09 同意）：波兰语名词随数字变形——1 znak、2～4 znaki、5 及以上 znaków。
+    // 最短长度常量 SITE_SEARCH_MIN_QUERY_LENGTH 现为 2，写死 "znaków" 会显示成错误的 "2 znaków"，故用 ICU plural
+    // （t() 走 intl-messageformat，见 index.ts:235；本文件头部"No ICU"的说明已过时，chapterCount 等键早已用 plural）。
+    // 分支 one/few/many/other 与 Intl.PluralRules("pl") 一致：other 是小数专用罕见分支（整数常量走不到），按语法给单数属格 "znaku"。
+    hintMinLength: "Wpisz co najmniej {min, plural, one {{min} znak} few {{min} znaki} many {{min} znaków} other {{min} znaku}}, aby wyszukać.",
+    hintMaxLength: "Wpisz maksymalnie {max, plural, one {{max} znak} few {{max} znaki} many {{max} znaków} other {{max} znaku}}.",
     resultsHeading: "Wyniki dla \"{query}\"",
     empty: "Brak wyników dla \"{query}\".",
     unavailable: "Wyszukiwanie jest chwilowo niedostępne. Spróbuj ponownie później.",
@@ -222,7 +226,7 @@ const messages = {
     inputPlaceholder: "Szukaj według tytułu książki…",
     idle: "Wpisz tytuł książki, aby rozpocząć wyszukiwanie.",
     emptyHint: "Spróbuj zamiast tego przeglądać wszystkie dzieła.",
-    metaDescription: "Wyniki wyszukiwania dla „{query}” w PulseNovel. Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
+    metaDescription: "Wyniki wyszukiwania dla „{query}” w serwisie PulseNovel. Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
   },
   meta: {
     notFound: "Nie znaleziono",
