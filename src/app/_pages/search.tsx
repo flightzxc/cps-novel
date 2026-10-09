@@ -55,7 +55,8 @@ type SearchPageState =
 
 async function loadSearchState(locale: SiteLocale, searchParams: SearchSearchParams): Promise<SearchPageState> {
   const activeLocales = await loadActiveLocales();
-  const { settings, chrome } = await loadChrome(locale, undefined, undefined, activeLocales);
+  // current = "search"：页头的搜索入口按"当前页"高亮（PN-15 第二批页头接线）。
+  const { settings, chrome } = await loadChrome(locale, "search", undefined, activeLocales);
   if (!isSiteSearchEnabled(settings)) return { kind: "disabled", settings };
 
   const requestedPage = parsePageParam(searchParams.page);

@@ -116,6 +116,19 @@ describe("分页：第 2 页起 canonical 自引用（带 page），参数顺序
     expect(og(build("en", result("ok", "alpha", 20, 2))).url).toBe(`${SITE}/search?q=alpha&page=2`);
   });
 
+  it("第 2 页起标题加本地化翻页后缀（<title> 与 og/twitter 标题同步），第 1 页不加；描述不加", () => {
+    const first = build("en", result("ok", "alpha", 20, 1));
+    const second = build("en", result("ok", "alpha", 20, 2));
+    expect(first.title).toBe("Search results for “alpha”");
+    expect(second.title).toBe("Search results for “alpha” - Page 2");
+    expect(og(second).title).toBe("Search results for “alpha” - Page 2");
+    expect(tw(second).title).toBe("Search results for “alpha” - Page 2");
+    expect(second.description).toBe(first.description);
+    // 非英语走 meta.pageSuffix 文案
+    const fr = build("fr", result("ok", "alpha", 20, 3));
+    expect(fr.title).toBe(`${getPublicT("fr")("search.metaTitle", { query: "alpha" })}${getPublicT("fr")("meta.pageSuffix", { page: 3 })}`);
+  });
+
   it("与翻页组件 Pagination 的拼法一致（同一个参数编码器）", async () => {
     const { Pagination } = await import("@/features/public-ui/collection/Pagination");
     const { renderToStaticMarkup } = await import("react-dom/server");

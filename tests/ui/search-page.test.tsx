@@ -126,6 +126,16 @@ describe("后台开关", () => {
     const container = await renderPage("en");
     expect(container.querySelector("h1")!.textContent).toBe("Search");
   });
+
+  it("页头按\"当前在搜索页\"取（loadChrome 的 current = \"search\"），元数据与正文用同一组实参（请求内去重）", async () => {
+    await renderPage("ja");
+    await buildSearchMetadata("ja", Promise.resolve({}));
+    expect(loadChrome).toHaveBeenCalled();
+    for (const call of loadChrome.mock.calls) {
+      expect(call[0]).toBe("ja");
+      expect(call[1]).toBe("search");
+    }
+  });
 });
 
 describe("搜索表单：零 JS、GET、不写 action", () => {

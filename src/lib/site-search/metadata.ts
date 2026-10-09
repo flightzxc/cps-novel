@@ -23,6 +23,7 @@ import type { Metadata } from "next";
 
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import type { Translator } from "@/lib/locale/messages";
+import { withPageSuffix } from "@/lib/seo/page-suffix";
 import { buildLocaleCanonical, openGraphLocaleTag, resolveShareImage } from "@/lib/seo/seo-templates/_shared";
 import { resolveSiteBrandName } from "@/lib/seo/site-brand";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
@@ -135,7 +136,9 @@ export function buildSearchPageMetadata(input: SearchMetadataInput): Metadata {
   if (result.status === "ok") {
     const indexable = result.itemCount > 0;
     const canonical = indexable ? buildSearchCanonical(locale, result.displayQuery, result.page) : baseCanonical;
-    const title = t("search.metaTitle", { query: result.displayQuery });
+    // 第 2 页起加本地化翻页后缀（同"全部作品"页 / 分类页：只进 <title> 与 og/twitter 标题），
+    // 否则可收录的第 2 页与第 1 页同名。零结果只有第 1 页，不受影响。
+    const title = withPageSuffix(t("search.metaTitle", { query: result.displayQuery }), result.page, t);
     const description = t("search.metaDescription", { query: result.displayQuery });
     return {
       title,
