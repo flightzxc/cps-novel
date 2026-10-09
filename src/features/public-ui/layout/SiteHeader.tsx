@@ -309,12 +309,15 @@ function NavLink({
 /**
  * 导航里的「搜索」项：放大镜 + 文字。当前页高亮规则与 `NavLink` 完全一致
  * （颜色 + 下划线 + `aria-current="page"`）。桌面导航里图标 16px，手机菜单里 18px。
+ *
+ * 桌面默认类名带 `align-middle`：行内弹性盒里有图标、没有文字基线，按默认基线对齐会比
+ * 旁边的纯文字导航项高出约 3px（768 宽法语实测），垂直居中后偏差 < 1px。
  */
 function SearchNavLink({
   href,
   label,
   current,
-  className = "inline-flex items-center gap-1.5",
+  className = "inline-flex items-center gap-1.5 align-middle",
   textClass = "text-sm",
   iconSize = 16,
   onNavigate,

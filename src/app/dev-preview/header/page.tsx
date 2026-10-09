@@ -30,10 +30,17 @@ export default async function HeaderPreviewPage({
   const searchOn = query.search !== "off";
   const overlay = query.overlay === "1";
 
+  // 导航项与生产 `chromeFromSiteSetting` 同文案（首页 / 全部作品）：截图要用真实最长的文案
+  // （例如法语"Toutes les œuvres"），夹具里的"Genres"短得多，量不出挤版。
+  const prefix = localePrefix(locale);
   const chrome = {
     ...mockChrome(locale, current),
+    navItems: [
+      { label: t("nav.home"), href: prefix || "/", current: current === "home" },
+      { label: t("nav.browse"), href: `${prefix}/browse`, current: current === "collection" },
+    ],
     activeLocales: SITE_LOCALES,
-    ...(searchOn ? { searchHref: `${localePrefix(locale)}/search`, searchCurrent: current === "search" } : {}),
+    ...(searchOn ? { searchHref: `${prefix}/search`, searchCurrent: current === "search" } : {}),
   };
 
   return (
