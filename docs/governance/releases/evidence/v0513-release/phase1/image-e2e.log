@@ -1,0 +1,20 @@
+IMG=cps-novel:cutover-local-cc2655b
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+npm notice To update run: npm install -g npm@11.21.0
+npm notice
+MIGRATE_EXIT=0
+MIGRATIONS_APPLIED=24
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+CHECK_EXIT=0
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+PUBLIC_LIST_SCALE_CHECK exceeded=false max_category_count=0 max_locale_total=0 category_threshold=40000 locale_threshold=60000
+SCALE_EXIT=0
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+DEV_ABSENT=yes
+next=16.3.8
+Prisma schema loaded from prisma/schema.prisma
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+HEALTH={"ok":true,"status":"healthy","build":{"version":"0.5.13","commit":"cc2655b0a3864f6ae6a665f46bad91f15d0a904a","builtAt":"2026-10-09T03:03:27Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.13","commit":"cc2655b0a3864f6ae6a665f46bad91f15d0a904a"}},"databa
+BROWSE_STATUS=500
+WEB_LOG_ERRORS=0

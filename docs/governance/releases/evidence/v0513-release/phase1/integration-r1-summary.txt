@@ -1,0 +1,57 @@
+waited=195s load_at_start={ 6.94 9.19 8.23 }
+HEAD 6fb21b94 tree=df057751443bc7100fa7cf13e1d3d73bbb015afa migrations=24 runners=35
+npm-ci EXIT=0
+prisma-generate EXIT=0
+source-map-js installed=1.2.2 next=16.3.8
+npm-ls EXIT=0 versions=   3 source-map-js@1.2.2 
+audit critical=0 high=5 high_pkgs=@prisma/config,deepmerge-ts,effect,nanoid,prisma
+tsc EXIT=0
+lint EXIT=0 |   0 errors and 7 warnings potentially fixable with the `--fix` option.
+vitest EXIT=0 |  Test Files 565 passed | 56 skipped (621)  Tests 9436 passed | 725 skipped (10161)  | unhandled=0 | load={ { 18.34 13.47 10.19 } }
+build EXIT=0 dirty=0
+run-add-admin-identity-postgres-verification rc=0 4s | ADD_ADMIN_IDENTITY_POSTGRES_VERIFICATION=PASS
+run-article-blog-rebind-postgres-verification rc=0 11s | ARTICLE_BLOG_REBIND_POSTGRES_VERIFICATION=PASS
+run-article-publish-batch-postgres-verification rc=0 30s | ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=PASS
+run-article-template-version-postgres-verification rc=0 6s | ARTICLE_TEMPLATE_VERSION_POSTGRES_VERIFICATION=PASS
+run-catalog-batch-postgres-verification rc=0 22s | CATALOG_BATCH_POSTGRES_VERIFICATION=PASS
+run-effective-tag-projection-postgres-verification rc=0 10s | B38_EFFECTIVE_TAG_POSTGRES_VERIFICATION=PASS
+run-indexnow-sweep-postgres-verification rc=0 19s | WO6_POSTGRES_VERIFICATION=PASS
+run-next-proxy-probe-verification rc=0 11s | NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.8
+run-novel-article-decouple-postgres-verification rc=0 7s | NOVEL_ARTICLE_DECOUPLE_POSTGRES_VERIFICATION=PASS
+run-p1-05b-postgres-verification rc=1 0s | 
+run-p1-06-postgres-verification rc=1 0s | 
+run-p1-08b-postgres-verification rc=0 19s | P1_08B_POSTGRES_VERIFICATION=PASS
+run-p2-02b-article-template-postgres-verification rc=0 7s | P2_02B_ARTICLE_TEMPLATE_POSTGRES_VERIFICATION=PASS
+run-p2-04-admin-content-postgres-verification rc=0 3s | P2_04_ADMIN_CONTENT_POSTGRES_VERIFICATION=PASS
+run-phase-b-entity-fix-postgres-verification rc=0 6s | PHASE_B_ENTITY_FIX_INTEGRATION_TESTS=PASS
+run-phase-d-postgres-verification rc=0 21s | PHASE_D_PG_GATED_TESTS=PASS
+run-phase-d-role-password-postgres-verification rc=0 4s | PHASE_D_ROLE_PASSWORD_SELF_HEAL=PASS
+run-preprod-db-contract-verification rc=0 8s | PREPROD_DB_CONTRACT=PASS
+run-preview-account-hold-postgres-verification rc=0 4s | PREVIEW_HOLD_POSTGRES_VERIFICATION=PASS
+run-preview-opening-postgres-verification rc=0 5s | PREVIEW_OPENING_POSTGRES_VERIFICATION=PASS
+run-promo-claim-batch-control-postgres-verification rc=0 6s | PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
+run-promo-claim-release-postgres-verification rc=0 5s | PROMO_CLAIM_RELEASE_POSTGRES_VERIFICATION=PASS
+run-public-list-postgres-verification rc=0 102s | B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS
+run-publication-preview-postgres-verification rc=0 21s | PUBLICATION_PREVIEW_POSTGRES_VERIFICATION=PASS
+run-revenue-dashboard-postgres-verification rc=0 7s | REVENUE_DASHBOARD_POSTGRES_VERIFICATION=PASS
+run-sitemap-refresh-postgres-verification rc=0 34s | SITEMAP_REFRESH_POSTGRES_VERIFICATION=PASS
+run-tagging-auto-preview-postgres-verification rc=0 21s | TAGGING_AUTO_PREVIEW_POSTGRES_VERIFICATION=PASS
+run-tagging-public-auto-postgres-verification rc=0 43s | P2_06_5_POSTGRES_VERIFICATION=PASS
+run-task-claim-control-postgres-verification rc=0 5s | TASK_CLAIM_CONTROL_POSTGRES_VERIFICATION=PASS
+run-tkd-repair-postgres-verification rc=0 4s | TKD_REPAIR_POSTGRES_VERIFICATION=PASS
+run-worker-health-index-postgres-verification rc=0 8s | WORKER_HEALTH_INDEX_POSTGRES_VERIFICATION=PASS
+run-worker-light-postgres-verification rc=0 5s | WO5_POSTGRES_VERIFICATION=PASS
+run-x2-postgres-hardening-verification rc=0 2s | X2_POSTGRES_HARDENING_VERIFICATION=PASS
+run-x6-site-setting-postgres-verification rc=0 6s | X6_SITE_SETTING_POSTGRES_VERIFICATION=PASS
+run-x9-postgres-verification rc=0 10s | X9_POSTGRES_VERIFICATION=PASS
+NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0
+X9_MIGRATION_empty=PASS migrations=24 tables=58 X9_MIGRATION_upgrade=PASS migrations=24 tables=58 
+measure EXIT=0 | B21_MEASUREMENT=PASS
+nginx-matrix EXIT=0 | NGINX_MATRIX_ALL=PASS
+cutover-mutations EXIT=0 | PUBLIC_CUTOVER_MUTATIONS=PASS
+brand-image(docker build) EXIT=0 | BRAND_IMAGE=PASS image=cps-novel:cutover-local-6fb21b9 status=200 content_type=image/png sha256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb
+RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=532 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+image-e2e | MIGRATE_EXIT=0 MIGRATIONS_APPLIED=24 CHECK_EXIT=0 SCALE_EXIT=0 DEV_ABSENT=yes next=16.3.8 BROWSE_STATUS=500 WEB_LOG_ERRORS=0  EFFECTIVE_TAG_CHECK missi
+HEALTH={"ok":true,"status":"healthy","build":{"version":"0.5.12","commit":"6fb21b94cf87d527e978e913641c3c278a61f61e","builtAt":"2026-10-09T02:25:58Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.12","commit":"6fb21b94cf87d527e978e913641c3c278a61f61e"}},"databa
+git_dirty_end=0 load_end: { { 7.01 6.87 7.68 } } total=1094s
+ALL_DONE

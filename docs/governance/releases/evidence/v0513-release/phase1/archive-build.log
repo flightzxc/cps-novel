@@ -1,0 +1,126 @@
+ Image cps-novel:0.5.13-cc2655b Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 955B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 3.94kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 167B done
+#4 DONE 0.0s
+
+#5 [production-dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 73.69kB 0.0s done
+#6 DONE 0.0s
+
+#7 [builder 1/3] COPY . .
+#7 CACHED
+
+#8 [production-dependencies 6/8] RUN npm ci --omit=dev
+#8 CACHED
+
+#9 [runner 11/17] COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+#9 CACHED
+
+#10 [production-dependencies 5/8] COPY package.json package-lock.json ./
+#10 CACHED
+
+#11 [runner  6/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#11 CACHED
+
+#12 [runner 13/17] COPY --from=builder --chown=nextjs:nodejs /app/scheduler ./scheduler
+#12 CACHED
+
+#13 [runner  8/17] COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
+#13 CACHED
+
+#14 [builder 2/3] RUN npm run build
+#14 CACHED
+
+#15 [runner 10/17] COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+#15 CACHED
+
+#16 [production-dependencies 4/8] RUN npm install --global npm@11.6.2
+#16 CACHED
+
+#17 [runner  9/17] COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
+#17 CACHED
+
+#18 [builder 3/3] RUN rm -rf .next/standalone/node_modules
+#18 CACHED
+
+#19 [runner 14/17] COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+#19 CACHED
+
+#20 [production-dependencies 7/8] COPY prisma ./prisma
+#20 CACHED
+
+#21 [production-dependencies 2/8] WORKDIR /app
+#21 CACHED
+
+#22 [runner  7/17] COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+#22 CACHED
+
+#23 [dependencies 6/8] RUN npm ci
+#23 CACHED
+
+#24 [production-dependencies 8/8] RUN npx --no-install prisma generate
+#24 CACHED
+
+#25 [runner 12/17] COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
+#25 CACHED
+
+#26 [runner  3/17] RUN apk add --no-cache bash libc6-compat openssl     && npm install --global npm@11.6.2 tsx@4.21.0
+#26 CACHED
+
+#27 [dependencies 8/8] RUN npx --no-install prisma generate
+#27 CACHED
+
+#28 [dependencies 7/8] COPY prisma ./prisma
+#28 CACHED
+
+#29 [runner 15/17] COPY --from=builder --chown=nextjs:nodejs /app/infra ./infra
+#29 CACHED
+
+#30 [production-dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#30 CACHED
+
+#31 [runner  5/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#31 CACHED
+
+#32 [runner  4/17] RUN addgroup --system --gid 1001 nodejs     && adduser --system --uid 1001 --ingroup nodejs nextjs     && mkdir -p /app/runtime/static-sitemaps     && chown -R nextjs:nodejs /app/runtime
+#32 CACHED
+
+#33 [runner 16/17] COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+#33 CACHED
+
+#34 [runner 17/17] RUN set -eu;     test -n "0.5.13";     test -n "v0.5.13";     test "0.5.13" != "latest";     test "$(node -p 'require("./package.json").version')" = "0.5.13";     echo "cc2655b0a3864f6ae6a665f46bad91f15d0a904a" | grep -Eq '^[0-9a-f]{40}$';     node -e 'if (!Number.isFinite(Date.parse(process.argv[1]))) process.exit(1)' "2026-10-09T03:08:11Z";     printf '{"version":"%s","commit":"%s","builtAt":"%s"}\n'       "0.5.13" "cc2655b0a3864f6ae6a665f46bad91f15d0a904a" "2026-10-09T03:08:11Z" > /app/.build-metadata.json;     chmod 0444 /app/.build-metadata.json
+#34 DONE 0.5s
+
+#35 exporting to image
+#35 exporting layers done
+#35 writing image sha256:890994ee2d034abb8cd64f39b4b681d320de13095cde28e03f58c9a38167af60 done
+#35 naming to docker.io/library/cps-novel:0.5.13-cc2655b done
+#35 DONE 0.0s
+
+#36 resolving provenance for metadata file
+#36 DONE 0.0s
+ Image cps-novel:0.5.13-cc2655b Built 
+IMAGE=PASS anchor=config_id
+ARCHIVE_BUILD=PASS
+ARCHIVE_FILE=/Users/chenweifeng/Documents/cps海阅/release-v0.5.13/.tmp/preproduction-archive/cps-novel-0.5.13-cc2655b.tar.zst
+ARCHIVE_SHA256=356b6d7c1aecf3099f877300127f9038ea6aff453ee23f90774fc6e660458089
+IMAGE_TARGET_DIGEST=sha256:c2f9a5942e98220a772c1cb61b3ff0f0320460ae43cb9d0b0d21f800017b38e8
+IMAGE_PLATFORM_MANIFEST_DIGEST=sha256:c2f9a5942e98220a772c1cb61b3ff0f0320460ae43cb9d0b0d21f800017b38e8
+IMAGE_CONFIG_DIGEST=sha256:890994ee2d034abb8cd64f39b4b681d320de13095cde28e03f58c9a38167af60
+IMAGE_PLATFORM=linux/amd64
+IMAGE_REVISION=cc2655b0a3864f6ae6a665f46bad91f15d0a904a
+RELEASE_MANIFEST=/Users/chenweifeng/Documents/cps海阅/release-v0.5.13/.tmp/preproduction-archive/cc2655b0a3864f6ae6a665f46bad91f15d0a904a.json

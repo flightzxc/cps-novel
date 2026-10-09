@@ -39,6 +39,38 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-09 11:20 - 海阅上线主控（Claude Opus 5.5，主控直接发版；时间 +0800）
+
+**变更类型**：海阅 v0.5.13 PATCH 正式站部署，仅 haiyue-vps。11:20:43 +0800 RELEASE=PASS / EXIT=0，维护 54 秒，含 1 条迁移。部署后实测 V0513_POST_CHECK=PASS，外部验收通过。
+**背景**：
+- Owner 10-09 定 v0.5.13 范围：B-38 根治、B-40 镜像瘦身；搜索（PN-15）排在 B-38 之后，HSTS 提级按计划 10-14 前后做。
+- Owner 授权本版由主控直接发布，推送后直接部署，不经 Codex。
+- B-38 方案经 Owner 拍板，「再议 A」由 Owner 在 B-38 会话定为同一事务里直接重算。
+**变更内容**：
+- B-38 `fix/b38-db-pagination-v0513@f7998b7`（merge `2f1dc03`；定案记录 `4a7ea47`，merge `6fb21b9`）：分类归属表 `novel_effective_tag`（迁移 20261009120000，迁移内首建）；公开列表由数据库分页并计数；删除 PUBLIC_LIST_CAP。
+- B-40 `chore/b40-slim-runtime-image-v0513@1442f71`（merge `4b03a06`）：运行镜像只带生产依赖，prisma 移入 dependencies，新增 RUNTIME_IMAGE_DEPS 门禁。
+- 集成修正 `8d94332`：p1-05b、p1-06 前置检查改读 dependencies。
+- 合入 v0.5.12 治理补记 `a42873d`（merge `391cb0d`）。
+- 六文件升版到 `cc2655b`。
+**影响范围**：
+- 正式站分类页、全部作品页、博客列表、导航、站点地图改为全量可翻页，作品数为真实总数（英语 13,008 本）。
+- 迁移由 23 条变为 24 条，表由 57 张变为 58 张；新表权限：web_app、worker_app 读写，analyst_ro 只读。
+- 镜像由约 1.23GB 降到约 952MB，开发依赖不再进入镜像。
+- env 只改两个版本字段，其余字节 cmp 一致；nginx 和白名单不变。
+**验证方式**：
+- 主控逐组复核，独立变异：promoReadySql 去掉 btrim，公开列表运行器 45 条变红。
+- Final 上完整门禁：35 个运行器 PASS；621 个文件、9,436 条测试 passed、0 failed；x9 为 24/58；代理探针 1742 次、0 findings；RUNTIME_IMAGE_DEPS=PASS；生产依赖 audit 0 critical、5 high。
+- 瘦身镜像接临时库：24 条迁移跑通，effective-tag check 0/0/0。
+- 服务器侧：归档校验 VERIFY=PASS；部署前门禁 PASS；备份并通过 pg_restore --list；部署后归属表检查 0/0/0，185,270 行，四个容器都不含开发依赖。
+- 外部：/browse?page=651 和 female-audience?page=487 都是 200。
+**后续待办**：
+- Notion 同步交 Codex，提示词在产品文档目录。
+- vitest 4.1.11 升级评估排 v0.5.14，由 B-40 会话处理。
+- 再议 B（首页题材导航改成运营勾选）另开单。
+- 71 本过短网址书待运营生成后核对。
+- 主控误把外部验收脚本重跑一次，多发了约 5 次只读请求，已在发布记录中如实登记。
+- 完整记录见 releases/v0.5.13-preproduction.md。
+
 ### 2026-10-09 00:40 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：海阅v0.5.12 PATCH正式站部署，仅haiyue-vps；00:40:49 +0800 / 01:40:49 JST RELEASE=PASS/EXIT=0，维护51秒；A～E/自动F.1～F.3 PASS；Owner 2026-10-09 本会话确认验收通过，F.4/F.5 按 Owner 确认登记通过。

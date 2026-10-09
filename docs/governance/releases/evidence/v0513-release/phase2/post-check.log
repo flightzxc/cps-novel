@@ -1,0 +1,24 @@
+{"service": "web", "id": "3cb7cf4776f22a8e4401da47e9795744e5ee56a3930ecd476dd8e3d16bec7a0c", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+INDEXNOW_OFF=PASS service=web
+{"service": "worker", "id": "07b0b8cf972e3e4be4d3d924c43fdd68e88aa3b0622c5cdda924a26b070d89e1", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+STARTUP_ALLOWLIST={"service": "worker", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "effective": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "invalid": []}
+INDEXNOW_OFF=PASS service=worker
+{"service": "worker-light", "id": "b33be45935b23f75f4511ce9aa15749e88fda2e8cef522966a0290053a7d501e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+STARTUP_ALLOWLIST={"service": "worker-light", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1"], "effective": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1"], "invalid": []}
+INDEXNOW_OFF=PASS service=worker-light
+{"service": "scheduler", "id": "9a236177cd79b109efe2cada87ddf7c8d7aaef049271c9f1b1960c6e26093266", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+{"service": "backup-timer", "id": "8e1d3657b0fcd9ef34b33a5610f069e9bec6f0f0e8b7f3fe4de2a6f42c25ae8e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+{"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "credential_leak_patterns": 0}
+REVENUE_VIEW_ROLES=super_admin
+POST_DB={"finished" : 24, "unfinished" : 0, "rolled_back" : 0, "new_migration_ms" : 5688.659000, "tables" : ["revenue_sync_scope", "revenue_sync_batch", "revenue_raw_snapshot", "revenue_daily_stat"], "worker_insert" : true, "web_insert" : false, "web_select" : true, "scheduler_select" : false, "net_table" : "novel_effective_tag", "net_rows" : 185270, "net_web_write" : true, "net_worker_write" : true, "net_analyst_select" : true, "net_scheduler_select" : false, "list_order_idx" : "article_public_list_order_idx"}
+POST_NGINX_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}
+POST_CHECK=PASS
+WEB_NEXT_VERSION=16.3.8
+BACKUP_TIMER=RUNNING
+EFFECTIVE_TAG=EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0 exit=0
+SCALE=PUBLIC_LIST_SCALE_CHECK exceeded=false max_category_count=9732 max_locale_total=13008 category_threshold=40000 locale_threshold=60000 exit=0
+RUNTIME_DEPS_SLIM=PASS container=cps-novel-web-1
+RUNTIME_DEPS_SLIM=PASS container=cps-novel-worker-1
+RUNTIME_DEPS_SLIM=PASS container=cps-novel-worker-light-1
+RUNTIME_DEPS_SLIM=PASS container=cps-novel-scheduler-1
+V0513_POST_CHECK=PASS

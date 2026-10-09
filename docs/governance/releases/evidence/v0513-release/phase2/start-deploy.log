@@ -1,0 +1,2 @@
+DEPLOY_PID=998374
+DEPLOY_LOG=/opt/cps-novel/logs/release-v0.5.13-cc2655b.log

@@ -3,7 +3,34 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-08 · 共 1194 个 commit
+生成时间：2026-10-09 · 共 1218 个 commit
+
+## v0.5.13
+
+- `cc2655b` 2026-10-09 发布：准备海阅 v0.5.13 六文件版本身份  — _海阅上线主控 · claude-opus-5-5_
+- `391cb0d` 2026-10-09 合并：v0.5.12 收官后的治理补记（Owner 验收补记，仅文档）进 v0.5.13  — _海阅上线主控 · claude-opus-5-5_
+- `8d94332` 2026-10-09 修复(集成)：p1-05b / p1-06 运行器的 prisma 版本前置检查改读 dependencies  — _海阅上线主控 · claude-opus-5-5_
+- `6fb21b9` 2026-10-09 合并：v0.5.13 B-38「再议 A」定案记录（同事务直接重算）  — _海阅上线主控 · claude-opus-5-5_
+- `4b03a06` 2026-10-09 合并：v0.5.13 B-40 运行镜像只带生产依赖并加发版门禁  — _海阅上线主控 · claude-opus-5-5_
+- `4a7ea47` 2026-10-09 文档(B-38)：Owner 定案「再议 A」= 同事务直接重算，并写明改判触发条件  — _claude-code · Claude Opus 5.5_
+- `2f1dc03` 2026-10-09 合并：v0.5.13 B-38 根治——公开列表改为数据库分页，新增分类归属表 novel_effective_tag  — _海阅上线主控 · claude-opus-5-5_
+- `f7998b7` 2026-10-09 文档(B-38)：ADR、移植登记销项 240 上限与 CPS 平移登记、并发说明改为"先检查再对账"  — _claude-code · Claude Opus 5.5_
+- `5881bd3` 2026-10-09 测试(B-38)：一致性用例的逐页翻页加上限，回归时立即变红而不是挂住运行器  — _claude-code · Claude Opus 5.5_
+- `3331435` 2026-10-09 测试(B-38)：基准把矩阵也纳入'article 上没有 Seq Scan'的断言；B38_BENCH_EXPLAIN=1 时打印每条的 EXPLAIN ANALYZE 全文  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `7999673` 2026-10-09 测试(B-38)：基准里的小分类并列时按 slug 选，两次运行选同一个  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `3bce122` 2026-10-09 文档(B-38)：列表可见性片段的两条注释写在代码旁；种子脚本可用 vite-node 直接跑；清理过期注释  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `035a86d` 2026-10-09 测试(B-38)：公开列表真实库用例、运行器与规模基准  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `29a3f33` 2026-10-09 测试(B-38)：单元用例按数据库分页的新边界改写，不放宽断言  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `0c3de91` 2026-10-09 功能(B-38)：公开列表改数据库分页，删除"最新 240 本"窗口  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `7a16c05` 2026-10-09 功能(B-38)：推广链接"可用"的数据库等价片段 promoReadySql  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `2ae1853` 2026-10-09 修复(B-38)：规则 SQL 改成"统计缺失也不出坏计划"的形状，首建从 10 分钟以上降到约 2 秒  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `424493b` 2026-10-09 测试(B-38)：运行器最后一行才打印 PASS，并核对已应用迁移条数  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `068be0a` 2026-10-09 测试(B-38)：登记用例按确切个数钉住各文件里的重算调用  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `38fb51e` 2026-10-09 测试(B-38)：防漏登记、运维对账命令、冻结参照与真实库运行器  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `26b167c` 2026-10-09 功能(B-38)：全部写入点在改动真源的同一事务里重算分类归属  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `b09e3f3` 2026-10-09 功能(B-38)：新增分类归属表 novel_effective_tag（迁移、投影模块、授权、数据字典与治理文档）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `1442f71` 2026-10-09 chore(image): B-40 运行镜像只带生产依赖并加发版门禁  — _claude-code · Claude Sonnet 5_
+- `a42873d` 2026-10-09 docs: 完成v0.5.12验收收官日志与Notion回读  — _codex · GPT-6_
 - `9f2adf1` 2026-10-09 docs: 补记海阅v0.5.12 Owner验收通过  — _codex · GPT-6_
 - `12c08b5` 2026-10-09 docs: 补记v0.5.12 Git与Notion收官回读  — _codex · GPT-6_
 - `702dc7e` 2026-10-09 docs: 登记海阅v0.5.12正式站部署与依赖裁定  — _codex · GPT-6_

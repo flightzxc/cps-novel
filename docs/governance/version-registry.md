@@ -19,7 +19,15 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.13 —— 准备中（2026-10-09；主控直接发布，Owner 授权不经 Codex）
+### v0.5.13 —— 已部署正式站（2026-10-09 11:20:43 +0800 / 03:20:43Z；主控直接发布，Owner 授权不经 Codex）
+
+- Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`（tree `48427e2d`），annotated tag `v0.5.13`；镜像 `cps-novel:0.5.13-cc2655b`；归档 SHA256 `356b6d7c…8089`。
+- 维护 54 秒，迁移 24 条（新增 `novel_effective_tag`，首建 185,270 行，迁移 5.7 秒）；V0513_POST_CHECK=PASS；归属表检查 missing=0 extra=0 changed=0。
+- 外部验收：/browse 13,008 本、第 651 页 200；female-audience 9,732 本、第 487 页 200。完整记录见 [发布记录](releases/v0.5.13-preproduction.md)。
+- Notion 同步待办：由主控留提示词交 Codex（Claude 的 Notion 连接无权访问手账页）。
+
+#### v0.5.13 准备快照（历史）
+
 
 - 唯一基线 `391cb0d361e067b3788e90854a7310d2c872a68a`，来自 `integration/v0.5.13-2026-10-09`。它基于 v0.5.12 收官 `12c08b5`（Final `84af0d7`），并已合入 v0.5.12 收官后的治理补记 `a42873d`。各组合入均经主控复核，含独立变异验证。
 - 本版合入：
@@ -429,7 +437,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.13` | 2026-10-09 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | `release/v0.5.13-2026-10-09`；基线 `391cb0d` | 准备中，主控直接发布 |
+| `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |
 | `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
 | `v0.5.10` | 2026-10-08 01:11:28 | PATCH | 书封、分类Sitemap/站内链接、分页SEO、阅读设置、阿语与运营后台；Turnstile合入关闭；无新迁移 | Final `7f955106a82f8dff82568e305ea35f1a68b8c934`；annotated `v0.5.10`；image `cps-novel:0.5.10-7f95510` | 正式站已部署，自动验收PASS；35分片115163、en分类1788→72；Owner浏览器/手机待确认 |

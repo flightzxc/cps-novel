@@ -1,0 +1,7 @@
+外部验收（2026-10-09，本机经 http://127.0.0.1:7899 代理，有效请求 5 次）
+health: {"ok":true,"status":"healthy","build":{"version":"0.5.13","commit":"cc2655b0a3864f6ae6a665f46bad91f15d0a904a","builtAt":"2026-10-09T03:08:11Z"},...,"metadataConsistency":{"status":"passed"...}}
+/browse                              200  1.90s  13008 works
+/browse?page=651                     200  1.42s  翻页器 651 / 651
+/category/female-audience            200  2.02s  9732 works
+/category/female-audience?page=487   200  1.61s  翻页器 487 / 487
+说明：整理证据时主控误把验收脚本又执行了一遍（输出目录写成 /dev/null，结果被丢弃），因此另外多发了约 5 次同样的只读请求。外部请求总数约为 10 次，没有遍历分类页。

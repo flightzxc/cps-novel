@@ -1,0 +1,19 @@
+MIGRATE_EXIT=0
+b500-web-new-90934 /browse => 500
+b500-web-new-90934 /en => 308
+b500-web-new-90934 /category/romance => 404
+b500-web-new-90934 / => 500
+--- b500-web-new-90934 log (errors) ---
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+b500-web-old-90934 /browse => 500
+b500-web-old-90934 /en => 308
+b500-web-old-90934 /category/romance => 404
+b500-web-old-90934 / => 500
+--- b500-web-old-90934 log (errors) ---
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
+⨯ Error: OG image is required: pass coverUrl or defaultOgImage
