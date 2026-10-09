@@ -222,7 +222,7 @@ const messages = {
     inputPlaceholder: "Szukaj według tytułu książki…",
     idle: "Wpisz tytuł książki, aby rozpocząć wyszukiwanie.",
     emptyHint: "Spróbuj zamiast tego przeglądać wszystkie dzieła.",
-    metaDescription: "Wyniki wyszukiwania dla „{query}” w PulseNovel. Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
+    metaDescription: "Wyniki wyszukiwania dla „{query}” w serwisie PulseNovel. Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
   },
   meta: {
     notFound: "Nie znaleziono",

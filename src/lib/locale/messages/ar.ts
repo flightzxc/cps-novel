@@ -229,7 +229,7 @@ const messages = {
     inputPlaceholder: "ابحث بعنوان الكتاب…",
     idle: "أدخل عنوان كتاب لبدء البحث.",
     emptyHint: "جرّب تصفّح جميع الأعمال بدلًا من ذلك.",
-    metaDescription: "نتائج البحث عن \"{query}\" على PulseNovel. اكتشف الروايات وابدأ بقراءة فصول مجانية.",
+    metaDescription: "نتائج البحث عن «{query}» على PulseNovel. اكتشف الروايات وابدأ بقراءة فصول مجانية.",
   },
   meta: {
     notFound: "غير موجود",

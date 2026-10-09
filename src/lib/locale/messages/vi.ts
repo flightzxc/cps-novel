@@ -210,7 +210,7 @@ const messages = {
     empty: "Không tìm thấy kết quả cho \"{query}\".",
     unavailable: "Tìm kiếm tạm thời không khả dụng. Vui lòng thử lại sau.",
     metaTitle: "Kết quả tìm kiếm cho “{query}”",
-    inputLabel: "Tìm tiểu thuyết theo tên",
+    inputLabel: "Tìm tiểu thuyết theo tên sách",
     inputPlaceholder: "Tìm theo tên sách…",
     idle: "Nhập tên sách để bắt đầu tìm kiếm.",
     emptyHint: "Thay vào đó, hãy thử duyệt tất cả tác phẩm.",
