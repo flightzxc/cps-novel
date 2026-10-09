@@ -45,9 +45,11 @@ describe("结构断言：scheduler/index.ts 源码里领推广放行真的接了
 });
 
 vi.mock("@prisma/client", () => ({
-  PrismaClient: vi.fn().mockImplementation(() => ({
-    $disconnect: vi.fn(async () => {}),
-  })),
+  PrismaClient: vi.fn().mockImplementation(function () {
+    return {
+      $disconnect: vi.fn(async () => {}),
+    };
+  }),
 }));
 
 vi.mock("@/lib/locale/active-locales", () => ({
