@@ -1083,6 +1083,12 @@ model SiteSetting {
   /// 运营 V2 需求（Owner 2026-09-30）：Yandex Metrica 计数器 ID，只允许 1～12 位数字，
   /// NULL 表示不输出统计代码。无 CPS 对应（NOVEL_ONLY）。
   yandexMetricaId                 String?  @map("yandex_metrica_id") @db.VarChar(32)
+  /// 前台站内搜索开关（PN-15，Owner 2026-10-09 拍板"开关加，最好做在后台"）。
+  /// CPS 对应物是环境变量 `FEATURE_SITE_SEARCH`；海阅改为后台受管字段（NOVEL_ADAPTED），
+  /// 与其它站点设置同一条保存路径（`settings:manage` + 两步验证、乐观锁、同事务审计）。
+  /// false（默认）= 搜索页返回 404 + `noindex,nofollow`、页头搜索入口不渲染；
+  /// true = 前台站内搜索开放。只接受 JSON 布尔值。
+  siteSearchEnabled               Boolean  @default(false) @map("site_search_enabled")
   carouselConfigJson              Json     @default("{}") @map("carousel_config_json") @db.JsonB
   updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

@@ -173,6 +173,9 @@ GRANT SELECT (
 -- 自动对 web_app / worker_app 可读（worker 的 sitemap 构建器经 getSiteSetting 读整行）；
 -- web_app 的 UPDATE 是列级授权，两列必须显式加进下面的清单。scheduler_app 的列级 SELECT
 -- 仍只有 (id, carousel_config_json)，不读这两列，不扩大。
+-- PN-15（Owner 2026-10-09）：`site_search_enabled`（前台站内搜索开关）同理——SELECT 是表级、
+-- 自动对 web_app / worker_app 可读；web_app 的列级 UPDATE 清单必须显式加上它；scheduler_app
+-- 仍只有 (id, carousel_config_json)，不读这一列，不扩大。
 GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
 GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app;
 GRANT UPDATE (
@@ -180,7 +183,7 @@ GRANT UPDATE (
   default_og_image, google_search_console_verification,
   footer_copyright_text, footer_disclaimer_text, friend_links,
   indexnow_host, indexnow_key, indexnow_key_location, ga4_measurement_id,
-  yandex_verification, yandex_metrica_id,
+  yandex_verification, yandex_metrica_id, site_search_enabled,
   carousel_config_json, updated_at
 ) ON site_setting TO web_app;
 

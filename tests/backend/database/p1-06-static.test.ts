@@ -184,8 +184,10 @@ describe("P1-06 database operations static contracts", () => {
     // 6 field records, 7 physical-object records on the new table (primary key, 2 foreign keys,
     // 2 plain indexes, 2 CHECKs) plus the migration-only partial index
     // article_public_list_order_idx on article -- 1326 + 15 = 1341.
-    expect(records).toHaveLength(1341);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1341);
+    // PN-15 (20261009150000_site_setting_site_search_enabled) adds one site_setting
+    // field record (site_search_enabled) -- no new physical constraint/index -- 1341 + 1 = 1342.
+    expect(records).toHaveLength(1342);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1342);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

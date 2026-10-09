@@ -42,6 +42,8 @@ export type SiteSettingSnapshot = Readonly<{
   yandexVerification: string;
   /** 运营 V2（Owner 2026-09-30）：Yandex Metrica 计数器 ID（纯数字），null = 不输出。 */
   yandexMetricaId: string | null;
+  /** PN-15（Owner 2026-10-09）：前台站内搜索开关，false（默认）= 搜索页 404、页头入口不渲染。 */
+  siteSearchEnabled: boolean;
   updatedAt: Date;
 }>;
 
@@ -61,6 +63,7 @@ type SiteSettingRow = {
   ga4MeasurementId: string | null;
   yandexVerification: string;
   yandexMetricaId: string | null;
+  siteSearchEnabled: boolean;
   updatedAt: Date;
 };
 
@@ -103,6 +106,7 @@ function toSnapshot(row: SiteSettingRow): SiteSettingSnapshot {
     ga4MeasurementId: row.ga4MeasurementId,
     yandexVerification: row.yandexVerification,
     yandexMetricaId: row.yandexMetricaId,
+    siteSearchEnabled: row.siteSearchEnabled,
     updatedAt: row.updatedAt,
   });
 }
@@ -217,6 +221,7 @@ export const SITE_SETTING_WRITABLE_FIELDS = [
   "ga4MeasurementId",
   "yandexVerification",
   "yandexMetricaId",
+  "siteSearchEnabled",
 ] as const;
 
 type WritableField = (typeof SITE_SETTING_WRITABLE_FIELDS)[number];
@@ -237,6 +242,7 @@ type WritableValues = {
   ga4MeasurementId: string | null;
   yandexVerification: string;
   yandexMetricaId: string | null;
+  siteSearchEnabled: boolean;
 };
 type WritablePatch = Partial<WritableValues>;
 
@@ -269,6 +275,7 @@ export type UpdateSiteSettingInput = Readonly<{
   ga4MeasurementId?: unknown;
   yandexVerification?: unknown;
   yandexMetricaId?: unknown;
+  siteSearchEnabled?: unknown;
 }>;
 
 export type SiteSettingWriteDependencies = Readonly<{
@@ -327,6 +334,7 @@ function adminView(snapshot: SiteSettingSnapshot): AdminSiteSettingView {
     ga4MeasurementId: snapshot.ga4MeasurementId,
     yandexVerification: snapshot.yandexVerification,
     yandexMetricaId: snapshot.yandexMetricaId,
+    siteSearchEnabled: snapshot.siteSearchEnabled,
     updatedAt: snapshot.updatedAt.toISOString(),
   });
 }
@@ -392,7 +400,7 @@ function normalizeFriendLinks(value: unknown): SiteSettingFriendLink[] {
 function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
   const patch: WritablePatch = {};
   const textLimits: Record<
-    Exclude<WritableField, "friendLinks" | "ga4MeasurementId" | "yandexMetricaId">,
+    Exclude<WritableField, "friendLinks" | "ga4MeasurementId" | "yandexMetricaId" | "siteSearchEnabled">,
     number
   > = {
     siteName: 160, siteDescription: 5000, homeMetaTitle: 500,
@@ -425,6 +433,13 @@ function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
         throw new SiteSettingValidationError("yandexVerification may only contain letters, digits, '_' and '-'");
       }
       patch.yandexVerification = raw;
+    } else if (field === "siteSearchEnabled") {
+      // PN-15：前台站内搜索开关只接受 JSON 布尔值 true/false。字符串 "true"/"false"、
+      // 数字 0/1、null、undefined 一律拒绝，不做任何隐式转换。
+      if (typeof input.siteSearchEnabled !== "boolean") {
+        throw new SiteSettingValidationError("siteSearchEnabled must be a boolean");
+      }
+      patch.siteSearchEnabled = input.siteSearchEnabled;
     } else {
       patch[field] = textValue(input[field], field, textLimits[field]);
     }
@@ -456,6 +471,7 @@ function validateMergedValues(
     ga4MeasurementId: patch.ga4MeasurementId !== undefined ? patch.ga4MeasurementId : before.ga4MeasurementId,
     yandexVerification: patch.yandexVerification ?? before.yandexVerification.trim(),
     yandexMetricaId: patch.yandexMetricaId !== undefined ? patch.yandexMetricaId : before.yandexMetricaId,
+    siteSearchEnabled: patch.siteSearchEnabled ?? before.siteSearchEnabled,
   };
 
   if (!values.siteName) throw new SiteSettingValidationError("siteName must remain non-empty");
@@ -535,6 +551,7 @@ function auditSnapshot(values: WritableValues, updatedAt: Date): Prisma.JsonObje
     ga4MeasurementId: values.ga4MeasurementId,
     yandexVerification: values.yandexVerification,
     yandexMetricaId: values.yandexMetricaId,
+    siteSearchEnabled: values.siteSearchEnabled,
     updatedAt: updatedAt.toISOString(),
   };
 }
@@ -680,6 +697,7 @@ export async function updateAdminSiteSetting(
                 ga4MeasurementId: before.ga4MeasurementId,
                 yandexVerification: before.yandexVerification,
                 yandexMetricaId: before.yandexMetricaId,
+                siteSearchEnabled: before.siteSearchEnabled,
               },
               before.updatedAt,
             ),
@@ -701,6 +719,7 @@ export async function updateAdminSiteSetting(
                   ga4MeasurementId: after.ga4MeasurementId,
                   yandexVerification: after.yandexVerification,
                   yandexMetricaId: after.yandexMetricaId,
+                  siteSearchEnabled: after.siteSearchEnabled,
                 },
                 after.updatedAt,
               ),

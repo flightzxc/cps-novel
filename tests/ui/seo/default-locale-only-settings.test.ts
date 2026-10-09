@@ -77,6 +77,7 @@ const SETTINGS_FILLED = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-09-30T00:00:00Z"),
 };
 const SETTINGS_EMPTY = {

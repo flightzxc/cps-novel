@@ -70,6 +70,7 @@ const SETTINGS = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-10-08T00:00:00Z"),
 };
 const CHROME = { brandHref: "/", navItems: [], footerNote: "© test" };

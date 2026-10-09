@@ -87,6 +87,7 @@ describe("static sitemap index never lists an empty locale's novelpage/mainpage 
           ga4MeasurementId: null,
           yandexVerification: "",
           yandexMetricaId: null,
+          siteSearchEnabled: false,
           updatedAt: new Date("2026-08-04T00:00:00.000Z"),
         }),
       },
@@ -179,6 +180,7 @@ describe("category page URLs (now inside the mainpage shard) carry the shard's o
           ga4MeasurementId: null,
           yandexVerification: "",
           yandexMetricaId: null,
+          siteSearchEnabled: false,
           updatedAt: new Date("2026-08-04T00:00:00.000Z"),
         }),
       },
@@ -244,6 +246,7 @@ describe("PN-09: the sitemap never lists an empty locale's home or any other ent
     ga4MeasurementId: null,
     yandexVerification: "",
     yandexMetricaId: null,
+    siteSearchEnabled: false,
     updatedAt: new Date("2026-08-04T00:00:00.000Z"),
   };
 

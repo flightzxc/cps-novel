@@ -64,6 +64,7 @@ const SETTINGS = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-09-30T00:00:00Z"),
 };
 const CARD = { id: "biz-1", title: "A Book", coverUrl: "/c.jpg", tags: [], href: "/novel/a-book-pabc123" };

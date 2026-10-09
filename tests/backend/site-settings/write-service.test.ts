@@ -38,6 +38,7 @@ const BASE_ROW = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null as string | null,
+  siteSearchEnabled: false,
   updatedAt: BEFORE,
 };
 
@@ -298,6 +299,100 @@ describe("updateAdminSiteSetting", () => {
     }, dependencies(db, stores));
     expect(result.setting.yandexVerification).toHaveLength(255);
     expect(result.setting.yandexMetricaId).toBe("123456789012");
+  });
+
+  // PN-15（Owner 2026-10-09）：前台站内搜索开关，与其它字段同一条保存路径。
+  it("PN-15: defaults to false, saving true audits false -> true, and the next read sees it (cache invalidated)", async () => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const cached = await getSiteSetting(db.asPrismaClient(), { ttlMs: 30_000, now: () => NOW.getTime() });
+    expect(cached.siteSearchEnabled).toBe(false);
+
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "open site search",
+      siteSearchEnabled: true,
+    }, dependencies(db, stores));
+
+    expect(result.replayed).toBe(false);
+    expect(result.setting.siteSearchEnabled).toBe(true);
+    expect(db.row?.siteSearchEnabled).toBe(true);
+    expect(db.audits).toHaveLength(1);
+    const audit = db.audits[0] as unknown as { beforeSnapshot: Record<string, unknown>; afterSnapshot: Record<string, unknown> };
+    expect(audit.beforeSnapshot).toMatchObject({ siteSearchEnabled: false });
+    expect(audit.afterSnapshot).toMatchObject({ siteSearchEnabled: true });
+
+    // The 30s process cache was warmed with `false` above; a stale read here would prove the
+    // post-commit invalidation is missing.
+    const fresh = await getSiteSetting(db.asPrismaClient(), { ttlMs: 30_000, now: () => NOW.getTime() });
+    expect(fresh.siteSearchEnabled).toBe(true);
+  });
+
+  it("PN-15: saving false turns it back off and audits true -> false", async () => {
+    const db = new FakeSiteSettingDb({ ...BASE_ROW, siteSearchEnabled: true });
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "close site search",
+      siteSearchEnabled: false,
+    }, dependencies(db, stores));
+    expect(result.setting.siteSearchEnabled).toBe(false);
+    expect(db.row?.siteSearchEnabled).toBe(false);
+    const audit = db.audits[0] as unknown as { beforeSnapshot: Record<string, unknown>; afterSnapshot: Record<string, unknown> };
+    expect(audit.beforeSnapshot).toMatchObject({ siteSearchEnabled: true });
+    expect(audit.afterSnapshot).toMatchObject({ siteSearchEnabled: false });
+  });
+
+  it("PN-15: omitting siteSearchEnabled leaves the stored switch untouched (and still audits it)", async () => {
+    const db = new FakeSiteSettingDb({ ...BASE_ROW, siteSearchEnabled: true });
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "rename only",
+      siteName: "Renamed",
+    }, dependencies(db, stores));
+    expect(result.setting).toMatchObject({ siteName: "Renamed", siteSearchEnabled: true });
+    expect(db.row?.siteSearchEnabled).toBe(true);
+    const audit = db.audits[0] as unknown as { beforeSnapshot: Record<string, unknown>; afterSnapshot: Record<string, unknown> };
+    expect(audit.beforeSnapshot).toMatchObject({ siteSearchEnabled: true });
+    expect(audit.afterSnapshot).toMatchObject({ siteSearchEnabled: true });
+  });
+
+  it.each([
+    ['the string "true"', "true"],
+    ['the string "false"', "false"],
+    ["the empty string", ""],
+    ["the number 1", 1],
+    ["the number 0", 0],
+    ["null", null],
+    ["undefined (key present, value missing)", undefined],
+    ["an object", {}],
+    ["an array", [true]],
+  ])("PN-15: rejects %s for siteSearchEnabled (JSON booleans only) and writes nothing", async (_label, value) => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const attempt = updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "r",
+      siteSearchEnabled: value,
+    }, dependencies(db, stores));
+    await expect(attempt).rejects.toBeInstanceOf(SiteSettingValidationError);
+    await expect(attempt).rejects.toMatchObject({
+      code: "site_setting_invalid",
+      status: 400,
+      message: "siteSearchEnabled must be a boolean",
+    });
+    expect(db.updateCalls).toBe(0);
+    expect(db.audits).toHaveLength(0);
+    expect(db.row?.siteSearchEnabled).toBe(false);
   });
 
   it("rejects a non-empty invalid GA4 id instead of silently clearing it", async () => {

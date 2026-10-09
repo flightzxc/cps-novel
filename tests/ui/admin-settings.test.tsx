@@ -32,6 +32,7 @@ const BASE_SETTING: AdminSiteSettingView = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 
@@ -790,5 +791,105 @@ describe("写：Yandex 站长验证码与 Metrica 计数器 ID（运营 V2，Own
     await submit(siteForm());
     await waitFor(() => expect(within(siteForm()).getByRole("status").textContent).toContain("站点设置参数无效"));
     expect((within(siteForm()).getByLabelText("Yandex Metrica 计数器 ID") as HTMLInputElement).value).toBe("123");
+  });
+});
+
+describe("写：前台站内搜索开关（PN-15，Owner 2026-10-09）", () => {
+  const reasonInput = () => within(siteForm()).getByLabelText("修改原因（必填，写入审计）");
+  const toggle = () => within(siteForm()).getByLabelText("前台站内搜索") as HTMLInputElement;
+  const saveButton = () => within(siteForm()).getByRole("button", { name: "保存站点 SEO 设置" }) as HTMLButtonElement;
+  const clickToggle = async () => {
+    await act(async () => {
+      fireEvent.click(toggle());
+    });
+  };
+
+  it("站点区有一个真实的复选框，label 可访问，默认未勾选，说明文案挂在 aria-describedby 上", () => {
+    renderClient();
+    const box = toggle();
+    expect(box.tagName).toBe("INPUT");
+    expect(box.type).toBe("checkbox");
+    expect(box.checked).toBe(false);
+    // label 与控件一一对应（getByLabelText 能找到就证明 <label for> 接线正确）。
+    expect(within(siteForm()).getByRole("checkbox", { name: "前台站内搜索" })).toBe(box);
+    const hintId = box.getAttribute("aria-describedby");
+    expect(hintId).toBeTruthy();
+    const hint = document.getElementById(hintId!);
+    expect(hint?.textContent).toBe("关闭时搜索页返回 404，页头不显示搜索入口；保存后立即生效。");
+  });
+
+  it("已开启时回显为勾选", () => {
+    renderClient({ setting: { ...BASE_SETTING, siteSearchEnabled: true } });
+    expect(toggle().checked).toBe(true);
+  });
+
+  it("没动开关时保存按钮置灰（开关本身参与脏检查）；勾选并填原因后可保存", async () => {
+    renderClient();
+    await type(reasonInput(), "开放站内搜索");
+    expect(saveButton().disabled).toBe(true);
+    await clickToggle();
+    expect(toggle().checked).toBe(true);
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it("勾选后提交：PATCH 体里 siteSearchEnabled 是 JSON 布尔 true（不是字符串），成功后以服务端值回填", async () => {
+    const NEXT: AdminSiteSettingView = {
+      ...BASE_SETTING,
+      siteSearchEnabled: true,
+      updatedAt: "2026-08-20T01:00:00.000Z",
+    };
+    const { calls } = queueFetch({ body: { ok: true, data: { setting: NEXT, replayed: false } } });
+    renderClient();
+
+    await clickToggle();
+    await type(reasonInput(), "开放站内搜索");
+    await submit(siteForm());
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const body = parseBody(calls[0]);
+    expect(body).toMatchObject({ reason: "开放站内搜索", siteSearchEnabled: true });
+    expect(body.siteSearchEnabled).toBe(true);
+    await waitFor(() => expect(within(siteForm()).getByRole("status").textContent).toContain("已保存"));
+    expect(toggle().checked).toBe(true);
+  });
+
+  it("取消勾选后提交：PATCH 体里 siteSearchEnabled 是 JSON 布尔 false", async () => {
+    const { calls } = queueFetch({
+      body: { ok: true, data: { setting: { ...BASE_SETTING, updatedAt: "2026-08-20T01:00:00.000Z" }, replayed: false } },
+    });
+    renderClient({ setting: { ...BASE_SETTING, siteSearchEnabled: true } });
+
+    await clickToggle();
+    expect(toggle().checked).toBe(false);
+    await type(reasonInput(), "关闭站内搜索");
+    await submit(siteForm());
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const body = parseBody(calls[0]);
+    expect(body.siteSearchEnabled).toBe(false);
+  });
+
+  it("没改开关、只改站名时，PATCH 体里的 siteSearchEnabled 仍是当前值的布尔（不会丢字段也不会变字符串）", async () => {
+    const { calls } = queueFetch({
+      body: { ok: true, data: { setting: { ...BASE_SETTING, siteName: "Renamed", siteSearchEnabled: true, updatedAt: "2026-08-20T01:00:00.000Z" }, replayed: false } },
+    });
+    renderClient({ setting: { ...BASE_SETTING, siteSearchEnabled: true } });
+
+    await type(within(siteForm()).getByLabelText("站点名称"), "Renamed");
+    await type(reasonInput(), "改站名");
+    await submit(siteForm());
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(parseBody(calls[0]).siteSearchEnabled).toBe(true);
+  });
+
+  it("服务端拒绝（site_setting_invalid）时保留操作员的勾选，不静默回退", async () => {
+    queueFetch({ status: 400, body: { ok: false, status: 400, code: "site_setting_invalid" } });
+    renderClient();
+    await clickToggle();
+    await type(reasonInput(), "r");
+    await submit(siteForm());
+    await waitFor(() => expect(within(siteForm()).getByRole("status").textContent).toContain("站点设置参数无效"));
+    expect(toggle().checked).toBe(true);
   });
 });

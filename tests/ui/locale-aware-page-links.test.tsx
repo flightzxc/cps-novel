@@ -86,6 +86,7 @@ const SETTINGS = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-08-18T00:00:00Z"),
 };
 

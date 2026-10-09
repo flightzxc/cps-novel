@@ -176,6 +176,7 @@ export function SiteSettingsClient({
   const [ga4MeasurementId, setGa4MeasurementId] = useState(setting?.ga4MeasurementId ?? "");
   const [yandexVerification, setYandexVerification] = useState(setting?.yandexVerification ?? "");
   const [yandexMetricaId, setYandexMetricaId] = useState(setting?.yandexMetricaId ?? "");
+  const [siteSearchEnabled, setSiteSearchEnabled] = useState(setting?.siteSearchEnabled ?? false);
   const [siteReason, setSiteReason] = useState("");
 
   // `settingsManage !== "granted"` and `setting === null` travel together —
@@ -227,6 +228,7 @@ export function SiteSettingsClient({
       setGa4MeasurementId(next.ga4MeasurementId ?? "");
       setYandexVerification(next.yandexVerification);
       setYandexMetricaId(next.yandexMetricaId ?? "");
+      setSiteSearchEnabled(next.siteSearchEnabled);
     }
   }
 
@@ -302,6 +304,8 @@ export function SiteSettingsClient({
     ga4MeasurementId: ga4MeasurementId.trim(),
     yandexVerification: yandexVerification.trim(),
     yandexMetricaId: yandexMetricaId.trim(),
+    // PN-15：前台站内搜索开关，请求体里始终是 JSON 布尔值（服务端只接受 true/false）。
+    siteSearchEnabled,
   };
   // 运营 V2：与服务端同一组正则（`@/lib/seo/yandex-metrica`）。这里只负责"提前说清楚为什么
   // 不能保存"，真正的拒绝仍在服务端——非法字符一律不保存，不做静默清洗。
@@ -324,6 +328,7 @@ export function SiteSettingsClient({
     || siteFields.ga4MeasurementId !== (current.ga4MeasurementId ?? "")
     || siteFields.yandexVerification !== current.yandexVerification
     || siteFields.yandexMetricaId !== (current.yandexMetricaId ?? "")
+    || siteSearchEnabled !== current.siteSearchEnabled
     || JSON.stringify(parsedFriendLinks) !== JSON.stringify(current.friendLinks)
   );
 
@@ -427,6 +432,20 @@ export function SiteSettingsClient({
           <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚版权</span><textarea value={footerCopyrightText} onChange={(event) => setFooterCopyrightText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚免责声明</span><textarea value={footerDisclaimerText} onChange={(event) => setFooterDisclaimerText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">友链 JSON</span><textarea value={friendLinksJson} onChange={(event) => setFriendLinksJson(event.target.value)} rows={5} aria-invalid={!friendLinksValid} className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs" />{!friendLinksValid ? <span className="mt-1 block text-xs text-red-700">JSON 格式无效</span> : null}</label>
+          <div className="flex items-start gap-3">
+            <input
+              id={`${hintIdPrefix}-site-search-enabled`}
+              type="checkbox"
+              checked={siteSearchEnabled}
+              onChange={(event) => setSiteSearchEnabled(event.target.checked)}
+              aria-describedby={`${hintIdPrefix}-site-search-enabled-hint`}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+            />
+            <div>
+              <label htmlFor={`${hintIdPrefix}-site-search-enabled`} className="block text-sm font-medium text-gray-900">前台站内搜索</label>
+              <span id={`${hintIdPrefix}-site-search-enabled-hint`} className="mt-1 block text-xs text-gray-400">关闭时搜索页返回 404，页头不显示搜索入口；保存后立即生效。</span>
+            </div>
+          </div>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">修改原因（必填，写入审计）</span><input value={siteReason} onChange={(event) => setSiteReason(event.target.value)} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <SectionSubmitFooter
             section="site"
