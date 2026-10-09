@@ -6,7 +6,7 @@
  * 在旧代码上灌出一模一样的数据再对比。除 `@prisma/client` 外不 import 任何站内模块。
  *
  * 也可以单独当脚本跑（只灌数据，不跑基准）：
- *   B38_SEED_RUN=1 B38_SEED_DATABASE_URL=postgresql://<owner>@host/db npx vite-node tests/integration/site/fixtures/scale-seed.ts
+ *   B38_SEED_RUN=1 B38_SEED_DATABASE_URL=postgresql://<owner>@host/db npx tsx tests/integration/site/fixtures/scale-seed.ts
  * （连接串里的库名必须以 `cps_novel_` 开头——种子会 TRUNCATE 之外的东西也不碰，但仍拒绝任何别的库。）
  *
  * ## 数据形状（对照方案附录 D / 2.2 的生产实测）
