@@ -157,8 +157,8 @@ describe("非英语语种：前缀、百分号编码、文案", () => {
 
   it("动态标题/描述走各语种文案（法语 « {query} » 两侧是 U+00A0）", () => {
     const metadata = build("fr", result("ok", "alpha", 3));
-    expect(metadata.title).toBe("Résultats de recherche pour « alpha »");
-    expect(String(metadata.description)).toContain("« alpha »");
+    expect(metadata.title).toBe("Résultats de recherche pour «\u00a0alpha\u00a0»");
+    expect(String(metadata.description)).toContain("«\u00a0alpha\u00a0»");
   });
 
   it("动态文案按字面透传（& 引号 < > 换行 不在这里转义，转义是渲染层的事）", () => {

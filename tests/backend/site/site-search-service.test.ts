@@ -226,7 +226,7 @@ describe("进程内缓存（60 秒 / 200 条，复用有界缓存）", () => {
   it("缓存键按归一后的词：空白不同、写法不同但归一后相同的词共用一条", async () => {
     const { db, queryRaw } = fakeDb({ total: 5 });
     await searchSiteCached({ query: "Alpha King", locale: "en" }, db);
-    await searchSiteCached({ query: "  Alpha  King  ", locale: "en" }, db);
+    await searchSiteCached({ query: "  Alpha\u00a0\u00a0King  ", locale: "en" }, db);
     await searchSiteCached({ query: "Ａlpha King", locale: "en" }, db);
     expect(queryRaw).toHaveBeenCalledTimes(1);
     // 大小写不同是另一条（canonical 保留大小写，照 CPS）。

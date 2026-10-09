@@ -76,7 +76,7 @@ describe("空白折叠 / trim", () => {
   });
 
   it("NBSP（U+00A0）与全角空格（U+3000）当空白折叠", () => {
-    expect(ok("hello  world　again")).toBe("hello world again");
+    expect(ok("hello\u00a0\u00a0world\u3000again")).toBe("hello world again");
   });
 
   it("LF / CR / TAB 折叠成单个空格（跨行的词保留词边界）", () => {
@@ -89,24 +89,24 @@ describe("空白折叠 / trim", () => {
   });
 
   it("行分隔符 U+2028 折成一个空格", () => {
-    expect(ok("hello world")).toBe("hello world");
+    expect(ok("hello\u2028world")).toBe("hello world");
   });
 });
 
 describe("零宽 / 格式类码点剔除，且折叠必须发生在剔除之后", () => {
   it("空格-ZWSP-空格 剔除后不留双空格", () => {
-    const query = ok("a ​ b");
+    const query = ok("a \u200b b");
     expect(query).toBe("a b");
     expect(/ {2,}/.test(query)).toBe(false);
   });
 
   it("没有相邻空白的 ZWSP 直接删除", () => {
-    expect(ok("a​b")).toBe("ab");
+    expect(ok("a\u200bb")).toBe("ab");
   });
 
   it("BOM（U+FEFF）、LRM（U+200E）、RLM（U+200F）、方向嵌入（U+202B）被删除", () => {
-    expect(ok("﻿hello‎world‏")).toBe("helloworld");
-    expect(ok("‫ab‬")).toBe("ab");
+    expect(ok("\ufeffhello\u200eworld\u200f")).toBe("helloworld");
+    expect(ok("\u202bab\u202c")).toBe("ab");
   });
 });
 
@@ -225,7 +225,7 @@ describe("CJK 单字放行（zh / ja / ko；Han / Hiragana / Katakana / Hangul�
   });
 
   it("放行：剔除不可见码点后只剩一个汉字", () => {
-    expect(ok("愛​", "ja")).toBe("愛");
+    expect(ok("愛\u200b", "ja")).toBe("愛");
   });
 
   it("拒绝：非 CJK 语种的单个汉字、不传语种、单个拉丁 / 西里尔字母", () => {
@@ -242,7 +242,7 @@ describe("CJK 单字放行（zh / ja / ko；Han / Hiragana / Katakana / Hangul�
   });
 
   it("孤零零的零宽字符是 idle，不是 too_short", () => {
-    expect(rejected("​", "ja").reason).toBe("idle");
+    expect(rejected("\u200b", "ja").reason).toBe("idle");
     expect(rejected("\u0001", "ja").reason).toBe("idle");
   });
 
