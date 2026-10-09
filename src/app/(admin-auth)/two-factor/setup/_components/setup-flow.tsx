@@ -5,10 +5,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { buttonClassName } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import type { RecoveryCodesOneTimeResult } from "@/contracts";
-import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { ADMIN_ACTION_REQUEST_FAILED_COPY, errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import { AuthCard } from "../../../_components/auth-card";
 import { AuthLogoutControl } from "../../../_components/auth-logout-control";
+import { isNextRedirect } from "../../../_lib/next-redirect";
 import { confirmSetupAction, finishSetupAction, startSetupAction, type TwoFactorSetupWithQr } from "../_actions";
 
 const INPUT_CLASS =
@@ -63,13 +64,22 @@ function StartedStep({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await confirmSetupAction({ code });
-    setBusy(false);
-    if (!result.ok) {
-      setError(errorEnvelopeCopy(result.envelope));
-      return;
+    try {
+      const result = await confirmSetupAction({ code });
+      if (!result.ok) {
+        setError(errorEnvelopeCopy(result.envelope));
+        return;
+      }
+      onDone(result.data);
+    } catch (caught) {
+      // The action threw instead of returning an envelope (network failure,
+      // proxy 401/429, stale Server Action after a deploy); `redirect()` is the
+      // one exception that is control flow and must keep propagating.
+      if (isNextRedirect(caught)) throw caught;
+      setError(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    } finally {
+      setBusy(false);
     }
-    onDone(result.data);
   }
 
   const minutes = Math.floor(remaining / 60);
@@ -148,15 +158,6 @@ function StartedStep({
   );
 }
 
-function isNextRedirect(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
-  );
-}
-
 function DoneStep({ recovery, next }: { recovery: RecoveryCodesOneTimeResult; next: string | null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,13 +216,22 @@ export function SetupFlow({ next }: { next: string | null }) {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await startSetupAction();
-    setBusy(false);
-    if (!result.ok) {
-      setError(errorEnvelopeCopy(result.envelope));
-      return;
+    try {
+      const result = await startSetupAction();
+      if (!result.ok) {
+        setError(errorEnvelopeCopy(result.envelope));
+        return;
+      }
+      setStep({ name: "started", setup: result.data });
+    } catch (caught) {
+      // The action threw instead of returning an envelope (network failure,
+      // proxy 401/429, stale Server Action after a deploy); `redirect()` is the
+      // one exception that is control flow and must keep propagating.
+      if (isNextRedirect(caught)) throw caught;
+      setError(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    } finally {
+      setBusy(false);
     }
-    setStep({ name: "started", setup: result.data });
   }
 
   const body =

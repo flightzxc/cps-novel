@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { ADMIN_ACTION_REQUEST_FAILED_COPY, errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import type { AdminLoginTurnstilePublicState } from "@/lib/auth/admin-login-turnstile";
 
+import { isNextRedirect } from "../../_lib/next-redirect";
 import { loginAction } from "../_actions";
 import { TurnstileWidget } from "./turnstile-widget";
 
@@ -38,6 +39,12 @@ export function LoginForm({
   const turnstileReady = turnstile?.state === "ready";
   const turnstileUnavailable = turnstile?.state === "misconfigured";
 
+  function discardSpentTurnstileToken() {
+    if (!turnstileReady) return;
+    setTurnstileToken("");
+    setWidgetKey((key) => key + 1);
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -51,26 +58,40 @@ export function LoginForm({
     }
     setBusy(true);
     setError(null);
-    const result = await loginAction({
-      username,
-      password,
-      next: next ?? undefined,
-      ...(turnstileReady ? { turnstileToken } : {}),
-    });
-    if (!result.ok) {
-      if (turnstileReady) {
-        setTurnstileToken("");
-        setWidgetKey((key) => key + 1);
+    // Only a successful sign-in keeps the form busy: it is about to navigate
+    // away, and re-enabling it would allow a second submit mid-transition. Every
+    // other way out of this function — a refused result or a thrown action —
+    // must hand the form back, or it stays on "登录中…" with its inputs locked.
+    let navigating = false;
+    try {
+      const result = await loginAction({
+        username,
+        password,
+        next: next ?? undefined,
+        ...(turnstileReady ? { turnstileToken } : {}),
+      });
+      if (result.ok) {
+        router.push(result.next);
+        navigating = true;
+        return;
       }
+      discardSpentTurnstileToken();
       // Copy comes from the stable code (`errorEnvelopeCopy`), never a server
       // string — a bad username and a bad password render the exact same
       // sentence, by design (`authenticateAdminLogin` collapses both to one
       // `jwt_invalid`).
       setError(errorEnvelopeCopy(result.envelope));
-      setBusy(false);
-      return;
+    } catch (caught) {
+      // The action threw instead of returning an envelope (network failure,
+      // proxy 401/429, a stale page whose Server Action no longer exists after
+      // a deploy). `redirect()` is the one exception that is control flow.
+      if (isNextRedirect(caught)) throw caught;
+      // The failed request may already have spent the single-use token.
+      discardSpentTurnstileToken();
+      setError(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    } finally {
+      if (!navigating) setBusy(false);
     }
-    router.push(result.next);
   }
 
   return (

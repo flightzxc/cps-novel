@@ -5,8 +5,9 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import type { TwoFactorChallengeView } from "@/contracts";
-import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { ADMIN_ACTION_REQUEST_FAILED_COPY, errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
+import { isNextRedirect } from "../../../_lib/next-redirect";
 import { completeChallengeAction, resendChallengeAction } from "../_actions";
 
 const INPUT_CLASS =
@@ -36,13 +37,22 @@ function ExpiredState() {
   async function onResend() {
     setBusy(true);
     setError(null);
-    const result = await resendChallengeAction();
-    setBusy(false);
-    if (!result.ok) {
-      setError(errorEnvelopeCopy(result.envelope));
-      return;
+    try {
+      const result = await resendChallengeAction();
+      if (!result.ok) {
+        setError(errorEnvelopeCopy(result.envelope));
+        return;
+      }
+      router.refresh();
+    } catch (caught) {
+      // The action threw instead of returning an envelope (network failure,
+      // proxy 401/429, stale Server Action after a deploy); `redirect()` is the
+      // one exception that is control flow and must keep propagating.
+      if (isNextRedirect(caught)) throw caught;
+      setError(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    } finally {
+      setBusy(false);
     }
-    router.refresh();
   }
 
   return (
@@ -83,15 +93,30 @@ export function ChallengeForm({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await completeChallengeAction(
-      mode === "totp" ? { code, next } : { recoveryCode: code, next },
-    );
-    if (!result.ok) {
-      setError(errorEnvelopeCopy(result.envelope));
-      setBusy(false);
-      return;
+    // Only a successful verification keeps the form busy: it is about to
+    // navigate away, and re-enabling it would allow a second submit
+    // mid-transition. A refused result or a thrown action must hand the form
+    // back, or it stays on "验证中…" with its input locked.
+    let navigating = false;
+    try {
+      const result = await completeChallengeAction(
+        mode === "totp" ? { code, next } : { recoveryCode: code, next },
+      );
+      if (!result.ok) {
+        setError(errorEnvelopeCopy(result.envelope));
+        return;
+      }
+      router.push(result.next);
+      navigating = true;
+    } catch (caught) {
+      // The action threw instead of returning an envelope (network failure,
+      // proxy 401/429, stale Server Action after a deploy); `redirect()` is the
+      // one exception that is control flow and must keep propagating.
+      if (isNextRedirect(caught)) throw caught;
+      setError(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    } finally {
+      if (!navigating) setBusy(false);
     }
-    router.push(result.next);
   }
 
   const minutes = Math.floor(remaining / 60);

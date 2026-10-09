@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ADMIN_ACTION_REQUEST_FAILED_COPY } from "@/features/admin-ui/error-copy";
 import { TURNSTILE_SCRIPT_SRC } from "@/lib/auth/admin-login-turnstile";
+
+import { captureUnhandledRejections, nextRedirectError } from "./capture-unhandled-rejections";
 
 /**
  * B-39 — the login page / form / widget with Cloudflare Turnstile.
@@ -277,6 +280,90 @@ describe("switch ON and fully configured: the widget gates the submit", () => {
     await fillAndSubmit();
 
     expect((await screen.findByRole("alert")).textContent).toBe(copy);
+  });
+});
+
+describe("B-9: loginAction throws instead of returning a result", () => {
+  // A failed request may already have spent the single-use token (the server
+  // verifies it before it ever answers), so the throw path must drop it and
+  // re-mount the widget exactly like a refused result does.
+  it.each([
+    ["state off", { state: "off" as const }],
+    ["prop absent", undefined],
+  ])("%s: shows the shared notice, hands the form back, and the retry still carries no turnstileToken key", async (_label, turnstile) => {
+    const turnstileApi = installTurnstileStub();
+    loginAction.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<LoginForm next={null} turnstile={turnstile} />);
+
+    await fillAndSubmit("root", "pw");
+
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() => expect((screen.getByRole("button", { name: "登录" }) as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByLabelText("用户名") as HTMLInputElement).disabled).toBe(false);
+
+    loginAction.mockResolvedValueOnce({ ok: true, next: "/two-factor/challenge" });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/two-factor/challenge"));
+    expect(loginAction).toHaveBeenCalledTimes(2);
+    expect(Object.keys(loginAction.mock.calls[1]![0] as Record<string, unknown>).sort()).toEqual([
+      "next",
+      "password",
+      "username",
+    ]);
+    expect(turnstileApi.render).not.toHaveBeenCalled();
+    expect(screen.queryByText("人机验证")).toBeNull();
+  });
+
+  it("ready: shows the shared notice, drops the spent token, re-mounts the widget, and the form is usable again", async () => {
+    const turnstileApi = installTurnstileStub();
+    loginAction.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<LoginForm next={null} turnstile={{ state: "ready", siteKey: TEST_SITE_KEY }} />);
+    await waitFor(() => expect(turnstileApi.renders).toHaveLength(1));
+
+    act(() => turnstileApi.renders[0]!.callback("single-use-token"));
+    await fillAndSubmit();
+
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() => expect(turnstileApi.renders).toHaveLength(2));
+    expect(turnstileApi.remove).toHaveBeenCalledWith("widget-1");
+    expect((screen.getByRole("button", { name: "登录" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByLabelText("用户名") as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText("密码") as HTMLInputElement).disabled).toBe(false);
+
+    // the spent token is gone: submitting again without a fresh one is refused client-side
+    await fillAndSubmit();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("请先完成人机验证"));
+    expect(loginAction).toHaveBeenCalledTimes(1);
+
+    // a fresh token from the re-mounted widget unlocks the next attempt, with the same credentials
+    loginAction.mockResolvedValueOnce({ ok: true, next: "/two-factor/challenge" });
+    act(() => turnstileApi.renders[1]!.callback("fresh-token"));
+    await fillAndSubmit();
+    await waitFor(() => expect(loginAction).toHaveBeenCalledTimes(2));
+    expect(loginAction.mock.calls[1]![0]).toEqual({
+      username: "root",
+      password: "pw",
+      next: undefined,
+      turnstileToken: "fresh-token",
+    });
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/two-factor/challenge"));
+  });
+
+  it("ready: a NEXT_REDIRECT is re-thrown untouched — no network notice", async () => {
+    const turnstileApi = installTurnstileStub();
+    const redirect = nextRedirectError("/two-factor/setup");
+    loginAction.mockRejectedValueOnce(redirect);
+    render(<LoginForm next={null} turnstile={{ state: "ready", siteKey: TEST_SITE_KEY }} />);
+    await waitFor(() => expect(turnstileApi.renders).toHaveLength(1));
+    act(() => turnstileApi.renders[0]!.callback("tok"));
+
+    await captureUnhandledRejections(async (seen) => {
+      await fillAndSubmit();
+      await waitFor(() => expect(seen).toContain(redirect));
+    });
+
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
   });
 });
 
