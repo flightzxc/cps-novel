@@ -24,7 +24,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`（tree `48427e2d`），annotated tag `v0.5.13`；镜像 `cps-novel:0.5.13-cc2655b`；归档 SHA256 `356b6d7c…8089`。
 - 维护 54 秒，迁移 24 条（新增 `novel_effective_tag`，首建 185,270 行，迁移 5.7 秒）；V0513_POST_CHECK=PASS；归属表检查 missing=0 extra=0 changed=0。
 - 外部验收：/browse 13,008 本、第 651 页 200；female-audience 9,732 本、第 487 页 200。完整记录见 [发布记录](releases/v0.5.13-preproduction.md)。
-- Notion 同步待办：由主控留提示词交 Codex（Claude 的 Notion 连接无权访问手账页）。
+- Notion 已同步回读 PASS（2026-10-09T04:39:26Z）：Codex 按主控交接完成当前快照、版本表、详细手账和唯一开发日志镜像；关键事实一致，历史/规则/模板逐字节保留，收据见 `releases/evidence/v0513-release/phase2/notion-readback.json`。
 
 #### v0.5.13 准备快照（历史）
 

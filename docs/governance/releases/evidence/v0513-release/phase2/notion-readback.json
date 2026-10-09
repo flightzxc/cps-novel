@@ -1,0 +1,231 @@
+{
+  "result": "PASS",
+  "readAt": "2026-10-09T04:39:26Z",
+  "pageLastEditedAt": "2026-10-09T04:36:36.822Z",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageUrl": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "sourceBranch": "release/v0.5.13-2026-10-09",
+  "sourceGovernanceCommit": "b2785477d992c16b1e86581ca0fd85a49e7ab630",
+  "approvedFinal": "cc2655b0a3864f6ae6a665f46bad91f15d0a904a",
+  "annotatedTagObject": "18055f9a05c302e7262dd70b46f0c1a88f6a4032",
+  "sourceFilesSha256": {
+    "docs/governance/releases/v0.5.13-preproduction.md": "9a1e26d169c9a79886d0b10428714111a5a856995a5e521ca09f6353d47045d9",
+    "docs/governance/version-registry.md": "7e94188f2bcbafe5430de45c9c5e7d9f40c446fa807976bee47ee21f0c973862",
+    "docs/governance/development-log.md": "6415b9b5cdbf35cc5d6f8b8a9062198f843b7e57f4ac3cf99a37668890783b0c"
+  },
+  "updatedAreas": {
+    "currentSnapshot": true,
+    "versionTable": true,
+    "detailedHandbook": true,
+    "developmentLogMirror": true
+  },
+  "checks": [
+    {
+      "name": "Final",
+      "expected": "cc2655b0a3864f6ae6a665f46bad91f15d0a904a",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "tree",
+      "expected": "48427e2d230721e6cafcb5007e2ea464c35f8aed",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "image",
+      "expected": "cps-novel:0.5.13-cc2655b",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "archiveSha256",
+      "expected": "356b6d7c1aecf3099f877300127f9038ea6aff453ee23f90774fc6e660458089",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "ociTarget",
+      "expected": "sha256:c2f9a5942e98220a772c1cb61b3ff0f0320460ae43cb9d0b0d21f800017b38e8",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "ociConfig",
+      "expected": "sha256:890994ee2d034abb8cd64f39b4b681d320de13095cde28e03f58c9a38167af60",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "maintenance",
+      "expected": "03:19:48Z–03:20:42Z，共 54 秒",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "migration",
+      "expected": "20261009120000_b38_novel_effective_tag",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "migrationElapsed",
+      "expected": "5,689ms",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "migrationCounts",
+      "expected": "迁移 finished 24、unfinished 0、rolled_back 0",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "tableCount",
+      "expected": "业务表由 57 张变为 58 张",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "rowCount",
+      "expected": "185,270 行",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "projection",
+      "expected": "missing=0 extra=0 changed=0",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "browseCount",
+      "expected": "13,008 works",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "browseLastPage",
+      "expected": "/browse?page=651",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "categoryCount",
+      "expected": "9,732 works",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "categoryLastPage",
+      "expected": "/category/female-audience?page=487",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "runtimeGate",
+      "expected": "RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=532",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "integrationFix",
+      "expected": "8d94332",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "changeCriteria",
+      "expected": "单次全量对账超过 4 秒、后台保存出现锁等待超时、改映射或启停分类变成高频操作",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "extraRequests",
+      "expected": "多发了约 5 次只读请求",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "publicationMethod",
+      "expected": "本版由主控（Claude，会话「海阅上线主控」）直接发布，不经 Codex",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "runtimeSize",
+      "expected": "镜像从约 1.23GB 降到约 952MB",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "vitestPending",
+      "expected": "vitest 4.1.11 升级评估排 v0.5.14",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "reconsiderB",
+      "expected": "再议 B（首页题材导航改成运营勾选）另开单",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "book71Pending",
+      "expected": "71 本过短网址书待运营生成后核对",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    },
+    {
+      "name": "runnerFix",
+      "expected": "p1-05b、p1-06 前置检查是 B-40 的遗漏",
+      "sourceContains": true,
+      "notionContains": true,
+      "result": "PASS"
+    }
+  ],
+  "history": {
+    "result": "PASS",
+    "beforeCharacters": 206087,
+    "recoveredCharacters": 206087,
+    "scope": "Entire pre-existing page content recovered after removing only added snapshot/history heading, v0.5.13 table row and appendices",
+    "originalCurrentSnapshotPreservedAsHistory": true,
+    "templatesAndRulesPreserved": true,
+    "beforeSha256": "b3dd70af1a7afef9014617a00cdc8b92008812970db93e3c4cdef07fedbcd6fc",
+    "recoveredAfterSha256": "b3dd70af1a7afef9014617a00cdc8b92008812970db93e3c4cdef07fedbcd6fc",
+    "hashesMatch": true
+  },
+  "sourceMirrorNormalization": "Notion strips blank lines and auto-links the plain filename v0.5.13-preproduction.md; displayed source text matches after reversing only that serialization. No second Notion write was performed.",
+  "constraints": {
+    "serverConnected": false,
+    "codeChanged": false,
+    "tagChanged": false,
+    "developmentLogSourceFileChanged": false
+  }
+}
