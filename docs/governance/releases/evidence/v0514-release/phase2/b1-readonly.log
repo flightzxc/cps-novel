@@ -1,0 +1,11 @@
+BEGIN
+                  id                  | ok | same 
+--------------------------------------+----+------
+ 4410a759-8485-4fb8-954c-a497b8e6a229 | t  | f
+(1 row)
+
+ held_batch_id | channel_account_id | credential_id | credential_ok | reason_code 
+---------------+--------------------+---------------+---------------+-------------
+(0 rows)
+
+COMMIT

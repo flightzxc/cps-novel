@@ -3,7 +3,42 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-09 · 共 1218 个 commit
+生成时间：2026-10-09 · 共 1250 个 commit
+- `821a030` 2026-10-09 文档：登记海阅 v0.5.14 第一阶段门禁与不可变发布工件  — _codex · GPT-6_
+
+## v0.5.14
+
+- `bf61b5e` 2026-10-09 发布：准备海阅 v0.5.14 六文件版本身份  — _codex · GPT-6_
+- `a5daf6e` 2026-10-09 合并：v0.5.14 搜索文案按第三方验收修正（ar/ko/pl/vi 4 条 + cs/pl 字数提示改 ICU plural）  — _海阅上线主控 · claude-opus-5-5_
+- `04220b3` 2026-10-09 修正(search)：捷克语、波兰语最短/最长字数提示的名词随数字变形（改 ICU plural）  — _v0514-copy-sonnet · claude-sonnet-5-5_
+- `beaa33f` 2026-10-09 修正(search)：站内搜索 4 条译文按第三方验收逐字替换（ar/ko/pl/vi）  — _v0514-copy-sonnet · claude-sonnet-5-5_
+- `0a9b59a` 2026-10-09 合并：v0.5.14 站内搜索（PN-15）——搜索页、后台开关、页头方案 A、搜索限流 nginx 段  — _海阅上线主控 · claude-opus-5-5_
+- `5079523` 2026-10-09 功能(PN-15)：后台站点设置新增「前台站内搜索」开关  — _claude-code · Claude Sonnet 5.5_
+- `d370705` 2026-10-09 修正(search)：搜索页接页头"当前页"高亮 + 有结果第 2 页起标题加翻页后缀（PN-15 复核）  — _claude-code · Claude Opus 5.5_
+- `e050f05` 2026-10-09 修正(header)：桌面导航「搜索」项垂直对齐 + 页头预览页用真实导航文案（PN-15 第二批复核）  — _claude-code · Claude Opus 5.5_
+- `f9b94c2` 2026-10-09 test(header): 手机菜单语种行并入网址冻结守卫 + 搜索入口 / 手机页头结构用例（PN-15 第二批）  — _claude-code · Claude Sonnet 5.5_
+- `45dfcf4` 2026-10-09 feat(header): 页头搜索入口 + 手机端页头方案 A（PN-15 第二批）  — _claude-code · Claude Sonnet 5.5_
+- `3298f26` 2026-10-09 test(header): 页头改版前的网址冻结守卫（PN-15 第二批）  — _claude-code · Claude Sonnet 5.5_
+- `eb07afe` 2026-10-09 test(search): 规模测量的多词场景改用库里真实存在的两词组合  — _claude-code · Claude Sonnet 5.5_
+- `e570cc7` 2026-10-09 docs(adr): ADR-PN15 前台站内搜索  — _claude-code · Claude Sonnet 5.5_
+- `750e505` 2026-10-09 test(search): 站内搜索真实库用例、规模测量与运行器（PN-15）  — _claude-code · Claude Sonnet 5.5_
+- `8cc11a6` 2026-10-09 test(search): 搜索页各状态的页面层元数据接线用例  — _claude-code · Claude Sonnet 5.5_
+- `365c12a` 2026-10-09 test(search): 单元用例里的不可见字符一律用 \u 转义写  — _claude-code · Claude Sonnet 5.5_
+- `f1dd2ec` 2026-10-09 feat(search): nginx 搜索 location 与独立限流（PN-15）  — _claude-code · Claude Sonnet 5.5_
+- `fb198c6` 2026-10-09 test(search): 站内搜索单元与页面用例（PN-15）  — _claude-code · Claude Sonnet 5.5_
+- `c9a13e3` 2026-10-09 feat(search): 搜索页 /search 与 /{语种}/search、翻页不预取、搜索页语种切换（PN-15）  — _claude-code · Claude Sonnet 5.5_
+- `03b0e0f` 2026-10-09 feat(search): 站内搜索查询层（PN-15）  — _claude-code · Claude Sonnet 5.5_
+- `afcebfa` 2026-10-09 feat(search): 站内搜索 15 语文案（search 命名空间 13 键）  — _claude-code · Claude Sonnet 5.5_
+- `0afab4e` 2026-10-09 流程：公开网址冻结（2026-10-09 起，运营要求）  — _海阅上线主控 · claude-opus-5-5_
+- `d5c132e` 2026-10-09 合并：v0.5.14 测试工具 vitest 升到 4.1.11（移除 tinypool 漏洞链）  — _海阅上线主控 · claude-opus-5-5_
+- `c8acce2` 2026-10-09 合并：v0.5.14 小修四项（B-1 凭据替换误判、B-9 登录失败卡死、B-26 nanoid、vite-node 提示改 tsx）  — _海阅上线主控 · claude-opus-5-5_
+- `02eb050` 2026-10-09 文档：B-38 种子脚本手工提示由 npx vite-node 改为 npx tsx  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `069e753` 2026-10-09 修复(B-26)：nanoid 锁定升到 3.3.18，消除生产依赖高危公告  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `0a646ff` 2026-10-09 修复(B-9)：后台登录与两步验证表单请求失败时不再卡死，给出提示并恢复可提交  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `8b71121` 2026-10-09 修复(B-1)：替换凭据后校验时刻改用事务时刻，生命周期凭据检查不再误判未就绪  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `7ff4871` 2026-10-09 chore(test): vitest 3.2.7 升级到 4.1.11，移除 tinypool 漏洞链  — _claude-code · Claude Sonnet 5_
+- `a263cb5` 2026-10-09 docs: 完成海阅v0.5.13 Notion同步与回读核对  — _codex · GPT-6_
+- `b278547` 2026-10-09 docs: 登记海阅 v0.5.13 正式站部署（主控直接发布）  — _海阅上线主控 · claude-opus-5-5_
 
 ## v0.5.13
 

@@ -1,0 +1,6 @@
+{"service": "web", "id": "ef2331b075e407c8893bd1c3d6ca078c9e4a760fde6392a4169787866ca172d2", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-09T15:13:34.492994+00:00"}
+Traceback (most recent call last):
+  File "/opt/cps-novel/shared/artifacts/staging/v0514/post-check-v0514.py", line 35, in <module>
+    assert env.get('INDEXNOW_ENABLED')=='false' and env.get('INDEXNOW_OUTBOUND_ENABLED')=='false'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

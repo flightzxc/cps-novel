@@ -1,0 +1,12 @@
+FINAL_WINDOW_AT=2026-10-09T15:13:34Z
+PUBLIC_ESTABLISHED_CONNECTIONS=1
+--- /opt/cps-novel/shared/env/preprod.env.bak-v0514-20261009T151334Z
++++ /opt/cps-novel/shared/env/preprod.env
+@@ -1,2 +1,2 @@
+-APP_VERSION=0.5.13
+-NEXT_PUBLIC_BUILD_VERSION=v0.5.13
++APP_VERSION=0.5.14
++NEXT_PUBLIC_BUILD_VERSION=v0.5.14
+{"envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v0514-20261009T151334Z", "beforeSha256": "02678ac313af230e7084262f532dbc337e5e6d3aa1f9b6d497c6281b5e3bdea8", "afterSha256": "c4c49569eb2fbbb5b14d7ba827b59770cc562de3706383ad404ddd9d8bc0da6c", "otherBytesCmp": "PASS", "allowlists": "UNCHANGED"}
+ENV_TWO_LINES_ONLY=PASS
+DEPLOY_PID=1526940

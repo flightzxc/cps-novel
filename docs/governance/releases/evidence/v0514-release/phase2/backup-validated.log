@@ -1,0 +1,8 @@
+a277ce80dbedff9d0c063abac3fc124507409cf6048bd6f43107a57b4504a7e5  /var/lib/cps-novel/backups/logical/cps-novel-v0514-20261009T150909Z.dump
+created_at=2026-10-09T15:11:12Z
+database=cps_novel
+server_version=16.14 (Debian 16.14-1.pgdg13+1)
+pg_dump_version=pg_dump (PostgreSQL) 16.14 (Debian 16.14-1.pgdg13+1)
+size_bytes=707597780
+sha256=a277ce80dbedff9d0c063abac3fc124507409cf6048bd6f43107a57b4504a7e5
+BACKUP_RESTORE_LIST=PASS host=/opt/cps-novel/shared/backups/logical/cps-novel-v0514-20261009T150909Z.dump

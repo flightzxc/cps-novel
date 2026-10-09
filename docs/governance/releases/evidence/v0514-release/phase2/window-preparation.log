@@ -1,0 +1,21 @@
+CONNECTION_SAMPLE_AT=2026-10-09T15:08:19Z
+PUBLIC_ESTABLISHED_CONNECTIONS=1
+CONNECTION_SAMPLE_AT=2026-10-09T15:08:29Z
+PUBLIC_ESTABLISHED_CONNECTIONS=1
+CONNECTION_SAMPLE_AT=2026-10-09T15:08:39Z
+PUBLIC_ESTABLISHED_CONNECTIONS=1
+PREPROD_SITE_MODE=public
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write open=catalog_write,promo_write,sitemap_write,auto_tag_write
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+PREPROD_PREFLIGHT=PASS
+SERVER_DISK
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1       193G   58G  135G  31% /
+RESTORE_DIRECTORY
+ROLLBACK_DIRECTORY=PASS

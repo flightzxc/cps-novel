@@ -1,0 +1,10 @@
+PREPROD_SITE_MODE=public
+POSTGRES_ID=691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e
+NGINX_FILES
+/etc/nginx/conf.d:
+total 20
+-rw-r--r-- 1 root root 16840 Oct  7 15:51 cps-novel-preprod.conf
+
+/etc/nginx/sites-enabled:
+total 0
+NGINX_FINGERPRINTS

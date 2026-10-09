@@ -1,0 +1,72 @@
+[
+  {
+    "number": 1,
+    "name": "before-home",
+    "url": "https://pulsenovels.com/",
+    "at": "2026-10-09T15:08:42.220220+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/ 0",
+    "stderr": ""
+  },
+  {
+    "number": 2,
+    "name": "before-category",
+    "url": "https://pulsenovels.com/category/female-audience",
+    "at": "2026-10-09T15:08:44.833039+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/category/female-audience 0",
+    "stderr": ""
+  },
+  {
+    "number": 3,
+    "name": "before-novel",
+    "url": "https://pulsenovels.com/novel/signed-sealed-sinful-pw0wq1aaj",
+    "at": "2026-10-09T15:08:47.475904+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/novel/signed-sealed-sinful-pw0wq1aaj 0",
+    "stderr": ""
+  },
+  {
+    "number": 4,
+    "name": "after-search",
+    "url": "https://pulsenovels.com/search",
+    "at": "2026-10-09T15:17:23.773280+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "404 https://pulsenovels.com/search 0",
+    "stderr": ""
+  },
+  {
+    "number": 5,
+    "name": "after-home",
+    "url": "https://pulsenovels.com/",
+    "at": "2026-10-09T15:17:25.996350+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/ 0",
+    "stderr": ""
+  },
+  {
+    "number": 6,
+    "name": "after-category",
+    "url": "https://pulsenovels.com/category/female-audience",
+    "at": "2026-10-09T15:17:28.195811+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/category/female-audience 0",
+    "stderr": ""
+  },
+  {
+    "number": 7,
+    "name": "after-novel",
+    "url": "https://pulsenovels.com/novel/signed-sealed-sinful-pw0wq1aaj",
+    "at": "2026-10-09T15:17:32.374614+00:00",
+    "proxy": "http://127.0.0.1:7899",
+    "exit": 0,
+    "result": "200 https://pulsenovels.com/novel/signed-sealed-sinful-pw0wq1aaj 0",
+    "stderr": ""
+  }
+]

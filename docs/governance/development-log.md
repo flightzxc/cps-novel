@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-09 23:14 - codex（GPT-6，正式发版执行；时间 +0800 / JST 2026-10-10 00:14）
+
+**变更类型**：海阅 v0.5.14 PATCH 正式站部署，仅 haiyue-vps。Owner 明确授权 Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；2026-10-09 15:14:32Z 原 RELEASE=PASS / EXIT=0，维护 OFF；A–E 与自动 F.1–F.3 PASS，F.4 Owner 登录及两步验证待反馈。
+**背景与 Owner 10-09 决定**：按交接仅发版、不开发功能；本版范围为以下五组合入。B-1 提到第一档；搜索收录照 CPS（“顺其自然”）；页头方案 A；开关做在后台；第三档顺延 v0.5.15；公开网址冻结持续执行。部署在日本凌晨低流量窗口进行，四次公开连接观测均 1、在途发布/生成 0。
+**变更内容（五组与来源）**：
+- 小修四项 `fix/v0514-small-fixes@02eb050` / merge `c8acce2`：B-1 事务时间戳及 RETURNING 读回，替换凭据后生命周期自动恢复；B-9 登录及两步验证失败显示异常并恢复提交；B-26 nanoid 3.3.18；手工提示改 tsx。
+- Vitest 4.1.11 `chore/vitest4-v0514@7ff4871` / merge `d5c132e`，移除 tinypool 漏洞链。
+- 公开网址冻结规则 `0afab4e`。
+- PN-15 搜索 `feat/pn15-search-v0514@5079523` / merge `0a9b59a`：列表可见性同口径、后台开关与授权审计、页头 A、搜索模板限流，新增 site_search_enabled 常量默认 false 迁移。
+- 搜索文案 `fix/pn15-copy-gpt-v0514@04220b3` / merge `a5daf6e`：第三方结论 **ACCEPT_WITH_FIXES，已照改**；ar/ko/pl/vi 四条，cs/pl ICU plural；阿语双数排 v0.5.15。
+**影响范围**：五组合入已在正式站生效；**搜索已合入、开关关闭**。迁移 24→25、业务表仍 58；web_app 新列 UPDATE=t、scheduler_app SELECT=f。env 只改 APP_VERSION / NEXT_PUBLIC_BUILD_VERSION 两行、余字节真实 cmp 一致，两个 worker 白名单与原写闸不变；没有安装/修改 nginx（原两 SHA 一致），未动证书/DNS/NAS、搜索或业务开关、Turnstile/IndexNow、推广批次，未生成文章、刷新 sitemap。postgres CID 不变，未回滚或擅设兼容批准。
+**验证方式**：第一阶段 Final 全门禁 PASS，10,955passed / 0failed / 无Unhandled，36运行器、25迁移58表/drift0、strict proxy1742/known0、B21/矩阵/变异/品牌镜像/发布镜像E2E/三Compose PASS；生产 audit0critical/指定四high，全量0critical。服务器 SHA/原 --load/OCI/Final/tree 全 PASS；两次只读暂停门禁及旧24checksum匹配；在线逻辑备份707597780bytes、SHA a277ce80…4a7e5、restore-list PASS。维护15:13:42.742847Z–15:14:31.224573Z共48.481726秒，新迁移16.316ms；25finished/0rolledback/全部checksum一致，search=false/列权限通过；worker投影0/0/0，五应用+postgreshealthy，health0.5.14/Final/metadata/database passed，四应用RUNTIME_IMAGE_DEPS PASS dev522无vitest/tinypool，Next16.3.8/nanoid3.3.18；backup-timerRUNNING，六服务自部署error/permissiondenied0、allowlist requested/effective不变invalid空。外部7次全部经代理，search404/header无搜索，分类和小说URL/canonical/hreflang前后一致；B-1 active唯一行4410a759-8485-4fb8-954c-a497b8e6a229 ok=t/same=f，credential_not_ready暂停批次0，无补点校验需要。包装器变量名/tsx路径/读取权限偏差均修正留证，不修改原门禁。
+**后续待办与治理**：F.4 已请 Owner 正常后台登录并走一次两步验证，待反馈；不代登录或改开关。v0.5.15 第三档/阿语双数，nginx搜索location及HSTS提级另行安排。annotated v0.5.14固定Final，原生成器七位SHA生成CHANGELOG；台账、本唯一发版条目、发布记录与原始证据已完成；Git推送回读和Notion同步/回读按本条最终补记。回滚须Owner另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES，先恢复本次env备份、原v0.5.13不可变目录执行，不下迁移、不改nginx。完整证据见 [v0.5.14 发布记录](releases/v0.5.14-preproduction.md)。
+
 ### 2026-10-09 11:20 - 海阅上线主控（Claude Opus 5.5，主控直接发版；时间 +0800）
 
 **变更类型**：海阅 v0.5.13 PATCH 正式站部署，仅 haiyue-vps。11:20:43 +0800 RELEASE=PASS / EXIT=0，维护 54 秒，含 1 条迁移。部署后实测 V0513_POST_CHECK=PASS，外部验收通过。

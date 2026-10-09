@@ -1,0 +1,18 @@
+NGINX_FINGERPRINTS
+d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe  /etc/nginx/conf.d/cps-novel-preprod.conf
+ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e  /etc/nginx/nginx.conf
+NGINX_PUBLIC_MARKERS
+map $http_next_router_prefetch $cps_page_key { "" $server_name; default ""; }
+map $http_next_router_prefetch $cps_prefetch_key { "" ""; default $server_name; }
+map $host $cps_public_hsts { default "max-age=86400"; }
+limit_conn_zone $server_name zone=cps_edge_go_conn:10m;
+server { listen 80 default_server; server_name _; return 444; }
+    server_name _;
+    server_name pulsenovels.com;
+    server_name zbcwf.pulsenovels.com;
+    server_name pulsenovels.com;
+    access_log /var/log/nginx/cps-novel-public.access.log cps_edge_json;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Cache-Control "public, max-age=86400";
+    server_name zbcwf.pulsenovels.com;
+    access_log /var/log/nginx/cps-novel-admin.access.log cps_edge_json;

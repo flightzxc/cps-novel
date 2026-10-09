@@ -1,0 +1,61 @@
+{
+  "release": "v0.5.14",
+  "final": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "tree": "38e87f2331aad0667c6b27250477ba0e6e76bfcd",
+  "image": "cps-novel:0.5.14-bf61b5e",
+  "deployFinishedAt": "2026-10-09T15:14:32.346655+00:00",
+  "releaseExit": 0,
+  "maintenance": {
+    "on": "2026-10-09T15:13:42.742847+00:00",
+    "off": "2026-10-09T15:14:31.224573+00:00",
+    "seconds": 48.481726
+  },
+  "migrationMilliseconds": 16.316,
+  "env": {
+    "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v0514-20261009T151334Z",
+    "beforeSha256": "02678ac313af230e7084262f532dbc337e5e6d3aa1f9b6d497c6281b5e3bdea8",
+    "afterSha256": "c4c49569eb2fbbb5b14d7ba827b59770cc562de3706383ad404ddd9d8bc0da6c",
+    "otherBytesCmp": "PASS",
+    "allowlists": "UNCHANGED"
+  },
+  "gates": {
+    "preflightBefore": "PASS",
+    "pauseGate": "PASS",
+    "oldMigrationsChecksum24": "PASS",
+    "backupRestoreList": "PASS",
+    "remoteArchiveVerifyLoad": "PASS",
+    "healthMetadata": "PASS",
+    "fiveApplicationsHealthy": "PASS",
+    "postgresContainerUnchanged": "PASS",
+    "migrations25Finished0Rollback": "PASS",
+    "searchFalse": "PASS",
+    "columnPrivileges": "PASS",
+    "projectionMissingExtraChanged0": "PASS",
+    "runtimeDependenciesFourContainers": "PASS",
+    "next16.3.8NanoiD3.3.18": "PASS",
+    "preflightWritesUnchanged": "PASS",
+    "workerAllowlistsUnchanged": "PASS",
+    "backupTimerRunning": "PASS",
+    "errors0PermissionDenied0": "PASS",
+    "nginxHashesUnchanged": "PASS",
+    "proxyExternal7Requests": "PASS",
+    "search404HeaderNoEntry": "PASS",
+    "categoryNovelURLSEOUnchanged": "PASS",
+    "b1Readonly": "PASS",
+    "ownerLogin2FA": "PENDING_OWNER"
+  },
+  "backup": {
+    "path": "/opt/cps-novel/shared/backups/logical/cps-novel-v0514-20261009T150909Z.dump",
+    "bytes": 707597780,
+    "sha256": "a277ce80dbedff9d0c063abac3fc124507409cf6048bd6f43107a57b4504a7e5"
+  },
+  "b1": {
+    "activeCredentials": 1,
+    "okTrue": 1,
+    "sameFalse": 1,
+    "credentialNotReadyHeldBatches": 0,
+    "ownerValidationRequired": false
+  },
+  "searchState": "已合入、开关关闭",
+  "rollback": "NOT_EXECUTED; compatibility approval required from Owner"
+}

@@ -1,0 +1,7 @@
+BEGIN READ ONLY;
+DO $$ BEGIN
+IF EXISTS (SELECT 1 FROM generic_task b WHERE b.status IN ('pending','processing') AND EXISTS (SELECT 1 FROM generic_task s WHERE s.parent_task_id=b.id AND s.task_type='promo_link.claim.v1')) OR EXISTS (SELECT 1 FROM generic_task WHERE task_type='promo_link.claim.v1' AND status IN ('pending','processing')) OR EXISTS (SELECT 1 FROM side_effect_intent WHERE status IN ('prepared','claim_retry_blocked')) OR EXISTS (SELECT 1 FROM generic_task_item WHERE status='processing') OR EXISTS (SELECT 1 FROM channel_sync_task_item WHERE status='processing') THEN RAISE EXCEPTION 'PUBLIC_CUTOVER_PAUSE_GATE=FAIL'; END IF;
+END $$;
+SELECT 'PUBLIC_CUTOVER_PAUSE_GATE=PASS';
+SELECT json_build_object('read_at',clock_timestamp(),'article_publish_inflight',(SELECT count(*) FROM generic_task WHERE task_type LIKE 'article.publish.%' AND status IN ('pending','processing')),'article_generate_inflight',(SELECT count(*) FROM generic_task WHERE task_type LIKE 'article.generate.%' AND status IN ('pending','processing')),'site_search_column_exists',EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='site_setting' AND column_name='site_search_enabled'),'migrations',(SELECT json_agg(json_build_object('name',migration_name,'checksum',checksum,'finished',finished_at IS NOT NULL,'rolled_back',rolled_back_at IS NOT NULL) ORDER BY migration_name) FROM _prisma_migrations));
+COMMIT;

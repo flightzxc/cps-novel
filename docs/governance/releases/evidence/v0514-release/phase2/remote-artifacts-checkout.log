@@ -1,0 +1,35 @@
+cps-novel-0.5.14-bf61b5e.tar.zst: OK
+bf61b5ea276a0981870cdfa63578a822a65836f3.json: OK
+cps-novel-v0.5.14.bundle: OK
+Cloning into '/opt/cps-novel/releases/bf61b5ea276a0981870cdfa63578a822a65836f3'...
+done.
+Note: switching to 'cc2655b0a3864f6ae6a665f46bad91f15d0a904a'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Updating files:  59% (1422/2393)Updating files:  60% (1436/2393)Updating files:  61% (1460/2393)Updating files:  62% (1484/2393)Updating files:  63% (1508/2393)Updating files:  64% (1532/2393)Updating files:  65% (1556/2393)Updating files:  66% (1580/2393)Updating files:  67% (1604/2393)Updating files:  68% (1628/2393)Updating files:  69% (1652/2393)Updating files:  70% (1676/2393)Updating files:  71% (1700/2393)Updating files:  72% (1723/2393)Updating files:  73% (1747/2393)Updating files:  74% (1771/2393)Updating files:  75% (1795/2393)Updating files:  76% (1819/2393)Updating files:  77% (1843/2393)Updating files:  78% (1867/2393)Updating files:  79% (1891/2393)Updating files:  80% (1915/2393)Updating files:  81% (1939/2393)Updating files:  82% (1963/2393)Updating files:  83% (1987/2393)Updating files:  84% (2011/2393)Updating files:  85% (2035/2393)Updating files:  86% (2058/2393)Updating files:  87% (2082/2393)Updating files:  88% (2106/2393)Updating files:  89% (2130/2393)Updating files:  90% (2154/2393)Updating files:  91% (2178/2393)Updating files:  92% (2202/2393)Updating files:  93% (2226/2393)Updating files:  94% (2250/2393)Updating files:  95% (2274/2393)Updating files:  96% (2298/2393)Updating files:  97% (2322/2393)Updating files:  98% (2346/2393)The bundle contains this ref:
+bf61b5ea276a0981870cdfa63578a822a65836f3 refs/heads/release/v0.5.14-2026-10-09
+The bundle requires these 2 refs:
+cc2655b0a3864f6ae6a665f46bad91f15d0a904a 
+391cb0d361e067b3788e90854a7310d2c872a68a 
+The bundle uses this hash algorithm: sha1
+Updating files:  99% (2370/2393)Updating files: 100% (2393/2393)Updating files: 100% (2393/2393), done.
+/opt/cps-novel/shared/artifacts/staging/v0514/cps-novel-v0.5.14.bundle is okay
+From /opt/cps-novel/shared/artifacts/staging/v0514/cps-novel-v0.5.14.bundle
+ * branch                release/v0.5.14-2026-10-09 -> FETCH_HEAD
+Previous HEAD position was cc2655b0a 发布：准备海阅 v0.5.13 六文件版本身份
+HEAD is now at bf61b5ea2 发布：准备海阅 v0.5.14 六文件版本身份
+REMOTE_CHECKOUT=PASS Final=bf61b5ea276a0981870cdfa63578a822a65836f3 tree=38e87f2331aad0667c6b27250477ba0e6e76bfcd

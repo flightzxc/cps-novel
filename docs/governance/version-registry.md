@@ -19,7 +19,15 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.14 —— 第一阶段完成，尚未部署（2026-10-09）
+### v0.5.14 —— 已部署正式站（2026-10-09 23:14:32 +0800 / 2026-10-10 00:14:32 JST）
+
+- Owner 明确授权 Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；原 RELEASE=PASS / EXIT=0，维护 OFF。维护 15:13:42.742847Z–15:14:31.224573Z，48.481726 秒；新迁移 16.316ms。tree `38e87f2331aad0667c6b27250477ba0e6e76bfcd`，image `cps-novel:0.5.14-bf61b5e`，linux/amd64；服务器原归档 --load / SHA / OCI / revision 全 PASS。
+- A–E 与自动 F.1–F.3 PASS：env 仅两版本行、其余真实 cmp 一致，两白名单不变；在线逻辑备份 707,597,780 字节 / restore-list PASS；25 条迁移全部 finished / 0 rollback、58 表；搜索 false，web UPDATE=t / scheduler SELECT=f；标签投影 missing=0 extra=0 changed=0；health 0.5.14/Final/metadata passed，五应用和 postgres healthy、postgres CID 不变；四容器生产依赖门禁 PASS / Next16.3.8 / nanoid3.3.18；写闸相同、备份定时器 RUNNING、六服务错误及 permission denied 0。
+- F 外部 7 次全经代理：search404 / 英文首页 header 无搜索；一分类及一小说 URL/canonical/hreflang 前后相同。B-1 唯一 active 凭据 ok=t / same=f，无 credential_not_ready 暂停生命周期批次；不需 Owner 补点校验。F.4 Owner 正常后台登录及两步验证已请求、待反馈，未冒充完成。
+- **搜索已合入、开关关闭**；本版五组合入在正式站生效。nginx 未安装/修改、两原文件 SHA 不变；证书/DNS/NAS/业务开关/Turnstile/IndexNow/推广批次/文章/sitemap 均按授权边界保留。公开网址冻结持续执行；第三档与阿语双数排 v0.5.15。
+- annotated `v0.5.14` 固定 Final，原生成器七位 SHA CHANGELOG、台账、发布记录、唯一发版日志已登记；Git 推送回读和 Notion 回读按最终收官补记。完整 [发布记录](releases/v0.5.14-preproduction.md) 与 [phase2 证据](releases/evidence/v0514-release/phase2/phase2-result.json)。
+
+#### v0.5.14 第一阶段交付快照（历史：当时尚未部署）
 
 - 唯一基线 `a5daf6e586f39d9b00911d82d150f177e4a0f65d`，来自 `integration/v0.5.14-2026-10-09`，基于 v0.5.13 收官 `a263cb5`；发布分支 `release/v0.5.14-2026-10-09`。
 - 第一阶段 PASS：Final `bf61b5ea276a0981870cdfa63578a822a65836f3` / tree `38e87f2331aad0667c6b27250477ba0e6e76bfcd`；全量 10,955 passed / 0 failed / 无 Unhandled；36 运行器、25 迁移及 drift=0、严格代理探针 1742/0、B21、nginx 矩阵、完整变异、真实镜像、发布镜像端到端和三套 Compose 全 PASS。生产 audit 恰好四项 high / 0 critical，全量 0 critical。
@@ -449,7 +457,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.14` | 2026-10-09 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；`release/v0.5.14-2026-10-09` | 第一阶段 PASS，尚未部署；搜索默认关闭 |
+| `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |
 | `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |
 | `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
