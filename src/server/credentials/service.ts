@@ -321,7 +321,12 @@ export async function addOrReplaceCredential(input: {
       // An active replacement is inserted in a non-active intermediate state so
       // its fingerprint can be reserved before the old latch is released.
       const initialStatus = validation.status === "active" ? "invalid" : "expired";
-      await tx.$executeRaw(Prisma.sql`
+      // B-1：last_validated_at 与 created_at 同取数据库的事务时刻，不能用应用侧
+      // 在事务开始前取好的 `now`——后者必然早于 created_at 几毫秒，会让生命周期
+      // 凭据就绪判定（D5：校验时刻不早于创建时刻）误报 validated_before_creation，
+      // 替换完还得再手点一次"校验"批次才恢复。RETURNING 把库里真实写入的值带回来，
+      // 保证首次返回与幂等重放（findCommittedCredentialReplacement 从库里读）一致。
+      const inserted = await tx.$queryRaw<Array<{ last_validated_at: Date }>>(Prisma.sql`
         INSERT INTO channel_account_credential (
           id, channel_account_id, credential_type, encrypted_secret, key_version,
           secret_fingerprint, fingerprint_prefix, expires_at, last_validated_at,
@@ -329,10 +334,15 @@ export async function addOrReplaceCredential(input: {
         ) VALUES (
           ${credentialId}::uuid, ${input.channelAccountId}::uuid, ${credentialType},
           ${encrypted.encryptedSecret}, ${encrypted.keyVersion}, ${fingerprint.full},
-          ${fingerprint.prefix}, ${validation.expiresAt}, ${now}, ${initialStatus},
+          ${fingerprint.prefix}, ${validation.expiresAt}, transaction_timestamp(), ${initialStatus},
           transaction_timestamp(), transaction_timestamp()
         )
+        RETURNING last_validated_at
       `);
+      const insertedLastValidatedAt = inserted[0]?.last_validated_at;
+      if (!insertedLastValidatedAt) {
+        throw new Error("Credential insert did not return last_validated_at");
+      }
 
       if (validation.status === "active") {
         await tx.$executeRaw(Prisma.sql`
@@ -411,7 +421,7 @@ export async function addOrReplaceCredential(input: {
         fingerprintPrefix: fingerprint.prefix,
         status: validation.status,
         expiresAt: validation.expiresAt,
-        lastValidatedAt: now,
+        lastValidatedAt: insertedLastValidatedAt,
       });
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
       { op: "credentials.addOrReplaceCredential", itemId: input.channelAccountId, idempotencyKey: input.requestId },

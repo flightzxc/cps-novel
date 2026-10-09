@@ -43,6 +43,12 @@ import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { TestOnlyInMemoryAuthStores } from "../auth/test-only-in-memory-stores";
 
 const NOW = new Date("2026-08-18T00:00:00.000Z");
+/**
+ * 假库在 `INSERT ... RETURNING last_validated_at` 里"返回"的数据库事务时刻。
+ * 故意取一个和应用侧 `NOW` 不同的值——用来证明服务返回的是库里写入的值，
+ * 而不是应用侧 `deps.now`（B-1）。
+ */
+const FAKE_DB_TRANSACTION_TIME = new Date("2026-08-18T00:00:00.123Z");
 const ORIGIN = "https://admin.cps-novel.test";
 
 function keyFiles(): { env: NodeJS.ProcessEnv; cleanup(): void } {
@@ -129,6 +135,8 @@ function sqlText(query: Prisma.Sql): string {
 class FakeAddOrReplaceCredentialDb {
   /** Captured positional `.values` of the `INSERT INTO channel_account_credential` statement. */
   insertedCredentialValues: unknown[] | null = null;
+  /** Captured SQL text of the `INSERT INTO channel_account_credential` statement. */
+  insertedCredentialSql: string | null = null;
   readonly calls: string[] = [];
 
   private buildClient(): PrismaClient {
@@ -164,6 +172,13 @@ class FakeAddOrReplaceCredentialDb {
       if (text.includes("SELECT id, fingerprint_prefix")) {
         return []; // no pre-existing active credential — this is a first-time add
       }
+      // B-1：凭据行 INSERT 改成 `$queryRaw ... RETURNING last_validated_at`，
+      // 由数据库的 transaction_timestamp() 写入并带回。
+      if (text.includes("INSERT INTO channel_account_credential")) {
+        this.insertedCredentialValues = [...query.values];
+        this.insertedCredentialSql = text;
+        return [{ last_validated_at: FAKE_DB_TRANSACTION_TIME }];
+      }
       throw new Error(`FakeAddOrReplaceCredentialDb: unexpected $queryRaw shape: ${text}`);
     };
 
@@ -171,8 +186,7 @@ class FakeAddOrReplaceCredentialDb {
       const text = sqlText(query);
       this.calls.push(`$executeRaw:${text.slice(0, 40).trim()}`);
       if (text.includes("INSERT INTO channel_account_credential")) {
-        this.insertedCredentialValues = [...query.values];
-        return 1;
+        throw new Error("channel_account_credential INSERT must go through $queryRaw RETURNING (B-1)");
       }
       // INSERT INTO channel_credential_active_fingerprint / UPDATE .../ DELETE ...:
       // not inspected by this test, just acknowledged as a 1-row write.
@@ -266,6 +280,48 @@ describe("addOrReplaceCredential: Bearer-prefixed intake normalization (D-6)", (
 
         expect(metadata.fingerprintPrefix).toBe(expectedFingerprint.prefix);
       }
+    } finally {
+      keys.cleanup();
+    }
+  });
+});
+
+describe("addOrReplaceCredential: last_validated_at 取数据库事务时刻（B-1）", () => {
+  it("INSERT 的 last_validated_at 用 transaction_timestamp()，不绑定应用侧 now；返回值取自库里写入的值", async () => {
+    const keys = keyFiles();
+    try {
+      const jwt = makeJwt(Math.floor(NOW.getTime() / 1000) + 3600);
+      const stores = new TestOnlyInMemoryAuthStores();
+      const admin = seedAdmin(stores);
+      const { authorization, requestId } = await issueAuthorization(stores, "admin.credential.replace", admin.token);
+      const fake = new FakeAddOrReplaceCredentialDb();
+
+      const metadata = await addOrReplaceCredential(
+        {
+          authorization,
+          requestId,
+          channelAccountId: "channel-account-b1",
+          secret: jwt,
+          reason: "B-1 regression test: validation time is the database transaction time",
+        },
+        { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW, env: keys.env },
+      );
+
+      // 语句本身：last_validated_at 那一列写 transaction_timestamp()，并 RETURNING 带回。
+      expect(fake.insertedCredentialSql).not.toBeNull();
+      const normalizedSql = (fake.insertedCredentialSql as string).replace(/\s+/g, " ");
+      // 取值顺序：... expires_at(?), last_validated_at(txn 时刻), status(?), created_at(txn), updated_at(txn)。
+      expect(normalizedSql).toMatch(/\?, transaction_timestamp\(\), \?, transaction_timestamp\(\), transaction_timestamp\(\) \) RETURNING last_validated_at/);
+
+      // 绑定参数里不能再出现应用侧 now（任何 Date 值都只能是 expires_at）。
+      const boundDates = (fake.insertedCredentialValues as unknown[]).filter((value) => value instanceof Date) as Date[];
+      expect(boundDates).toHaveLength(1);
+      expect(boundDates[0]!.getTime()).toBe((Math.floor(NOW.getTime() / 1000) + 3600) * 1000);
+      expect(boundDates.some((value) => value.getTime() === NOW.getTime())).toBe(false);
+
+      // 返回给调用方的 lastValidatedAt 是库返回的值，而不是 deps.now。
+      expect(metadata.lastValidatedAt).toBe(FAKE_DB_TRANSACTION_TIME.toISOString());
+      expect(metadata.lastValidatedAt).not.toBe(NOW.toISOString());
     } finally {
       keys.cleanup();
     }
