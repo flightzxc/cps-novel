@@ -19,6 +19,16 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.14 —— 准备中，尚未部署（2026-10-09）
+
+- 唯一基线 `a5daf6e586f39d9b00911d82d150f177e4a0f65d`，来自 `integration/v0.5.14-2026-10-09`，基于 v0.5.13 收官 `a263cb5`；发布分支 `release/v0.5.14-2026-10-09`。
+- 五组合入：小修四项（B-1 凭据替换时间戳、B-9 登录/两步验证失败恢复、B-26 nanoid 3.3.18、tsx 手工提示；`fix/v0514-small-fixes@02eb050` / merge `c8acce2`）；Vitest 4.1.11（`chore/vitest4-v0514@7ff4871` / merge `d5c132e`）；公开网址冻结规则（`0afab4e`）；PN-15 站内搜索（`feat/pn15-search-v0514@5079523` / merge `0a9b59a`）；搜索文案第三方验收修正（`fix/pn15-copy-gpt-v0514@04220b3` / merge `a5daf6e`，ACCEPT_WITH_FIXES 已照改）。
+- 新增迁移 `20261009150000_site_setting_site_search_enabled`，迁移 25 条、业务表 58 张；搜索开关默认 false，新增 web_app 列级 UPDATE。搜索已合入、开关关闭，当前未部署。
+- 没有新环境变量或 worker 白名单变化；生产 env 仅改 APP_VERSION 与 NEXT_PUBLIC_BUILD_VERSION。nginx 搜索模板本轮不安装，HSTS 提级另行安排。
+- Owner 10-09 决定：B-1 提到第一档；搜索收录照 CPS、页头方案 A、开关放后台；第三档与阿语双数顺延 v0.5.15；公开网址冻结持续执行。
+- 第一阶段不连接远程主机；全部本地门禁、真实镜像与归档通过后推送并交付。第二阶段须 Owner 明确授权，仅限 haiyue-vps 低流量时段。
+- 生产 audit 门禁：0 critical，恰好四项 high（@prisma/config、deepmerge-ts、effect、prisma）；正式 tag、生成 CHANGELOG、发版级开发日志和 Notion 收官待部署验收后完成。
+
 ### v0.5.13 —— 已部署正式站（2026-10-09 11:20:43 +0800 / 03:20:43Z；主控直接发布，Owner 授权不经 Codex）
 
 - Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`（tree `48427e2d`），annotated tag `v0.5.13`；镜像 `cps-novel:0.5.13-cc2655b`；归档 SHA256 `356b6d7c…8089`。
@@ -437,6 +447,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.14` | 2026-10-09 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | `release/v0.5.14-2026-10-09`；基线 `a5daf6e` | 准备中，尚未部署 |
 | `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |
 | `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |
 | `v0.5.11` | 2026-10-08 17:15:56 | PATCH | 十项已复核范围；收益四表迁移及grants，主worker手动同步；IndexNow/Turnstile关闭，nginx未安装 | Final `eb40756416b186ca4b293ff57e24026af78cf4f9`；annotated `v0.5.11`；image `cps-novel:0.5.11-eb40756` | 正式站已部署，A～E及自动F通过；Owner新Sitemap/B33、桌面目视、收益同步对数待确认 |
