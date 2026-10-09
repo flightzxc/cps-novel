@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
-import { CATALOGS } from "@/lib/locale/messages";
+import { CATALOGS, getPublicT } from "@/lib/locale/messages";
+import { SITE_SEARCH_MAX_QUERY_LENGTH, SITE_SEARCH_MIN_QUERY_LENGTH } from "@/lib/site-search/types";
 
 /**
  * PN-15 站内搜索译文逐字钉住（v0.5.14，第三方 GPT 验收 ACCEPT_WITH_FIXES，Owner 2026-10-09 同意）。
@@ -69,5 +70,72 @@ describe("search.* 译文逐字钉住（PN-15 / v0.5.14 GPT 验收修正）", ()
     for (const [locale, open, close] of quoted) {
       expect(rawSearchValue(locale, "metaDescription"), locale).toContain(`${open}{query}${close}`);
     }
+  });
+});
+
+/**
+ * 第二件事（同一份验收）：捷克语、波兰语的数词词形。
+ *
+ * 这两个语种的名词随数字变：1 → znak，2～4 → znaky（cs）/ znaki（pl），5 及以上 → znaků（cs）/ znaków（pl）。
+ * 最短长度常量 `SITE_SEARCH_MIN_QUERY_LENGTH` 是 2，所以写死 "znaků" / "znaków" 会显示成错误的 "2 znaků"。
+ * 渲染路径：`SearchScreen` → `getPublicT` → `t()` → intl-messageformat，支持 ICU plural，
+ * 因此 4 条文案改写成 plural，**常量以后改成别的值，词形自动跟着变，不需要有人记得回来改文案**。
+ * 下面的表是人工核对过的期望值（不从 Intl.PluralRules 推导，否则等于拿答案对答案）。
+ */
+describe("search.hintMinLength / hintMaxLength：cs、pl 的名词形式随数字变", () => {
+  const MIN_CASES: ReadonlyArray<readonly [number, string, string]> = [
+    [1, "Zadejte alespoň 1 znak pro vyhledávání.", "Wpisz co najmniej 1 znak, aby wyszukać."],
+    [2, "Zadejte alespoň 2 znaky pro vyhledávání.", "Wpisz co najmniej 2 znaki, aby wyszukać."],
+    [3, "Zadejte alespoň 3 znaky pro vyhledávání.", "Wpisz co najmniej 3 znaki, aby wyszukać."],
+    [4, "Zadejte alespoň 4 znaky pro vyhledávání.", "Wpisz co najmniej 4 znaki, aby wyszukać."],
+    [5, "Zadejte alespoň 5 znaků pro vyhledávání.", "Wpisz co najmniej 5 znaków, aby wyszukać."],
+    // 波兰语 12～14 属 many（不是 few）；22～24 回到 few；捷克语 12、22 都是 other。
+    [12, "Zadejte alespoň 12 znaků pro vyhledávání.", "Wpisz co najmniej 12 znaków, aby wyszukać."],
+    [22, "Zadejte alespoň 22 znaků pro vyhledávání.", "Wpisz co najmniej 22 znaki, aby wyszukać."],
+    [25, "Zadejte alespoň 25 znaků pro vyhledávání.", "Wpisz co najmniej 25 znaków, aby wyszukać."],
+  ];
+
+  const MAX_CASES: ReadonlyArray<readonly [number, string, string]> = [
+    [1, "Zadejte nejvýše 1 znak.", "Wpisz maksymalnie 1 znak."],
+    [2, "Zadejte nejvýše 2 znaky.", "Wpisz maksymalnie 2 znaki."],
+    [4, "Zadejte nejvýše 4 znaky.", "Wpisz maksymalnie 4 znaki."],
+    [5, "Zadejte nejvýše 5 znaků.", "Wpisz maksymalnie 5 znaków."],
+    [22, "Zadejte nejvýše 22 znaků.", "Wpisz maksymalnie 22 znaki."],
+    [500, "Zadejte nejvýše 500 znaků.", "Wpisz maksymalnie 500 znaków."],
+  ];
+
+  it.each(MIN_CASES)("hintMinLength min=%i", (n, cs, pl) => {
+    expect(getPublicT("cs")("search.hintMinLength", { min: n })).toBe(cs);
+    expect(getPublicT("pl")("search.hintMinLength", { min: n })).toBe(pl);
+  });
+
+  it.each(MAX_CASES)("hintMaxLength max=%i", (n, cs, pl) => {
+    expect(getPublicT("cs")("search.hintMaxLength", { max: n })).toBe(cs);
+    expect(getPublicT("pl")("search.hintMaxLength", { max: n })).toBe(pl);
+  });
+
+  // 页面实际传入的是这两个常量。名词形式按 Intl.PluralRules 选出的类别查表（表里是各类别的正确词形），
+  // 所以常量改成任何整数这条都不会误报，只会在"词形没跟着数字走"时变红。
+  const NOUN_BY_CATEGORY = {
+    cs: { one: "znak", few: "znaky", many: "znaku", other: "znaků" },
+    pl: { one: "znak", few: "znaki", many: "znaków", other: "znaku" },
+  } as const;
+
+  it.each(["cs", "pl"] as const)("%s: 页面实际用的最短/最长常量渲染出与其数值对应的词形", (locale) => {
+    const t = getPublicT(locale);
+    const rules = new Intl.PluralRules(locale);
+    const nounFor = (n: number) => NOUN_BY_CATEGORY[locale][rules.select(n) as keyof (typeof NOUN_BY_CATEGORY)["cs"]];
+    expect(t("search.hintMinLength", { min: SITE_SEARCH_MIN_QUERY_LENGTH })).toContain(
+      `${SITE_SEARCH_MIN_QUERY_LENGTH} ${nounFor(SITE_SEARCH_MIN_QUERY_LENGTH)}`,
+    );
+    expect(t("search.hintMaxLength", { max: SITE_SEARCH_MAX_QUERY_LENGTH })).toContain(
+      `${SITE_SEARCH_MAX_QUERY_LENGTH} ${nounFor(SITE_SEARCH_MAX_QUERY_LENGTH)}`,
+    );
+  });
+
+  it("俄语 \"не менее / не более {n} символов\" 是正确的属格用法，不随本次修正改动", () => {
+    const t = getPublicT("ru");
+    expect(t("search.hintMinLength", { min: 2 })).toBe("Введите не менее 2 символов для поиска.");
+    expect(t("search.hintMaxLength", { max: 500 })).toBe("Введите не более 500 символов.");
   });
 });
