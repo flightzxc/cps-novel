@@ -2,7 +2,8 @@
  * 公开列表的**唯一**筛选定义（B-38 第二段，v0.5.13）。
  *
  * 首页作品格、全部作品页、分类页、页脚分类、首页题材导航、站点地图的分类网址、详情页的"可链接分类集合"、
- * 分类页的 hreflang、404 判定、"作品数"、分页——全部由这个文件里的同一段筛选条件生成，由数据库直接
+ * 分类页的 hreflang、404 判定、"作品数"、分页、站内搜索（PN-15，`src/lib/site-search/search-query.ts`，
+ * 只在这段筛选条件之后追加"书名包含搜索词"）——全部由这个文件里的同一段筛选条件生成，由数据库直接
  * 筛选、分页、计数：一把尺子，没有任何列表上限。
  *
  * ## 取数方式（照 CPS `getTagPageArticles`，v8.7.2）
@@ -83,7 +84,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * 与 `buildPublicListArticleWhere` + `isPromoReady` 的等价由真实库用例证明
  * （`tests/integration/site/list-equivalence-postgres.test.ts` / `promo-ready-sql-equivalence-postgres.test.ts`）。
  */
-const PUBLIC_LIST_FROM_SQL = Prisma.sql`
+export const PUBLIC_LIST_FROM_SQL = Prisma.sql`
   FROM article a
   JOIN novel n ON n.id = a.novel_id
   JOIN promo_link p ON p.id = a.promo_link_id
@@ -115,7 +116,7 @@ export function publicListFromWhereSql(localePredicate: Prisma.Sql, env: NodeJS.
   return Prisma.sql`${PUBLIC_LIST_FROM_SQL} WHERE ${publicListWhereSql(localePredicate, env)}`;
 }
 
-function singleLocale(locale: string): Prisma.Sql {
+export function singleLocale(locale: string): Prisma.Sql {
   return Prisma.sql`a.locale = ${locale}`;
 }
 
