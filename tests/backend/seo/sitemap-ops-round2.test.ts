@@ -230,6 +230,7 @@ function makeDb(input: {
         ga4MeasurementId: null,
         yandexVerification: "",
         yandexMetricaId: null,
+        siteSearchEnabled: false,
         updatedAt: new Date("2026-08-04T00:00:00.000Z"),
       }),
     },

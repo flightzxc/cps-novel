@@ -92,7 +92,7 @@ function makeDb(input: { rows: Row[]; categories: readonly Category[] }) {
       siteName: "Fixture", siteDescription: "", homeMetaTitle: "", homeMetaDescription: "", defaultOgImage: "",
       googleSearchConsoleVerification: "", footerCopyrightText: "", footerDisclaimerText: "", friendLinks: [],
       indexNowHost: "", indexNowKey: "", indexNowKeyLocation: "", ga4MeasurementId: null,
-      yandexVerification: "", yandexMetricaId: null, updatedAt: new Date("2025-06-01T00:00:00.000Z"),
+      yandexVerification: "", yandexMetricaId: null, siteSearchEnabled: false, updatedAt: new Date("2025-06-01T00:00:00.000Z"),
     }) },
     $queryRaw: vi.fn(async (query: { text: string; values: readonly unknown[] }) => {
       const values = query.values;

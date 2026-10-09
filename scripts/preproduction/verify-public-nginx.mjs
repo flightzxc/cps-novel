@@ -41,7 +41,7 @@ try{
  docker('exec',edge,'nginx','-t');
  sp=Number(docker('port',edge,'443/tcp').trim().split(':').at(-1));hp=Number(docker('port',edge,'80/tcp').trim().split(':').at(-1));mp=Number(docker('port',mock,'3000/tcp').trim().split(':').at(-1));await ready();
  if(!process.argv.includes('--smoke-only')){
-  for(const p of ['/','/ko','/novel/book','/ko/novel/book/chapter/1','/browse','/ko/category/fiction','/blog/a','/go/a','/ko/go/a','/robots.txt','/sitemap.xml','/sitemap/ko.xml','/indexnow-key.txt','/api/health','/brand/og-default.png','/_next/static/a.js','/missing']){
+  for(const p of ['/','/ko','/novel/book','/ko/novel/book/chapter/1','/browse','/ko/category/fiction','/blog/a','/search?q=alpha','/ko/search','/go/a','/ko/go/a','/robots.txt','/sitemap.xml','/sitemap/ko.xml','/indexnow-key.txt','/api/health','/brand/og-default.png','/_next/static/a.js','/missing']){
    security(await probe(pub,p,mode==='public'?(p==='/missing'?404:200):401),'public');security(await probe(pub,p,p==='/missing'?404:200,auth),'public');await pause(100);
   }
   for(const p of ['/dashboard','/login','/api/admin','/api/admin/foo','/api/health/worker','/api/health/backup'])for(const h of [{},auth])security(await probe(pub,p,404,h),'public');
@@ -57,7 +57,7 @@ try{
   writeFileSync(`${dir}/shared/maintenance/enabled`,'');
   for(const [host,kind]of [[pub,'public'],[admin,'admin']]){for(const h of [{},auth]){const r=await probe(host,host===pub?'/':'/login',503,h);assert(r.body.includes('<h1>Maintenance in progress</h1>'));security(r,kind);assert.equal(r.headers['cache-control'],'no-store');}security(await probe(host,'/api/health',200,auth),kind);}
   await probe(pub,'/api/health',mode==='public'?200:401);await probe(admin,'/api/health',401);await probe(pub,'/api/health/worker',404,auth);
-  for(const p of ['/brand/og-default.png','/_next/static/a.js'])assert.equal((await probe(pub,p,503,auth)).headers['cache-control'],'no-store');
+  for(const p of ['/brand/og-default.png','/_next/static/a.js','/search?q=alpha','/ko/search'])assert.equal((await probe(pub,p,503,auth)).headers['cache-control'],'no-store');
   rmSync(`${dir}/shared/maintenance/enabled`);
   if(mode==='rehearsal'){
    run('/bin/bash',[`${root}/scripts/preproduction/render-nginx.sh`,'--bootstrap-public','--output',`${dir}/bootstrap.conf`]);docker('cp',`${dir}/bootstrap.conf`,`${edge}:/etc/nginx/conf.d/public-bootstrap.conf`);docker('exec',edge,'nginx','-t');docker('exec',edge,'nginx','-s','reload');await pause(200);
@@ -68,7 +68,7 @@ try{
   security(await probe(pub,'/api/health',502,{...auth,'X-Test-Abort':'1'}),'public');
   console.log(`NGINX_MATRIX=PASS mode=${mode}`);
  }
- for(const [p,expected,prefetch]of [['/novel/book',[200,200,200,429],''],['/go/a',[200,200,429],''],['/novel/book',[200,200,200,429],'2']]){await reset();const codes=[];for(let i=0;i<expected.length;i++)codes.push(fromContainer(i%2?client:mock,p,'ClaudeBot',prefetch));assert.deepEqual(codes,expected,`crawler key across two real IPs ${p}`);console.log(`NGINX_RATE=PASS mode=${mode} case=crawler path=${p} prefetch=${prefetch||"none"} statuses=${codes}`);}
+ for(const [p,expected,prefetch]of [['/novel/book',[200,200,200,429],''],['/go/a',[200,200,429],''],['/novel/book',[200,200,200,429],'2'],['/search?q=a',[200,200,200,429],'']]){await reset();const codes=[];for(let i=0;i<expected.length;i++)codes.push(fromContainer(i%2?client:mock,p,'ClaudeBot',prefetch));assert.deepEqual(codes,expected,`crawler key across two real IPs ${p}`);console.log(`NGINX_RATE=PASS mode=${mode} case=crawler path=${p} prefetch=${prefetch||"none"} statuses=${codes}`);}
  await reset();for(const ua of ['Claude-User','ChatGPT-User','Googlebot','Bingbot'])for(let i=0;i<4;i++)await probe(pub,'/novel/book',200,{...auth,'User-Agent':ua});
  const locales=JSON.parse('['+readFileSync(`${root}/src/lib/locale/locale-canonical.ts`,'utf8').match(/export const SITE_LOCALES:[^=]+?= Object\.freeze\(\[([\s\S]*?)\]\)/)[1].replace(/,\s*$/,'')+']');
  await reset();for(const locale of locales){security(await probe(pub,`/${locale}/browse`,200,auth),'public');await pause(90);}
@@ -80,5 +80,24 @@ try{
  await reset();const rates=await Promise.all(Array.from({length:60},(_,i)=>get(pub,i%2?'/ko/browse':'/browse',auth)));assert(rates.some(r=>r.status===429));assert(rates.every(r=>[200,429].includes(r.status)));
  const logs=docker('exec',edge,'cat','/var/log/nginx/cps-novel-public.access.log').trim().split('\n').map(l=>JSON.parse(l));assert(logs.some(l=>l.limit_req_status==='REJECTED'));assert(logs.some(l=>l.limit_conn_status==='REJECTED'));for(const l of logs){assert('request_time'in l);assert('upstream_response_time'in l);assert('user_agent'in l);}
  console.log(`NGINX_RATE=PASS mode=${mode} case=mixed_locale_rate json_logs=PASS`);
+ // PN-15 站内搜索：自己的两层额度（每 IP 20r/m 突发 10 + 全站 3r/s 突发 10），超额 429；刷搜索不占页面额度，
+ // 刷页面也不占搜索额度；搜索的正则不吞别的路径（/searchx、/search/foo、/novel/…、/category/…、/blog/…、/browse）。
+ await reset();
+ const searchPaths=['/search?q=a','/ko/search?q=a','/en/search?q=a'];
+ const flood=await Promise.all(Array.from({length:60},(_,i)=>get(pub,searchPaths[i%3],auth)));
+ const searchPassed=flood.filter(r=>r.status===200).length;
+ assert(searchPassed>=11&&searchPassed<=12,`search burst: ${searchPassed} passed`);
+ assert.equal(flood.filter(r=>r.status===429).length,60-searchPassed);
+ security(flood.find(r=>r.status===429),'public');
+ security(await probe(pub,'/search?q=a',429,auth),'public');
+ security(await probe(pub,'/ko/search',429,auth),'public');
+ for(const p of ['/novel/book','/browse','/ko/browse','/category/fiction','/blog/a','/','/ko'])await probe(pub,p,200,auth);
+ for(const p of ['/searchx','/search/foo','/ko/searchx','/ko/search/foo','/novel/search-me','/category/search','/blog/search','/go/search','/ko/novel/search'])await probe(pub,p,200,auth);
+ console.log(`NGINX_RATE=PASS mode=${mode} case=search_budget passed=${searchPassed} rejected=${60-searchPassed} page_budget_untouched=PASS regex_isolated=PASS`);
+ await reset();
+ const pageFlood=await Promise.all(Array.from({length:60},(_,i)=>get(pub,i%2?'/ko/browse':'/browse',auth)));
+ assert(pageFlood.some(r=>r.status===429));
+ await probe(pub,'/search?q=a',200,auth);await probe(pub,'/ko/search',200,auth);
+ console.log(`NGINX_RATE=PASS mode=${mode} case=page_flood_leaves_search_budget`);
 }catch(error){try{console.error(docker('logs',edge));}catch{}throw error;}
 finally{for(const name of [edge,mock,client])try{docker('rm','-f',name);}catch{}try{docker('network','rm',network);}catch{}rmSync(dir,{recursive:true,force:true});}

@@ -55,6 +55,7 @@ const BASE_SETTINGS = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null as string | null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-09-30T00:00:00Z"),
 };
 

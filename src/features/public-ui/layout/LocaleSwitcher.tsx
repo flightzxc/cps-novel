@@ -31,6 +31,9 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  *
  * - **首页、`/browse`、`/blog` 列表**：各语种都有这个页面，保持直接切换
  *   （`/browse?category=…` 例外：分类在目标语种没有文章时就是 404，归入下一类）。
+ * - **搜索页 `/search`**（PN-15）：每个语种都有搜索页，直接切换到目标语种的 `/search`，
+ *   **只带 `q`、去掉 `page`**（页码在另一语种里没有意义，目标语种页数不足会 404）。这个"只带 `q`"
+ *   的规则只对搜索页生效，其它页面的计划与 href 完全不变（`localeSwitchSearch`）。
  * - **书的详情页**（`/novel/{slug}`）：先问 `/api/novel-locale-check`
  *   （CPS `/api/drama-locale-check` 的移植），目标语种有这本书的公开页就直接
  *   跳过去；没有、或者接口出错，就弹提示，再跳**目标语种首页**。
@@ -89,6 +92,20 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  * 当前语种仍然排在菜单里并标 `aria-current`，免得触发按钮上的语种名在菜单里找不到；其它空语种
  * 一概不列。全站只有英文有书（`activeLocales` 只剩 `["en"]`）而读者恰好在空语种页面时，
  * 菜单依然渲染（English + 当前语种），让读者有路回到英文。
+ *
+ * PN-15 第二批（手机端页头方案 A，Owner 2026-10-09）：语种入口有两种**展示形态**（`variant`）。
+ * 逻辑（条目集合、`href`、`planLocaleSwitch` / `buildLocaleSwitchHref`、兄弟页查询、回退提示、
+ * cookie）**只有一份**，两种形态共用 `LocaleSwitcherMenu` 里同一套代码，不复制：
+ *
+ * - `"pill"`（默认）：页头里的胶囊 + 下拉。**只在 `md` 及以上显示**——手机页头不再放语种按钮
+ *   （320 宽的印尼语 "Bahasa Indonesia" 会折两行、把菜单按钮挤到 20px）。手机上它只剩一件事：
+ *   提示条的挂载点。切换后的提示要在新页面挂载时读回来，而手机菜单收起时语种行根本没渲染，
+ *   所以胶囊实例始终挂载（触发按钮 `display:none`，不进可访问性树），提示条在手机上改成
+ *   `fixed` 贴页头下沿，`md` 起仍是原来的 `absolute` 挂在触发按钮下面。
+ * - `"menuRow"`：手机菜单面板里的一行（地球图标 + `nav.language` 文案，右侧本语自称 + 下拉箭头），
+ *   点开后在面板里**就地展开**同一份语种列表。展开列表不是浮层（没有 `absolute` / `z-*`）。
+ *   在这一行里按 Esc 只收起它自己的列表（`stopPropagation`，不让页头把整个面板一起关掉）。
+ *   跨页提示不在这个形态里读回——那是胶囊实例的事，否则同一条提示会显示两遍。
  */
 
 // Native self-names ("Français", "日本語", …) live in `locale-canonical.ts`
@@ -220,11 +237,43 @@ export function planLocaleSwitch(pathname: string, search?: string): LocaleSwitc
 
   if (segments.length === 1 && segments[0] === "blog") return { kind: "direct" };
 
+  // PN-15：搜索页每个语种都有（开关打开时），直接切换；带哪些参数见 `localeSwitchSearch`。
+  if (segments.length === 1 && segments[0] === "search") return { kind: "direct" };
+
   if (segments.length === 2 && segments[0] === "novel") {
     return { kind: "novel", slugParam: decodeSlugParam(segments[1]!) };
   }
 
   return { kind: "fallback" };
+}
+
+/** 当前路径是不是搜索页（`/search` 或 `/{语种}/search`）。 */
+function isSearchPath(pathname: string): boolean {
+  const segments = stripLocalePrefix(pathname).split("/").filter(Boolean);
+  return segments.length === 1 && segments[0] === "search";
+}
+
+/**
+ * 切换语种时要带到目标页的 query string（含开头的 `?`，没有则空串）。
+ *
+ * - 搜索页：**只带 `q`**（重复时取第一个，空 `q` 不带），`page` 与其它参数一律去掉；
+ * - 其它页面：原样带上（照 CPS，分页等参数保留）——与 PN-15 之前逐字一致。
+ */
+export function localeSwitchSearch(pathname: string, search?: string): string {
+  if (!search) return "";
+  if (!isSearchPath(pathname)) return search;
+  const query = new URLSearchParams(search).get("q");
+  return query ? `?${new URLSearchParams({ q: query }).toString()}` : "";
+}
+
+/**
+ * "直接切换"的最终 href。搜索页单独处理：路径部分走 `buildLocaleSwitchHref`（过同源守卫），
+ * `q` 在守卫之外追加——守卫按子串拒绝 `localhost` 等字样，搜索词里出现它们不该把读者送回首页；
+ * 追加的部分是 `URLSearchParams` 编码过的，不可能构成协议头或 `//`。
+ */
+export function buildDirectLocaleSwitchHref(pathname: string, target: SiteLocale, search?: string): string {
+  if (!isSearchPath(pathname)) return buildLocaleSwitchHref(pathname, target, search);
+  return `${buildLocaleSwitchHref(pathname, target)}${localeSwitchSearch(pathname, search)}`;
 }
 
 /**
@@ -297,7 +346,22 @@ async function lookupNovelSibling(slugParam: string, target: SiteLocale): Promis
   }
 }
 
-export function LocaleSwitcher({ activeLocales = [] }: { activeLocales?: readonly SiteLocale[] }) {
+/** 展示形态。逻辑一律共用，只有外观与挂载位置不同，见文件头最后一段。 */
+export type LocaleSwitcherVariant = "pill" | "menuRow";
+
+export function LocaleSwitcher({
+  activeLocales = [],
+  variant = "pill",
+  onNavigate,
+}: {
+  activeLocales?: readonly SiteLocale[];
+  variant?: LocaleSwitcherVariant;
+  /**
+   * 点了某个语种条目、真的要切换语种时调用（点当前语种、带修饰键的点击不算）。
+   * 手机菜单借它在跳转时把整块面板收起来；胶囊形态不需要。
+   */
+  onNavigate?: () => void;
+}) {
   // Deliberately decided BEFORE any hook that needs App Router context runs (see the
   // file-level comment on why: `usePathname()` needs real App Router context, which existing
   // tests that render `SiteHeader`/`SiteShell` do not provide — and don't need to, since
@@ -315,10 +379,19 @@ export function LocaleSwitcher({ activeLocales = [] }: { activeLocales?: readonl
   const distinct = new Set<SiteLocale>(activeLocales);
   if (currentLocale) distinct.add(currentLocale);
   if (distinct.size <= 1) return null;
-  return <LocaleSwitcherMenu selectable={activeLocales} />;
+  return <LocaleSwitcherMenu selectable={activeLocales} variant={variant} onNavigate={onNavigate} />;
 }
 
-function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] }) {
+function LocaleSwitcherMenu({
+  selectable,
+  variant,
+  onNavigate,
+}: {
+  selectable: readonly SiteLocale[];
+  variant: LocaleSwitcherVariant;
+  onNavigate?: () => void;
+}) {
+  const isRow = variant === "menuRow";
   const t = useT();
   const locale = useLocale();
   const pathname = usePathname();
@@ -347,6 +420,8 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
   // 所以只能挂载后同步一次——与 `ReaderSettingsProvider` 从 localStorage 读初值
   // 是同一种 `react-hooks/set-state-in-effect` 覆盖不到的正当情形。
   useEffect(() => {
+    // 手机菜单里的语种行不读回：上一页的提示由始终挂载的胶囊实例显示，两边都读会显示两遍。
+    if (isRow) return;
     const stashed = readStashedSwitchToast();
     if (stashed) {
       /* eslint-disable-next-line react-hooks/set-state-in-effect */
@@ -356,10 +431,11 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
-  }, []);
+  }, [isRow]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    // 手机菜单里的语种行是就地展开的列表：不做「点外面收起」，Esc 由行自己的 onKeyDown 处理（见下）。
+    if (!isOpen || isRow) return;
 
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -380,7 +456,7 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, isRow]);
 
   /** 目标语种没有对应内容：弹提示（同时留给下一页），再回目标语种首页。 */
   function fallBackToHome(target: SiteLocale, search: string) {
@@ -420,13 +496,15 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
     }
 
     writeLocaleCookie(target);
+    onNavigate?.();
     const search = window.location.search;
     const plan = planLocaleSwitch(pathname ?? "/", search);
 
     if (plan.kind === "direct") {
-      if (!search) return; // the rendered href is already correct with no query string
+      // 非搜索页 `carried === search`（与此前一致）；搜索页只带 q，page 不带。
+      if (!localeSwitchSearch(pathname ?? "/", search)) return; // the rendered href is already correct with no query string
       event.preventDefault();
-      router.push(buildLocaleSwitchHref(pathname ?? "/", target, search));
+      router.push(buildDirectLocaleSwitchHref(pathname ?? "/", target, search));
       return;
     }
 
@@ -452,8 +530,96 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
     }
   }
 
+  const items = menuItems.map((item) => {
+    const isCurrent = item === locale;
+    return (
+      <Link
+        key={item}
+        role="menuitem"
+        aria-current={isCurrent ? "true" : undefined}
+        href={hrefForMenuItem(pathname ?? "/", item)}
+        onClick={(event) => void handleSwitchClick(event, item)}
+        className={
+          isRow
+            ? `flex min-h-11 w-full items-center rounded-novel-sm px-3 text-start text-[15px] transition-colors ${
+                isCurrent
+                  ? "bg-novel-bg-raised text-novel-primary"
+                  : "text-novel-fg-muted hover:bg-novel-bg-raised hover:text-novel-fg"
+              }`
+            : `block w-full rounded-novel-sm px-3 py-2 text-start text-sm transition-colors ${
+                isCurrent
+                  ? "bg-novel-bg text-novel-primary"
+                  : "text-novel-fg-muted hover:bg-novel-bg hover:text-novel-fg"
+              }`
+        }
+      >
+        {SITE_LOCALE_NATIVE_NAMES[item]}
+      </Link>
+    );
+  });
+
+  if (isRow) {
+    return (
+      <div
+        ref={rootRef}
+        className="w-full"
+        onKeyDown={(event) => {
+          // 只收起这一行自己的列表，并且不让事件冒到 document 上的页头 Esc 处理（它会把整块面板关掉）
+          if (event.key === "Escape" && isOpen) {
+            event.stopPropagation();
+            setIsOpen(false);
+            triggerRef.current?.focus();
+          }
+        }}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          onClick={() => setIsOpen((open) => !open)}
+          className="flex min-h-[52px] w-full items-center justify-between gap-3 text-start text-[15px] text-novel-fg-muted transition-colors hover:text-novel-fg"
+        >
+          <span className="inline-flex items-center gap-2.5">
+            <GlobeIcon />
+            <span>{t("nav.language")}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-novel-fg">
+            <span>{SITE_LOCALE_NATIVE_NAMES[locale]}</span>
+            <ChevronIcon open={isOpen} size={14} />
+          </span>
+        </button>
+
+        {isOpen ? (
+          <div
+            id={menuId}
+            role="menu"
+            aria-orientation="vertical"
+            className="flex flex-col gap-0.5 pb-3 ps-7"
+          >
+            {items}
+          </div>
+        ) : null}
+
+        {toastMessage ? (
+          <div
+            role="status"
+            className="mb-3 rounded-novel-md border border-novel-border bg-novel-bg-raised px-3 py-2 text-xs text-novel-fg"
+          >
+            {toastMessage}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div ref={rootRef} className="relative inline-flex">
+    // 手机上根节点不生成盒子（`contents`），它的子节点里只有提示条会显示，且是 `fixed`——
+    // 不占页头的 flex 位置、不多出一道 gap。`md` 起恢复成原来的 `relative inline-flex`。
+    // `md:ms-2`：与前面的导航之间 8px 额外间距（设计稿 margin-right: 8px），挂在胶囊自己身上，
+    // 这样语种入口不渲染时导航不会白白少 8px。
+    <div ref={rootRef} className="contents md:relative md:ms-2 md:inline-flex">
       <button
         ref={triggerRef}
         type="button"
@@ -462,19 +628,10 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
         aria-expanded={isOpen}
         aria-controls={menuId}
         onClick={() => setIsOpen((open) => !open)}
-        className="inline-flex items-center gap-1.5 rounded-novel-md border border-novel-border-strong bg-transparent px-3 py-1.5 text-sm text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg"
+        className="hidden items-center gap-1.5 rounded-novel-md border border-novel-border-strong bg-transparent px-3 py-1.5 text-sm text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg md:inline-flex"
       >
         <span>{SITE_LOCALE_NATIVE_NAMES[locale]}</span>
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
-        >
-          <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ChevronIcon open={isOpen} size={12} />
       </button>
 
       {/* 🔴 下拉面板与提示条用逻辑属性 end-0 贴触发器的「末端」：从右到左时触发器在
@@ -489,36 +646,49 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
           aria-orientation="vertical"
           className="absolute end-0 top-full z-60 mt-2 min-w-[10rem] rounded-novel-md border border-novel-border bg-novel-bg-raised p-1 shadow-lg"
         >
-          {menuItems.map((item) => {
-            const isCurrent = item === locale;
-            return (
-              <Link
-                key={item}
-                role="menuitem"
-                aria-current={isCurrent ? "true" : undefined}
-                href={hrefForMenuItem(pathname ?? "/", item)}
-                onClick={(event) => void handleSwitchClick(event, item)}
-                className={`block w-full rounded-novel-sm px-3 py-2 text-start text-sm transition-colors ${
-                  isCurrent
-                    ? "bg-novel-bg text-novel-primary"
-                    : "text-novel-fg-muted hover:bg-novel-bg hover:text-novel-fg"
-                }`}
-              >
-                {SITE_LOCALE_NATIVE_NAMES[item]}
-              </Link>
-            );
-          })}
+          {items}
         </div>
       ) : null}
 
+      {/* 提示条：手机上触发按钮不显示，所以改成 fixed 贴在页头（h-16）下沿、距视口末端 1rem；
+          md 起回到原来的 absolute 挂在触发按钮下面。`end-0` + `mx-4` 在手机上等价于「离末端 1rem」，
+          md 把外边距清零。 */}
       {toastMessage ? (
         <div
           role="status"
-          className="absolute end-0 top-full z-60 mt-2 w-64 rounded-novel-md border border-novel-border bg-novel-bg-raised px-3 py-2 text-xs text-novel-fg shadow-lg"
+          className="fixed end-0 top-[4.5rem] z-60 mx-4 w-64 max-w-[calc(100vw-2rem)] rounded-novel-md border border-novel-border bg-novel-bg-raised px-3 py-2 text-xs text-novel-fg shadow-lg md:absolute md:top-full md:mx-0 md:mt-2 md:max-w-none"
         >
           {toastMessage}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ChevronIcon({ open, size }: { open: boolean; size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      className={`transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M2.75 10h14.5M10 2.75c2 2.1 3 4.5 3 7.25s-1 5.15-3 7.25M10 2.75c-2 2.1-3 4.5-3 7.25s1 5.15 3 7.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
   );
 }

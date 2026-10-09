@@ -22,6 +22,15 @@ export interface SiteChrome {
    * `SiteHeader` 按空数组处理（同样隐藏切换器）。
    */
   activeLocales?: readonly SiteLocale[];
+  /**
+   * PN-15：站内搜索入口的地址（`/search` 或 `/{语种}/search`）。**有值才渲染入口**——
+   * 手机页头的放大镜、手机菜单里的「搜索」行、平板/桌面导航里的「搜索」项。
+   * 由 `chromeFromSiteSetting` 按后台开关（`isSiteSearchEnabled`）决定：开关关闭时这个字段
+   * 连 key 都不存在。单独成字段而不是塞进 `navItems`，是为了不改变 `navItems` 的形状。
+   */
+  searchHref?: string;
+  /** 当前页就是搜索页：搜索入口按「当前页」高亮（颜色 + 下划线 + `aria-current`）。 */
+  searchCurrent?: boolean;
 }
 
 /**
@@ -73,6 +82,8 @@ export function SiteShell({
           navItems={chrome.navItems}
           overlay={headerOverlay}
           activeLocales={chrome.activeLocales}
+          searchHref={chrome.searchHref}
+          searchCurrent={chrome.searchCurrent}
         />
 
         <main id="main" className="flex-1">

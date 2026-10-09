@@ -357,6 +357,7 @@ const settings = (defaultOgImage: string) => ({
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-10-07T00:00:00Z"),
 });
 const CARD = { id: "biz-1", title: "A Book", coverUrl: COVER_PATH, tags: [], href: "/novel/a-book-pabc123" };

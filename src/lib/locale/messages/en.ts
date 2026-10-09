@@ -235,6 +235,23 @@ export const en = {
     pageOf: "{current} / {total}",
     label: "Pagination",
   },
+  // PN-15 站内搜索（v0.5.14）。前 8 键逐字沿用 CPS v8.7.2 已上线译文（`title` 同时是页面 H1、
+  // 页头导航与手机图标的读屏标签）；后 5 键为本项目新写。作品数/翻页沿用 `collection.workCount`、`pagination.*`。
+  search: {
+    title: "Search",
+    submit: "Search",
+    hintMinLength: "Enter at least {min} characters to search.",
+    hintMaxLength: "Enter no more than {max} characters.",
+    resultsHeading: "Results for \"{query}\"",
+    empty: "No results found for \"{query}\".",
+    unavailable: "Search is temporarily unavailable. Please try again later.",
+    metaTitle: "Search results for “{query}”",
+    inputLabel: "Search novels by title",
+    inputPlaceholder: "Search by book title…",
+    idle: "Enter a book title to start searching.",
+    emptyHint: "Try browsing all works instead.",
+    metaDescription: "Search results for “{query}” on PulseNovel. Discover novels and start reading free chapters.",
+  },
   meta: {
     notFound: "Not found",
     chapterNotFound: "Chapter not found",

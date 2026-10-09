@@ -52,7 +52,9 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       .filter((record) => record.table_name === "site_setting");
     // 19 + 2: 运营 V2 (20260930100000_site_setting_yandex) adds the
     // yandex_verification and yandex_metrica_id field records.
-    expect(records).toHaveLength(21);
+    // 21 + 1: PN-15 (20261009150000_site_setting_site_search_enabled) adds the
+    // site_search_enabled field record.
+    expect(records).toHaveLength(22);
     const fields = new Map(records.filter((record) => record.record_kind === "field")
       .map((record) => [record.field_name, record]));
     // PR6 lane E: scheduler_app reads exactly `id` and `carousel_config_json`
@@ -78,6 +80,39 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       expect(fields.get(field)?.write_roles).toEqual(["migration_owner", "web_app"]);
     }
     expect(fields.get("id")?.write_roles).toEqual(["migration_owner"]);
+  });
+
+  it("PN-15: site_search_enabled is in the web_app column-level UPDATE list, readable by web/worker only, never by scheduler/analyst", () => {
+    const grants = read("infra/postgres/grants.sql");
+    const updateColumns = [...grants.matchAll(/GRANT UPDATE \(([^;]*?)\) ON site_setting TO web_app;/g)]
+      .flatMap((match) => match[1].split(",").map((column) => column.trim()));
+    // web_app may UPDATE the new column (column-level grant, not table-level).
+    expect(updateColumns).toContain("site_search_enabled");
+    // scheduler_app's column-scoped SELECT stays exactly (id, carousel_config_json).
+    const schedulerSelect = grants.match(/GRANT SELECT \(([^)]*)\) ON site_setting TO scheduler_app;/);
+    expect(schedulerSelect).not.toBeNull();
+    expect(schedulerSelect![1].split(",").map((column) => column.trim())).toEqual(["id", "carousel_config_json"]);
+    expect(grants).not.toMatch(/GRANT[^;]+site_setting[^;]+analyst_ro/s);
+    // Dictionary record: Web/Worker read, Web writes (via the guarded service), nobody else.
+    const record = read("docs/governance/database-schema-dictionary.jsonl")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .find((candidate) => candidate.stable_key === "db:public:site_setting:site_search_enabled");
+    expect(record).toMatchObject({
+      record_kind: "field",
+      table_name: "site_setting",
+      field_name: "site_search_enabled",
+      data_type: "boolean",
+      nullable: false,
+      default: "false",
+      introduced_in_migration: "20261009150000_site_setting_site_search_enabled",
+      status: "active",
+      read_roles: ["web_app", "worker_app"],
+      write_roles: ["migration_owner", "web_app"],
+    });
+    expect(record.read_roles).not.toContain("scheduler_app");
+    expect(record.read_roles).not.toContain("analyst_ro");
   });
 
   it("ships a syntactically valid self-cleaning disposable verification", () => {

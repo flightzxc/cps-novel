@@ -10,7 +10,7 @@ const setting = {
   defaultOgImage: "/og.jpg", googleSearchConsoleVerification: "google-code", footerCopyrightText: "© Haiyue",
   footerDisclaimerText: "Disclaimer", friendLinks: [{ name: "Partner", url: "https://partner.example", nofollow: true }],
   indexNowHost: "", indexNowKey: "", indexNowKeyLocation: "", ga4MeasurementId: "G-ABC123",
-  yandexVerification: "", yandexMetricaId: null, updatedAt: new Date(),
+  yandexVerification: "", yandexMetricaId: null, siteSearchEnabled: false, updatedAt: new Date(),
 };
 
 describe("SiteSetting public consumers", () => {

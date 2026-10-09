@@ -636,6 +636,10 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       // 目标语种的本语自称。这个采样表必须覆盖每一个插值变量名，否则 `t()`
       // 对缺变量的键会（按设计）抛 MissingMessagesError。
       locale: "Sample",
+      // PN-15 站内搜索 `search.*` 的插值变量：最短/最长字数与搜索词。
+      min: 2,
+      max: 500,
+      query: "Sample",
     };
     const leftoverBraces: string[] = [];
     for (const key of EN_KEYS) {

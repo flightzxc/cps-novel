@@ -93,6 +93,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
   it("runs the guarded write and sanitized audit as web_app", async () => {
     const stores = authStores();
     const before = await web.siteSetting.findUniqueOrThrow({ where: { id: 1 } });
+    // PN-15：迁移给的列默认值是 false（全新库 / 存量库升级后都默认关闭）。
+    expect(before.siteSearchEnabled).toBe(false);
     const requestId = randomUUID();
     const guarded = await requireAdminRouteAccess(
       {
@@ -124,6 +126,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
         // 运营 V2：两个新列走同一条真实角色写路径（web_app 列级 UPDATE 必须已授权）。
         yandexVerification: "x6-yandex_code-1",
         yandexMetricaId: "12345678",
+        // PN-15：站内搜索开关同样走真实 web_app 列级 UPDATE（该列必须已在 grants.sql 授权）。
+        siteSearchEnabled: true,
       },
       {
         db: web,
@@ -139,9 +143,14 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
     expect(persisted.indexNowKey).toBe("x6-disposable-indexnow-key");
     expect(persisted.yandexVerification).toBe("x6-yandex_code-1");
     expect(persisted.yandexMetricaId).toBe("12345678");
+    expect(persisted.siteSearchEnabled).toBe(true);
+    expect(result.setting.siteSearchEnabled).toBe(true);
     const audit = await owner.operationAudit.findFirstOrThrow({
       where: { actorType: "admin", action: "site_setting.update", requestId },
     });
+    // PN-15：审计前后快照都带新字段（false -> true）。
+    expect(audit.beforeSnapshot).toMatchObject({ siteSearchEnabled: false });
+    expect(audit.afterSnapshot).toMatchObject({ siteSearchEnabled: true });
     expect(JSON.stringify({
       before: audit.beforeSnapshot,
       after: audit.afterSnapshot,
@@ -160,6 +169,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
       ORDER BY attname
     `;
     expect(writable.map(({ column_name }) => column_name)).toEqual(managedSiteSettingUpdateColumns());
+    // PN-15：新列在 web_app 的列级 UPDATE 授权里，且是 Prisma 字段名 siteSearchEnabled 派生出来的。
+    expect(writable.map(({ column_name }) => column_name)).toContain("site_search_enabled");
 
     // No-op id write avoids confusing singleton/CHECK failure with role denial.
     await expect(web.$executeRaw`UPDATE site_setting SET id=id WHERE id=1`)
@@ -181,6 +192,12 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
     );
     expect(yandex[0]).toEqual({ yandex_verification: "x6-yandex_code-1", yandex_metrica_id: "12345678" });
     await expectDenied(() => worker.$executeRawUnsafe("UPDATE site_setting SET yandex_metrica_id='1' WHERE id=1"));
+    // PN-15：worker_app 同样能读新列（表级 SELECT）但不能改。
+    const search = await worker.$queryRawUnsafe<Array<{ site_search_enabled: boolean }>>(
+      "SELECT site_search_enabled FROM site_setting WHERE id=1",
+    );
+    expect(search[0]).toEqual({ site_search_enabled: true });
+    await expectDenied(() => worker.$executeRawUnsafe("UPDATE site_setting SET site_search_enabled=false WHERE id=1"));
     await expectDenied(() => worker.$executeRawUnsafe("UPDATE site_setting SET indexnow_key='denied' WHERE id=1"));
   });
 
@@ -190,6 +207,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
       await expectDenied(() => client.$queryRawUnsafe("SELECT * FROM site_setting WHERE id=1"));
       // 运营 V2：新列同样不对 Analyst / Scheduler 开放（Scheduler 的列级 SELECT 仍只有 id, carousel_config_json）。
       await expectDenied(() => client.$queryRawUnsafe("SELECT yandex_verification, yandex_metrica_id FROM site_setting WHERE id=1"));
+      // PN-15：站内搜索开关列同样不对 Analyst / Scheduler 开放。
+      await expectDenied(() => client.$queryRawUnsafe("SELECT site_search_enabled FROM site_setting WHERE id=1"));
     }
   });
 });

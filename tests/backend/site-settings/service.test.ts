@@ -27,6 +27,7 @@ const ROW = {
   ga4MeasurementId: "G-TEST",
   yandexVerification: "yandex-code_1",
   yandexMetricaId: "12345678",
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-08-18T00:00:00Z"),
 };
 
@@ -48,6 +49,13 @@ describe("getSiteSetting", () => {
     // 运营 V2：Yandex 两个新字段随快照透传给公开站（layout 读取）。
     expect(snapshot.yandexVerification).toBe("yandex-code_1");
     expect(snapshot.yandexMetricaId).toBe("12345678");
+    // PN-15：站内搜索开关随快照透传；库里默认 false（迁移列默认值）= 关闭。
+    expect(snapshot.siteSearchEnabled).toBe(false);
+  });
+
+  it("PN-15: passes siteSearchEnabled=true through the snapshot (the front end reads it from here)", async () => {
+    const snapshot = await getSiteSetting(dbReturning({ ...ROW, siteSearchEnabled: true }), { ttlMs: 0 });
+    expect(snapshot.siteSearchEnabled).toBe(true);
   });
 
   it("queries id=1", async () => {

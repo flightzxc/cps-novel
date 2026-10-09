@@ -118,6 +118,7 @@ const SETTINGS_NO_DESCRIPTION = {
   ga4MeasurementId: null,
   yandexVerification: "",
   yandexMetricaId: null,
+  siteSearchEnabled: false,
   updatedAt: new Date("2026-09-10T00:00:00Z"),
 };
 

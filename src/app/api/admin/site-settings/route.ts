@@ -49,6 +49,7 @@ export async function PATCH(request: Request): Promise<Response> {
       ...(Object.prototype.hasOwnProperty.call(body, "ga4MeasurementId") ? { ga4MeasurementId: body.ga4MeasurementId } : {}),
       ...(Object.prototype.hasOwnProperty.call(body, "yandexVerification") ? { yandexVerification: body.yandexVerification } : {}),
       ...(Object.prototype.hasOwnProperty.call(body, "yandexMetricaId") ? { yandexMetricaId: body.yandexMetricaId } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "siteSearchEnabled") ? { siteSearchEnabled: body.siteSearchEnabled } : {}),
     };
     return updateAdminSiteSetting(input, serviceDependencies());
   });
