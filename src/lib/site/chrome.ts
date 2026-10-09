@@ -1,6 +1,7 @@
 import type { SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
+import { isSiteSearchEnabled } from "@/lib/site-search/enabled";
 import { localePrefix } from "@/lib/slug/article-path";
 import type { SiteSettingSnapshot } from "@/server/site-settings/service";
 import type { PublicTaxonomyTag } from "./public-taxonomy";
@@ -15,7 +16,8 @@ import type { PublicTaxonomyTag } from "./public-taxonomy";
  * a missing value to `[]`, which reads the same way (hidden switcher).
  */
 
-export type PublicChromeCurrent = "home" | "browse";
+/** `"search"`（PN-15）：搜索页自己调用 `loadChrome` 时传入，让页头的搜索入口显示为当前页。 */
+export type PublicChromeCurrent = "home" | "browse" | "search";
 
 /**
  * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3): `locale` is now
@@ -78,5 +80,10 @@ export function chromeFromSiteSetting(
     ],
     footerNote: footerNote || undefined,
     activeLocales,
+    // PN-15：站内搜索入口只在后台开关打开时才出现。单独的字段、不进 `navItems`——
+    // 开关关闭时返回对象的形状与此前逐字一致（连 key 都不多一个）。
+    ...(isSiteSearchEnabled(settings)
+      ? { searchHref: `${prefix}/search`, searchCurrent: current === "search" }
+      : {}),
   };
 }
