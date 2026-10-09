@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ADMIN_ACTION_REQUEST_FAILED_COPY } from "@/features/admin-ui/error-copy";
+
+import { captureUnhandledRejections, nextRedirectError } from "./capture-unhandled-rejections";
+
 /**
  * PR-C1 / U5 · `/two-factor/setup` — page branching (`page.tsx`) and the
  * idle -> started -> done step machine (`_components/setup-flow.tsx`).
@@ -259,5 +263,127 @@ describe("SetupFlow — idle -> started -> done, and the failure branch at each 
     render(<SetupFlow next={null} />);
     expect(screen.queryByText("A1B2-C3D4-E5F6")).toBeNull();
     expect(screen.getByRole("button", { name: "生成密钥" })).toBeTruthy();
+  });
+});
+
+describe("SetupFlow — the action throws instead of returning a result (B-9)", () => {
+  // Network drop, proxy 401/429 answering with HTML, or a stale Server Action
+  // after a deploy: the call rejects. Before B-9 "生成密钥" stayed on "生成中…"
+  // and "确认并启用" stayed on "确认中…" with the code input locked, forever.
+  const startedSetup = {
+    manualKey: "JBSWY3DPEHPK3PXP",
+    otpauthUri: "otpauth://totp/root@cps-novel?secret=JBSWY3DPEHPK3PXP",
+    pendingExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+  };
+
+  async function reachStarted() {
+    startSetupAction.mockResolvedValue({ ok: true, data: startedSetup });
+    render(<SetupFlow next={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "生成密钥" }));
+    await screen.findByText("JBSWY3DPEHPK3PXP");
+  }
+
+  function submitCode(value = "123456") {
+    fireEvent.change(screen.getByLabelText("身份验证器中显示的 6 位验证码"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "确认并启用" }));
+  }
+
+  it("start: shows the shared notice, hands the button back, and a second click starts the setup", async () => {
+    let rejectFirst!: (reason: unknown) => void;
+    startSetupAction.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      }),
+    );
+    render(<SetupFlow next={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "生成密钥" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "生成中…" })).toBeTruthy());
+
+    rejectFirst(new TypeError("Failed to fetch"));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "生成密钥" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    startSetupAction.mockResolvedValueOnce({ ok: true, data: startedSetup });
+    fireEvent.click(screen.getByRole("button", { name: "生成密钥" }));
+
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
+    expect(startSetupAction).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
+  });
+
+  it("start: re-throws a NEXT_REDIRECT untouched instead of showing the network notice", async () => {
+    const redirect = nextRedirectError("/login");
+    startSetupAction.mockRejectedValue(redirect);
+    render(<SetupFlow next={null} />);
+
+    await captureUnhandledRejections(async (seen) => {
+      fireEvent.click(screen.getByRole("button", { name: "生成密钥" }));
+      await waitFor(() => expect(seen).toContain(redirect));
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
+  });
+
+  it("confirm: shows the shared notice, keeps the secret and the typed code, and a second submit reaches the recovery codes", async () => {
+    await reachStarted();
+    let rejectFirst!: (reason: unknown) => void;
+    confirmSetupAction.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      }),
+    );
+
+    submitCode();
+    await waitFor(() => expect(screen.getByRole("button", { name: "确认中…" })).toBeTruthy());
+    expect((screen.getByLabelText("身份验证器中显示的 6 位验证码") as HTMLInputElement).disabled).toBe(true);
+
+    rejectFirst(new TypeError("Failed to fetch"));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() =>
+      expect((screen.getByLabelText("身份验证器中显示的 6 位验证码") as HTMLInputElement).disabled).toBe(false),
+    );
+    expect((screen.getByLabelText("身份验证器中显示的 6 位验证码") as HTMLInputElement).value).toBe("123456");
+    expect(screen.getByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
+    const button = screen.getByRole("button", { name: "确认并启用" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    confirmSetupAction.mockResolvedValueOnce({
+      ok: true,
+      data: { codes: ["A1B2-C3D4-E5F6"], generatedAt: new Date().toISOString() },
+    });
+    fireEvent.click(button);
+
+    expect(await screen.findByText("A1B2-C3D4-E5F6")).toBeTruthy();
+    expect(confirmSetupAction).toHaveBeenCalledTimes(2);
+    expect(confirmSetupAction).toHaveBeenLastCalledWith({ code: "123456" });
+  });
+
+  it("confirm: re-throws a NEXT_REDIRECT untouched instead of showing the network notice", async () => {
+    await reachStarted();
+    const redirect = nextRedirectError("/login");
+    confirmSetupAction.mockRejectedValue(redirect);
+
+    await captureUnhandledRejections(async (seen) => {
+      submitCode();
+      await waitFor(() => expect(seen).toContain(redirect));
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
+  });
+
+  it("continue (unchanged): a non-redirect failure keeps its own copy, not the shared notice", async () => {
+    finishSetupAction.mockRejectedValueOnce(new Error("same-origin denied"));
+    await reachDone("/tags", ["A1B2-C3D4-E5F6"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "我已保存，继续" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("退出失败");
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
   });
 });

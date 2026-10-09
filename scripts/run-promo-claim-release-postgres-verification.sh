@@ -10,6 +10,13 @@ set +x
 # tests/integration/tasks/promo-claim-release-postgres.test.ts——D7 硬要求
 # "scheduler 角色实际能完成放行"的真实数据库验证,不是只读 Prisma schema 猜测。
 #
+# B-1（v0.5.14）：同一次运行还会跑 tests/integration/tasks/promo-claim-credential-
+# replacement-postgres.test.ts——"后台替换凭据 → 批次停在 credential_not_ready →
+# scheduler 自动恢复放行"的端到端验收。那个用例要用真实的 web_app 角色调用
+# addOrReplaceCredential（需要凭据加密钥匙与指纹钥匙文件，运行器在 secret_dir 里
+# 现生成，只存在于本次一次性运行，脚本不会打印钥匙内容）、用 worker_app 角色跑
+# credential.validate.v1，所以这里额外传 web/worker 连接串（测试专用变量，不是应用配置）。
+#
 # scheduler_app 连接串额外带 connection_limit/pool_timeout：并发测试对同一个
 # 渠道账号发出 100 次并发放行,每次都要在 Postgres 里排队等同一把咨询锁,默认
 # 连接池大小可能不够,把等锁的请求先卡在 Prisma 自己的池排队超时上,而不是卡
@@ -41,6 +48,10 @@ scheduler_password="$(openssl rand -hex 24)"
 analyst_password="$(openssl rand -hex 24)"
 backup_password="$(openssl rand -hex 24)"
 printf '%s' "$bootstrap_password" >"$secret_dir/bootstrap-password"
+# B-1 端到端用例需要的凭据加密钥匙 / 指纹钥匙（一次性、32 字节随机、标准 base64），
+# 写文件不 echo；键名与文件名约定同 scripts/run-p1-08b-postgres-verification.sh。
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-v1.key"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-fingerprint.key"
 printf "ALTER ROLE migration_owner PASSWORD '%s';\n" "$migration_password" >"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE web_app PASSWORD '%s';\n" "$web_password" >>"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE worker_app PASSWORD '%s';\n" "$worker_password" >>"$secret_dir/role-passwords.sql"
@@ -78,6 +89,8 @@ docker exec "$container_name" createdb -U promo_claim_release_admin -O migration
 
 owner_url="postgresql://migration_owner:${migration_password}@127.0.0.1:${host_port}/${database_name}?schema=public"
 scheduler_url="postgresql://scheduler_app:${scheduler_password}@127.0.0.1:${host_port}/${database_name}?schema=public&connection_limit=50&pool_timeout=60"
+web_url="postgresql://web_app:${web_password}@127.0.0.1:${host_port}/${database_name}?schema=public"
+worker_url="postgresql://worker_app:${worker_password}@127.0.0.1:${host_port}/${database_name}?schema=public"
 
 DATABASE_URL="$owner_url" npm exec prisma migrate deploy >/dev/null
 docker exec \
@@ -85,10 +98,29 @@ docker exec \
   -e PGUSER=migration_owner -e PGPASSWORD="$migration_password" \
   "$container_name" psql --no-psqlrc --file=/workspace/infra/postgres/grants.sql >/dev/null
 
+# 两个测试文件一次性跑完并输出 JSON 报告。CHANNEL_CREDENTIAL_* 只有 B-1 端到端用例会读
+# （经 loadCredentialKeyring 读文件）；promo-claim-release-postgres.test.ts 与 scheduler 的
+# env 对象都不含它们。
 PROMO_CLAIM_RELEASE_DATABASE_TEST=1 \
 PROMO_CLAIM_RELEASE_OWNER_DATABASE_URL="$owner_url" \
+PROMO_CLAIM_RELEASE_WEB_DATABASE_URL="$web_url" \
+PROMO_CLAIM_RELEASE_WORKER_DATABASE_URL="$worker_url" \
 PROMO_CLAIM_RELEASE_SCHEDULER_DATABASE_URL="$scheduler_url" \
-npm exec vitest run -- --project node tests/integration/tasks/promo-claim-release-postgres.test.ts
+CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=1 \
+CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$secret_dir/credential-v1.key" \
+CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$secret_dir/credential-fingerprint.key" \
+npm exec vitest run -- --project node \
+  tests/integration/tasks/promo-claim-release-postgres.test.ts \
+  tests/integration/tasks/promo-claim-credential-replacement-postgres.test.ts \
+  --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
+
+# 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
+# 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
+if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PROMO_CLAIM_RELEASE "$secret_dir/integration-result.json" \
+  tests/integration/tasks/promo-claim-release-postgres.test.ts=24 \
+  tests/integration/tasks/promo-claim-credential-replacement-postgres.test.ts=4; then
+  exit 1
+fi
 
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs
 

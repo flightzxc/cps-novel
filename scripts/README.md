@@ -157,4 +157,4 @@ npx tsx scripts/ops/effective-tag-projection.ts scale-check
   `B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS`）。
 - 规模 / 性能基准：`scripts/run-public-list-bench-postgres.sh`（英语约 4 万本合成数据；输出 `B38_BENCH name=… median_ms=…`
   与 `B38_PLAN name=… top=… seq_scans=…`）。合成数据种子 `tests/integration/site/fixtures/scale-seed.ts` 只写表、不依赖新函数，
-  可原样拷进旧代码的 worktree 灌同一份数据做新旧对比（`B38_SEED_RUN=1 B38_SEED_DATABASE_URL=… npx vite-node …/scale-seed.ts`）。
+  可原样拷进旧代码的 worktree 灌同一份数据做新旧对比（`B38_SEED_RUN=1 B38_SEED_DATABASE_URL=… npx tsx …/scale-seed.ts`）。

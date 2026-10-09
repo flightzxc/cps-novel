@@ -93,6 +93,17 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   manual_mode_conflict: "小说当前不处于 manual 标签模式",
 });
 
+/**
+ * Shown when a Server Action call itself throws instead of returning a result
+ * envelope: the network dropped, a proxy answered 401/429 with HTML, or the page
+ * was rendered before a deploy and its Server Action no longer exists on the new
+ * build (Next's client throws on that). None of these carry an `AdminErrorCode`,
+ * so this is a fixed sentence rather than a `COPY` entry. It points at a page
+ * refresh because that fixes the stale-deploy case, and is harmless for the rest.
+ * Shared by the login and two-factor forms (B-9).
+ */
+export const ADMIN_ACTION_REQUEST_FAILED_COPY = "网络或会话异常，请刷新页面后重试";
+
 /** Reason refines the code; without it the two session expiries read identically. */
 const REASON_COPY: Readonly<Record<string, string>> = Object.freeze({
   idle_timeout: "长时间未操作，会话已超时",

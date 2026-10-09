@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ADMIN_ACTION_REQUEST_FAILED_COPY } from "@/features/admin-ui/error-copy";
+
+import { captureUnhandledRejections, nextRedirectError } from "./capture-unhandled-rejections";
+
 /**
  * PR-C1 · `/two-factor/challenge` — page branching (`page.tsx`, including
  * `loadChallengeView`) and form interaction (`_components/challenge-form.tsx`).
@@ -238,5 +242,126 @@ describe("ChallengeForm — mode toggle and every completeChallengeAction result
     fireEvent.click(screen.getByRole("button", { name: "重新发送验证" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("尝试次数过多");
+  });
+});
+
+describe("ChallengeForm — the action throws instead of returning a result (B-9)", () => {
+  // Network drop, proxy 401/429 answering with HTML, or a stale Server Action
+  // after a deploy: the call rejects. Before B-9 the form stayed on "验证中…"
+  // with its input locked, and the resend button stayed on "发送中…", forever.
+  const liveView = { expiresAt: new Date(Date.now() + 120_000).toISOString(), attemptsRemaining: 5 };
+
+  function submitCode(value = "123456") {
+    fireEvent.change(screen.getByLabelText("6 位验证码"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "验证" }));
+  }
+
+  it("submit: shows the shared notice, hands the form back, keeps the typed code, and a second submit calls the action again", async () => {
+    let rejectFirst!: (reason: unknown) => void;
+    completeChallengeAction.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      }),
+    );
+    render(<ChallengeForm view={liveView} next={null} />);
+
+    submitCode();
+    await waitFor(() => expect(screen.getByRole("button", { name: "验证中…" })).toBeTruthy());
+    expect((screen.getByLabelText("6 位验证码") as HTMLInputElement).disabled).toBe(true);
+
+    rejectFirst(new TypeError("Failed to fetch"));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() => expect((screen.getByLabelText("6 位验证码") as HTMLInputElement).disabled).toBe(false));
+    expect((screen.getByLabelText("6 位验证码") as HTMLInputElement).value).toBe("123456");
+    const button = screen.getByRole("button", { name: "验证" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(routerPush).not.toHaveBeenCalled();
+
+    completeChallengeAction.mockResolvedValueOnce({ ok: true, next: "/novels" });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(completeChallengeAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/novels"));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a successful verification keeps the form busy while it navigates away", async () => {
+    completeChallengeAction.mockResolvedValue({ ok: true, next: "/novels" });
+    render(<ChallengeForm view={liveView} next={null} />);
+
+    submitCode();
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/novels"));
+    expect((screen.getByRole("button", { name: "验证中…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("6 位验证码") as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("a refused code (ok:false) also hands the form back", async () => {
+    completeChallengeAction.mockResolvedValue({
+      ok: false,
+      envelope: { ok: false, status: 403, code: "two_factor_failed" },
+    });
+    render(<ChallengeForm view={liveView} next={null} />);
+
+    submitCode("000000");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("验证码或恢复码不正确");
+    await waitFor(() => expect((screen.getByLabelText("6 位验证码") as HTMLInputElement).disabled).toBe(false));
+  });
+
+  it("submit: re-throws a NEXT_REDIRECT untouched instead of showing the network notice", async () => {
+    const redirect = nextRedirectError("/login");
+    completeChallengeAction.mockRejectedValue(redirect);
+    render(<ChallengeForm view={liveView} next={null} />);
+
+    await captureUnhandledRejections(async (seen) => {
+      submitCode();
+      await waitFor(() => expect(seen).toContain(redirect));
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(ADMIN_ACTION_REQUEST_FAILED_COPY)).toBeNull();
+  });
+
+  it("resend: shows the shared notice, hands the button back, and a second click calls the action again", async () => {
+    let rejectFirst!: (reason: unknown) => void;
+    resendChallengeAction.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      }),
+    );
+    render(<ChallengeForm view={null} next={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "重新发送验证" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "发送中…" })).toBeTruthy());
+
+    rejectFirst(new TypeError("Failed to fetch"));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADMIN_ACTION_REQUEST_FAILED_COPY);
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "重新发送验证" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+    expect(routerRefresh).not.toHaveBeenCalled();
+
+    resendChallengeAction.mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole("button", { name: "重新发送验证" }));
+
+    await waitFor(() => expect(resendChallengeAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("resend: re-throws a NEXT_REDIRECT untouched instead of showing the network notice", async () => {
+    const redirect = nextRedirectError("/login");
+    resendChallengeAction.mockRejectedValue(redirect);
+    render(<ChallengeForm view={null} next={null} />);
+
+    await captureUnhandledRejections(async (seen) => {
+      fireEvent.click(screen.getByRole("button", { name: "重新发送验证" }));
+      await waitFor(() => expect(seen).toContain(redirect));
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(routerRefresh).not.toHaveBeenCalled();
   });
 });
