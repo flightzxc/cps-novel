@@ -12,7 +12,7 @@
  *
  * 运行：`bash scripts/run-public-list-postgres-verification.sh`（一次性 postgres:16.14，真实角色）。
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import { clearPublicCategoryCountsCacheForTest, getPublicCategoryCounts, PUBLIC_LIST_SCALE_THRESHOLDS, queryPublicCategoryCounts } from "@/lib/site/public-list";
 import { reconcileAllEffectiveTags } from "@/server/tagging/effective-tag-projection";
@@ -28,7 +28,7 @@ const BIG_LOCALE_COUNT = PUBLIC_LIST_SCALE_THRESHOLDS.perLocaleTotal + 1; // 60,
 const BIG_CATEGORY_COUNT = PUBLIC_LIST_SCALE_THRESHOLDS.perCategoryPerLocale + 1; // 40,001
 const env = envFor({ autoTags: false, seoVisibility: false });
 
-const warnEvents = (spy: ReturnType<typeof vi.spyOn>) =>
+const warnEvents = (spy: MockInstance) =>
   spy.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("public_list_scale_threshold_exceeded")).map((line) => JSON.parse(line));
 
 describe.skipIf(!enabled).sequential("B-38 规模触发器：告警日志 + scale-check 退出码（真实库、真实阈值）", () => {

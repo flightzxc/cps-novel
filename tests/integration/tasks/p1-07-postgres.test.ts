@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
+import { buildSync } from "esbuild";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -617,30 +619,41 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
 
   it("recovers after a real worker child process is killed and restarted", async () => {
     const task = await createGenericTask();
-    const executable = path.join(process.cwd(), "node_modules/.bin/vite-node");
     const fixture = path.join(process.cwd(), "tests/integration/tasks/fixtures/claim-and-hang.ts");
-    const child = spawn(executable, ["--config", "vitest.config.ts", fixture], {
+    // vitest 4 不再附带 vite-node：先用 esbuild 把子进程夹具打成单文件 ESM（做法同
+    // worker-light-postgres.test.ts），再用 node 直接起进程。产物必须落在仓库目录内，
+    // 外部包（@prisma/client）的裸导入才解析得到 node_modules。
+    await mkdir(".tmp", { recursive: true });
+    const bundleDir = await mkdtemp(path.resolve(".tmp/p1-07-child-"));
+    const bundle = path.join(bundleDir, "claim-and-hang.mjs");
+    buildSync({ entryPoints: [fixture], outfile: bundle, bundle: true, platform: "node", format: "esm", packages: "external", logLevel: "silent" });
+    const child = spawn(process.execPath, [bundle], {
       cwd: process.cwd(),
       env: { ...process.env, P1_07_CHILD_WORKER_ID: "killed-worker", P1_07_CHILD_LEASE_MS: "60000" },
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`Child claim timeout: ${stderr}`)), 15_000);
-      child.stdout.on("data", (chunk) => {
-        if (String(chunk).includes("P1_07_CHILD_CLAIMED=")) {
+    try {
+      let stderr = "";
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`Child claim timeout: ${stderr}`)), 15_000);
+        child.stdout.on("data", (chunk) => {
+          if (String(chunk).includes("P1_07_CHILD_CLAIMED=")) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+        child.once("exit", (code) => {
           clearTimeout(timeout);
-          resolve();
-        }
+          reject(new Error(`Child exited before claim (${code}): ${stderr}`));
+        });
       });
-      child.once("exit", (code) => {
-        clearTimeout(timeout);
-        reject(new Error(`Child exited before claim (${code}): ${stderr}`));
-      });
-    });
-    child.kill("SIGKILL");
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+      child.kill("SIGKILL");
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await rm(bundleDir, { recursive: true, force: true });
+    }
     await expireGenericItem(task.items[0].id);
     await recoverExpiredItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], maxAttemptsByType: { "runtime.test": 3 },
