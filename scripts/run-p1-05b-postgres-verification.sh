@@ -23,7 +23,7 @@ cd "$project_root"
 
 node -e '
   const p = require("./package.json");
-  if (p.devDependencies?.prisma !== "6.19.2" || p.dependencies?.["@prisma/client"] !== "6.19.2") {
+  if (p.dependencies?.prisma !== "6.19.2" || p.dependencies?.["@prisma/client"] !== "6.19.2") {
     throw new Error("P1-05B requires prisma and @prisma/client exactly 6.19.2");
   }
 '

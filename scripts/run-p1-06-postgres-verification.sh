@@ -53,7 +53,7 @@ chmod 600 "$secret_dir"/*
 cd "$project_root"
 node -e '
   const p = require("./package.json");
-  if (p.devDependencies?.prisma !== "6.19.2" || p.dependencies?.["@prisma/client"] !== "6.19.2") {
+  if (p.dependencies?.prisma !== "6.19.2" || p.dependencies?.["@prisma/client"] !== "6.19.2") {
     throw new Error("P1-06 requires Prisma CLI and Client 6.19.2");
   }
 '
