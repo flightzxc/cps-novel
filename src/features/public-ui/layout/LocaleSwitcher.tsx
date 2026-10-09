@@ -31,6 +31,9 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  *
  * - **首页、`/browse`、`/blog` 列表**：各语种都有这个页面，保持直接切换
  *   （`/browse?category=…` 例外：分类在目标语种没有文章时就是 404，归入下一类）。
+ * - **搜索页 `/search`**（PN-15）：每个语种都有搜索页，直接切换到目标语种的 `/search`，
+ *   **只带 `q`、去掉 `page`**（页码在另一语种里没有意义，目标语种页数不足会 404）。这个"只带 `q`"
+ *   的规则只对搜索页生效，其它页面的计划与 href 完全不变（`localeSwitchSearch`）。
  * - **书的详情页**（`/novel/{slug}`）：先问 `/api/novel-locale-check`
  *   （CPS `/api/drama-locale-check` 的移植），目标语种有这本书的公开页就直接
  *   跳过去；没有、或者接口出错，就弹提示，再跳**目标语种首页**。
@@ -220,11 +223,43 @@ export function planLocaleSwitch(pathname: string, search?: string): LocaleSwitc
 
   if (segments.length === 1 && segments[0] === "blog") return { kind: "direct" };
 
+  // PN-15：搜索页每个语种都有（开关打开时），直接切换；带哪些参数见 `localeSwitchSearch`。
+  if (segments.length === 1 && segments[0] === "search") return { kind: "direct" };
+
   if (segments.length === 2 && segments[0] === "novel") {
     return { kind: "novel", slugParam: decodeSlugParam(segments[1]!) };
   }
 
   return { kind: "fallback" };
+}
+
+/** 当前路径是不是搜索页（`/search` 或 `/{语种}/search`）。 */
+function isSearchPath(pathname: string): boolean {
+  const segments = stripLocalePrefix(pathname).split("/").filter(Boolean);
+  return segments.length === 1 && segments[0] === "search";
+}
+
+/**
+ * 切换语种时要带到目标页的 query string（含开头的 `?`，没有则空串）。
+ *
+ * - 搜索页：**只带 `q`**（重复时取第一个，空 `q` 不带），`page` 与其它参数一律去掉；
+ * - 其它页面：原样带上（照 CPS，分页等参数保留）——与 PN-15 之前逐字一致。
+ */
+export function localeSwitchSearch(pathname: string, search?: string): string {
+  if (!search) return "";
+  if (!isSearchPath(pathname)) return search;
+  const query = new URLSearchParams(search).get("q");
+  return query ? `?${new URLSearchParams({ q: query }).toString()}` : "";
+}
+
+/**
+ * "直接切换"的最终 href。搜索页单独处理：路径部分走 `buildLocaleSwitchHref`（过同源守卫），
+ * `q` 在守卫之外追加——守卫按子串拒绝 `localhost` 等字样，搜索词里出现它们不该把读者送回首页；
+ * 追加的部分是 `URLSearchParams` 编码过的，不可能构成协议头或 `//`。
+ */
+export function buildDirectLocaleSwitchHref(pathname: string, target: SiteLocale, search?: string): string {
+  if (!isSearchPath(pathname)) return buildLocaleSwitchHref(pathname, target, search);
+  return `${buildLocaleSwitchHref(pathname, target)}${localeSwitchSearch(pathname, search)}`;
 }
 
 /**
@@ -424,9 +459,10 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
     const plan = planLocaleSwitch(pathname ?? "/", search);
 
     if (plan.kind === "direct") {
-      if (!search) return; // the rendered href is already correct with no query string
+      // 非搜索页 `carried === search`（与此前一致）；搜索页只带 q，page 不带。
+      if (!localeSwitchSearch(pathname ?? "/", search)) return; // the rendered href is already correct with no query string
       event.preventDefault();
-      router.push(buildLocaleSwitchHref(pathname ?? "/", target, search));
+      router.push(buildDirectLocaleSwitchHref(pathname ?? "/", target, search));
       return;
     }
 
