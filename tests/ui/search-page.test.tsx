@@ -399,6 +399,29 @@ describe("元数据（页面层接线）", () => {
     expect(bad.robots).toEqual({ index: false, follow: false });
   });
 
+  it("各状态的页面层元数据（接线）：零结果 noindex,follow + 裸 canonical；没输入 / 太短 / 太长 noindex,follow；出错 noindex,nofollow", async () => {
+    const cases: Array<[Partial<SiteSearchResponse> & Pick<SiteSearchResponse, "status">, { index: boolean; follow: boolean }]> = [
+      [{ status: "ok", displayQuery: "zzz" }, { index: false, follow: true }],
+      [{ status: "idle" }, { index: false, follow: true }],
+      [{ status: "too_short", displayQuery: "a" }, { index: false, follow: true }],
+      [{ status: "too_long", displayQuery: "a".repeat(501) }, { index: false, follow: true }],
+      [{ status: "unavailable", displayQuery: "alpha" }, { index: false, follow: false }],
+    ];
+    for (const [partial, robots] of cases) {
+      loadSearchPage.mockResolvedValue(response(partial));
+      const metadata = await buildSearchMetadata("en", Promise.resolve({ q: partial.displayQuery ?? "" }));
+      expect(metadata.robots, partial.status).toEqual(robots);
+      expect(metadata.alternates, partial.status).toEqual({ canonical: "https://example.test/search" });
+    }
+  });
+
+  it("有结果的第 2 页：canonical 自引用带 page", async () => {
+    loadSearchPage.mockResolvedValue(response({ status: "ok", displayQuery: "alpha", items: cards(20, 20), totalCount: 45, totalPages: 3, page: 2 }));
+    const metadata = await buildSearchMetadata("ja", Promise.resolve({ q: "alpha", page: "2" }));
+    expect(metadata.robots).toEqual({ index: true, follow: true });
+    expect(metadata.alternates).toEqual({ canonical: "https://example.test/ja/search?q=alpha&page=2" });
+  });
+
   it("越界页的元数据同样是 Not found", async () => {
     loadSearchPage.mockResolvedValue(response({ status: "ok", displayQuery: "alpha", items: [], totalCount: 45, totalPages: 3, page: 4 }));
     const metadata = await buildSearchMetadata("en", Promise.resolve({ q: "alpha", page: "4" }));
