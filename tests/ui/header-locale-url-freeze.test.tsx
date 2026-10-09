@@ -13,8 +13,9 @@ import { MessagesProvider } from "@/lib/locale/messages/MessagesProvider";
  * 页头改版（搜索入口 + 手机端方案 A）只允许**换位置**：语种切换从页头右侧的胶囊挪进手机菜单，
  * 每个语种菜单项的 href、切换计划（直接切 / 查兄弟页 / 回退提示）、点击后的跳转必须**逐字不变**。
  *
- * 本文件先于任何页头改动写成，并在改动之前的代码上跑绿（基线）；改动之后它必须仍然绿，
- * 而且手机菜单里的语种列表要与胶囊下拉**逐项相同**（见文件末尾 `describe.each` 的 surface 列表）。
+ * 本文件先于任何页头改动写成，并在改动之前的代码上跑绿（基线，提交 d3459137，202 条）；
+ * 改动之后它必须仍然绿，并且把**手机菜单里的语种行**也加进同一份守卫（`SURFACES` 里的后两项）：
+ * 胶囊下拉、`menuRow` 形态、真实页头展开的手机菜单面板，三处的条目 / href / 点击行为逐项相同。
  *
  * 下面所有期望值都是**写死的字面量**，不从被测代码里推导：
  * - `PFX`：15 个语种各自的路径前缀（en 无前缀）；
@@ -30,6 +31,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const { LocaleSwitcher, planLocaleSwitch } = await import("@/features/public-ui/layout/LocaleSwitcher");
+const { SiteHeader } = await import("@/features/public-ui/layout/SiteHeader");
 
 /** 菜单条目的期望顺序 = 登记顺序（写死，同时钉住 SITE_LOCALES 本身没被动过）。 */
 const ORDER: readonly SiteLocale[] = [
@@ -214,10 +216,28 @@ function withMessages(current: SiteLocale, ui: React.ReactElement) {
 }
 
 /** 语种菜单触发器：带 `aria-haspopup="menu"` 的按钮（胶囊与手机菜单里的语种行共用这一约定）。 */
-function menuTrigger(): HTMLElement {
-  const triggers = Array.from(document.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]'));
+function menuTrigger(scope: ParentNode = document): HTMLElement {
+  const triggers = Array.from(scope.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]'));
   expect(triggers).toHaveLength(1);
   return triggers[0]!;
+}
+
+/** 真实页头里「手机菜单开关」：有 `aria-controls`、不带 `aria-haspopup` 的那个按钮。 */
+function headerMenuToggle(): HTMLElement {
+  const toggle = document.querySelector<HTMLElement>("button[aria-controls]:not([aria-haspopup])");
+  expect(toggle).toBeTruthy();
+  return toggle!;
+}
+
+/** 打开真实页头的手机菜单面板并展开语种行，返回语种列表（`role="menu"`）。已展开的步骤不重复点。 */
+function openHeaderLanguageRow(): HTMLElement {
+  const toggle = headerMenuToggle();
+  if (toggle.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
+  const panel = document.getElementById(toggle.getAttribute("aria-controls")!);
+  expect(panel).toBeTruthy();
+  const trigger = menuTrigger(panel!);
+  if (trigger.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+  return within(panel!).getByRole("menu");
 }
 
 const SURFACES: readonly Surface[] = [
@@ -227,10 +247,41 @@ const SURFACES: readonly Surface[] = [
       withMessages(current, <LocaleSwitcher activeLocales={ORDER} />);
       return {
         openMenu: () => {
-          fireEvent.click(menuTrigger());
+          const trigger = menuTrigger();
+          if (trigger.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
           return screen.getByRole("menu");
         },
       };
+    },
+  },
+  {
+    name: "手机菜单语种行（LocaleSwitcher variant=menuRow）",
+    mount: (current) => {
+      withMessages(current, <LocaleSwitcher variant="menuRow" activeLocales={ORDER} />);
+      return {
+        openMenu: () => {
+          const trigger = menuTrigger();
+          if (trigger.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+          return screen.getByRole("menu");
+        },
+      };
+    },
+  },
+  {
+    name: "真实页头：展开手机菜单面板 → 语种行（SiteHeader）",
+    mount: (current) => {
+      withMessages(
+        current,
+        <SiteHeader
+          navItems={[
+            { label: "Home", href: PFX[current] || "/" },
+            { label: "All works", href: `${PFX[current]}/browse` },
+          ]}
+          activeLocales={ORDER}
+          searchHref={`${PFX[current]}/search`}
+        />,
+      );
+      return { openMenu: openHeaderLanguageRow };
     },
   },
 ];
@@ -381,4 +432,39 @@ describe.each(SURFACES)("语种菜单 · $name", (surface) => {
       expect(document.cookie).not.toContain("NEXT_LOCALE=en");
     });
   });
+});
+
+describe("同一次页头渲染里：手机菜单语种行与胶囊下拉逐项相同（文字 / href / 当前态 / 顺序）", () => {
+  for (const current of ORDER) {
+    it.each(KINDS.map((kind) => [kind.name, kind] as const))(`${current} · %s`, (_name, kind) => {
+      setLocation(pathOf(current, kind), "");
+      withMessages(
+        current,
+        <SiteHeader
+          navItems={[{ label: "Home", href: PFX[current] || "/" }]}
+          activeLocales={ORDER}
+          searchHref={`${PFX[current]}/search`}
+        />,
+      );
+
+      // 胶囊（页头里始终挂载，手机上由 CSS 藏起来）
+      const pillTrigger = document.querySelector<HTMLElement>('button[aria-haspopup="menu"]')!;
+      fireEvent.click(pillTrigger);
+      const pillItems = menuItems(screen.getByRole("menu")).map((item) => ({
+        text: item.textContent,
+        href: item.getAttribute("href"),
+        current: item.getAttribute("aria-current"),
+      }));
+      fireEvent.click(pillTrigger); // 收起，下面只剩手机语种行的菜单
+
+      const rowItems = menuItems(openHeaderLanguageRow()).map((item) => ({
+        text: item.textContent,
+        href: item.getAttribute("href"),
+        current: item.getAttribute("aria-current"),
+      }));
+
+      expect(rowItems).toEqual(pillItems);
+      expect(rowItems.map((item) => item.href)).toEqual(ORDER.map((target) => kind.href(target)));
+    });
+  }
 });
