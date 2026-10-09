@@ -1,0 +1,51 @@
+
+> cps-novel@0.5.14 test
+> vitest run
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+ ❯ |node| tests/backend/runtime/admin-login-turnstile-config-contract.test.ts (68 tests | 1 failed) 81888ms
+     × switch off / unset / TRUE: the file is not even looked at (it may not exist) and the boot log is quiet 20564ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/backend/runtime/admin-login-turnstile-config-contract.test.ts > 4. startup: start-web.sh loads the secret only when the switch is exactly true, never fatally > switch off / unset / TRUE: the file is not even looked at (it may not exist) and the boot log is quiet
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/backend/runtime/admin-login-turnstile-config-contract.test.ts:207:3
+    205|   }
+    206|
+    207|   it("switch off / unset / TRUE: the file is not even looked at (it ma…
+       |   ^
+    208|     for (const value of [undefined, "false", "TRUE", "1"]) {
+    209|       const { result, log } = await harness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 575 passed | 59 skipped (635)
+      Tests  1 failed | 10954 passed | 762 skipped (11717)
+   Start at  21:24:28
+   Duration  86.63s (transform 15.55s, setup 0ms, import 59.18s, tests 1129.32s, environment 51.57s)
+

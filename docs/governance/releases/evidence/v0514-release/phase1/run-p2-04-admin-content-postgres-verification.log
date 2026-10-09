@@ -1,0 +1,17 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+ ✓ |node| tests/integration/admin-content/p2-04-postgres.test.ts (4 tests) 180ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  21:43:07
+   Duration  325ms (transform 35ms, setup 0ms, import 60ms, tests 180ms, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-p2-04-admin-content-secrets.cz8YlP/integration-result.json
+  tests/integration/admin-content/p2-04-postgres.test.ts passed=4 skipped=0
+P2_04_ADMIN_CONTENT_INTEGRATION=PASS files=1 passed=4 skipped=0
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+P2_04_ADMIN_CONTENT_DICTIONARY_DRIFT=0
+P2_04_ADMIN_CONTENT_POSTGRES_VERIFICATION=PASS
+P2_04_ADMIN_CONTENT_DISPOSABLE_DATABASE_CLEANED=yes

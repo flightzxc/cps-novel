@@ -1,0 +1,44 @@
+== seeding fixtures (123 CanonicalTag v1 + fixture novels, en/ja; plus 6 B-23 boilerplate novels in locale b23) ==
+{"result":"TAGGING_AUTO_PREVIEW_FIXTURES_OK","canonicalTagCount":123,"effectiveTagRowsInserted":10,"locales":["en","ja"],"novelsPerLocale":20,"boilerplateLocale":"b23","boilerplateNovels":6,"boilerplateExpectedImpact":{"novelsScanned":6,"novelsManualSkipped":1,"novelsEligible":5,"novelsBoilerplateMatched":4,"novelsChanged":1,"novelsScoreOnlyChanged":1,"novelsLosingAllAutoTags":1,"tagsRemoved":1,"tagsAdded":0,"patternHits":{"bp-001":3,"bp-008":1}}}
+== snapshotting table counts BEFORE the preview script runs ==
+== run 1 (web_app, seed=20260928) ==
+{
+  "result": "TAGGING_AUTO_PREVIEW_OK",
+  "outDir": "/var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T//cps-novel-tagging-auto-preview-secrets.yzaieH/run1",
+  "locales": [
+    "en",
+    "ja"
+  ],
+  "totalSamples": 16,
+  "totalSkipped": 0,
+  "databaseTransaction": "READ_ONLY"
+}
+== run 2 (web_app, same seed -- reproducibility) ==
+{
+  "result": "TAGGING_AUTO_PREVIEW_OK",
+  "outDir": "/var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T//cps-novel-tagging-auto-preview-secrets.yzaieH/run2",
+  "locales": [
+    "en",
+    "ja"
+  ],
+  "totalSamples": 16,
+  "totalSkipped": 0,
+  "databaseTransaction": "READ_ONLY"
+}
+== B-23 impact report (web_app, read-only): per locale and --all ==
+== snapshotting table counts AFTER both runs ==
+== asserting zero writes, reproducibility, and output shape ==
+TAGGING_AUTO_PREVIEW_ZERO_WRITES=PASS tables_checked=59
+TAGGING_AUTO_PREVIEW_REPRODUCIBLE=PASS seed_reused=true
+TAGGING_AUTO_PREVIEW_OUTPUT_SHAPE=PASS
+== asserting the B-23 impact report matches the fixture's expectation ==
+TAGGING_IMPACT_REPORT=PASS matched=4 changed=1 tagsRemoved=1 locales=b23,en,ja
+== mutation: a write injected after the role check must be rejected by the read-only transaction ==
+TAGGING_AUTO_PREVIEW_MUTATION_CAUGHT=PASS exit_code=64
+== mutation: a write injected into the B-23 impact report transaction must be rejected too ==
+TAGGING_IMPACT_MUTATION_CAUGHT=PASS exit_code=1
+== re-snapshotting table counts AFTER the rejected mutation attempt ==
+TAGGING_AUTO_PREVIEW_MUTATION_ZERO_WRITES=PASS tables_checked=59
+TAGGING_AUTO_PREVIEW_MUTATION_SCRATCH_FILE_REMOVED=PASS
+TAGGING_AUTO_PREVIEW_POSTGRES_VERIFICATION=PASS
+TAGGING_AUTO_PREVIEW_DISPOSABLE_DATABASE_CLEANED=yes

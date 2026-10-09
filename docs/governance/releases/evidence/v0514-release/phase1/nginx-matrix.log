@@ -1,0 +1,36 @@
+curl: (52) Empty reply from server
+NGINX_MATRIX=PASS
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+2026/10/09 12:50:13 [notice] 34#34: signal process started
+NGINX_MATRIX=PASS mode=rehearsal
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/novel/book prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/go/a prefetch=none statuses=200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/novel/book prefetch=2 statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/search?q=a prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=page_concurrency limit=10 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=prefetch_concurrency limit=4 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=go_concurrency limit=16 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=mixed_locale_rate json_logs=PASS
+NGINX_RATE=PASS mode=rehearsal case=search_budget passed=11 rejected=49 page_budget_untouched=PASS regex_isolated=PASS
+NGINX_RATE=PASS mode=rehearsal case=page_flood_leaves_search_budget
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+NGINX_MATRIX=PASS mode=public
+NGINX_RATE=PASS mode=public case=crawler path=/novel/book prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/go/a prefetch=none statuses=200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/novel/book prefetch=2 statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/search?q=a prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=page_concurrency limit=10 rejected=429
+NGINX_RATE=PASS mode=public case=prefetch_concurrency limit=4 rejected=429
+NGINX_RATE=PASS mode=public case=go_concurrency limit=16 rejected=429
+NGINX_RATE=PASS mode=public case=mixed_locale_rate json_logs=PASS
+NGINX_RATE=PASS mode=public case=search_budget passed=11 rejected=49 page_budget_untouched=PASS regex_isolated=PASS
+NGINX_RATE=PASS mode=public case=page_flood_leaves_search_budget
+NGINX_MATRIX_ALL=PASS

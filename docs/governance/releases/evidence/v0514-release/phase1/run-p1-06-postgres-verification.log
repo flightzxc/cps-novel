@@ -1,0 +1,458 @@
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 517 packages, and audited 518 packages in 9s
+
+171 packages are looking for funding
+  run `npm fund` for details
+
+11 high severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+Prisma schema loaded from prisma/schema.prisma
+The schema at prisma/schema.prisma is valid 🚀
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 128ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_p1_06_20261009213810_14448", schema "public" at "127.0.0.1:52520"
+
+25 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  21:38:26
+   Duration  603ms (transform 9ms, setup 0ms, import 403ms, tests 103ms, environment 0ms)
+
+LOGICAL_BACKUP=PASS
+BACKUP_ARCHIVE=/artifacts/source.dump
+LOGICAL_RESTORE=PASS
+49 CHECK constraint(s) differ verbatim but are identical after normalization:
+-- admin_identity_status_check (admin_identity)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('disabled'::character varying)::text])))
+-- article_article_type_check (article)
+source:  CHECK (((article_type)::text = ANY ((ARRAY['novel_article'::character varying, 'blog_article'::character varying, 'listicle'::character varying, 'guide'::character varying])::text[])))
+restore: CHECK (((article_type)::text = ANY (ARRAY[('novel_article'::character varying)::text, ('blog_article'::character varying)::text, ('listicle'::character varying)::text, ('guide'::character varying)::text])))
+-- article_content_mode_check (article)
+source:  CHECK (((content_mode)::text = ANY ((ARRAY['manual'::character varying, 'template'::character varying])::text[])))
+restore: CHECK (((content_mode)::text = ANY (ARRAY[('manual'::character varying)::text, ('template'::character varying)::text])))
+-- article_novel_rebind_batch_item_error_kind_check (article_novel_rebind_batch_item)
+source:  CHECK (((error_kind IS NULL) OR ((error_kind)::text = ANY ((ARRAY['drift'::character varying, 'not_found'::character varying, 'blocked'::character varying, 'ineligible'::character varying, 'fence_lost'::character varying, 'unknown'::character varying])::text[]))))
+restore: CHECK (((error_kind IS NULL) OR ((error_kind)::text = ANY (ARRAY[('drift'::character varying)::text, ('not_found'::character varying)::text, ('blocked'::character varying)::text, ('ineligible'::character varying)::text, ('fence_lost'::character varying)::text, ('unknown'::character varying)::text]))))
+-- article_novel_rebind_batch_item_status_check (article_novel_rebind_batch_item)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'applied'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('applied'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
+-- article_novel_rebind_batch_status_check (article_novel_rebind_batch)
+source:  CHECK (((status)::text = ANY ((ARRAY['ready'::character varying, 'processing'::character varying, 'completed'::character varying, 'partial'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('ready'::character varying)::text, ('processing'::character varying)::text, ('completed'::character varying)::text, ('partial'::character varying)::text, ('failed'::character varying)::text])))
+-- article_seo_visibility_check (article)
+source:  CHECK (((seo_visibility)::text = ANY ((ARRAY['public'::character varying, 'seo_only'::character varying, 'hidden'::character varying])::text[])))
+restore: CHECK (((seo_visibility)::text = ANY (ARRAY[('public'::character varying)::text, ('seo_only'::character varying)::text, ('hidden'::character varying)::text])))
+-- article_status_check (article)
+source:  CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'unpublished'::character varying, 'takedown'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('unpublished'::character varying)::text, ('takedown'::character varying)::text])))
+-- article_template_applicable_article_type_check (article_template)
+source:  CHECK (((applicable_article_type)::text = ANY ((ARRAY['novel_article'::character varying, 'blog_article'::character varying, 'listicle'::character varying, 'guide'::character varying, 'any'::character varying])::text[])))
+restore: CHECK (((applicable_article_type)::text = ANY (ARRAY[('novel_article'::character varying)::text, ('blog_article'::character varying)::text, ('listicle'::character varying)::text, ('guide'::character varying)::text, ('any'::character varying)::text])))
+-- article_template_status_check (article_template)
+source:  CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'inactive'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('active'::character varying)::text, ('inactive'::character varying)::text])))
+-- canonical_tag_keyword_match_mode_check (canonical_tag_keyword)
+source:  CHECK (((match_mode)::text = ANY ((ARRAY['unicode_word'::character varying, 'cjk_contiguous'::character varying, 'auto'::character varying])::text[])))
+restore: CHECK (((match_mode)::text = ANY (ARRAY[('unicode_word'::character varying)::text, ('cjk_contiguous'::character varying)::text, ('auto'::character varying)::text])))
+-- canonical_tag_status_check (canonical_tag)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text])))
+-- channel_account_credential_status_check (channel_account_credential)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'superseded'::character varying, 'expired'::character varying, 'invalid'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('superseded'::character varying)::text, ('expired'::character varying)::text, ('invalid'::character varying)::text])))
+-- channel_account_status_check (channel_account)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('disabled'::character varying)::text])))
+-- channel_app_status_check (channel_app)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'registered_disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('registered_disabled'::character varying)::text])))
+-- channel_capability_status_check (channel_capability)
+source:  CHECK (((status)::text = ANY ((ARRAY['enabled'::character varying, 'registered_disabled'::character varying, 'registered_partial'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('enabled'::character varying)::text, ('registered_disabled'::character varying)::text, ('registered_partial'::character varying)::text])))
+-- channel_status_check (channel)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'registered_disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('registered_disabled'::character varying)::text])))
+-- channel_sync_task_item_status_check (channel_sync_task_item)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'success'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('success'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
+-- channel_sync_task_mode_check (channel_sync_task)
+source:  CHECK (((mode)::text = ANY ((ARRAY['dry_run'::character varying, 'apply'::character varying])::text[])))
+restore: CHECK (((mode)::text = ANY (ARRAY[('dry_run'::character varying)::text, ('apply'::character varying)::text])))
+-- channel_sync_task_status_check (channel_sync_task)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'completed_with_errors'::character varying, 'failed'::character varying, 'disabled'::character varying, 'paused'::character varying, 'cancelled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('completed'::character varying)::text, ('completed_with_errors'::character varying)::text, ('failed'::character varying)::text, ('disabled'::character varying)::text, ('paused'::character varying)::text, ('cancelled'::character varying)::text])))
+-- cron_run_status_check (cron_run)
+source:  CHECK (((status)::text = ANY ((ARRAY['created'::character varying, 'task_created'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('created'::character varying)::text, ('task_created'::character varying)::text, ('failed'::character varying)::text])))
+-- generic_task_item_status_check (generic_task_item)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'success'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('success'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
+-- generic_task_mode_check (generic_task)
+source:  CHECK (((mode)::text = ANY ((ARRAY['dry_run'::character varying, 'apply'::character varying])::text[])))
+restore: CHECK (((mode)::text = ANY (ARRAY[('dry_run'::character varying)::text, ('apply'::character varying)::text])))
+-- generic_task_status_check (generic_task)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'completed_with_errors'::character varying, 'failed'::character varying, 'disabled'::character varying, 'paused'::character varying, 'cancelled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('completed'::character varying)::text, ('completed_with_errors'::character varying)::text, ('failed'::character varying)::text, ('disabled'::character varying)::text, ('paused'::character varying)::text, ('cancelled'::character varying)::text])))
+-- home_carousel_auto_batch_status_check (home_carousel_auto_batch)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('completed'::character varying)::text, ('failed'::character varying)::text])))
+-- home_carousel_serving_source_check (home_carousel_serving)
+source:  CHECK (((source)::text = ANY ((ARRAY['manual'::character varying, 'new_novel'::character varying, 'recency'::character varying])::text[])))
+restore: CHECK (((source)::text = ANY (ARRAY[('manual'::character varying)::text, ('new_novel'::character varying)::text, ('recency'::character varying)::text])))
+-- indexnow_outbox_attempt_attempt_state_check (indexnow_outbox_attempt)
+source:  CHECK (((attempt_state)::text = ANY ((ARRAY['started'::character varying, 'completed'::character varying, 'unknown_outcome'::character varying])::text[])))
+restore: CHECK (((attempt_state)::text = ANY (ARRAY[('started'::character varying)::text, ('completed'::character varying)::text, ('unknown_outcome'::character varying)::text])))
+-- indexnow_outbox_attempt_outcome_check (indexnow_outbox_attempt)
+source:  CHECK (((outcome)::text = ANY ((ARRAY['started'::character varying, 'accepted'::character varying, 'retryable_failed'::character varying, 'permanent_failed'::character varying])::text[])))
+restore: CHECK (((outcome)::text = ANY (ARRAY[('started'::character varying)::text, ('accepted'::character varying)::text, ('retryable_failed'::character varying)::text, ('permanent_failed'::character varying)::text])))
+-- indexnow_outbox_status_check (indexnow_outbox)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'accepted'::character varying, 'retry_wait'::character varying, 'permanent_failed'::character varying, 'dead_letter'::character varying, 'cancelled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('accepted'::character varying)::text, ('retry_wait'::character varying)::text, ('permanent_failed'::character varying)::text, ('dead_letter'::character varying)::text, ('cancelled'::character varying)::text])))
+-- novel_canonical_tag_source_check (novel_canonical_tag)
+source:  CHECK (((source)::text = ANY ((ARRAY['manual'::character varying, 'auto'::character varying])::text[])))
+restore: CHECK (((source)::text = ANY (ARRAY[('manual'::character varying)::text, ('auto'::character varying)::text])))
+-- novel_chapter_source_item_status_check (novel_chapter_source_item)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'materialized'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('materialized'::character varying)::text, ('failed'::character varying)::text])))
+-- novel_chapter_status_check (novel_chapter)
+source:  CHECK (((status)::text = ANY ((ARRAY['preview'::character varying, 'locked'::character varying, 'stale'::character varying, 'withdrawn'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('preview'::character varying)::text, ('locked'::character varying)::text, ('stale'::character varying)::text, ('withdrawn'::character varying)::text])))
+-- novel_effective_tag_provenance_check (novel_effective_tag)
+source:  CHECK (((provenance)::text = ANY ((ARRAY['manual'::character varying, 'mapped'::character varying, 'auto'::character varying])::text[])))
+restore: CHECK (((provenance)::text = ANY (ARRAY[('manual'::character varying)::text, ('mapped'::character varying)::text, ('auto'::character varying)::text])))
+-- novel_source_item_status_check (novel_source_item)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'linked'::character varying, 'ignored'::character varying, 'stale'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('linked'::character varying)::text, ('ignored'::character varying)::text, ('stale'::character varying)::text])))
+-- novel_status_check (novel)
+source:  CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'ready'::character varying, 'published'::character varying, 'unpublished'::character varying, 'takedown'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('ready'::character varying)::text, ('published'::character varying)::text, ('unpublished'::character varying)::text, ('takedown'::character varying)::text])))
+-- novel_tag_state_mode_check (novel_tag_state)
+source:  CHECK (((mode)::text = ANY ((ARRAY['automatic'::character varying, 'manual'::character varying])::text[])))
+restore: CHECK (((mode)::text = ANY (ARRAY[('automatic'::character varying)::text, ('manual'::character varying)::text])))
+-- promo_link_origin_check (promo_link)
+source:  CHECK (((origin)::text = ANY ((ARRAY['upstream_existing'::character varying, 'claimed'::character varying])::text[])))
+restore: CHECK (((origin)::text = ANY (ARRAY[('upstream_existing'::character varying)::text, ('claimed'::character varying)::text])))
+-- promo_link_status_check (promo_link)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'fetched'::character varying, 'failed'::character varying, 'registered_disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('fetched'::character varying)::text, ('failed'::character varying)::text, ('registered_disabled'::character varying)::text])))
+-- revenue_sync_batch_reconciliation_status_check (revenue_sync_batch)
+source:  CHECK (((reconciliation_status IS NULL) OR ((reconciliation_status)::text = ANY ((ARRAY['matched'::character varying, 'mismatched'::character varying, 'not_applicable'::character varying])::text[]))))
+restore: CHECK (((reconciliation_status IS NULL) OR ((reconciliation_status)::text = ANY (ARRAY[('matched'::character varying)::text, ('mismatched'::character varying)::text, ('not_applicable'::character varying)::text]))))
+-- revenue_sync_batch_status_check (revenue_sync_batch)
+source:  CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying, 'completed'::character varying, 'partial_failed'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('running'::character varying)::text, ('completed'::character varying)::text, ('partial_failed'::character varying)::text, ('failed'::character varying)::text])))
+-- revenue_sync_batch_terminal_shape_check (revenue_sync_batch)
+source:  CHECK (((((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying])::text[])) OR (finished_at IS NOT NULL)) AND (((status)::text <> ALL ((ARRAY['failed'::character varying, 'partial_failed'::character varying])::text[])) OR (error_code IS NOT NULL))))
+restore: CHECK (((((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('running'::character varying)::text])) OR (finished_at IS NOT NULL)) AND (((status)::text <> ALL (ARRAY[('failed'::character varying)::text, ('partial_failed'::character varying)::text])) OR (error_code IS NOT NULL))))
+-- revenue_sync_scope_status_check (revenue_sync_scope)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('disabled'::character varying)::text])))
+-- schedule_run_misfire_policy_check (schedule_run)
+source:  CHECK (((misfire_policy)::text = ANY ((ARRAY['bounded_catch_up'::character varying, 'skip'::character varying, 'mark_failed'::character varying])::text[])))
+restore: CHECK (((misfire_policy)::text = ANY (ARRAY[('bounded_catch_up'::character varying)::text, ('skip'::character varying)::text, ('mark_failed'::character varying)::text])))
+-- schedule_run_status_check (schedule_run)
+source:  CHECK (((status)::text = ANY ((ARRAY['due'::character varying, 'enqueued'::character varying, 'misfired'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('due'::character varying)::text, ('enqueued'::character varying)::text, ('misfired'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
+-- schedule_run_trigger_kind_check (schedule_run)
+source:  CHECK (((trigger_kind)::text = ANY ((ARRAY['scheduled'::character varying, 'manual'::character varying])::text[])))
+restore: CHECK (((trigger_kind)::text = ANY (ARRAY[('scheduled'::character varying)::text, ('manual'::character varying)::text])))
+-- side_effect_intent_status_check (side_effect_intent)
+source:  CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'confirmed'::character varying, 'failed'::character varying, 'claim_retry_blocked'::character varying, 'manual_review_required'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('prepared'::character varying)::text, ('confirmed'::character varying)::text, ('failed'::character varying)::text, ('claim_retry_blocked'::character varying)::text, ('manual_review_required'::character varying)::text])))
+-- source_app_status_check (source_app)
+source:  CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'registered_disabled'::character varying])::text[])))
+restore: CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('registered_disabled'::character varying)::text])))
+-- source_label_label_kind_check (source_label)
+source:  CHECK (((label_kind)::text = ANY ((ARRAY['series_type'::character varying, 'recommend'::character varying, 'language'::character varying, 'agency'::character varying])::text[])))
+restore: CHECK (((label_kind)::text = ANY (ARRAY[('series_type'::character varying)::text, ('recommend'::character varying)::text, ('language'::character varying)::text, ('agency'::character varying)::text])))
+-- tag_classification_run_method_check (tag_classification_run)
+source:  CHECK (((method)::text = ANY ((ARRAY['deterministic_text'::character varying, 'offline_llm'::character varying])::text[])))
+restore: CHECK (((method)::text = ANY (ARRAY[('deterministic_text'::character varying)::text, ('offline_llm'::character varying)::text])))
+normalized (both sides equal):
+-- admin_identity_status_check: CHECKstatus=ANYARRAY['active','disabled']
+-- article_article_type_check: CHECKarticle_type=ANYARRAY['novel_article','blog_article','listicle','guide']
+-- article_content_mode_check: CHECKcontent_mode=ANYARRAY['manual','template']
+-- article_novel_rebind_batch_item_error_kind_check: CHECKerror_kindISNULLORerror_kind=ANYARRAY['drift','not_found','blocked','ineligible','fence_lost','unknown']
+-- article_novel_rebind_batch_item_status_check: CHECKstatus=ANYARRAY['pending','processing','applied','skipped','failed']
+-- article_novel_rebind_batch_status_check: CHECKstatus=ANYARRAY['ready','processing','completed','partial','failed']
+-- article_seo_visibility_check: CHECKseo_visibility=ANYARRAY['public','seo_only','hidden']
+-- article_status_check: CHECKstatus=ANYARRAY['draft','published','unpublished','takedown']
+-- article_template_applicable_article_type_check: CHECKapplicable_article_type=ANYARRAY['novel_article','blog_article','listicle','guide','any']
+-- article_template_status_check: CHECKstatus=ANYARRAY['draft','active','inactive']
+-- canonical_tag_keyword_match_mode_check: CHECKmatch_mode=ANYARRAY['unicode_word','cjk_contiguous','auto']
+-- canonical_tag_status_check: CHECKstatus=ANYARRAY['active','inactive']
+-- channel_account_credential_status_check: CHECKstatus=ANYARRAY['active','superseded','expired','invalid']
+-- channel_account_status_check: CHECKstatus=ANYARRAY['active','disabled']
+-- channel_app_status_check: CHECKstatus=ANYARRAY['active','inactive','registered_disabled']
+-- channel_capability_status_check: CHECKstatus=ANYARRAY['enabled','registered_disabled','registered_partial']
+-- channel_status_check: CHECKstatus=ANYARRAY['active','inactive','registered_disabled']
+-- channel_sync_task_item_status_check: CHECKstatus=ANYARRAY['pending','processing','success','skipped','failed']
+-- channel_sync_task_mode_check: CHECKmode=ANYARRAY['dry_run','apply']
+-- channel_sync_task_status_check: CHECKstatus=ANYARRAY['pending','processing','completed','completed_with_errors','failed','disabled','paused','cancelled']
+-- cron_run_status_check: CHECKstatus=ANYARRAY['created','task_created','failed']
+-- generic_task_item_status_check: CHECKstatus=ANYARRAY['pending','processing','success','skipped','failed']
+-- generic_task_mode_check: CHECKmode=ANYARRAY['dry_run','apply']
+-- generic_task_status_check: CHECKstatus=ANYARRAY['pending','processing','completed','completed_with_errors','failed','disabled','paused','cancelled']
+-- home_carousel_auto_batch_status_check: CHECKstatus=ANYARRAY['pending','processing','completed','failed']
+-- home_carousel_serving_source_check: CHECKsource=ANYARRAY['manual','new_novel','recency']
+-- indexnow_outbox_attempt_attempt_state_check: CHECKattempt_state=ANYARRAY['started','completed','unknown_outcome']
+-- indexnow_outbox_attempt_outcome_check: CHECKoutcome=ANYARRAY['started','accepted','retryable_failed','permanent_failed']
+-- indexnow_outbox_status_check: CHECKstatus=ANYARRAY['pending','processing','accepted','retry_wait','permanent_failed','dead_letter','cancelled']
+-- novel_canonical_tag_source_check: CHECKsource=ANYARRAY['manual','auto']
+-- novel_chapter_source_item_status_check: CHECKstatus=ANYARRAY['pending','materialized','failed']
+-- novel_chapter_status_check: CHECKstatus=ANYARRAY['preview','locked','stale','withdrawn']
+-- novel_effective_tag_provenance_check: CHECKprovenance=ANYARRAY['manual','mapped','auto']
+-- novel_source_item_status_check: CHECKstatus=ANYARRAY['pending','linked','ignored','stale']
+-- novel_status_check: CHECKstatus=ANYARRAY['draft','ready','published','unpublished','takedown']
+-- novel_tag_state_mode_check: CHECKmode=ANYARRAY['automatic','manual']
+-- promo_link_origin_check: CHECKorigin=ANYARRAY['upstream_existing','claimed']
+-- promo_link_status_check: CHECKstatus=ANYARRAY['pending','fetched','failed','registered_disabled']
+-- revenue_sync_batch_reconciliation_status_check: CHECKreconciliation_statusISNULLORreconciliation_status=ANYARRAY['matched','mismatched','not_applicable']
+-- revenue_sync_batch_status_check: CHECKstatus=ANYARRAY['pending','running','completed','partial_failed','failed']
+-- revenue_sync_batch_terminal_shape_check: CHECKstatus=ANYARRAY['pending','running']ORfinished_atISNOTNULLANDstatus<>ALLARRAY['failed','partial_failed']ORerror_codeISNOTNULL
+-- revenue_sync_scope_status_check: CHECKstatus=ANYARRAY['active','disabled']
+-- schedule_run_misfire_policy_check: CHECKmisfire_policy=ANYARRAY['bounded_catch_up','skip','mark_failed']
+-- schedule_run_status_check: CHECKstatus=ANYARRAY['due','enqueued','misfired','skipped','failed']
+-- schedule_run_trigger_kind_check: CHECKtrigger_kind=ANYARRAY['scheduled','manual']
+-- side_effect_intent_status_check: CHECKstatus=ANYARRAY['prepared','confirmed','failed','claim_retry_blocked','manual_review_required']
+-- source_app_status_check: CHECKstatus=ANYARRAY['active','inactive','registered_disabled']
+-- source_label_label_kind_check: CHECKlabel_kind=ANYARRAY['series_type','recommend','language','agency']
+-- tag_classification_run_method_check: CHECKmethod=ANYARRAY['deterministic_text','offline_llm']
+2 partial index(es) differ verbatim but are identical after WHERE-predicate normalization:
+-- channel_sync_active_scope_uidx (channel_sync_task)
+source:  CREATE UNIQUE INDEX channel_sync_active_scope_uidx ON public.channel_sync_task USING btree (task_type, channel_account_id, channel_app_id, operation_scope_hash) WHERE ((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying])::text[]))
+restore: CREATE UNIQUE INDEX channel_sync_active_scope_uidx ON public.channel_sync_task USING btree (task_type, channel_account_id, channel_app_id, operation_scope_hash) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]))
+-- generic_task_active_scope_uidx (generic_task)
+source:  CREATE UNIQUE INDEX generic_task_active_scope_uidx ON public.generic_task USING btree (task_type, channel_account_id, channel_app_id, operation_scope_hash) NULLS NOT DISTINCT WHERE ((status)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying])::text[]))
+restore: CREATE UNIQUE INDEX generic_task_active_scope_uidx ON public.generic_task USING btree (task_type, channel_account_id, channel_app_id, operation_scope_hash) NULLS NOT DISTINCT WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]))
+{"status":"ok","constraintCount":276,"indexCount":243,"triggerCount":3,"benignCheckTextDiffCount":49,"benignIndexTextDiffCount":2,"constraintDigest":"ab71163ddb3734cc475deee9a05ae84e","objectDigest":"f63b11605dd5e08231e336a8b47295cf"}
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  21:38:28
+   Duration  213ms (transform 9ms, setup 0ms, import 30ms, tests 97ms, environment 0ms)
+
+
+> cps-novel@0.5.14 typecheck
+> tsc --noEmit
+
+
+> cps-novel@0.5.14 lint
+> eslint
+
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/scripts/preproduction/image-identity.mjs
+  36:53  warning  'EX_UNAVAILABLE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/app/(admin)/tasks/_lib/task-copy.ts
+  64:38  warning  '_family' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/adapters/moboreader-rate-limit.ts
+  439:17  warning  '_endpoint' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/tasks/promo-claim-release.ts
+  139:3  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/database/wal-retention-guards.test.ts
+  8:3  warning  'readFileSync' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/delivery-handler.test.ts
+  99:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  99:63  warning  '_init' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/fake-db.ts
+  385:24  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/runtime/preproduction-deployment-contract.test.ts
+  867:13  warning  'dir' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/postgres.test.ts
+  1077:9  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1103:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1116:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1129:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/promo-claim-lifecycle-shard-enumeration-postgres.test.ts
+  198:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/preview-opening-postgres.test.ts
+   23:10  warning  'Prisma' is defined but never used           @typescript-eslint/no-unused-vars
+  440:11  warning  'second' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  531:11  warning  'held' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-batch-control-postgres.test.ts
+  59:3  warning  'TaskAdminError' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-release-postgres.test.ts
+  206:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+✖ 19 problems (0 errors, 19 warnings)
+  0 errors and 7 warnings potentially fixable with the `--fix` option.
+
+
+> cps-novel@0.5.14 test:backend
+> vitest run --project node tests/backend --maxWorkers=4
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+
+ Test Files  370 passed (370)
+      Tests  6041 passed | 1 skipped (6042)
+   Start at  21:38:43
+   Duration  103.70s (transform 3.51s, setup 0ms, import 17.61s, tests 370.66s, environment 14ms)
+
+
+> cps-novel@0.5.14 test
+> vitest run --maxWorkers=4
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+
+ Test Files  576 passed | 59 skipped (635)
+      Tests  10955 passed | 762 skipped (11717)
+   Start at  21:40:27
+   Duration  132.32s (transform 6.93s, setup 0ms, import 35.26s, tests 421.55s, environment 32.80s)
+
+ROLE_TESTS=PASS
+WEB_SECRET_READ=DENIED
+ANALYST_WRITE=DENIED
+APP_DDL=DENIED
+LOGICAL_BACKUP=PASS
+LOGICAL_RESTORE=PASS
+RESTORE_DURATION_MS=343
+TABLE_COUNT=58
+CONSTRAINT_DIGEST=ab71163ddb3734cc475deee9a05ae84e
+OBJECT_DIGEST=f63b11605dd5e08231e336a8b47295cf
+DICTIONARY_DRIFT=0_OF_1272
+PITR_STATUS=SCRIPT_AND_RUNBOOK_ONLY
+P1_06_VERIFICATION=PASS
+DISPOSABLE_DATABASE_CLEANED=yes

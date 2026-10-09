@@ -1,0 +1,53 @@
+
+> cps-novel@0.5.14 lint
+> eslint
+
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/scripts/preproduction/image-identity.mjs
+  36:53  warning  'EX_UNAVAILABLE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/app/(admin)/tasks/_lib/task-copy.ts
+  64:38  warning  '_family' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/adapters/moboreader-rate-limit.ts
+  439:17  warning  '_endpoint' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/tasks/promo-claim-release.ts
+  139:3  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/database/wal-retention-guards.test.ts
+  8:3  warning  'readFileSync' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/delivery-handler.test.ts
+  99:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  99:63  warning  '_init' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/fake-db.ts
+  385:24  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/runtime/preproduction-deployment-contract.test.ts
+  867:13  warning  'dir' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/postgres.test.ts
+  1077:9  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1103:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1116:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1129:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/promo-claim-lifecycle-shard-enumeration-postgres.test.ts
+  198:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/preview-opening-postgres.test.ts
+   23:10  warning  'Prisma' is defined but never used           @typescript-eslint/no-unused-vars
+  440:11  warning  'second' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  531:11  warning  'held' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-batch-control-postgres.test.ts
+  59:3  warning  'TaskAdminError' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-release-postgres.test.ts
+  206:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+✖ 19 problems (0 errors, 19 warnings)
+  0 errors and 7 warnings potentially fixable with the `--fix` option.
+

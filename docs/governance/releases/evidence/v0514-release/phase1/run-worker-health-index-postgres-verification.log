@@ -1,0 +1,39 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14
+WORKER_HEALTH_SEED {"seedSeconds":4.4,"tables":[{"rel":"channel_sync_task_item","rows":80004,"heap_mb":36.8,"total_mb":49},{"rel":"generic_task_item","rows":402012,"heap_mb":195.5,"total_mb":252.4}]}
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 基线（迁移前的生产状态）：旧写法心跳查询对两张大表都是 Seq Scan；过期锁查询早已走既有的 expired_lease 索引
+WORKER_HEALTH_PLAN {"phase":"baseline_before_migration","query":"legacy_heartbeat","executionMs":24.06,"sharedBlocks":29731,"scans":["Seq Scan:generic_task_item","Seq Scan:channel_sync_task_item"]}
+WORKER_HEALTH_PLAN {"phase":"baseline_before_migration","query":"expired_locks","executionMs":0.09,"sharedBlocks":26,"scans":["Index Scan:channel_sync_task_item@channel_sync_task_item_expired_lease_idx","Index Scan:channel_sync_task@channel_sync_task_pkey","Index Scan:generic_task_item@generic_task_item_expired_lease_idx","Index Scan:generic_task@generic_task_pkey"]}
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 基线（迁移前的生产状态）：旧写法心跳查询对两张大表都是 Seq Scan；过期锁查询早已走既有的 expired_lease 索引
+WORKER_HEALTH_PLAN {"phase":"control_expired_lease_idx_dropped_rolled_back","query":"expired_locks","executionMs":0.11,"sharedBlocks":41,"scans":["Seq Scan:channel_sync_task","Index Scan:channel_sync_task_item@channel_sync_item_task_status_idx","Seq Scan:generic_task","Index Scan:generic_task_item@generic_task_item_task_status_idx"]}
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 迁移 SQL 本身建出恰好两个心跳部分索引：定义、有效性、体积；既有 expired_lease 索引原样在位
+WORKER_HEALTH_INDEX_BUILD {"totalMs":40,"perIndex":[{"index":"generic_task_item_heartbeat_idx","ms":29},{"index":"channel_sync_task_item_heartbeat_idx","ms":7}]}
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 迁移 SQL 本身建出恰好两个心跳部分索引：定义、有效性、体积；既有 expired_lease 索引原样在位
+WORKER_HEALTH_INDEX_SIZE [{"index":"channel_sync_task_item_expired_lease_idx","bytes":16384},{"index":"channel_sync_task_item_heartbeat_idx","bytes":16384},{"index":"generic_task_item_expired_lease_idx","bytes":16384},{"index":"generic_task_item_heartbeat_idx","bytes":16384}]
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 发布的两条查询都走部分索引：两张表都没有 Seq Scan，缓冲区读取是有界的少数页
+WORKER_HEALTH_PLAN {"phase":"after_indexes","query":"heartbeat","executionMs":0.01,"sharedBlocks":4,"scans":["Index Only Scan Backward:channel_sync_task_item@channel_sync_task_item_heartbeat_idx","Index Only Scan Backward:generic_task_item@generic_task_item_heartbeat_idx"]}
+WORKER_HEALTH_PLAN {"phase":"after_indexes","query":"expired_locks","executionMs":0.03,"sharedBlocks":18,"scans":["Index Scan:channel_sync_task_item@channel_sync_task_item_expired_lease_idx","Index Scan:channel_sync_task@channel_sync_task_pkey","Index Scan:generic_task_item@generic_task_item_expired_lease_idx","Index Scan:generic_task@generic_task_pkey"]}
+
+stdout | tests/integration/health/worker-health-indexes-postgres.test.ts > worker health partial indexes on disposable PostgreSQL 16.14 > 对照：旧写法文本在有索引后虽不再 Seq Scan，却读全部在途心跳（O(在途行数)）——改写把它收成每表 1 行
+WORKER_HEALTH_PLAN {"phase":"after_indexes","query":"legacy_heartbeat_text","executionMs":0.02,"sharedBlocks":4,"scans":["Index Only Scan:channel_sync_task_item@channel_sync_task_item_heartbeat_idx","Index Only Scan:generic_task_item@generic_task_item_heartbeat_idx"]}
+
+ ✓ |node| tests/integration/health/worker-health-indexes-postgres.test.ts (7 tests) 4959ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  21:48:00
+   Duration  5.13s (transform 47ms, setup 0ms, import 69ms, tests 4.96s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-worker-health-secrets.vx7KCn/integration-result.json
+WORKER_HEALTH_INDEX_INTEGRATION=PASS passed=7 skipped=0
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+WORKER_HEALTH_INDEX_DICTIONARY_DRIFT=0
+WORKER_HEALTH_INDEX_POSTGRES_VERIFICATION=PASS
+WORKER_HEALTH_INDEX_DISPOSABLE_DATABASE_CLEANED=yes

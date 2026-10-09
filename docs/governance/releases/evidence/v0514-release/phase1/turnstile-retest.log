@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+
+ Test Files  1 passed (1)
+      Tests  68 passed (68)
+   Start at  21:26:22
+   Duration  18.32s (transform 34ms, setup 0ms, import 120ms, tests 18.12s, environment 0ms)
+

@@ -1,0 +1,187 @@
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_b38_20261009214406_50295", schema "public" at "127.0.0.1:53786"
+
+25 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+B38_MIGRATION_COUNT=PASS applied=25
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+ ✓ |node| tests/integration/site/blog-pagination-postgres.test.ts (9 tests) 130ms
+ ✓ |node| tests/integration/site/card-taxonomy-from-table-postgres.test.ts (11 tests) 2344ms
+ ✓ |node| tests/integration/site/consistency-invariants-postgres.test.ts (70 tests) 65073ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · en  2505ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · es  1064ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · ko  638ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · en  2002ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · es  831ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · ko  543ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · en  1858ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · es  715ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · ko  402ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · en  1922ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · es  757ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · ko  437ms
+       ✓ C·某分类的 hreflang 语种集合 === 该分类第 1 页非 null 的语种集合（15 个登记语种逐个对）  1464ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · en  2239ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · es  1176ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · ko  717ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · en  1587ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · es  857ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · ko  571ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · en  1518ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · es  738ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · ko  471ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · en  1569ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · es  776ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · ko  486ms
+       ✓ C·某分类的 hreflang 语种集合 === 该分类第 1 页非 null 的语种集合（15 个登记语种逐个对）  1591ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · en  3281ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · es  1485ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · ko  757ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · en  2694ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · es  1198ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · ko  645ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · en  2540ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · es  1033ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · ko  493ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · en  2617ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · es  1097ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · ko  527ms
+       ✓ C·某分类的 hreflang 语种集合 === 该分类第 1 页非 null 的语种集合（15 个登记语种逐个对）  1717ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · en  1770ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · es  971ms
+       ✓ A·站点地图分类网址集合（含 ?page=N）=== 分类页真实返回非 null 的 (slug, page) 集合 · ko  598ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · en  1225ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · es  729ms
+       ✓ B·listPublicCategories 的 slug 集合 === 第 1 页非 null 的分类集合 · ko  483ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · en  1150ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · es  634ms
+       ✓ D·totalCount === 所有页卡片数之和，totalPages === ceil(totalCount / 20) · ko  391ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · en  1189ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · es  647ms
+       ✓ E·站点地图用的页数映射（listPublicCategoryPageCounts，worker_app）=== 页面自己的总页数 · ko  420ms
+       ✓ C·某分类的 hreflang 语种集合 === 该分类第 1 页非 null 的语种集合（15 个登记语种逐个对）  1350ms
+     ✓ 矩阵缓存是 60 秒窗口：缓存期内矩阵不变，而分页 / 计数 / 404 判定是实时的  341ms
+ ✓ |node| tests/integration/site/list-equivalence-postgres.test.ts (34 tests) 20894ms
+       ✓ 全部作品页 en：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  1433ms
+       ✓ 全部作品页 es：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  381ms
+       ✓ 分类页 en：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  2596ms
+       ✓ 分类页 es：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  968ms
+       ✓ 分类页 ko：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  745ms
+       ✓ 全部作品页 en：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  1025ms
+       ✓ 全部作品页 es：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  314ms
+       ✓ 分类页 en：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  3077ms
+       ✓ 分类页 es：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  1135ms
+       ✓ 分类页 ko：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  684ms
+       ✓ 全部作品页 en：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  1014ms
+       ✓ 全部作品页 es：逐页拼起来与参照逐 id 相等，totalCount / totalPages 相等  302ms
+       ✓ 分类页 en：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  1779ms
+       ✓ 分类页 en：每个启用分类逐页拼起来与参照（冻结的现场计算）逐 id 相等；没有书的分类是 null  355ms
+ ✓ |node| tests/integration/site/promo-ready-sql-equivalence-postgres.test.ts (6 tests) 1000ms
+     ✓ U+0001–U+FFFF 每个字符单独作为 web_url：app_url ∈ {NULL, '', 正常值} × status ∈ {fetched, pending}  655ms
+     ✓ U+0001–U+FFFF 每个字符单独作为 app_url：web_url ∈ {NULL, '', 正常值}（status = fetched）  320ms
+ ✓ |node| tests/integration/site/real-roles-postgres.test.ts (5 tests) 1303ms
+ ✓ |node| tests/integration/site/scale-trigger-postgres.test.ts (4 tests) 5642ms
+     ✓ 超过：一个语种 60,001 本、其中一个分类 40,001 本 → 告警（含语种 / 分类 / 数量）+ scale-check 退出 3  4994ms
+     ✓ 恰好等于阈值不算超过（严格大于）：下架分类里的 1 本 → 40,000 / 60,000 → 退出 0；补回 → 又超过  575ms
+
+ Test Files  7 passed (7)
+      Tests  139 passed (139)
+   Start at  21:44:09
+   Duration  97.48s (transform 199ms, setup 0ms, import 537ms, tests 96.39s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-b38-public-list-secrets.ONLM5A/integration-result.json
+  tests/integration/site/promo-ready-sql-equivalence-postgres.test.ts passed=6 skipped=0
+  tests/integration/site/list-equivalence-postgres.test.ts passed=34 skipped=0
+  tests/integration/site/consistency-invariants-postgres.test.ts passed=70 skipped=0
+  tests/integration/site/card-taxonomy-from-table-postgres.test.ts passed=11 skipped=0
+  tests/integration/site/blog-pagination-postgres.test.ts passed=9 skipped=0
+  tests/integration/site/real-roles-postgres.test.ts passed=5 skipped=0
+  tests/integration/site/scale-trigger-postgres.test.ts passed=4 skipped=0
+B38_PUBLIC_LIST_INTEGRATION=PASS files=7 passed=139 skipped=0
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+B38_DICTIONARY_DRIFT=0
+B38_DISPOSABLE_DATABASE_CLEANED=yes
+B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS

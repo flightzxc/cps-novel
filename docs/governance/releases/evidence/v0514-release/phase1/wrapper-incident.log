@@ -1,0 +1,6 @@
+2026-10-09T12:48:27Z WRAPPER_ERROR
+All 36 run-*-verification.sh runners had exited 0.
+The running .tmp/v0514-release/gates.sh had been rewritten to add network retry handling. Bash subsequently read a shifted file offset at the end of the runners branch.
+Observed output: .tmp/v0514-release/gates.sh: line 54: se/brand-image.log: No such file or directory
+No brand-image.log existed, and the brand command did not start because output redirection failed.
+Recovery: checked the complete current wrapper with bash -n; launched a fresh process with the extras branch. Existing runner evidence was preserved. The wrapper was not edited again while running.

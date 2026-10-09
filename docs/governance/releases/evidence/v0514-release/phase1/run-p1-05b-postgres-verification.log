@@ -1,0 +1,245 @@
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 517 packages, and audited 518 packages in 9s
+
+171 packages are looking for funding
+  run `npm fund` for details
+
+11 high severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+Prisma schema loaded from prisma/schema.prisma
+The schema at prisma/schema.prisma is valid 🚀
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 130ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_p1_05b_20261009213312_80003", schema "public" at "127.0.0.1:51645"
+
+25 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_p1_05b_20261009213312_80003", schema "public" at "127.0.0.1:51645"
+
+25 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+No difference detected.
+
+No difference detected.
+
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+
+> cps-novel@0.5.14 typecheck
+> tsc --noEmit
+
+
+> cps-novel@0.5.14 lint
+> eslint
+
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/scripts/preproduction/image-identity.mjs
+  36:53  warning  'EX_UNAVAILABLE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/app/(admin)/tasks/_lib/task-copy.ts
+  64:38  warning  '_family' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/adapters/moboreader-rate-limit.ts
+  439:17  warning  '_endpoint' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/src/lib/tasks/promo-claim-release.ts
+  139:3  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/database/wal-retention-guards.test.ts
+  8:3  warning  'readFileSync' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/delivery-handler.test.ts
+  99:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  99:63  warning  '_init' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/indexnow/fake-db.ts
+  385:24  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/backend/runtime/preproduction-deployment-contract.test.ts
+  867:13  warning  'dir' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/postgres.test.ts
+  1077:9  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1103:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1116:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  1129:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/catalog-batch/promo-claim-lifecycle-shard-enumeration-postgres.test.ts
+  198:7  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/preview-opening-postgres.test.ts
+   23:10  warning  'Prisma' is defined but never used           @typescript-eslint/no-unused-vars
+  440:11  warning  'second' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  531:11  warning  'held' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-batch-control-postgres.test.ts
+  59:3  warning  'TaskAdminError' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/integration/tasks/promo-claim-release-postgres.test.ts
+  206:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+✖ 19 problems (0 errors, 19 warnings)
+  0 errors and 7 warnings potentially fixable with the `--fix` option.
+
+
+> cps-novel@0.5.14 test:backend
+> vitest run --project node tests/backend --maxWorkers=4
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+
+ Test Files  370 passed (370)
+      Tests  6041 passed | 1 skipped (6042)
+   Start at  21:34:00
+   Duration  113.18s (transform 3.50s, setup 0ms, import 17.43s, tests 405.87s, environment 14ms)
+
+
+> cps-novel@0.5.14 test:integration
+> vitest run --project node tests/integration --maxWorkers=4
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+P1_05B_INDEX_PLANS={"channel_sync_task_item":{"pending":["channel_sync_task_item_pending_global_idx"],"recovery":["channel_sync_task_item_expired_lease_idx"]},"generic_task_item":{"pending":["generic_task_item_pending_global_idx"],"recovery":["generic_task_item_expired_lease_idx"]}}
+
+ Test Files  4 passed | 58 skipped (62)
+      Tests  38 passed | 751 skipped (789)
+   Start at  21:35:53
+   Duration  2.83s (transform 2.06s, setup 0ms, import 6.05s, tests 533ms, environment 3ms)
+
+
+> cps-novel@0.5.14 test
+> vitest run --maxWorkers=4
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+P1_05B_INDEX_PLANS={"channel_sync_task_item":{"pending":["channel_sync_task_item_pending_global_idx"],"recovery":["channel_sync_task_item_expired_lease_idx"]},"generic_task_item":{"pending":["generic_task_item_pending_global_idx"],"recovery":["generic_task_item_expired_lease_idx"]}}
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+
+ Test Files  577 passed | 58 skipped (635)
+      Tests  10965 passed | 752 skipped (11717)
+   Start at  21:35:57
+   Duration  133.10s (transform 6.83s, setup 0ms, import 35.31s, tests 424.30s, environment 32.70s)
+
+16.15 (Debian 16.15-1.pgdg13+2)
+P1_05B_VERIFICATION=PASS
+P1_05B_DATABASE_CLEANED=yes

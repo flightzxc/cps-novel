@@ -1,0 +1,19 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+ ✓ |node| tests/integration/tasks/promo-claim-credential-replacement-postgres.test.ts (4 tests) 327ms
+ ✓ |node| tests/integration/tasks/promo-claim-release-postgres.test.ts (24 tests) 1672ms
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  21:44:04
+   Duration  2.44s (transform 199ms, setup 0ms, import 303ms, tests 2.00s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-promo-claim-release-secrets.ruBtrd/integration-result.json
+  tests/integration/tasks/promo-claim-release-postgres.test.ts passed=24 skipped=0
+  tests/integration/tasks/promo-claim-credential-replacement-postgres.test.ts passed=4 skipped=0
+PROMO_CLAIM_RELEASE_INTEGRATION=PASS files=2 passed=28 skipped=0
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+PROMO_CLAIM_RELEASE_DICTIONARY_DRIFT=0
+PROMO_CLAIM_RELEASE_POSTGRES_VERIFICATION=PASS
+PROMO_CLAIM_RELEASE_DISPOSABLE_DATABASE_CLEANED=yes

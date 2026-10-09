@@ -1,0 +1,302 @@
+FINAL=bf61b5ea276a0981870cdfa63578a822a65836f3
+TREE=38e87f2331aad0667c6b27250477ba0e6e76bfcd
+RUNNERS_ALL=PASS count=36
+FULL_TEST=PASS files=576 skipped_files=59 tests=10955 skipped_tests=762 failed=0 unhandled=0
+
+# archive-build.log
+IMAGE=PASS anchor=config_id
+ARCHIVE_BUILD=PASS
+ARCHIVE_SHA256=b00ad7630cb9ac804a4f4314434f624d025bd88d99bc67802c2197e760d700f2
+IMAGE_TARGET_DIGEST=sha256:b1c27566d30f350d150970368d830712cf168c670fe58879420490aa391c6b19
+IMAGE_CONFIG_DIGEST=sha256:95fb74f66c2eb88e56ef5091ef18a79798179decf4025e9973b0eb602220998e
+
+# archive-verify.log
+IDENTITY=PASS
+VERIFY_OFFLINE=PASS
+IMAGE=PASS anchor=config_id
+VERIFY=PASS
+
+# b21.log
+B21_MEASUREMENT=PASS
+
+# brand-image.log
+RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+BRAND_IMAGE=PASS image=cps-novel:cutover-local-bf61b5e status=200 content_type=image/png sha256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb
+
+# compose.log
+COMPOSE_VARIABLES=PASS file=docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/production-like/docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/preproduction/docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=.env.example added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/preproduction/preprod.env.example added=0 removed=0
+COMPOSE_RENDER=PASS mode=root services=5
+COMPOSE_RENDER=PASS mode=production-like services=7
+COMPOSE_RENDER=PASS mode=preproduction services=6
+COMPOSE_ALL=PASS
+
+# image-e2e.log
+E2E_MIGRATIONS=PASS applied=25
+EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+IMAGE_VERSIONS=PASS next=16.3.8 nanoid=3.3.18 dev_absent=yes
+IMAGE_HEALTH=PASS {"ok":true,"status":"healthy","build":{"version":"0.5.14","commit":"bf61b5ea276a0981870cdfa63578a822a65836f3","builtAt":"2026-10-09T12:26:09Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.14","commit":"bf61b5ea276a0981870cdfa63578a822a65836f3"}},"database":{"status":"passed","reason":null,"durationMs":154},"reasons":[]}
+IMAGE_E2E=PASS
+
+# nginx-matrix.log
+NGINX_MATRIX=PASS
+NGINX_MATRIX=PASS mode=rehearsal
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/novel/book prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/go/a prefetch=none statuses=200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/novel/book prefetch=2 statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=crawler path=/search?q=a prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=rehearsal case=page_concurrency limit=10 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=prefetch_concurrency limit=4 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=go_concurrency limit=16 rejected=429
+NGINX_RATE=PASS mode=rehearsal case=mixed_locale_rate json_logs=PASS
+NGINX_RATE=PASS mode=rehearsal case=search_budget passed=11 rejected=49 page_budget_untouched=PASS regex_isolated=PASS
+NGINX_RATE=PASS mode=rehearsal case=page_flood_leaves_search_budget
+NGINX_MATRIX=PASS mode=public
+NGINX_RATE=PASS mode=public case=crawler path=/novel/book prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/go/a prefetch=none statuses=200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/novel/book prefetch=2 statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=crawler path=/search?q=a prefetch=none statuses=200,200,200,429
+NGINX_RATE=PASS mode=public case=page_concurrency limit=10 rejected=429
+NGINX_RATE=PASS mode=public case=prefetch_concurrency limit=4 rejected=429
+NGINX_RATE=PASS mode=public case=go_concurrency limit=16 rejected=429
+NGINX_RATE=PASS mode=public case=mixed_locale_rate json_logs=PASS
+NGINX_RATE=PASS mode=public case=search_budget passed=11 rejected=49 page_budget_untouched=PASS regex_isolated=PASS
+NGINX_RATE=PASS mode=public case=page_flood_leaves_search_budget
+NGINX_MATRIX_ALL=PASS
+
+# public-cutover-mutations.log
+MUTATION=PASS name=locale_omission exit=1 restored=git_diff_quiet
+MUTATION=PASS name=crawler_ip_key exit=1 restored=git_diff_quiet
+MUTATION=PASS name=unregistered_indexnow exit=1 restored=git_diff_quiet
+MUTATION=PASS name=delivery_allowlist_desync exit=1 restored=git_diff_quiet
+MUTATION=PASS name=entry_guard_realpath exit=1 restored=git_diff_quiet
+MUTATION=PASS name=render_empty_guard_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=gate_empty_check_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=gate_shape_check_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=candidate_admin_auth_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=hash_check_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=ready_wait_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=ready_listener_probe_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=ready_old_worker_check_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=ready_master_blip_tolerance_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=search_location_removed exit=1 restored=git_diff_quiet
+MUTATION=PASS name=search_location_page_rate exit=1 restored=git_diff_quiet
+MUTATION=PASS name=search_regex_unquoted exit=1 restored=git_diff_quiet
+MUTATION=PASS name=public_noindex exit=1 restored=git_diff_quiet
+PUBLIC_CUTOVER_MUTATIONS=PASS
+
+# run-add-admin-identity-postgres-verification.log
+ADD_ADMIN_IDENTITY_INTEGRATION=PASS passed=2 skipped=0
+ADD_ADMIN_IDENTITY_DICTIONARY_DRIFT=0
+ADD_ADMIN_IDENTITY_POSTGRES_VERIFICATION=PASS
+
+# run-article-blog-rebind-postgres-verification.log
+ARTICLE_BLOG_REBIND_INTEGRATION=PASS files=6 passed=44 skipped=0
+ARTICLE_BLOG_REBIND_DICTIONARY_DRIFT=0
+ARTICLE_BLOG_REBIND_POSTGRES_VERIFICATION=PASS
+
+# run-article-publish-batch-postgres-verification.log
+ARTICLE_PUBLISH_BATCH_INTEGRATION=PASS files=1 passed=12 skipped=0
+ARTICLE_PUBLISH_BATCH_DICTIONARY_DRIFT=0
+ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=PASS
+
+# run-article-template-version-postgres-verification.log
+ARTICLE_TEMPLATE_VERSION_POSTGRES_VERIFICATION=PASS
+
+# run-catalog-batch-postgres-verification.log
+CATALOG_BATCH_INTEGRATION=PASS files=4 passed=57 skipped=0
+CATALOG_BATCH_DICTIONARY_DRIFT=0
+CATALOG_BATCH_POSTGRES_VERIFICATION=PASS
+
+# run-effective-tag-projection-postgres-verification.log
+B38_MIGRATION_COUNT=PASS applied=25
+B38_EFFECTIVE_TAG_INTEGRATION=PASS files=3 passed=33 skipped=0 failed=0
+B38_DICTIONARY_DRIFT=0
+B38_EFFECTIVE_TAG_POSTGRES_VERIFICATION=PASS
+
+# run-indexnow-sweep-postgres-verification.log
+WO6_INTEGRATION=PASS passed=20 skipped=0
+WO6_DICTIONARY_DRIFT=0
+WO6_POSTGRES_VERIFICATION=PASS
+
+# run-next-proxy-probe-verification.log
+NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0
+NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.8
+NEXT_PROBE_CLEANUP=PASS
+
+# run-novel-article-decouple-postgres-verification.log
+NOVEL_ARTICLE_DECOUPLE_POSTGRES_VERIFICATION=PASS
+
+# run-p1-05b-postgres-verification.log
+P1_05B_VERIFICATION=PASS
+
+# run-p1-06-postgres-verification.log
+LOGICAL_BACKUP=PASS
+LOGICAL_RESTORE=PASS
+ROLE_TESTS=PASS
+LOGICAL_BACKUP=PASS
+LOGICAL_RESTORE=PASS
+DICTIONARY_DRIFT=0_OF_1272
+P1_06_VERIFICATION=PASS
+
+# run-p1-08b-postgres-verification.log
+MIGRATION_DEPLOY=PASS
+MIGRATION_REAPPLY=PASS
+SCHEMA_DIFF=PASS
+P1_06_REGRESSION=PASS
+P1_07_REGRESSION=PASS
+P1_08B_POSTGRES_VERIFICATION=PASS
+
+# run-p2-02b-article-template-postgres-verification.log
+P2_02B_TEMPLATE_LIFECYCLE=PASS tests=8
+P2_02B_ARTICLE_RENDER=PASS tests=5
+P2_02B_ARTICLE_TEMPLATE_POSTGRES_VERIFICATION=PASS
+
+# run-p2-04-admin-content-postgres-verification.log
+P2_04_ADMIN_CONTENT_INTEGRATION=PASS files=1 passed=4 skipped=0
+P2_04_ADMIN_CONTENT_DICTIONARY_DRIFT=0
+P2_04_ADMIN_CONTENT_POSTGRES_VERIFICATION=PASS
+
+# run-phase-b-entity-fix-postgres-verification.log
+PHASE_B_ENTITY_FIX_INTEGRATION_TESTS=PASS
+PHASE_B_ENTITY_FIX_POSTGRES_CLEANUP=PASS
+
+# run-phase-d-postgres-verification.log
+PHASE_D_PG_GATED_TESTS=PASS
+PHASE_D_POSTGRES_CLEANUP=PASS
+
+# run-phase-d-role-password-postgres-verification.log
+PHASE_D_ROLE_VERIFY_AFTER_ALIGN=PASSED
+PHASE_D_ROLE_PASSWORD_SELF_HEAL=PASS
+PHASE_D_ROLE_POSTGRES_CLEANUP=PASS
+
+# run-preprod-db-contract-verification.log
+PREPROD_DB_CONTRACT_SETUP=PASS database=cps_novel migrations=applied
+PREPROD_DB_CONTRACT_CASE_POSITIVE_GRANTS_REPLAY=PASS
+PREPROD_DB_CONTRACT_CASE_POSITIVE_PRIVILEGE_CHECK=PASS
+PREPROD_DB_CONTRACT_CASE_POSITIVE_WEB_APP_INSERT=PASS
+PREPROD_DB_CONTRACT_CASE_POSITIVE_BACKUP_ROLE_PG_DUMP=PASS
+PREPROD_DB_CONTRACT_CASE_POSITIVE=PASS
+PREPROD_DB_CONTRACT_CASE_NEGATIVE_PRE_FIX_SETUP=PASS database=cps_novel_nogrants migrations=applied grants=NOT_REPLAYED
+PREPROD_DB_CONTRACT_CASE_NEGATIVE_PRE_FIX=PASS
+PREPROD_DB_CONTRACT_CASE_ATOMICITY_SETUP=PASS database=cps_novel_atomicity migrations=applied grants=NOT_REPLAYED
+PREPROD_DB_CONTRACT_CASE_ATOMICITY_SEED=PASS before=backup:t,web:t
+PREPROD_DB_CONTRACT_CASE_ATOMICITY_STATE_UNCHANGED=PASS before=backup:t,web:t after=backup:t,web:t
+PREPROD_DB_CONTRACT_CASE_ATOMICITY=PASS
+PREPROD_DB_CONTRACT_CASE_ATOMICITY_MUTATION_SETUP=PASS database=cps_novel_atomicity_mutation migrations=applied grants=NOT_REPLAYED
+PREPROD_DB_CONTRACT_CASE_ATOMICITY_MUTATION=PASS without_single_transaction_strips=web_admin_identity:f,web_operation_audit:f backup_role_operation_audit:t_(re-granted_before_injection_point_in_file_order,_expected)
+PREPROD_DB_CONTRACT_CASE_CHECK_HAS_TEETH_WEB_APP_OPERATION_AUDIT=PASS reason=web_app_missing_operation_audit_privilege
+PREPROD_DB_CONTRACT_CASE_CHECK_HAS_TEETH_BACKUP_ROLE_TABLE_SELECT=PASS reason=backup_role_missing_table_select table=public.operation_audit
+PREPROD_DB_CONTRACT_CASE_CHECK_HAS_TEETH_UNEXPECTED_ADMIN_AUTH_SELECT=PASS reason=unexpected_admin_auth_select role=worker_app
+PREPROD_DB_CONTRACT_CASE_CHECK_HAS_TEETH=PASS
+PREPROD_DB_CONTRACT_CASE_REASON_FALLBACK=PASS reason=unknown detail_present=yes
+PREPROD_DB_CONTRACT_CASE_REASON_FALLBACK_STRUCTURED=PASS reason=web_app_missing_operation_audit_privilege
+PREPROD_DB_CONTRACT=PASS
+PREPROD_DB_CONTRACT_CLEANUP=PASS
+
+# run-preview-account-hold-postgres-verification.log
+PREVIEW_HOLD_INTEGRATION=PASS passed=7 skipped=0 filtered=false
+PREVIEW_HOLD_DICTIONARY_DRIFT=0
+PREVIEW_HOLD_POSTGRES_VERIFICATION=PASS
+
+# run-preview-opening-postgres-verification.log
+PREVIEW_OPENING_INTEGRATION=PASS passed=27 skipped=0 filtered=false
+PREVIEW_OPENING_DICTIONARY_DRIFT=0
+PREVIEW_OPENING_POSTGRES_VERIFICATION=PASS
+
+# run-promo-claim-batch-control-postgres-verification.log
+PROMO_CLAIM_BATCH_CONTROL_DICTIONARY_DRIFT=0
+PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
+
+# run-promo-claim-release-postgres-verification.log
+PROMO_CLAIM_RELEASE_INTEGRATION=PASS files=2 passed=28 skipped=0
+PROMO_CLAIM_RELEASE_DICTIONARY_DRIFT=0
+PROMO_CLAIM_RELEASE_POSTGRES_VERIFICATION=PASS
+
+# run-public-list-postgres-verification.log
+B38_MIGRATION_COUNT=PASS applied=25
+B38_PUBLIC_LIST_INTEGRATION=PASS files=7 passed=139 skipped=0
+B38_DICTIONARY_DRIFT=0
+B38_PUBLIC_LIST_POSTGRES_VERIFICATION=PASS
+
+# run-publication-preview-postgres-verification.log
+PUBLICATION_PREVIEW_INTEGRATION=PASS passed=12 skipped=0 filtered=false
+PUBLICATION_PREVIEW_DICTIONARY_DRIFT=0
+PUBLICATION_PREVIEW_POSTGRES_VERIFICATION=PASS
+
+# run-revenue-dashboard-postgres-verification.log
+REVENUE_DASHBOARD_GRANTS_REPLAY_1=PASS
+REVENUE_DASHBOARD_GRANTS_REPLAY_2=PASS
+REVENUE_DASHBOARD_INTEGRATION=PASS files=1 passed=24 skipped=0
+REVENUE_DASHBOARD_DICTIONARY_DRIFT=0
+REVENUE_DASHBOARD_POSTGRES_VERIFICATION=PASS
+
+# run-site-search-postgres-verification.log
+PN15_MIGRATION_COUNT=PASS applied=25
+PN15_SITE_SEARCH_INTEGRATION=PASS files=1 passed=30 skipped=0
+PN15_SITE_SEARCH_POSTGRES_VERIFICATION=PASS
+
+# run-sitemap-refresh-postgres-verification.log
+SITEMAP_REFRESH_INTEGRATION=PASS files=3 passed=34 skipped=0
+SITEMAP_REFRESH_DICTIONARY_DRIFT=0
+SITEMAP_REFRESH_POSTGRES_VERIFICATION=PASS
+
+# run-tagging-auto-preview-postgres-verification.log
+TAGGING_AUTO_PREVIEW_ZERO_WRITES=PASS tables_checked=59
+TAGGING_AUTO_PREVIEW_REPRODUCIBLE=PASS seed_reused=true
+TAGGING_AUTO_PREVIEW_OUTPUT_SHAPE=PASS
+TAGGING_IMPACT_REPORT=PASS matched=4 changed=1 tagsRemoved=1 locales=b23,en,ja
+TAGGING_AUTO_PREVIEW_MUTATION_CAUGHT=PASS exit_code=64
+TAGGING_IMPACT_MUTATION_CAUGHT=PASS exit_code=1
+TAGGING_AUTO_PREVIEW_MUTATION_ZERO_WRITES=PASS tables_checked=59
+TAGGING_AUTO_PREVIEW_MUTATION_SCRATCH_FILE_REMOVED=PASS
+TAGGING_AUTO_PREVIEW_POSTGRES_VERIFICATION=PASS
+
+# run-tagging-public-auto-postgres-verification.log
+WO7_INTEGRATION=PASS passed=33 skipped=0
+P2_06_5_DICTIONARY_DRIFT=0
+P2_06_5_POSTGRES_VERIFICATION=PASS
+
+# run-task-claim-control-postgres-verification.log
+TASK_CLAIM_CONTROL_INTEGRATION=PASS files=2 passed=19 skipped=0
+TASK_CLAIM_CONTROL_DICTIONARY_DRIFT=0
+TASK_CLAIM_CONTROL_POSTGRES_VERIFICATION=PASS
+
+# run-tkd-repair-postgres-verification.log
+TKD_REPAIR_INTEGRATION=PASS passed=17 skipped=0 filtered=false
+TKD_REPAIR_POSTGRES_VERIFICATION=PASS
+
+# run-worker-health-index-postgres-verification.log
+WORKER_HEALTH_INDEX_INTEGRATION=PASS passed=7 skipped=0
+WORKER_HEALTH_INDEX_DICTIONARY_DRIFT=0
+WORKER_HEALTH_INDEX_POSTGRES_VERIFICATION=PASS
+
+# run-worker-light-postgres-verification.log
+WO5_INTEGRATION=PASS passed=12 skipped=0
+WO5_DICTIONARY_DRIFT=0
+WO5_POSTGRES_VERIFICATION=PASS
+
+# run-x2-postgres-hardening-verification.log
+X2_ROLE_TIMEOUTS=PASS
+X2_POSTGRESQL_CONFIG=PASS
+X2_PG_STAT_STATEMENTS=PASS
+X2_POSTGRES_HARDENING_VERIFICATION=PASS
+
+# run-x6-site-setting-postgres-verification.log
+X6_GRANTS_REPLAY=PASS
+X6_SITE_SETTING_SERVICE=PASS
+X6_WEB_MINIMUM_UPDATE_GRANT=PASS
+X6_WORKER_READ_ONLY=PASS
+X6_DICTIONARY_DRIFT=PASS
+X6_SITE_SETTING_POSTGRES_VERIFICATION=PASS
+
+# run-x9-postgres-verification.log
+X9_WEB_INTENT_COLUMN_GRANT=PASS
+X9_MANUAL_REVIEW_CAS_AND_AUDIT=PASS
+X9_POSTGRES_VERIFICATION=PASS
+AUDIT_PRODUCTION critical=0 high=4 high_packages=@prisma/config,deepmerge-ts,effect,prisma
+AUDIT_ALL critical=0 high=11 high_packages=@next/eslint-plugin-next,@prisma/config,brace-expansion,braces,deepmerge-ts,effect,eslint-config-next,fast-glob,js-yaml,micromatch,prisma

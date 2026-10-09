@@ -1,0 +1,33 @@
+
+> cps-novel@0.5.14 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.hoisted() call in "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/tests/ui/rc11-admin-auth-recovery-matrix.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+
+ Test Files  576 passed | 59 skipped (635)
+      Tests  10955 passed | 762 skipped (11717)
+   Start at  21:26:40
+   Duration  227.41s (transform 5.64s, setup 0ms, import 30.25s, tests 358.65s, environment 29.93s)
+

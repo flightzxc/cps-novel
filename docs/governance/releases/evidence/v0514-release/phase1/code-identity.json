@@ -1,0 +1,13 @@
+{
+  "baseline": "a5daf6e586f39d9b00911d82d150f177e4a0f65d",
+  "final": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "tree": "38e87f2331aad0667c6b27250477ba0e6e76bfcd",
+  "installed": {
+    "next": "16.3.8",
+    "vitest": "4.1.11",
+    "nanoid": "3.3.18"
+  },
+  "nodeModules": "real-directory",
+  "migrations": 25,
+  "runners": 36
+}

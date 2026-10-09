@@ -1,0 +1,50 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.14
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 429 retries only after due scan creates a new delivery
+WO6_RETRY http=429 delay_ms=317412 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 500 retries only after due scan creates a new delivery
+WO6_RETRY http=500 delay_ms=322397 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 503 retries only after due scan creates a new delivery
+WO6_RETRY http=503 delay_ms=337449 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > main backlog of 20000 claims does not delay light delivery beyond a polling cycle
+WO6_PRESSURE wait_ms=960 http_ms=981 poll_ms=1000 remaining=19995 main_calls=5
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":4}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"b53778f6-a572-4699-b14e-8a28fe4d11eb","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":1}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates delivery backlog with actual sitemap and sweep without starvation
+WO6_FAIRNESS scan_completion_position=3 delivered_before_scan=2 backlog=301
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":3}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"68d8f1b3-6da9-4618-89fd-484b250901a8","total":2,"kept":2,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":1}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+WO6_TIMEOUT sitemap_wait_ms=10028 http_timeout_ms=10000
+
+ ✓ |node| tests/integration/tasks/indexnow-sweep-postgres.test.ts (20 tests) 13546ms
+     ✓ limits due work to 200 and empty outbox still admits recovery scans  356ms
+     ✓ main backlog of 20000 claims does not delay light delivery beyond a polling cycle  1293ms
+     ✓ alternates delivery backlog with actual sitemap and sweep without starvation  894ms
+     ✓ real 10 second timeout yields to a newly queued sitemap then retries via scan  10119ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  21:32:45
+   Duration  14.94s (transform 519ms, setup 0ms, import 1.31s, tests 13.55s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-wo6-secrets.ymMWcm/integration-result.json
+WO6_INTEGRATION=PASS passed=20 skipped=0
+{"status":"ok","models":58,"recordCount":1342,"activeCount":1272,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+WO6_DICTIONARY_DRIFT=0
+WO6_POSTGRES_VERIFICATION=PASS
+WO6_DISPOSABLE_DATABASE_CLEANED=yes

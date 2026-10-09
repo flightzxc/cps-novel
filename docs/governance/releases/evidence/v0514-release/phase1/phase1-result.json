@@ -1,0 +1,37 @@
+{
+  "result": "PASS",
+  "phase": "local-only",
+  "approvedFinal": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "tree": "38e87f2331aad0667c6b27250477ba0e6e76bfcd",
+  "runners": 36,
+  "archive": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/.tmp/preproduction-archive/cps-novel-0.5.14-bf61b5e.tar.zst",
+    "bytes": 252879673,
+    "sha256": "b00ad7630cb9ac804a4f4314434f624d025bd88d99bc67802c2197e760d700f2"
+  },
+  "manifest": {
+    "sha256": "babf547b94ce67ee039edb5a254baeb60bb8a74759f2046336f0a7613172a0bf"
+  },
+  "bundle": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.14/.tmp/v0514-release/cps-novel-v0.5.14.bundle",
+    "bytes": 261528,
+    "sha256": "ad875c0622e4b63df18654044d0e2eb234e53526dd6b4f9fd4c83c6021158a2b",
+    "prerequisites": [
+      "cc2655b0a3864f6ae6a665f46bad91f15d0a904a",
+      "391cb0d361e067b3788e90854a7310d2c872a68a"
+    ]
+  },
+  "runtimeImageGate": "PASS",
+  "imageE2E": "PASS",
+  "compose": "PASS",
+  "remoteServerConnected": false,
+  "deploymentAuthorized": false,
+  "heavyLockReleased": true,
+  "referenceIsolation": {
+    "oldBaselineClean": true,
+    "oldBaselineHead": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+    "xSeriesHead": "5096765a7d53ba704bc8d07322864c366cb41895",
+    "xSeriesStatusUnchanged": true,
+    "xSeriesStatusSha256": "ea53d26ea21ebd3dace6e7ec9a2cdd2ee4e2ffab4463d38af3392451c38cb5ea"
+  }
+}
