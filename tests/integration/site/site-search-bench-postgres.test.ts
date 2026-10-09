@@ -96,7 +96,7 @@ describe.skipIf(!benchEnabled).sequential("PN-15 站内搜索规模测量（接�
 
   const sql = (query: string, offset = 0) => querySiteSearchPage(web, { query, locale: "en", limit: 20, offset, env });
 
-  it("SQL 层：高命中 'the'（第 1 页）、深页、中等命中 'love'、多词、零命中", async () => {
+  it("SQL 层：高命中 'the'（第 1 页）、深页、中等命中 'love'、多词（库里真实存在的两词组合）、零命中、越界页", async () => {
     expect(theTotal).toBeGreaterThan(BOOKS * 0.4);
     await measure("sql_the_page1", async () => ({ total: (await sql("the")).total }));
     const lastOffset = Math.floor((theTotal - 1) / 20) * 20;
@@ -106,7 +106,14 @@ describe.skipIf(!benchEnabled).sequential("PN-15 站内搜索规模测量（接�
       return { total: page.total };
     });
     await measure("sql_love_page1", async () => ({ total: (await sql("love")).total }));
-    await measure("sql_multiword_alpha_king", async () => ({ total: (await sql("alpha king")).total }));
+    // 多词：取库里真实存在的一个"形容词 名词"组合（词表里两个词由同一个哈希决定，随便拼的组合可能一本都没有）。
+    const [{ title: sample }] = await owner.$queryRaw<Array<{ title: string }>>`SELECT title FROM article WHERE locale = 'en' ORDER BY id LIMIT 1`;
+    const phrase = sample.replace(/^The /, "").split(" ").slice(0, 2).join(" ").toLowerCase();
+    await measure("sql_multiword_real_phrase", async () => {
+      const page = await sql(phrase);
+      expect(page.total).toBeGreaterThan(0);
+      return { total: page.total };
+    });
     await measure("sql_zero_hit", async () => {
       const page = await sql("zzqxvkjw");
       expect(page.total).toBe(0);
