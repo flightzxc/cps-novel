@@ -234,7 +234,6 @@ const messages = {
     // 最长 SITE_SEARCH_MAX_QUERY_LENGTH 现为 500，"500 حرفًا" 也不对（100 以上名词用属格单数，应为 "500 حرف"）。
     // 改用 ICU plural，词形跟着数值走，常量以后改成任何整数都不需要有人记得回来改文案。
     // t() 走 intl-messageformat（见 index.ts 的 t()）；plural 六档与 Intl.PluralRules("ar") 一致，分支内用 {min}/{max}、不用 #。
-    // 本文件头部"No ICU"的说明已过时，由紧随其后的"文档(i18n)"提交统一更正。
     hintMinLength:
       "أدخل {min, plural, zero {{min} حرف} one {حرفًا واحدًا} two {حرفين} few {{min} أحرف} many {{min} حرفًا} other {{min} حرف}} على الأقل للبحث.",
     hintMaxLength:
