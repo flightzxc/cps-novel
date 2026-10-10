@@ -460,7 +460,12 @@ describe("P1-12 Compose and image contracts", () => {
     expect(envExample).toContain("With the claim double-gates in the SAME release change, append: promo_link.claim.v1");
     expect(envExample).toContain("With the Sitemap write-gate in the SAME release change, append: sitemap_refresh");
     expect(envExample).toContain("Only after X11 schedule/dedup/misfire=skip/worker-sweep acceptance");
-    expect(envExample).toContain("IndexNow delivery double-gates in the SAME release change, append: indexnow_delivery");
+    // B-41: the comment used to say "append: indexnow_delivery" right under the MAIN-lane list, which is wrong —
+    // the main lane refuses every IndexNow type (worker-lanes.mjs); they go to the LIGHT allowlist.
+    expect(envExample).toContain("IndexNow delivery double-gates in the SAME release change.");
+    expect(envExample).toContain("append them\n# to WORKER_LIGHT_TASK_ALLOWLIST");
+    expect(envExample).toContain("must never contain any IndexNow type");
+    expect(envExample).not.toContain("append: indexnow_delivery");
     expect(envExample.match(/^WORKER_TASK_ALLOWLIST=/gm)).toHaveLength(1);
   });
 

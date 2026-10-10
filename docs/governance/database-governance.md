@@ -166,6 +166,16 @@ Migration 演进，当前 Credential 状态增量为
 - **整批控制**：任务中心对批量发布父任务点「暂停/恢复/中止/重试失败项」，服务端级联到名下子任务（`@/lib/tasks/article-publish-batch-control`）；父任务自己枚举阶段（还是 `pending`/`processing`/`paused`）走原有单任务路径。审计动作沿用 `task.pause`/`task.resume`/`task.abort`/`task.retry_failed`，`afterSnapshot` 多一个 `affectedChildCount`。
 - **授权**：以真实角色验证——入队与任务控制走 `web_app`，枚举、逐篇发布、试读合并派发、站点地图触发全部走 `worker_app`（`scripts/run-article-publish-batch-postgres-verification.sh`，一次性 postgres:16.14，真实迁移 + `infra/postgres/grants.sql`），整条路径无 `permission denied`，因此**不改 `infra/postgres/grants.sql`**：`worker_app` 对 `article`/`novel`/`promo_link`/`novel_chapter(_content)` 本来就有 SELECT，对 `article`/`novel`/`generic_task(_item)`/`channel_sync_task(_item)`/`indexnow_outbox` 有 INSERT/UPDATE，对 `operation_audit` 有 INSERT + SELECT（含 RETURNING 用到的列）。
 
+#### B-41（`docs/adr/ADR-B41-INDEXNOW-BATCH-DELIVERY.md`）：IndexNow 批量投递新增 JSON 键与审计动作
+
+同 Phase C、阶段 2 的做法：以下都是落在既有 JSONB 列内部的新增键，以及 `operation_audit` 既有列里新增的取值，**不是新增数据库对象或列**，所以**不新增** `database-schema-dictionary.jsonl` 记录，`json_schema_version` 不变，零迁移、零授权变更。
+
+- **批量投递任务**（`generic_task.task_type = 'indexnow_delivery'`）`params` 新增 `mode: "batch"`（另有 `reason`、`triggeredBy`）；`operation_scope_hash` 固定为 `sha256("indexnow_delivery:batch")`，借 `generic_task_active_scope_uidx` 保证同一时间只有一个在途批量任务。条目 `generic_task_item.payload` 新增 `mode: "batch"`，`target_type = 'indexnow_batch'`、`target_id = 'batch'`。旧格式条目（`payload.outboxId`，`target_type = 'indexnow_outbox'`）仍可能存在于升级前遗留的任务里，新代码遇到直接跳过且不写任何表。
+- **`operation_audit` 新增 4 种 `action`**，全部 `entity_type = 'indexnow_delivery'`：`indexnow.delivery.breaker_trip`、`indexnow.delivery.breaker_resume`、`indexnow.delivery.rate_limited`、`indexnow.delivery.bisect`。
+- **3 个事件流**（用 `entity_id` 区分）：`breaker`（trip 与 resume 事件）、`rate_limit`（rate_limited 事件）、`bisect`（拆半记录）。熔断、429 等待都由这几个事件流推导：同一条流里事件 `id` 大的为准（不是 `created_at`），读取必须先用固定的 `entity_type`/`entity_id` 圈出本流再取最新一条，命中既有索引 `operation_audit_entity_created_idx`（真实库用例在 ≥ 75 万行上用 `EXPLAIN` 钉死）。写 trip / rate_limited / resume 事件的事务与领取事务先取 `pg_advisory_xact_lock(50241, 1)`。
+- 事件快照键：trip 的 `afterSnapshot` = `{ requestBatchId, httpStatus, urlCount, heldRetry, dbNow }`；rate_limited = `{ requestBatchId, retryAfterMs, waitUntil, dbNow }`；resume 的 `beforeSnapshot` = `{ resumedTripAuditId, trippedByAuditId, trip, breakerTripEvents, repeatAfterResume }`、`afterSnapshot` = `{ resumedTripAuditId }`；bisect 的 `afterSnapshot` = `{ conclusion, probes, acceptedCount, culprits, raisedMaxAttemptsBy, originalRequestBatchId, urlCount }`。
+- `indexnow_outbox.last_error_kind` 新增取值：`url_invalid`、`url_host_mismatch`、`isolated_bad_url`、`attempts_exhausted`（均为 VARCHAR(96) 自由文本，无 CHECK）；`indexnow_outbox_attempt.error_kind` 新增取值 `key_validation_pending`（HTTP 202 的尝试）。
+
 ### 3.5 Outbox 与首页轮播
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
