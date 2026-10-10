@@ -541,6 +541,10 @@ model CanonicalTag {
   status              String   @default("active") @db.VarChar(32)
   sortOrder           Int      @map("sort_order")
   taxonomyVersion     String   @map("taxonomy_version") @db.VarChar(64)
+  // 是否在前台首页的题材导航里显示（运营在后台"分类管理"勾选；默认 true = 上线零变化）。
+  // 只影响首页那一排按钮：页脚、详情页标签可链接集合、分类页、站点地图都不读它。
+  // CPS 对应物：Category.isHomepageVisible（同名同默认值）。
+  isHomepageVisible   Boolean  @default(true) @map("is_homepage_visible")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
