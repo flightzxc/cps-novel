@@ -1,8 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { buildIndexNowSweepSchedule, INDEXNOW_SWEEP_SCHEDULE, INDEXNOW_SWEEP_TASK_TYPE } from "@/lib/tasks/indexnow-sweep";
+import * as sweepTaskModule from "@/lib/tasks/indexnow-sweep";
+import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 import { SCHEDULES, SCHEDULER_HANDLERS } from "../../../scheduler";
 import { createIndexNowSweepHandler } from "../../../worker/handlers/indexnow-sweep";
 import type { TaskHandlerContext } from "@/lib/tasks";
+import { FakeIndexNowDb, installTestSiteUrl } from "./fake-db";
+import { seedDueRows } from "./helpers";
+
+installTestSiteUrl();
+beforeEach(() => invalidateSiteSettingCache());
+
 const now = new Date("2026-09-27T01:03:42Z");
 const env = { NODE_ENV: "test", FEATURE_INDEXNOW_DELIVERY: "true", INDEXNOW_DELIVERY_ALLOW_WRITE: "true" } as const;
 describe("IndexNow minute sweep wiring", () => {
@@ -10,7 +18,7 @@ describe("IndexNow minute sweep wiring", () => {
     const closed = { ...env, FEATURE_INDEXNOW_DELIVERY: feature, INDEXNOW_DELIVERY_ALLOW_WRITE: write };
     expect(buildIndexNowSweepSchedule(closed).dueInstants(now)).toEqual([]);
     const outcome = await createIndexNowSweepHandler(closed)({} as TaskHandlerContext);
-    expect(await outcome.protectedWrite!({} as never)).toMatchObject({ result: { recovered: 0, swept: 0, skippedAlreadyLive: 0 } });
+    expect(await outcome.protectedWrite!({} as never)).toMatchObject({ result: { recovered: 0, created: 0 } });
   });
   it("open gates emit only the current minute and skip missed buckets", () => {
     const schedule = buildIndexNowSweepSchedule(env);
@@ -23,13 +31,17 @@ describe("IndexNow minute sweep wiring", () => {
     expect(SCHEDULER_HANDLERS[INDEXNOW_SWEEP_TASK_TYPE].family).toBe("generic");
     await expect(SCHEDULER_HANDLERS[INDEXNOW_SWEEP_TASK_TYPE].handler({} as TaskHandlerContext)).rejects.toThrow("worker process");
   });
-  it("reads database time inside the fenced callback and limits the due query to 200", async () => {
-    const findMany = vi.fn().mockResolvedValue([]);
-    const tx = { $queryRaw: vi.fn().mockResolvedValue([{ now }]), indexNowOutbox: { findMany } };
+  it("reads database time inside the fenced callback and creates at most ONE batch task per scan (the old 200-row budget is gone)", async () => {
+    expect("INDEXNOW_SWEEP_MAX_DELIVERIES" in sweepTaskModule).toBe(false);
+    const fake = new FakeIndexNowDb().setNow(now);
+    seedDueRows(fake, 300, { baseMs: now.getTime() - 3_600_000 });
+    // A row that is only due in the future of the DATABASE clock must not count.
+    seedDueRows(fake, 1, { prefix: "later", status: "retry_wait", overrides: { nextAttemptAt: new Date(now.getTime() + 60_000) } });
     const outcome = await createIndexNowSweepHandler(env)({} as TaskHandlerContext);
-    expect(findMany).not.toHaveBeenCalled();
-    expect(await outcome.protectedWrite!(tx as never)).toMatchObject({ result: { recovered: 0, swept: 0, skippedAlreadyLive: 0 } });
-    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200,
-      where: { OR: [{ status: "pending", OR: [{ availableAt: null }, { availableAt: { lte: now } }] }, { status: "retry_wait", nextAttemptAt: { lte: now } }] } }));
+    expect(fake.genericTasks.size).toBe(0);
+    const result = await outcome.protectedWrite!(fake.asTransactionClient());
+    expect(result).toMatchObject({ status: "success", result: { recovered: 0, created: 1 } });
+    expect(fake.genericTasks.size).toBe(1);
+    expect(fake.genericTaskItems.size).toBe(1);
   });
 });

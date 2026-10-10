@@ -19,6 +19,7 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
 
 import type { ArticleType } from "@/domain/database-statuses";
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
@@ -45,6 +46,8 @@ export type IndexNowCandidateArticle = {
   /** C-25: `Article.seoVisibility` — a `hidden` Article must never reach IndexNow. See `isNovelIndexNowEligible` below. */
   readonly seoVisibility: string;
   readonly updatedAt: Date;
+  /** B-41: first-public-publication time, carried into the backfill manifest (`published_at`). Null when never stamped. */
+  readonly publishedAt: Date | null;
   readonly novel: NovelPublicationState;
   readonly promoLink: PromoLinkReadinessState;
 };
@@ -88,20 +91,15 @@ const ARTICLE_ELIGIBILITY_SELECT = {
   status: true,
   seoVisibility: true,
   updatedAt: true,
+  publishedAt: true,
   articleType: true,
   novel: { select: { status: true } },
   promoLink: { select: { status: true, webUrl: true, appUrl: true } },
 } satisfies Prisma.ArticleSelect;
 
-export async function loadIndexNowCandidateArticle(
-  db: Db,
-  articleId: string,
-): Promise<IndexNowCandidateArticleRow | null> {
-  const row = await db.article.findFirst({
-    where: { id: articleId, deletedAt: null },
-    select: ARTICLE_ELIGIBILITY_SELECT,
-  });
-  if (!row) return null;
+type EligibilitySelectRow = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_ELIGIBILITY_SELECT }>;
+
+function toCandidateRow(row: EligibilitySelectRow): IndexNowCandidateArticleRow {
   if (row.articleType === "novel_article") {
     return {
       articleType: "novel_article",
@@ -113,6 +111,7 @@ export async function loadIndexNowCandidateArticle(
       status: row.status,
       seoVisibility: row.seoVisibility,
       updatedAt: row.updatedAt,
+      publishedAt: row.publishedAt ?? null,
       novel: row.novel as NovelPublicationState,
       promoLink: row.promoLink,
     };
@@ -132,6 +131,38 @@ export async function loadIndexNowCandidateArticle(
     seoVisibility: row.seoVisibility,
     updatedAt: row.updatedAt,
   };
+}
+
+export async function loadIndexNowCandidateArticle(
+  db: Db,
+  articleId: string,
+): Promise<IndexNowCandidateArticleRow | null> {
+  const row = await db.article.findFirst({
+    where: { id: articleId, deletedAt: null },
+    select: ARTICLE_ELIGIBILITY_SELECT,
+  });
+  return row ? toCandidateRow(row) : null;
+}
+
+/**
+ * B-41: batch counterpart of {@link loadIndexNowCandidateArticle} — same
+ * select, same row shape, chunked `id IN (...)` (see
+ * `src/lib/db/chunked-id-lookup.ts` for why unbounded `IN` lists are unsafe).
+ * Missing and soft-deleted articles are simply absent from the map.
+ */
+export async function loadIndexNowCandidateArticles(
+  db: Db,
+  articleIds: readonly string[],
+): Promise<Map<string, IndexNowCandidateArticleRow>> {
+  const result = new Map<string, IndexNowCandidateArticleRow>();
+  for (const chunk of chunkIds([...new Set(articleIds)])) {
+    const rows = await db.article.findMany({
+      where: { id: { in: chunk }, deletedAt: null },
+      select: ARTICLE_ELIGIBILITY_SELECT,
+    });
+    for (const row of rows) result.set(row.id, toCandidateRow(row));
+  }
+  return result;
 }
 
 /**
@@ -204,19 +235,16 @@ export function isNovelIndexNowEligible(
  * entirely) so this predicate is fail-closed by construction wherever it is
  * eventually wired to a live enqueue/recheck call site.
  *
- * 🟡 Not yet wired to a production call site this round. The natural wiring
- * point — `src/server/publish-gate/service.ts`'s `dispatchFirstPublicPublication`
- * call — is currently guarded by `txResult.novelId !== null` (skipping the
- * enqueue entirely for a blog Article's first publish; that file's own
- * inline comment already flags "Blog's own IndexNow/sitemap wiring is
- * C-29's job"). `publish-gate/{facts,evaluator,service}.ts` are reserved
- * for a concurrently-running workstream this round and were left untouched
- * per this round's own file-boundary rule — so the actual enqueue call
- * remains unwired; only this standalone, independently-tested predicate
- * ships. `worker/handlers/indexnow-delivery.ts`'s own drift-recheck
- * (`isNovelIndexNowEligible`) is likewise not extended to blog rows this
- * round, since no blog `IndexNowOutbox` row can exist yet for it to ever
- * recheck. Wiring this in is a mechanical follow-up once that file opens up.
+ * Wiring status (corrected at B-41; the earlier note here said "not yet
+ * wired", which stopped being true at C-29b): `src/server/publish-gate/
+ * service.ts` now dispatches a blog Article's first publication into
+ * `dispatchFirstPublicPublication` like a novel article's, so a blog
+ * `IndexNowOutbox` row can exist, and
+ * `worker/handlers/indexnow-delivery.ts` rechecks blog rows with this
+ * predicate at delivery time (`isBlogIndexNowEligible` +
+ * `buildBlogIndexNowCanonicalUrl`). Only the *backfill* tooling stays
+ * novel-only (blog articles are 0 in production; revisit if blogs were
+ * published before the outbox was switched on — ADR-B41 "已知限制").
  */
 export type BlogIndexNowCandidateArticle = {
   readonly locale: string;

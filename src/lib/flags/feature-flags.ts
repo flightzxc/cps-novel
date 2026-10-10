@@ -223,17 +223,17 @@ export function isArticleSeoVisibilityEnabled(env: NodeJS.ProcessEnv = process.e
 // the WORKER process's own copy), and `docker-compose.yml`'s `worker`
 // service block must therefore carry `FEATURE_ARTICLE_BLOG` too (registered
 // this round). `src/lib/indexnow/eligibility.ts`'s `isBlogIndexNowEligible`
-// also checks this flag but is NOT yet called from any file under `worker/`
-// — the natural call site (`worker/handlers/indexnow-delivery.ts`'s
-// drift-recheck) has nothing to recheck yet, since no blog `IndexNowOutbox`
-// row can be enqueued this round (`publish-gate/service.ts`'s
-// `dispatchFirstPublicPublication` call still skips `novelId === null`
-// Articles — see that file's own inline comment and `eligibility.ts`'s
-// `isBlogIndexNowEligible` doc comment for the full explanation). So: the
-// worker's `docker-compose.yml`/`scripts/lib/x8-levels.json`/
+// also checks this flag and IS called from `worker/handlers/indexnow-delivery.ts`'s
+// delivery-time recheck (C-29b wired it; the earlier text here said "not yet
+// called from any file under `worker/`", which stopped being true then —
+// corrected at B-41, comment-only): `publish-gate/service.ts`'s
+// `dispatchFirstPublicPublication` call no longer skips `novelId === null`
+// Articles, so a blog `IndexNowOutbox` row can be enqueued, and the worker
+// rechecks it with this predicate before delivery. So: the worker's
+// `docker-compose.yml`/`scripts/lib/x8-levels.json`/
 // `scripts/acceptance/x8-validate-compose.mjs` registration for
-// `FEATURE_ARTICLE_BLOG` reflects the sitemap consumer only, not an
-// IndexNow one yet. `ARTICLE_BLOG_ALLOW_WRITE` is unaffected by any of this
+// `FEATURE_ARTICLE_BLOG` covers both the sitemap consumer and the IndexNow
+// one. `ARTICLE_BLOG_ALLOW_WRITE` is unaffected by any of this
 // — it is a write gate, and neither new C-29 consumer performs a write.
 // See `docs/governance/feature-flag-registry.md` and
 // `tests/backend/flags/article-blog-flags-passthrough.test.ts`.

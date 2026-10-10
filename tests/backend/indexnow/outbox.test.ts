@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { enqueueIndexNowFirstPublish, findPublishedWithoutIndexNowDelivery, releaseDeferredIndexNowOutbox } from "@/lib/indexnow/outbox";
+import {
+  articleHasAnyIndexNowOutbox,
+  enqueueIndexNowFirstPublish,
+  ensureIndexNowBatchDeliveryTask,
+  listPublishedWithoutIndexNowDelivery,
+  releaseDeferredIndexNowOutbox,
+} from "@/lib/indexnow/outbox";
+import { INDEXNOW_BATCH_OPERATION_SCOPE_HASH } from "@/lib/indexnow/outbox-contract";
 
 import { FakeIndexNowDb, installTestSiteUrl, testEnv } from "./fake-db";
 
@@ -148,14 +155,16 @@ describe("enqueueIndexNowFirstPublish — (url, revision) idempotency", () => {
     expect(rows[0]!.revision).not.toBe(rows[1]!.revision);
   });
 
-  it("creates exactly one GenericTask + GenericTaskItem for an immediate (non-deferred) enqueue", async () => {
+  it("[13] publishing only writes the outbox record — it creates NO generic_task and NO generic_task_item", async () => {
     const fake = new FakeIndexNowDb();
     seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"));
     const result = await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV, LOCALE_OK);
-    expect(fake.genericTasks.size).toBe(1);
-    expect(fake.genericTaskItems.size).toBe(1);
-    const outboxRow = fake.outbox.get(result.outboxId!)!;
-    expect(outboxRow.deliveryTaskId).toBe([...fake.genericTasks.values()][0]!.id);
+    expect(result.outcome).toBe("enqueued");
+    expect(fake.outbox.size).toBe(1);
+    expect(fake.genericTasks.size).toBe(0);
+    expect(fake.genericTaskItems.size).toBe(0);
+    expect(fake.outbox.get(result.outboxId!)!.deliveryTaskId).toBeNull();
+    expect(fake.outbox.get(result.outboxId!)!.status).toBe("pending");
   });
 
   it("throws when deferUntil is given without deferReason (or vice versa)", async () => {
@@ -171,7 +180,7 @@ describe("enqueueIndexNowFirstPublish — (url, revision) idempotency", () => {
     ).rejects.toThrow(/deferUntil and deferReason/);
   });
 
-  it("a deferred enqueue does not create a delivery task item until released", async () => {
+  it("a deferred enqueue stays pending behind its availableAt until released", async () => {
     const fake = new FakeIndexNowDb();
     seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"));
     const result = await enqueueIndexNowFirstPublish(
@@ -189,7 +198,7 @@ describe("enqueueIndexNowFirstPublish — (url, revision) idempotency", () => {
 });
 
 describe("releaseDeferredIndexNowOutbox", () => {
-  it("releases a deferred row, sets releaseCommit only now (not at enqueue time), and dispatches a delivery item", async () => {
+  it("releases a deferred row, sets releaseCommit only now (not at enqueue time), and creates no task (the minute sweep picks it up)", async () => {
     const fake = new FakeIndexNowDb();
     seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"));
     const enqueued = await enqueueIndexNowFirstPublish(
@@ -210,7 +219,9 @@ describe("releaseDeferredIndexNowOutbox", () => {
     expect(row.releasedAt).not.toBeNull();
     expect(row.releaseReason).toBe("manual_release");
     expect(row.releaseCommit).toBe("abc1234");
-    expect(fake.genericTaskItems.size).toBe(1);
+    expect(fake.genericTaskItems.size).toBe(0);
+    expect(fake.genericTasks.size).toBe(0);
+    expect(row.availableAt).not.toBeNull();
   });
 
   it("is a no-op for a row that was never deferred", async () => {
@@ -234,21 +245,117 @@ describe("releaseDeferredIndexNowOutbox", () => {
   });
 });
 
-describe("findPublishedWithoutIndexNowDelivery", () => {
-  it("returns published Articles that have no outbox row yet, and excludes ones that already do", async () => {
+describe("articleHasAnyIndexNowOutbox", () => {
+  it("is true for ANY record — any status, any source, any revision — and false for none", async () => {
     const fake = new FakeIndexNowDb();
-    seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"));
-    seedEligibleArticle(fake, "article-2", new Date("2026-01-01T00:00:00.000Z"));
-    await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV, LOCALE_OK);
+    fake.seedOutbox({ id: "o-1", articleId: "with-record", url: "https://x.example/a", revision: 1n, status: "cancelled", source: "whatever" });
+    expect(await articleHasAnyIndexNowOutbox(fake.asPrismaClient(), "with-record")).toBe(true);
+    expect(await articleHasAnyIndexNowOutbox(fake.asPrismaClient(), "without-record")).toBe(false);
+  });
+});
 
-    const candidates = await findPublishedWithoutIndexNowDelivery(fake.asPrismaClient(), 500, LOCALE_OK);
-    expect(candidates.map((c) => c.articleId)).toEqual(["article-2"]);
+describe("ensureIndexNowBatchDeliveryTask", () => {
+  it("creates one task + one item, and a second call while it is in flight reports created: false", async () => {
+    const fake = new FakeIndexNowDb();
+    const first = await ensureIndexNowBatchDeliveryTask(fake.asTransactionClient(), { reason: "r", triggeredBy: "t" });
+    expect(first.created).toBe(true);
+    const second = await ensureIndexNowBatchDeliveryTask(fake.asTransactionClient(), { reason: "r", triggeredBy: "t" });
+    expect(second).toEqual({ created: false, taskId: first.taskId });
+    expect(fake.genericTasks.size).toBe(1);
+    expect(fake.genericTaskItems.size).toBe(1);
+    expect([...fake.genericTasks.values()][0]!.operationScopeHash).toBe(INDEXNOW_BATCH_OPERATION_SCOPE_HASH);
   });
 
-  it("excludes candidates that fail eligibility even without an outbox row", async () => {
+  it("a bare client is wrapped in a transaction: if the item insert fails the task row rolls back too (never an item-less task holding the scope)", async () => {
     const fake = new FakeIndexNowDb();
-    fake.seedArticle({ id: "article-1", status: "published", novelStatus: "draft", updatedAt: new Date() });
-    const candidates = await findPublishedWithoutIndexNowDelivery(fake.asPrismaClient(), 500, LOCALE_OK);
-    expect(candidates).toEqual([]);
+    const realTx = fake.asTransactionClient.bind(fake);
+    fake.asTransactionClient = () => {
+      const tx = realTx() as unknown as { genericTaskItem: Record<string, unknown> };
+      tx.genericTaskItem = {
+        ...tx.genericTaskItem,
+        createMany: async () => {
+          throw new Error("item insert failed");
+        },
+      };
+      return tx as never;
+    };
+    await expect(ensureIndexNowBatchDeliveryTask(fake.asPrismaClient(), { reason: "r", triggeredBy: "t" })).rejects.toThrow("item insert failed");
+    expect(fake.genericTasks.size).toBe(0);
+
+    const healthy = new FakeIndexNowDb();
+    expect((await ensureIndexNowBatchDeliveryTask(healthy.asPrismaClient(), { reason: "r", triggeredBy: "t" })).created).toBe(true);
+    expect(healthy.genericTasks.size).toBe(1);
+    expect(healthy.genericTaskItems.size).toBe(1);
+  });
+});
+
+describe("[14] listPublishedWithoutIndexNowDelivery — cursor-complete difference query", () => {
+  function seedMany(fake: FakeIndexNowDb, count: number, withOutbox: (index: number) => boolean = () => false) {
+    for (let index = 0; index < count; index++) {
+      const id = `art-${String(index).padStart(6, "0")}`;
+      fake.seedArticle({ id, novelId: `n-${index}`, slug: `s-${index}`, publicPageShortId: `x${index}`, publishedAt: new Date(2026, 0, 1 + (index % 28)) });
+      if (withOutbox(index)) fake.seedOutbox({ id: `o-${index}`, articleId: id, url: `https://x.example/${index}`, revision: 1n });
+    }
+  }
+
+  it("walks past 5,000 articles across many pages: the candidate list equals ALL of them (the old cap was 5,000)", async () => {
+    const fake = new FakeIndexNowDb();
+    seedMany(fake, 5_321);
+    const { candidates, stats } = await listPublishedWithoutIndexNowDelivery(fake.asPrismaClient(), { pageSize: 700, eligibilityOptions: LOCALE_OK });
+    expect(candidates).toHaveLength(5_321);
+    expect(stats).toEqual({ scanned: 5_321, alreadyHasDelivery: 0, ineligible: 0, eligible: 5_321 });
+    expect(candidates[0]!.articleId).toBe("art-000000");
+    expect(candidates[5_320]!.articleId).toBe("art-005320");
+    expect(candidates[0]!.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it("a final page that is exactly full still gets one more page fetched (an EMPTY page is the end)", async () => {
+    const fake = new FakeIndexNowDb();
+    seedMany(fake, 30);
+    const pages: number[] = [];
+    const db = fake.asPrismaClient();
+    const original = db.article.findMany;
+    (db.article as { findMany: unknown }).findMany = async (args: Parameters<typeof original>[0]) => {
+      const rows = await original(args);
+      // Only the cursor pages (they carry an orderBy); the batch eligibility loader also uses article.findMany.
+      if (args?.orderBy) pages.push(rows.length);
+      return rows;
+    };
+    const { candidates } = await listPublishedWithoutIndexNowDelivery(db, { pageSize: 10, eligibilityOptions: LOCALE_OK });
+    expect(candidates).toHaveLength(30);
+    expect(pages).toEqual([10, 10, 10, 0]);
+  });
+
+  it("a SHORT page in the middle is not the end: it keeps paging until an empty page (a source that serves fewer rows than asked must not lose the rest)", async () => {
+    const fake = new FakeIndexNowDb();
+    seedMany(fake, 25);
+    const db = fake.asPrismaClient();
+    const original = db.article.findMany;
+    // Serve at most 3 rows per call even though 1000 were requested.
+    (db.article as { findMany: unknown }).findMany = async (args: Parameters<typeof original>[0]) =>
+      original({ ...args, take: Math.min(args?.take ?? 3, 3) });
+    const { candidates, stats } = await listPublishedWithoutIndexNowDelivery(db, { pageSize: 1000, eligibilityOptions: LOCALE_OK });
+    expect(candidates).toHaveLength(25);
+    expect(stats.scanned).toBe(25);
+  });
+
+  it("excludes articles that already have any record, counts them, and rechecks eligibility for the rest", async () => {
+    const fake = new FakeIndexNowDb();
+    seedMany(fake, 10, (index) => index % 2 === 0); // 5 with a record
+    fake.articles.get("art-000001")!.novelStatus = "draft"; // candidate but ineligible
+    const { candidates, stats } = await listPublishedWithoutIndexNowDelivery(fake.asPrismaClient(), { pageSize: 4, eligibilityOptions: LOCALE_OK });
+    expect(stats).toEqual({ scanned: 10, alreadyHasDelivery: 5, ineligible: 1, eligible: 4 });
+    expect(candidates.map((candidate) => candidate.articleId)).toEqual(["art-000003", "art-000005", "art-000007", "art-000009"]);
+  });
+
+  it("skips drafts, soft-deleted articles and the blog family", async () => {
+    const fake = new FakeIndexNowDb();
+    seedMany(fake, 3);
+    fake.seedArticle({ id: "draft", status: "draft", slug: "d", publicPageShortId: "d1" });
+    fake.seedArticle({ id: "deleted", deletedAt: new Date(), slug: "x", publicPageShortId: "x1" });
+    fake.seedArticle({ id: "blog", articleType: "blog_article", slug: "b", publicPageShortId: "b1" });
+    const { candidates, stats } = await listPublishedWithoutIndexNowDelivery(fake.asPrismaClient(), { eligibilityOptions: LOCALE_OK });
+    expect(candidates).toHaveLength(3);
+    expect(stats.scanned).toBe(3);
   });
 });

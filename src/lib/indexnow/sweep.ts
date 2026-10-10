@@ -1,5 +1,5 @@
 /**
- * Periodic due-delivery sweep (Stream E, P2-11).
+ * Periodic due-delivery sweep (Stream E, P2-11; batch delivery B-41).
  *
  * CPS's `deliverDueIndexNow` (`indexnow-delivery-service.ts:207-368`) is one
  * monolithic function: find due rows, hand-rolled per-row `updateMany` CAS
@@ -8,93 +8,99 @@
  * replace the hand-rolled claim loop with the real `GenericTaskItem` lease
  * (`P2-07-12-移植审计-2026-08-12/P2-11.md` §3):
  *
- *   1. **This file** — find rows that just became due (first enqueue,
- *      elapsed `nextAttemptAt`, or a manual release) and are not already
- *      covered by a live `GenericTaskItem`, and create exactly one fresh
- *      item per row (`outbox.ts`'s `createIndexNowDeliveryTaskItem`).
- *   2. **`worker/handlers/indexnow-delivery.ts`** — claims one such item at
- *      a time via the framework's real lease/fencing and does the actual
- *      HTTP submission.
+ *   1. **This file** — once a minute, decide whether a batch delivery is
+ *      worth starting, and if so create ONE batch task
+ *      (`outbox.ts`'s `ensureIndexNowBatchDeliveryTask`).
+ *   2. **`worker/handlers/indexnow-delivery.ts`** — claims that task's single
+ *      item with the framework's real lease/fencing and sends one batch of up
+ *      to 500 URLs in one HTTP request.
  *
- * One row never has two live items open at once: `enqueueIndexNowFirstPublish`
- * creates the row's first item immediately (a first-publish row is due the
- * moment it is written, unless deferred), and this sweep only considers rows
- * with no existing `pending`/`processing` `GenericTaskItem` — so a row
- * already covered by an in-flight item is skipped until that item reaches a
- * terminal state (success/skipped/failed) and, if the outcome was
- * retryable, `nextAttemptAt` puts it back in this sweep's due set for a
- * *new* item next time. This means "same row, second attempt" is always a
- * different `GenericTaskItem` id than the first — a deliberate simplicity
- * trade versus CPS's single long-lived delivery row that gets re-claimed by
- * the same worker-task machinery; the tradeoff and its correctness argument
- * are documented in this Stream's report to the round's coordinator.
+ * ## Order of checks (any miss creates no task and says why)
  *
- * `indexnow.sweep.v1` now runs this primitive on worker-light via the
- * minute schedule, with a 200-row per-scan budget. Direct callers retain
- * the historical default; first publication still creates its first item.
+ *   1. delivery switches off → nothing at all (not even crash recovery);
+ *   2. `recoverStaleIndexNowDeliveries` (rows stuck `processing` > 35 min);
+ *   3. IndexNow host/key/keyLocation not all configured → `config_missing`;
+ *   4. configured host ≠ `SITE_URL` host → `host_mismatch` (a 422 waiting to
+ *      happen — caught locally for free, trips no breaker);
+ *   5. breaker open → `breaker_open`; global 429 wait active → `rate_limited`;
+ *   6. nothing due → `nothing_due`;
+ *   7. a batch task is already in flight → `already_live`;
+ *   8. otherwise create the task → `created: 1`.
+ *
+ * At most one task per minute is created and one task sends one request, so
+ * the steady-state ceiling is 500 URLs/minute. Concurrency safety is the
+ * database's (`generic_task_active_scope_uidx`), see `ensureIndexNowBatchDeliveryTask`.
+ *
+ * `indexnow.sweep.v1` runs this on worker-light via the minute schedule,
+ * inside the scan item's `protectedWrite` transaction.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { isIndexNowDeliveryEnabled, isIndexNowDeliveryWriteAllowed } from "@/lib/flags";
+import { getIndexNowDeliveryConfig, isIndexNowConfigured } from "@/server/site-settings/service";
 
-import { createIndexNowDeliveryTaskItem } from "./outbox";
+import { getIndexNowDeliveryControlState, isIndexNowHostConsistent } from "./delivery-control";
+import { indexNowDueWhere } from "./delivery-primitives";
+import { ensureIndexNowBatchDeliveryTask } from "./outbox";
 import { recoverStaleIndexNowDeliveries } from "./recovery";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export type SweepDueIndexNowDeliveriesResult = Readonly<{
-  recovered: number;
-  swept: number;
-  skippedAlreadyLive: number;
-}>;
+export type SweepDueIndexNowDeliveriesReason =
+  | "config_missing"
+  | "host_mismatch"
+  | "breaker_open"
+  | "rate_limited"
+  | "nothing_due"
+  | "already_live";
 
-const DEFAULT_MAX_DELIVERIES = 2000;
-const MAX_DELIVERIES_CEILING = 10_000;
+export type SweepDueIndexNowDeliveriesResult = Readonly<{
+  /** Rows crash-recovered this run. */
+  recovered: number;
+  /** Batch tasks created this run (0 or 1). */
+  created: 0 | 1;
+  reason?: SweepDueIndexNowDeliveriesReason;
+  configMissing?: true;
+  hostMismatch?: true;
+  breakerOpen?: true;
+  /** ISO timestamp; present when the 429 wait is what stopped the sweep. */
+  rateLimitedUntil?: string;
+}>;
 
 export async function sweepDueIndexNowDeliveries(
   db: Db,
-  options: { now?: Date; maxDeliveries?: number } = {},
+  options: { now?: Date } = {},
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<SweepDueIndexNowDeliveriesResult> {
   if (!isIndexNowDeliveryEnabled(env) || !isIndexNowDeliveryWriteAllowed(env)) {
-    return { recovered: 0, swept: 0, skippedAlreadyLive: 0 };
+    return { recovered: 0, created: 0 };
   }
   const now = options.now ?? new Date();
   const recovered = await recoverStaleIndexNowDeliveries(db, now);
 
-  const maxDeliveries = Math.max(1, Math.min(options.maxDeliveries ?? DEFAULT_MAX_DELIVERIES, MAX_DELIVERIES_CEILING));
-  const due = await db.indexNowOutbox.findMany({
-    where: {
-      OR: [
-        { status: "pending", OR: [{ availableAt: null }, { availableAt: { lte: now } }] },
-        { status: "retry_wait", nextAttemptAt: { lte: now } },
-      ],
-    },
-    orderBy: { id: "asc" },
-    take: maxDeliveries,
-    select: { id: true },
-  });
-  if (due.length === 0) return { recovered, swept: 0, skippedAlreadyLive: 0 };
-
-  const liveItems = await db.genericTaskItem.findMany({
-    where: {
-      targetType: "indexnow_outbox",
-      targetId: { in: due.map((row) => row.id) },
-      status: { in: ["pending", "processing"] },
-    },
-    select: { targetId: true },
-  });
-  const alreadyLive = new Set(liveItems.map((item) => item.targetId));
-
-  let swept = 0;
-  let skippedAlreadyLive = 0;
-  for (const row of due) {
-    if (alreadyLive.has(row.id)) {
-      skippedAlreadyLive++;
-      continue;
-    }
-    await createIndexNowDeliveryTaskItem(db, row.id, { reason: "sweep_due", triggeredBy: "indexnow_delivery_sweep" });
-    swept++;
+  const config = await getIndexNowDeliveryConfig(db);
+  if (!isIndexNowConfigured(config)) {
+    return { recovered, created: 0, reason: "config_missing", configMissing: true };
   }
-  return { recovered, swept, skippedAlreadyLive };
+  if (!isIndexNowHostConsistent(config)) {
+    return { recovered, created: 0, reason: "host_mismatch", hostMismatch: true };
+  }
+
+  const control = await getIndexNowDeliveryControlState(db);
+  if (control.breaker.open) {
+    return { recovered, created: 0, reason: "breaker_open", breakerOpen: true };
+  }
+  if (control.rateLimit.waiting) {
+    return { recovered, created: 0, reason: "rate_limited", rateLimitedUntil: control.rateLimit.until.toISOString() };
+  }
+
+  const due = await db.indexNowOutbox.findFirst({ where: indexNowDueWhere(now), select: { id: true } });
+  if (!due) return { recovered, created: 0, reason: "nothing_due" };
+
+  const ensured = await ensureIndexNowBatchDeliveryTask(db, {
+    reason: "sweep_due",
+    triggeredBy: "indexnow_delivery_sweep",
+  });
+  if (!ensured.created) return { recovered, created: 0, reason: "already_live" };
+  return { recovered, created: 1 };
 }

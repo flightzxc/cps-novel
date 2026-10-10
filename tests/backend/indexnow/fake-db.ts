@@ -1,14 +1,36 @@
 /**
- * TEST_ONLY — a minimal hand-rolled in-memory double for exactly the Prisma
- * call shapes `src/lib/indexnow/**` and `worker/handlers/indexnow-delivery.ts`
- * issue. Not a general query engine — each method pattern-matches the one
- * real call site's shape, following the same convention as
- * `tests/backend/publish-gate/fake-db.ts`. None of this Stream's code uses
- * `$transaction` (see the outbox/recovery/handler file headers for why —
- * plain sequential writes, not fenced), so this double does not implement one.
+ * TEST_ONLY — an in-memory double for the Prisma call shapes
+ * `src/lib/indexnow/**`, `worker/handlers/indexnow-*.ts` and
+ * `scripts/indexnow-*.ts` issue.
+ *
+ * B-41 rewrite: the original hand-pattern-matched one call site per method.
+ * The batch handler uses interactive transactions, grouped `updateMany`s with
+ * `OR`/`AND`/`not`/`in`/`lte` filters, relation filters, `groupBy`, cursor
+ * paging, `createMany({ skipDuplicates })` and the control-event stream — so
+ * this double now has a small generic query engine (`matchesWhere`,
+ * `orderBy`, `take`, `groupBy`, `increment`) plus per-table unique rules.
+ * It is still NOT a general Prisma implementation: unsupported operators throw
+ * so a typo cannot silently match nothing.
+ *
+ * Deliberate fidelity points:
+ *   - `$transaction(fn)` snapshots every store and RESTORES it when `fn`
+ *     throws, so rollback behaviour of the batch write-back is observable. The
+ *     transaction client has no `$transaction` (like Prisma's), so
+ *     `ensureIndexNowBatchDeliveryTask` wraps a bare client but not a tx.
+ *   - `$queryRaw` / `$queryRawUnsafe` recognise exactly the statements the
+ *     code issues (database clock, advisory lock, the control-state SQL
+ *     identified by its marker comment) and mimic their SQL semantics in JS.
+ *     The SQL text itself is verified against real PostgreSQL by
+ *     `tests/integration/tasks/indexnow-batch-postgres.test.ts`.
+ *   - `clock` is the "database clock": every `now()`/`clock_timestamp()` the
+ *     code reads and every `createdAt`/`updatedAt` stamped here comes from it.
+ *   - `writeCount` counts every mutating call, so "this path wrote nothing"
+ *     is a one-line assertion.
  */
 import { afterEach, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
+
+import { INDEXNOW_CONTROL_STATE_SQL } from "@/lib/indexnow/delivery-control";
 
 export type FakePromoLink = { status: string; webUrl: string | null; appUrl: string | null } | null;
 
@@ -20,19 +42,19 @@ export type FakeArticle = {
   publicPageShortId: string;
   status: string;
   updatedAt: Date;
+  publishedAt?: Date | null;
   deletedAt: Date | null;
   novelStatus: string;
   promoLink: FakePromoLink;
   /**
-   * C-29b: defaults to `"novel_article"` when omitted (every pre-C-29b
-   * fixture in this file). Set to `"blog_article"` (or another blog-family
-   * value) to seed a blog-shaped row — `article.findFirst` below shapes its
-   * returned row by this field, same discriminated-branch shape production
-   * `loadIndexNowCandidateArticle` (`src/lib/indexnow/eligibility.ts`) uses:
-   * a blog row's returned object carries no `novel`/`promoLink`/`novelId`
-   * fields at all, not always-null placeholders.
+   * C-29b: defaults to `"novel_article"` when omitted. Set to `"blog_article"`
+   * (or another blog-family value) to seed a blog-shaped row — a blog row's
+   * returned object carries no `novel`/`promoLink`/`novelId` fields at all,
+   * the same discriminated-branch shape production
+   * `loadIndexNowCandidateArticle` (`src/lib/indexnow/eligibility.ts`) uses.
    */
   articleType?: string;
+  seoVisibility?: string;
 };
 
 export type FakeOutboxRow = {
@@ -81,23 +103,289 @@ export type FakeAttempt = {
   workerTaskId: string | null;
 };
 
-export type FakeGenericTaskItem = { id: string; taskId: string; targetType: string; targetId: string; status: string; payload: unknown };
-export type FakeGenericTask = { id: string; taskType: string; status: string; operationScopeHash: string };
+export type FakeGenericTaskItem = {
+  id: string;
+  taskId: string;
+  targetType: string;
+  targetId: string;
+  status: string;
+  payload: unknown;
+};
+export type FakeGenericTask = {
+  id: string;
+  taskType: string;
+  status: string;
+  operationScopeHash: string;
+  requestToken?: string;
+  params?: unknown;
+  totalCount?: number;
+};
+
+export type FakeAudit = {
+  id: bigint;
+  actorType: string;
+  actorId: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  requestId: string | null;
+  taskType: string | null;
+  taskId: string | null;
+  reason: string | null;
+  beforeSnapshot: unknown;
+  afterSnapshot: unknown;
+  createdAt: Date;
+};
+
+type Row = Record<string, any>;
 
 let nextId = 1;
 function freshId(prefix: string): string {
   nextId += 1;
-  return `${prefix}-${nextId}`;
+  // Zero-padded so that string order == creation order (FIFO tie-breaks sort by id).
+  return `${prefix}-${String(nextId).padStart(8, "0")}`;
 }
 
 export type FakeSiteSetting = { indexNowHost: string; indexNowKey: string; indexNowKeyLocation: string; updatedAt: Date };
 
+/** Host equals `TEST_SITE_URL`'s host so the B-41 host-consistency check passes by default. */
 const DEFAULT_SITE_SETTING: FakeSiteSetting = {
-  indexNowHost: "indexnow-host.cps-novel.example",
+  indexNowHost: "cps-novel.example",
   indexNowKey: "test-index-now-key",
-  indexNowKeyLocation: "https://indexnow-host.cps-novel.example/test-index-now-key.txt",
+  indexNowKeyLocation: "https://cps-novel.example/test-index-now-key.txt",
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
+
+// ---------------------------------------------------------------------------
+// Generic query engine
+// ---------------------------------------------------------------------------
+
+function norm(value: unknown): unknown {
+  return value instanceof Date ? value.getTime() : value;
+}
+
+function eq(a: unknown, b: unknown): boolean {
+  const x = norm(a);
+  const y = norm(b);
+  if ((x === null || x === undefined) && (y === null || y === undefined)) return true;
+  return x === y;
+}
+
+function compare(a: unknown, b: unknown): number {
+  const x = norm(a) as any;
+  const y = norm(b) as any;
+  if (x === y) return 0;
+  if (x === null || x === undefined) return -1;
+  if (y === null || y === undefined) return 1;
+  return x < y ? -1 : 1;
+}
+
+function matchCondition(value: unknown, condition: unknown): boolean {
+  if (condition === null) return value === null || value === undefined;
+  if (condition instanceof Date || typeof condition !== "object") return eq(value, condition);
+  for (const [operator, operand] of Object.entries(condition as Row)) {
+    switch (operator) {
+      case "equals":
+        if (!eq(value, operand)) return false;
+        break;
+      case "in":
+        if (!(operand as unknown[]).some((candidate) => eq(value, candidate))) return false;
+        break;
+      case "notIn":
+        if ((operand as unknown[]).some((candidate) => eq(value, candidate))) return false;
+        break;
+      case "not":
+        if (operand === null ? value === null || value === undefined : matchCondition(value, operand)) return false;
+        break;
+      case "lt":
+      case "lte":
+      case "gt":
+      case "gte": {
+        if (value === null || value === undefined) return false;
+        const c = compare(value, operand);
+        if (operator === "lt" && !(c < 0)) return false;
+        if (operator === "lte" && !(c <= 0)) return false;
+        if (operator === "gt" && !(c > 0)) return false;
+        if (operator === "gte" && !(c >= 0)) return false;
+        break;
+      }
+      default:
+        throw new Error(`fake-db: unsupported filter operator "${operator}"`);
+    }
+  }
+  return true;
+}
+
+type RelationResolver = (row: Row) => Row[];
+
+function matchesWhere(row: Row, where: Row | undefined, relations: Record<string, RelationResolver>): boolean {
+  if (!where) return true;
+  for (const [key, condition] of Object.entries(where)) {
+    if (condition === undefined) continue;
+    if (key === "AND") {
+      const list = Array.isArray(condition) ? condition : [condition];
+      if (!list.every((sub) => matchesWhere(row, sub, relations))) return false;
+    } else if (key === "OR") {
+      if (!(condition as Row[]).some((sub) => matchesWhere(row, sub, relations))) return false;
+    } else if (key === "NOT") {
+      const list = Array.isArray(condition) ? condition : [condition];
+      if (list.some((sub) => matchesWhere(row, sub, relations))) return false;
+    } else if (relations[key]) {
+      const related = relations[key]!(row);
+      const spec = condition as Row;
+      if ("some" in spec) {
+        if (!related.some((candidate) => matchesWhere(candidate, spec.some, {}))) return false;
+      } else if (!related.some((candidate) => matchesWhere(candidate, spec.is ?? spec, {}))) {
+        return false;
+      }
+    } else if (!matchCondition(row[key], condition)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sortRows(rows: Row[], orderBy: unknown): Row[] {
+  if (!orderBy) return rows;
+  const specs = (Array.isArray(orderBy) ? orderBy : [orderBy]) as Row[];
+  return [...rows].sort((a, b) => {
+    for (const spec of specs) {
+      const [field, direction] = Object.entries(spec)[0]!;
+      const c = compare(a[field], b[field]);
+      if (c !== 0) return direction === "desc" ? -c : c;
+    }
+    return 0;
+  });
+}
+
+function applyData(row: Row, data: Row): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    if (value !== null && typeof value === "object" && !(value instanceof Date) && "increment" in value) {
+      row[key] = (row[key] as number) + (value as { increment: number }).increment;
+    } else {
+      row[key] = value;
+    }
+  }
+}
+
+function uniqueViolation(fields: string): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(`Unique constraint failed on the fields: (${fields})`, {
+    code: "P2002",
+    clientVersion: "test",
+  });
+}
+
+class Table<T extends Row> {
+  constructor(
+    readonly store: Map<string, T>,
+    private readonly owner: FakeIndexNowDb,
+    private readonly options: {
+      keyOf: (row: T) => string;
+      relations?: Record<string, RelationResolver>;
+      /** Fills defaults and runs unique checks; returns the row to insert. */
+      build: (data: Row, existing: readonly T[]) => T;
+      /** Post-processing for `select` (e.g. relation selects). */
+      project?: (row: T, select: Row) => Row;
+    },
+  ) {}
+
+  private all(): T[] {
+    return [...this.store.values()];
+  }
+
+  private filtered(where?: Row): T[] {
+    return this.all().filter((row) => matchesWhere(row, where, this.options.relations ?? {}));
+  }
+
+  private shape(row: T, select?: Row): Row {
+    const copy = { ...row } as Row;
+    return this.options.project && select ? this.options.project(row, select) : copy;
+  }
+
+  findMany = async (args: { where?: Row; orderBy?: unknown; take?: number; skip?: number; select?: Row; distinct?: string[] } = {}) => {
+    let rows = sortRows(this.filtered(args.where), args.orderBy ?? { id: "asc" });
+    if (args.distinct?.length) {
+      const seen = new Set<string>();
+      rows = rows.filter((row) => {
+        const key = args.distinct!.map((field) => String(row[field])).join("|");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+    if (args.skip) rows = rows.slice(args.skip);
+    if (args.take !== undefined) rows = rows.slice(0, args.take);
+    return rows.map((row) => this.shape(row as T, args.select));
+  };
+
+  findFirst = async (args: { where?: Row; orderBy?: unknown; select?: Row } = {}) => {
+    const rows = await this.findMany({ ...args, take: 1 });
+    return rows[0] ?? null;
+  };
+
+  findUnique = async (args: { where: Row; select?: Row }) => this.findFirst({ where: args.where, select: args.select });
+
+  count = async (args: { where?: Row } = {}) => this.filtered(args.where).length;
+
+  groupBy = async (args: { by: string[]; where?: Row; _count?: unknown; orderBy?: unknown }) => {
+    const groups = new Map<string, { key: Row; count: number }>();
+    for (const row of this.filtered(args.where)) {
+      const key = Object.fromEntries(args.by.map((field) => [field, row[field] ?? null]));
+      const id = args.by.map((field) => String(row[field] ?? null)).join("|");
+      const group = groups.get(id) ?? { key, count: 0 };
+      group.count++;
+      groups.set(id, group);
+    }
+    return [...groups.values()].map((group) => ({ ...group.key, _count: { _all: group.count } }));
+  };
+
+  create = async (args: { data: Row; select?: Row }) => {
+    this.owner.writes++;
+    const row = this.options.build(args.data, this.all());
+    this.store.set(this.options.keyOf(row), row);
+    return this.shape(row, args.select);
+  };
+
+  createMany = async (args: { data: Row[]; skipDuplicates?: boolean }) => {
+    this.owner.writes++;
+    let count = 0;
+    for (const data of args.data) {
+      try {
+        const row = this.options.build(data, this.all());
+        this.store.set(this.options.keyOf(row), row);
+        count++;
+      } catch (error) {
+        if (args.skipDuplicates && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") continue;
+        throw error;
+      }
+    }
+    return { count };
+  };
+
+  update = async (args: { where: Row; data: Row; select?: Row }) => {
+    this.owner.writes++;
+    const row = this.filtered(args.where)[0];
+    if (!row) throw new Error(`fake-db: update target not found: ${JSON.stringify(args.where, (_k, v) => (typeof v === "bigint" ? String(v) : v))}`);
+    applyData(row, args.data);
+    if ("updatedAt" in row && !("updatedAt" in args.data)) (row as Row).updatedAt = this.owner.clock();
+    return this.shape(row, args.select);
+  };
+
+  updateMany = async (args: { where?: Row; data: Row }) => {
+    this.owner.writes++;
+    const rows = this.filtered(args.where);
+    for (const row of rows) {
+      applyData(row, args.data);
+      if ("updatedAt" in row && !("updatedAt" in args.data)) (row as Row).updatedAt = this.owner.clock();
+    }
+    return { count: rows.length };
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The double
+// ---------------------------------------------------------------------------
 
 export class FakeIndexNowDb {
   readonly articles = new Map<string, FakeArticle>();
@@ -105,8 +393,25 @@ export class FakeIndexNowDb {
   readonly attempts = new Map<string, FakeAttempt>();
   readonly genericTasks = new Map<string, FakeGenericTask>();
   readonly genericTaskItems = new Map<string, FakeGenericTaskItem>();
+  readonly audits = new Map<string, FakeAudit>();
   siteSettingRow: FakeSiteSetting | null = { ...DEFAULT_SITE_SETTING };
+
+  /** The "database clock". Replace with `setNow`/`advance` for deterministic time. */
+  clock: () => Date = () => new Date();
+  /** Number of mutating calls so far. */
+  writes = 0;
   private attemptSeq = 1;
+  private auditSeq = 1;
+
+  setNow(date: Date): this {
+    this.clock = () => new Date(date.getTime());
+    return this;
+  }
+
+  advance(ms: number): this {
+    const current = this.clock();
+    return this.setNow(new Date(current.getTime() + ms));
+  }
 
   /** `null` simulates the (should-never-happen) missing-singleton fail-closed case; omit to keep the configured default. */
   seedSiteSetting(overrides: Partial<FakeSiteSetting> | null): this {
@@ -126,13 +431,19 @@ export class FakeIndexNowDb {
       novelStatus: article.novelStatus ?? "published",
       promoLink: article.promoLink === undefined ? { status: "fetched", webUrl: "https://example.com/w", appUrl: null } : article.promoLink,
       ...article,
+      articleType: article.articleType ?? "novel_article",
     });
     return this;
   }
 
   seedOutbox(row: Partial<FakeOutboxRow> & { id: string; url: string; revision: bigint }): this {
     const now = row.createdAt ?? new Date();
-    this.outbox.set(row.id, {
+    this.outbox.set(row.id, this.outboxDefaults({ ...row }, now));
+    return this;
+  }
+
+  private outboxDefaults(row: Partial<FakeOutboxRow> & { id: string; url: string; revision: bigint }, now: Date): FakeOutboxRow {
+    return {
       articleId: null,
       eventType: "article_first_publish",
       locale: "en",
@@ -157,8 +468,7 @@ export class FakeIndexNowDb {
       createdAt: now,
       updatedAt: now,
       ...row,
-    });
-    return this;
+    };
   }
 
   seedAttempt(attempt: Partial<FakeAttempt> & { outboxId: string; attemptNo: number }): FakeAttempt {
@@ -182,255 +492,332 @@ export class FakeIndexNowDb {
     return full;
   }
 
-  private article = {
-    // C-29b: shapes its return by `articleType`, same discriminated-branch
-    // pattern production `loadIndexNowCandidateArticle` uses — a
-    // `"novel_article"` row (the default) keeps the exact pre-C-29b shape;
-    // any other value (the blog family) returns the leaner shape with no
-    // `novel`/`promoLink`/`novelId` fields at all.
-    findFirst: async (args: { where: { id: string; deletedAt: null }; select: unknown }) => {
-      const article = this.articles.get(args.where.id);
-      if (!article || article.deletedAt !== null) return null;
+  seedAudit(audit: Partial<FakeAudit> & { action: string; entityId: string }): FakeAudit {
+    const id = BigInt(this.auditSeq++);
+    const full: FakeAudit = {
+      actorType: "worker",
+      actorId: null,
+      entityType: "indexnow_delivery",
+      requestId: null,
+      taskType: null,
+      taskId: null,
+      reason: null,
+      beforeSnapshot: null,
+      afterSnapshot: null,
+      createdAt: this.clock(),
+      ...audit,
+      id,
+    };
+    this.audits.set(String(id), full);
+    return full;
+  }
+
+  /** Deep copy of every store, for "this path changed nothing" assertions and transaction rollback. */
+  snapshot() {
+    return structuredClone({
+      articles: this.articles,
+      outbox: this.outbox,
+      attempts: this.attempts,
+      genericTasks: this.genericTasks,
+      genericTaskItems: this.genericTaskItems,
+      audits: this.audits,
+    });
+  }
+
+  private restore(snapshot: ReturnType<FakeIndexNowDb["snapshot"]>): void {
+    for (const key of ["articles", "outbox", "attempts", "genericTasks", "genericTaskItems", "audits"] as const) {
+      const target = this[key] as Map<string, unknown>;
+      target.clear();
+      for (const [id, row] of snapshot[key] as Map<string, unknown>) target.set(id, row);
+    }
+  }
+
+  // ---- tables ----------------------------------------------------------
+
+  private articleTable = new Table<Row>(this.articles as unknown as Map<string, Row>, this, {
+    keyOf: (row) => row.id,
+    build: () => {
+      throw new Error("fake-db: article writes are not supported");
+    },
+    // Mirrors the discriminated-branch shape of production's article select.
+    project: (article, select) => {
       const articleType = article.articleType ?? "novel_article";
-      if (articleType === "novel_article") {
-        return {
-          id: article.id,
-          novelId: article.novelId,
-          locale: article.locale,
-          slug: article.slug,
-          publicPageShortId: article.publicPageShortId,
-          status: article.status,
-          updatedAt: article.updatedAt,
-          articleType,
-          novel: { status: article.novelStatus },
-          promoLink: article.promoLink,
-        };
-      }
-      return {
+      const base: Row = {
         id: article.id,
         locale: article.locale,
         slug: article.slug,
         status: article.status,
         updatedAt: article.updatedAt,
+        publishedAt: article.publishedAt ?? null,
+        seoVisibility: article.seoVisibility,
         articleType,
+        publicPageShortId: article.publicPageShortId,
+      };
+      if (articleType === "novel_article") {
+        base.novelId = article.novelId;
+        base.novel = { status: article.novelStatus };
+        base.promoLink = article.promoLink;
+      }
+      void select;
+      return base;
+    },
+  });
+
+  private outboxTable = new Table<Row>(this.outbox as unknown as Map<string, Row>, this, {
+    keyOf: (row) => row.id,
+    relations: {
+      attempts: (row) => [...this.attempts.values()].filter((attempt) => attempt.outboxId === row.id),
+    },
+    build: (data, existing) => {
+      if (existing.some((row) => row.url === data.url && row.revision === data.revision)) {
+        throw uniqueViolation("`url`,`revision`");
+      }
+      const now = this.clock();
+      return this.outboxDefaults(
+        {
+          id: freshId("outbox"),
+          articleId: null,
+          ...(data as { url: string; revision: bigint }),
+          availableAt: (data.availableAt as Date | null) ?? null,
+          deferReason: (data.deferReason as string | null) ?? null,
+          createdAt: now,
+          updatedAt: now,
+        } as Partial<FakeOutboxRow> & { id: string; url: string; revision: bigint },
+        now,
+      ) as Row as FakeOutboxRow;
+    },
+    project: (row, select) => {
+      const out: Row = { ...row };
+      if (select.attempts) {
+        const spec = select.attempts === true ? {} : (select.attempts as Row);
+        let list: Row[] = [...this.attempts.values()].filter((attempt) => attempt.outboxId === row.id && matchesWhere(attempt, spec.where, {}));
+        list = sortRows(list, spec.orderBy);
+        if (spec.take !== undefined) list = list.slice(0, spec.take);
+        out.attempts = list.map((attempt) => ({ ...attempt }));
+      }
+      return out;
+    },
+  });
+
+  private attemptTable = new Table<Row>(this.attempts as unknown as Map<string, Row>, this, {
+    keyOf: (row) => String(row.id),
+    build: (data, existing) => {
+      if (existing.some((row) => row.outboxId === data.outboxId && row.attemptNo === data.attemptNo)) {
+        throw uniqueViolation("`outbox_id`,`attempt_no`");
+      }
+      const id = BigInt(this.attemptSeq++);
+      const now = this.clock();
+      return {
+        outcome: "started",
+        attemptState: "started",
+        startedAt: now,
+        requestAt: now,
+        responseAt: null,
+        httpStatus: null,
+        errorKind: null,
+        responseSummary: null,
+        batchSize: 1,
+        workerTaskId: null,
+        ...data,
+        id,
       };
     },
-    findMany: async (args: {
-      where: { status: string; deletedAt: null; articleType?: string };
-      orderBy?: unknown;
-      take?: number;
-      select: unknown;
-    }) => {
-      const rows = [...this.articles.values()]
-        .filter((a) => a.deletedAt === null && a.status === args.where.status)
-        .filter((a) => args.where.articleType === undefined || (a.articleType ?? "novel_article") === args.where.articleType)
-        .sort((a, b) => (a.id < b.id ? -1 : 1));
-      const limited = args.take ? rows.slice(0, args.take) : rows;
-      return limited.map((a) => ({ id: a.id }));
-    },
-  };
+  });
 
-  private indexNowOutbox = {
-    create: async (args: { data: Record<string, unknown>; select?: { id: true } }) => {
-      const url = args.data.url as string;
-      const revision = args.data.revision as bigint;
-      const conflict = [...this.outbox.values()].some((row) => row.url === url && row.revision === revision);
-      if (conflict) {
-        throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`url`,`revision`)", {
-          code: "P2002",
-          clientVersion: "test",
-        });
+  private auditTable = new Table<Row>(this.audits as unknown as Map<string, Row>, this, {
+    keyOf: (row) => String(row.id),
+    build: (data, existing) => {
+      if (
+        data.actorType === "admin" &&
+        data.requestId &&
+        existing.some((row) => row.actorType === "admin" && row.requestId === data.requestId && row.action === data.action)
+      ) {
+        throw uniqueViolation("`request_id`,`action`");
       }
-      const id = freshId("outbox");
-      const now = new Date();
-      this.seedOutbox({
+      const id = BigInt(this.auditSeq++);
+      return {
+        actorId: null,
+        requestId: null,
+        taskType: null,
+        taskId: null,
+        reason: null,
+        beforeSnapshot: null,
+        afterSnapshot: null,
+        ...data,
         id,
-        url,
-        revision,
-        articleId: (args.data.articleId as string) ?? null,
-        eventType: (args.data.eventType as string) ?? "article_first_publish",
-        locale: (args.data.locale as string) ?? "en",
-        status: (args.data.status as string) ?? "pending",
-        availableAt: (args.data.availableAt as Date | null) ?? null,
-        deferReason: (args.data.deferReason as string | null) ?? null,
-        source: (args.data.source as string) ?? "test",
-        sourceTaskId: (args.data.sourceTaskId as string | null) ?? null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return { id };
+        createdAt: this.clock(),
+      };
     },
-    findUnique: async (args: { where: { id: string }; select?: unknown }) => {
-      const row = this.outbox.get(args.where.id);
-      return row ? { ...row } : null;
-    },
-    findMany: async (args: {
-      where: Record<string, unknown>;
-      select?: { attempts?: unknown; articleId?: true; id?: true };
-      orderBy?: unknown;
-      take?: number;
-    }) => {
-      let rows = [...this.outbox.values()];
-      const where = args.where;
-      if (where.status && typeof where.status === "string") rows = rows.filter((r) => r.status === where.status);
-      if (where.updatedAt && typeof where.updatedAt === "object") {
-        const lt = (where.updatedAt as { lt?: Date }).lt;
-        if (lt) rows = rows.filter((r) => r.updatedAt.getTime() < lt.getTime());
-      }
-      if (where.articleId && typeof where.articleId === "object" && "in" in (where.articleId as object)) {
-        const ids = new Set((where.articleId as { in: string[] }).in);
-        rows = rows.filter((r) => r.articleId !== null && ids.has(r.articleId));
-      }
-      if (where.OR && Array.isArray(where.OR)) {
-        rows = rows.filter((r) =>
-          (where.OR as Array<Record<string, unknown>>).some((clause) => {
-            if (clause.status === "pending") {
-              const avail = clause.OR as Array<Record<string, unknown>> | undefined;
-              if (r.status !== "pending") return false;
-              if (!avail) return true;
-              return avail.some((sub) => {
-                if ("availableAt" in sub && sub.availableAt === null) return r.availableAt === null;
-                const lte = (sub.availableAt as { lte?: Date } | undefined)?.lte;
-                return lte !== undefined && r.availableAt !== null && r.availableAt.getTime() <= lte.getTime();
-              });
-            }
-            if (clause.status === "retry_wait") {
-              if (r.status !== "retry_wait") return false;
-              // Compare against the caller-supplied `lte` (the sweep's own
-              // `now`), never a freshly-constructed wall-clock `Date` — the
-              // whole point of this query is "due as of the caller's now",
-              // which in a test is a fixed fixture date that may be far from
-              // the real clock.
-              const lte = (clause.nextAttemptAt as { lte?: Date } | undefined)?.lte;
-              return lte !== undefined && r.nextAttemptAt !== null && r.nextAttemptAt.getTime() <= lte.getTime();
-            }
-            return false;
-          }),
-        );
-      }
-      rows.sort((a, b) => (a.id < b.id ? -1 : 1));
-      const limited = args.take ? rows.slice(0, args.take) : rows;
-      if (args.select?.attempts) {
-        return limited.map((r) => ({
-          id: r.id,
-          attemptCount: r.attemptCount,
-          maxAttempts: r.maxAttempts,
-          attempts: [...this.attempts.values()]
-            .filter((a) => a.outboxId === r.id)
-            .sort((a, b) => b.attemptNo - a.attemptNo)
-            .slice(0, 1),
-        }));
-      }
-      if (args.select?.articleId) return limited.filter((r) => r.articleId !== null).map((r) => ({ articleId: r.articleId }));
-      return limited.map((r) => ({ id: r.id }));
-    },
-    update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
-      const row = this.outbox.get(args.where.id);
-      if (!row) throw new Error(`outbox row ${args.where.id} not found`);
-      Object.assign(row, args.data, { updatedAt: new Date() });
-      return { ...row };
-    },
-    updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-      let rows = [...this.outbox.values()];
-      const where = args.where;
-      if (where.id && typeof where.id === "object" && "in" in (where.id as object)) {
-        const ids = new Set((where.id as { in: string[] }).in);
-        rows = rows.filter((r) => ids.has(r.id));
-      }
-      if (where.status) rows = rows.filter((r) => r.status === where.status);
-      if ("deferReason" in where) {
-        const clause = where.deferReason as { not?: null } | null;
-        if (clause && "not" in clause) rows = rows.filter((r) => r.deferReason !== null);
-      }
-      if (where.availableAt && typeof where.availableAt === "object") {
-        const gt = (where.availableAt as { gt?: Date }).gt;
-        if (gt) rows = rows.filter((r) => r.availableAt !== null && r.availableAt.getTime() > gt.getTime());
-      }
-      for (const row of rows) Object.assign(row, args.data, { updatedAt: new Date() });
-      return { count: rows.length };
-    },
-  };
+  });
 
-  private indexNowOutboxAttempt = {
-    create: async (args: { data: Record<string, unknown> }) => {
-      const attempt = this.seedAttempt({
-        outboxId: args.data.outboxId as string,
-        attemptNo: args.data.attemptNo as number,
-        outcome: args.data.outcome as string,
-        attemptState: args.data.attemptState as string,
-        requestBatchId: args.data.requestBatchId as string,
-        startedAt: args.data.startedAt as Date,
-        requestAt: args.data.requestAt as Date,
-        batchSize: (args.data.batchSize as number) ?? 1,
-        workerTaskId: (args.data.workerTaskId as string) ?? null,
-      });
-      return { ...attempt };
+  private taskTable = new Table<Row>(this.genericTasks as unknown as Map<string, Row>, this, {
+    keyOf: (row) => row.id,
+    build: (data, existing) => {
+      const status = (data.status as string | undefined) ?? "pending";
+      const active = status === "pending" || status === "processing";
+      if (existing.some((row) => data.requestToken && row.requestToken === data.requestToken)) {
+        throw uniqueViolation("`request_token`");
+      }
+      if (
+        active &&
+        existing.some(
+          (row) =>
+            (row.status === "pending" || row.status === "processing") &&
+            row.taskType === data.taskType &&
+            row.operationScopeHash === data.operationScopeHash,
+        )
+      ) {
+        // generic_task_active_scope_uidx
+        throw uniqueViolation("`task_type`,`channel_account_id`,`channel_app_id`,`operation_scope_hash`");
+      }
+      return { status, ...data, id: (data.id as string | undefined) ?? freshId("task") };
     },
-    update: async (args: { where: { id: bigint }; data: Record<string, unknown> }) => {
-      const attempt = this.attempts.get(String(args.where.id));
-      if (!attempt) throw new Error(`attempt ${args.where.id} not found`);
-      Object.assign(attempt, args.data);
-      return { ...attempt };
-    },
-    updateMany: async (args: { where: { outboxId: string; attemptNo: number }; data: Record<string, unknown> }) => {
-      const rows = [...this.attempts.values()].filter(
-        (a) => a.outboxId === args.where.outboxId && a.attemptNo === args.where.attemptNo,
-      );
-      for (const row of rows) Object.assign(row, args.data);
-      return { count: rows.length };
-    },
-  };
+  });
 
-  private siteSetting = {
-    findUnique: async (_args: { where: { id: 1 } }) => (this.siteSettingRow ? { ...this.siteSettingRow } : null),
-  };
+  private itemTable = new Table<Row>(this.genericTaskItems as unknown as Map<string, Row>, this, {
+    keyOf: (row) => row.id,
+    relations: { task: (row) => [this.genericTasks.get(row.taskId) as Row].filter(Boolean) },
+    build: (data, existing) => {
+      if (existing.some((row) => row.taskId === data.taskId && row.targetType === data.targetType && row.targetId === data.targetId)) {
+        throw uniqueViolation("`task_id`,`target_type`,`target_id`");
+      }
+      return { status: "pending", ...data, id: freshId("item") };
+    },
+  });
 
   private genericTask = {
-    create: async (args: { data: Record<string, unknown> & { items?: { create?: Array<Record<string, unknown>> } } }) => {
-      const id = freshId("task");
-      this.genericTasks.set(id, {
-        id,
-        taskType: args.data.taskType as string,
-        status: "pending",
-        operationScopeHash: args.data.operationScopeHash as string,
-      });
-      for (const itemData of args.data.items?.create ?? []) {
-        const itemId = freshId("item");
-        this.genericTaskItems.set(itemId, {
-          id: itemId,
-          taskId: id,
-          targetType: itemData.targetType as string,
-          targetId: itemData.targetId as string,
-          status: "pending",
-          payload: itemData.payload,
-        });
+    findFirst: this.taskTable.findFirst,
+    findMany: this.taskTable.findMany,
+    count: this.taskTable.count,
+    groupBy: this.taskTable.groupBy,
+    createMany: this.taskTable.createMany,
+    create: async (args: { data: Row & { items?: { create?: Row[] } } }) => {
+      const { items, ...data } = args.data;
+      const created = (await this.taskTable.create({ data })) as { id: string };
+      if (items?.create?.length) {
+        await this.itemTable.createMany({ data: items.create.map((item) => ({ ...item, taskId: created.id })) });
       }
-      return { id };
-    },
-    count: async (args: { where: { id: { in: string[] }; status: string } }) => {
-      const ids = new Set(args.where.id.in);
-      return [...this.genericTasks.values()].filter((t) => ids.has(t.id) && t.status === args.where.status).length;
+      return { id: created.id };
     },
   };
 
-  private genericTaskItem = {
-    findMany: async (args: { where: { targetType: string; targetId: { in: string[] }; status: { in: string[] } } }) => {
-      const ids = new Set(args.where.targetId.in);
-      const statuses = new Set(args.where.status.in);
-      return [...this.genericTaskItems.values()]
-        .filter((item) => item.targetType === args.where.targetType && ids.has(item.targetId) && statuses.has(item.status))
-        .map((item) => ({ targetId: item.targetId }));
-    },
-  };
+  // ---- clients ---------------------------------------------------------
+
+  private rawResult(query: unknown): unknown[] {
+    const text =
+      typeof query === "string"
+        ? query
+        : Array.isArray(query)
+          ? (query as string[]).join("?")
+          : ((query as { strings?: string[]; sql?: string }).strings?.join("?") ?? (query as { sql?: string }).sql ?? "");
+    if (text.includes("clock_timestamp() AS now")) return [{ now: this.clock() }];
+    if (text.includes("pg_advisory_xact_lock")) return [{ lock_result: "" }];
+    if (text === INDEXNOW_CONTROL_STATE_SQL || text.includes("/* indexnow:control-state */")) return [this.controlStateRow()];
+    throw new Error(`fake-db: unsupported raw SQL: ${text.slice(0, 120)}`);
+  }
+
+  /** JS mimic of `INDEXNOW_CONTROL_STATE_SQL` (ordering by id, never created_at). */
+  private controlStateRow(): Row {
+    const dbNow = this.clock();
+    const stream = (entityId: string) =>
+      [...this.audits.values()].filter((row) => row.entityType === "indexnow_delivery" && row.entityId === entityId).sort((a, b) => compare(a.id, b.id));
+    const breaker = stream("breaker");
+    const rate = stream("rate_limit");
+    const bisect = stream("bisect");
+    const lastBreaker = breaker[breaker.length - 1] ?? null;
+    const resumes = breaker.filter((row) => row.action === "indexnow.delivery.breaker_resume");
+    const lastResume = resumes[resumes.length - 1] ?? null;
+    const lastResumeId = lastResume ? lastResume.id : 0n;
+    const tripsSinceResume = breaker.filter((row) => row.action === "indexnow.delivery.breaker_trip" && row.id > lastResumeId);
+    const firstTrip = tripsSinceResume[0] ?? null;
+    const lastRate = rate[rate.length - 1] ?? null;
+    const waitUntil = lastRate ? ((lastRate.afterSnapshot as Row | null)?.waitUntil as string | undefined) : undefined;
+    const lastBisect = bisect[bisect.length - 1] ?? null;
+    return {
+      db_now: dbNow,
+      last_breaker_id: lastBreaker?.id ?? null,
+      last_breaker_action: lastBreaker?.action ?? null,
+      last_resume_id: lastResume?.id ?? null,
+      last_resume_actor_id: lastResume?.actorId ?? null,
+      last_resume_reason: lastResume?.reason ?? null,
+      last_resume_created_at: lastResume?.createdAt ?? null,
+      last_resume_after: lastResume?.afterSnapshot ?? null,
+      first_trip_id: firstTrip?.id ?? null,
+      first_trip_after: firstTrip?.afterSnapshot ?? null,
+      first_trip_created_at: firstTrip?.createdAt ?? null,
+      trip_events_since_resume: tripsSinceResume.length,
+      last_rate_id: lastRate?.id ?? null,
+      last_rate_after: lastRate?.afterSnapshot ?? null,
+      rate_waiting: waitUntil ? new Date(waitUntil).getTime() > dbNow.getTime() : false,
+      last_bisect_id: lastBisect?.id ?? null,
+      last_bisect_after: lastBisect?.afterSnapshot ?? null,
+      last_bisect_created_at: lastBisect?.createdAt ?? null,
+    };
+  }
+
+  private clientBody() {
+    return {
+      article: { findFirst: this.articleTable.findFirst, findMany: this.articleTable.findMany },
+      indexNowOutbox: {
+        create: this.outboxTable.create,
+        findUnique: this.outboxTable.findUnique,
+        findFirst: this.outboxTable.findFirst,
+        findMany: this.outboxTable.findMany,
+        count: this.outboxTable.count,
+        groupBy: this.outboxTable.groupBy,
+        update: this.outboxTable.update,
+        updateMany: this.outboxTable.updateMany,
+      },
+      indexNowOutboxAttempt: {
+        create: this.attemptTable.create,
+        createMany: this.attemptTable.createMany,
+        update: this.attemptTable.update,
+        updateMany: this.attemptTable.updateMany,
+        findMany: this.attemptTable.findMany,
+        findFirst: this.attemptTable.findFirst,
+        count: this.attemptTable.count,
+        groupBy: this.attemptTable.groupBy,
+      },
+      genericTask: this.genericTask,
+      genericTaskItem: {
+        findMany: this.itemTable.findMany,
+        findFirst: this.itemTable.findFirst,
+        count: this.itemTable.count,
+        groupBy: this.itemTable.groupBy,
+        createMany: this.itemTable.createMany,
+      },
+      operationAudit: {
+        create: this.auditTable.create,
+        findFirst: this.auditTable.findFirst,
+        findMany: this.auditTable.findMany,
+        count: this.auditTable.count,
+      },
+      siteSetting: {
+        findUnique: async () => (this.siteSettingRow ? { ...this.siteSettingRow } : null),
+      },
+      $queryRaw: async (query: unknown) => this.rawResult(query),
+      $queryRawUnsafe: async (query: string) => this.rawResult(query),
+    };
+  }
+
+  /** A transaction client: no `$transaction`, exactly like Prisma's. */
+  asTransactionClient(): Prisma.TransactionClient {
+    return this.clientBody() as unknown as Prisma.TransactionClient;
+  }
 
   asPrismaClient(): PrismaClient {
+    const tx = this.asTransactionClient();
     return {
-      article: this.article,
-      indexNowOutbox: this.indexNowOutbox,
-      indexNowOutboxAttempt: this.indexNowOutboxAttempt,
-      genericTask: this.genericTask,
-      genericTaskItem: this.genericTaskItem,
-      siteSetting: this.siteSetting,
+      ...this.clientBody(),
+      $transaction: async <R>(fn: (client: Prisma.TransactionClient) => Promise<R>) => {
+        const before = this.snapshot();
+        try {
+          return await fn(tx);
+        } catch (error) {
+          this.restore(before);
+          throw error;
+        }
+      },
     } as unknown as PrismaClient;
   }
 }
