@@ -114,6 +114,50 @@ export type AdminTagAuditMutationResult = Readonly<{
   replayed: boolean;
 }>;
 
+/**
+ * v0.5.15 首页题材导航勾选。全站一份名单（15 个语种共用），一次保存整份：
+ * `visibleCanonicalTagIds` 是保存后要在首页显示的分类（只能是启用中的分类），
+ * `expectedVisibleCanonicalTagIds` 是页面加载时看到的名单（保存前的现值），库里现值与它不一致就拒绝（409）。
+ */
+export const ADMIN_HOMEPAGE_NAV_MAX_IDS = 1000;
+
+export type AdminHomepageNavMutation = Readonly<{
+  requestId: string;
+  visibleCanonicalTagIds: readonly string[];
+  expectedVisibleCanonicalTagIds: readonly string[];
+}>;
+
+export type AdminHomepageNavMutationResult = Readonly<{
+  /** 保存后首页导航勾选的分类数（只算启用中的分类）。 */
+  visibleCount: number;
+  /** 这次真正改了几个分类的值（没变的不算）。 */
+  changedCount: number;
+  replayed: boolean;
+}>;
+
+/** 面板里的一行：一个启用中的分类，连同帮运营挑选的"书数"信息。 */
+export type AdminHomepageNavCandidate = Readonly<{
+  id: string;
+  slug: string;
+  facet: string | null;
+  sortOrder: number;
+  /** 中文名；没有 zh 译名时为 null（面板再回落 en 名、再回落 slug）。 */
+  zhName: string | null;
+  enName: string | null;
+  isHomepageVisible: boolean;
+  /** 英语里列表可见的书数（取自每语种每分类本数矩阵，最多晚 60 秒）。 */
+  enBookCount: number;
+  /** 有书的语种数（同一份矩阵）。 */
+  localeCount: number;
+}>;
+
+export type AdminHomepageNavCandidates = Readonly<{
+  items: readonly AdminHomepageNavCandidate[];
+  visibleCount: number;
+  /** 最近几次"首页导航"保存记录（新的在前），面板折叠区展示。 */
+  audit: readonly AdminTagAuditEntry[];
+}>;
+
 export type AdminCanonicalTagMutation =
   | Readonly<{
       action: "set_status";
@@ -264,6 +308,9 @@ export const TAGGING_ADMIN_ERROR_CODES = [
   "idempotency_conflict",
   "data_invariant_violation",
   "manual_mode_conflict",
+  // v0.5.15 首页题材导航勾选：名单已被别人改过（409）/ 名单里有不存在或已停用的分类（400）。
+  "homepage_nav_conflict",
+  "invalid_homepage_nav",
 ] as const;
 
 export type TaggingAdminErrorCode = (typeof TAGGING_ADMIN_ERROR_CODES)[number];

@@ -4,12 +4,15 @@
 # 一次性 postgres:16.14（tmpfs、随机口令）+ 真实 infra/postgres/roles.sql + 全部迁移（含
 # 20261009120000_b38_novel_effective_tag）+ 真实 infra/postgres/grants.sql，五个真实角色
 # （migration_owner / web_app / worker_app / scheduler_app / analyst_ro）各自的连接串传给用例。
-# 三个真实库用例文件（tests/integration/tagging/effective-tag-*-postgres.test.ts）必须全部通过且
-# skipped=0：
+# 四个真实库用例文件（tests/integration/tagging/ 下三个 effective-tag-*-postgres.test.ts 与
+# homepage-nav-postgres.test.ts）必须全部通过且 skipped=0：
 #   1) projection-equivalence：与改造前现场计算（tests/fixtures/public-taxonomy-before-b38.ts）逐行等价、
 #      迁移首建段与全量对账逐行一致、稳定状态零写入、检查命令、权限、事务闸；
 #   2) write-points：每个写入点用真实角色走真实服务函数 / 处理器；
-#   3) concurrency：咨询锁 50212 与书行锁、锁顺序。
+#   3) concurrency：咨询锁 50212 与书行锁、锁顺序；
+#   4) homepage-nav（v0.5.15 首页题材导航勾选）：用真实 web_app 角色保存名单（写开关为 false 的生产现状）、
+#      updated_at 逐行不变、审计行内容、名单冲突 409、停用分类不被改动、前台分类列表集合与顺序不变、
+#      与归属表全量重算并发不死锁。
 # 最后重放 grants 之后跑数据字典漂移检查（drift 必须为 0）。
 # 最后一行：B38_EFFECTIVE_TAG_POSTGRES_VERIFICATION=PASS
 set -euo pipefail
@@ -118,6 +121,7 @@ npm exec vitest run -- --project node \
   tests/integration/tagging/effective-tag-projection-equivalence-postgres.test.ts \
   tests/integration/tagging/effective-tag-write-points-postgres.test.ts \
   tests/integration/tagging/effective-tag-concurrency-postgres.test.ts \
+  tests/integration/tagging/homepage-nav-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 node - "$secret_dir/integration-result.json" <<'NODE'
@@ -125,8 +129,8 @@ const fs = require("node:fs");
 const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const files = report.testResults ?? [];
 const skipped = report.numPendingTests ?? -1;
-if (files.length !== 3 || files.some(f => f.status !== "passed" || !f.assertionResults?.length)
-    || skipped !== 0 || report.numFailedTests !== 0 || report.numPassedTests < 33) {
+if (files.length !== 4 || files.some(f => f.status !== "passed" || !f.assertionResults?.length)
+    || skipped !== 0 || report.numFailedTests !== 0 || report.numPassedTests < 33 + 11) {
   throw new Error(`B38_EFFECTIVE_TAG_INTEGRATION=FAIL files=${files.length} passed=${report.numPassedTests} skipped=${skipped} failed=${report.numFailedTests}`);
 }
 console.log(`B38_EFFECTIVE_TAG_INTEGRATION=PASS files=${files.length} passed=${report.numPassedTests} skipped=${skipped} failed=${report.numFailedTests}`);

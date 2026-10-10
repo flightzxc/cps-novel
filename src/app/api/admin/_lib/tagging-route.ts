@@ -3,6 +3,7 @@ import type {
   AdminCanonicalTagGetInput,
   AdminCanonicalTagKeyword,
   AdminCanonicalTagMutation,
+  AdminHomepageNavMutation,
   AdminNovelTagMutation,
   AdminSourceLabelMappingGetInput,
   AdminSourceLabelMappingMutation,
@@ -148,6 +149,25 @@ export function canonicalTagMutation(
     return { action: selectedAction, ...base, keywords: keywords(body.keywords) };
   }
   return invalid();
+}
+
+/**
+ * v0.5.15 首页题材导航勾选的请求体解析：只接受 `requestId`（必须与守卫发的请求号一致）、
+ * 保存后名单、页面加载时的名单这三个键，多一个少一个都拒绝。UUID 格式、重复、长度上限由服务端校验
+ * （`replaceHomepageNavSelection`），这里只管形状。
+ */
+export function homepageNavMutation(
+  input: unknown,
+  guardedRequestId: string,
+): AdminHomepageNavMutation {
+  const body = record(input);
+  exactKeys(body, ["requestId", "visibleCanonicalTagIds", "expectedVisibleCanonicalTagIds"]);
+  const requestId = assertRequestId(body, guardedRequestId);
+  return {
+    requestId,
+    visibleCanonicalTagIds: stringArray(body.visibleCanonicalTagIds),
+    expectedVisibleCanonicalTagIds: stringArray(body.expectedVisibleCanonicalTagIds),
+  };
 }
 
 export function sourceLabelMappingMutation(

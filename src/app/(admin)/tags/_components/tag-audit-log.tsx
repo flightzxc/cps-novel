@@ -23,7 +23,8 @@ import { formatDateTime } from "@/features/admin-ui/content-view";
  * reuse discipline `tags/_components/tag-badges.tsx:15` documents for
  * copying a small owned piece across a module-private boundary.
  *
- * If `AUDIT_KEYS` ever grows a twelfth key, this list needs the same edit.
+ * If `AUDIT_KEYS` ever grows another key, this list needs the same edit
+ * (v0.5.15 added the last three: `homepageNav` / `added` / `removed`).
  */
 const AUDIT_DIFF_KEYS = [
   "status",
@@ -37,10 +38,13 @@ const AUDIT_DIFF_KEYS = [
   "canonicalTagId",
   "mode",
   "revision",
+  "homepageNav",
+  "added",
+  "removed",
 ] as const;
 
 /**
- * The eight `action` strings the backend actually writes
+ * The `action` strings the backend actually writes
  * (`admin-service.ts` / `service.ts`). Unknown values pass through verbatim
  * — see `content-view.ts`'s `taskStatusLabel` for the same rule: inventing a
  * label would hide new data, not clarify it.
@@ -50,6 +54,7 @@ const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "tag.canonical.translations.replace": "替换译名",
   "tag.canonical.aliases.replace": "替换别名",
   "tag.canonical.keywords.replace": "替换 Keyword",
+  "tag.canonical.homepage_nav.replace": "首页导航",
   "tag.mapping.approve": "审批映射",
   "tag.mapping.deactivate": "停用映射",
   "tag.manual.replace": "人工设置标签",
@@ -72,6 +77,9 @@ const AUDIT_FIELD_LABELS: Readonly<Record<(typeof AUDIT_DIFF_KEYS)[number], stri
   canonicalTagId: "目标 Canonical Tag",
   mode: "模式",
   revision: "修订号",
+  homepageNav: "首页导航名单",
+  added: "本次新增",
+  removed: "本次去掉",
 });
 
 function isLocaleDisplayNamePair(value: Record<string, unknown>): value is { locale: string; displayName: string } {
@@ -185,7 +193,9 @@ export function TagAuditEntryRow({
         <ul className="space-y-0.5 pl-1 text-gray-600" data-testid={testId ? `${testId}-diff` : undefined}>
           {rows.map((row) => (
             <li key={row.key}>
-              {AUDIT_FIELD_LABELS[row.key]}：{formatAuditValue(row.before)} → {formatAuditValue(row.after)}
+              {row.key === "added" || row.key === "removed"
+                ? `${AUDIT_FIELD_LABELS[row.key]}：${formatAuditValue(row.after)}`
+                : `${AUDIT_FIELD_LABELS[row.key]}：${formatAuditValue(row.before)} → ${formatAuditValue(row.after)}`}
             </li>
           ))}
         </ul>
