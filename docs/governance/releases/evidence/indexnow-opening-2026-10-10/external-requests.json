@@ -1,0 +1,22 @@
+[
+  {
+    "atUTC": "2026-10-10T05:07:14.714527+00:00",
+    "url": "https://pulsenovels.com/indexnow-key.txt",
+    "requestNumber": 1,
+    "curlExit": 0,
+    "status": 200,
+    "cacheControl": [
+      "no-store"
+    ],
+    "bodyBytes": 32,
+    "bodySha256": "e33f183b9663a625cdc0e23d469f0c0b5b44d43e48f91da3fa430d470a548e1c",
+    "matchesDatabaseEffectiveKey": true
+  },
+  {
+    "requestNumber": 2,
+    "url": "https://pulsenovels.com/api/health",
+    "atUTC": "2026-10-10T05:09:59.298405+00:00",
+    "status": 200,
+    "curlExit": 0
+  }
+]

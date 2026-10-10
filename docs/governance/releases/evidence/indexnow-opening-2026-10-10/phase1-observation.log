@@ -1,0 +1,7 @@
+READONLY_SQL=[{"kind": "counts", "readAt": "2026-10-10T05:10:19.494916+00:00", "outboxTotal": 0, "attemptTotal": 0, "sweepScheduleTotal": 0, "newPublishedArticles": 0, "hiddenOutbox": 0, "duplicateOutboxGroups": 0}]
+LOG_READBACK={"service": "web", "since": "2026-10-10T05:08:55.439081111Z", "readAtUTC": "2026-10-10T05:10:19.595475+00:00", "errorLines": 0, "permissionDenied": 0}
+LOG_READBACK={"service": "worker", "since": "2026-10-10T05:09:03.964325924Z", "readAtUTC": "2026-10-10T05:10:19.645800+00:00", "errorLines": 0, "permissionDenied": 0}
+LOG_READBACK={"service": "worker-light", "since": "2026-10-10T05:09:11.836080527Z", "readAtUTC": "2026-10-10T05:10:19.698778+00:00", "errorLines": 0, "permissionDenied": 0}
+ENV_SHA256=6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58
+PHASE1_OBSERVATION=PENDING_OWNER_FIRST_PUBLISH
+SSH_EXIT=0

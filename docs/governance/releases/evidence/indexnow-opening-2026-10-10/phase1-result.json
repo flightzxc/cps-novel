@@ -1,0 +1,138 @@
+{
+  "status": "PHASE1_CONFIG_PASS_OBSERVATION_PENDING_OWNER_FIRST_PUBLISH",
+  "phase0": "PASS",
+  "phase1Configuration": "PASS",
+  "phase1PublicationObservation": "PENDING_OWNER_FIRST_PUBLISH",
+  "phase2": "NOT_AUTHORIZED_NOT_EXECUTED",
+  "delivery": "CLOSED",
+  "runtimeFinal": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "runtimeVersion": "0.5.14",
+  "configurationCompletedAtUTC": "2026-10-10T05:09:18.949425+00:00",
+  "configurationCompletedAtJST": "2026-10-10T14:09:18.949425+09:00",
+  "envChange": {
+    "backup": "/opt/cps-novel/shared/env/preprod.env.bak-indexnow-stage1-20261010T050845Z",
+    "beforeSha256": "c4c49569eb2fbbb5b14d7ba827b59770cc562de3706383ad404ddd9d8bc0da6c",
+    "afterSha256": "6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58",
+    "otherBytesCmp": "PASS",
+    "changedKeys": [
+      "FEATURE_INDEXNOW_OUTBOX",
+      "INDEXNOW_OUTBOX_ALLOW_WRITE",
+      "PREPROD_APPROVED_OPEN_WRITE_GATES"
+    ],
+    "allowlists": "UNCHANGED"
+  },
+  "services": [
+    {
+      "service": "web",
+      "id": "f14916abca950fb385014e9d42a907116cefce51c61a20be628520e35b306169",
+      "state": "running",
+      "health": "healthy",
+      "startedAt": "2026-10-10T05:08:55.439081111Z",
+      "outboxFeature": "true",
+      "outboxAllowWrite": "true",
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker",
+      "id": "82aaf8358c50b99f354e20d53f3167868a12b9a510acffc98d456b72d937c762",
+      "state": "running",
+      "health": "healthy",
+      "startedAt": "2026-10-10T05:09:03.964325924Z",
+      "outboxFeature": "true",
+      "outboxAllowWrite": "true",
+      "errorLines": 0,
+      "permissionDenied": 0,
+      "startupAllowlist": {
+        "schemaVersion": 1,
+        "event": "worker_task_allowlist",
+        "level": "info",
+        "requested": [
+          "credential.validate.v1",
+          "credential.supersede.v1",
+          "catalog_scan",
+          "promo_link.claim.v1",
+          "batch.materialize.v1",
+          "novel.materialize.v1",
+          "article.generate.v1",
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "moboreader.preview_refresh.v1",
+          "tagging.auto_classify",
+          "changdu.revenue_sync.v1"
+        ],
+        "effective": [
+          "credential.validate.v1",
+          "credential.supersede.v1",
+          "catalog_scan",
+          "promo_link.claim.v1",
+          "batch.materialize.v1",
+          "novel.materialize.v1",
+          "article.generate.v1",
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "moboreader.preview_refresh.v1",
+          "tagging.auto_classify",
+          "changdu.revenue_sync.v1"
+        ],
+        "invalid": []
+      }
+    },
+    {
+      "service": "worker-light",
+      "id": "4a986c1f84835b16bbf2b3113c7a9c7e76cac640ba85d032d5fbad8b1e2d647d",
+      "state": "running",
+      "health": "healthy",
+      "startedAt": "2026-10-10T05:09:11.836080527Z",
+      "outboxFeature": "true",
+      "outboxAllowWrite": "true",
+      "errorLines": 0,
+      "permissionDenied": 0,
+      "startupAllowlist": {
+        "schemaVersion": 1,
+        "event": "worker_task_allowlist",
+        "level": "info",
+        "requested": [
+          "sitemap_refresh",
+          "sitemap.daily_fallback.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "article.publish.batch.v1",
+          "article.publish.v1"
+        ],
+        "effective": [
+          "sitemap_refresh",
+          "sitemap.daily_fallback.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "article.publish.batch.v1",
+          "article.publish.v1"
+        ],
+        "invalid": []
+      }
+    },
+    {
+      "service": "scheduler",
+      "id": "76e2ed0ebc9d95d1861021de93c350f2bd9a5feb149c5ae748301425de5d4ba8",
+      "state": "running",
+      "health": "healthy",
+      "startedAt": "2026-10-09T15:14:07.800227153Z",
+      "unchanged": true
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "state": "running",
+      "health": "healthy",
+      "startedAt": "2026-09-27T15:28:01.610098036Z",
+      "unchanged": true
+    }
+  ],
+  "externalProbeRequests": 2,
+  "indexnowAttempts": 0,
+  "indexnowSweepSchedules": 0,
+  "x11Evidence": "../v0514-release/phase1/run-indexnow-sweep-postgres-verification.log",
+  "x11TestsPassed": 20,
+  "x11TestsSkipped": 0,
+  "stage0InvocationIncident": "Initial caller omitted manifest GIT_COMMIT export; fixed caller, full rerun PASS; no production mutation during incident."
+}
