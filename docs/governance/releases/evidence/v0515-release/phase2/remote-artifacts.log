@@ -1,0 +1,37 @@
+cps-novel-0.5.15-db62350.tar.zst: OK
+db623505539c3ca55f55b1270aab829b8db102d7.json: OK
+cps-novel-v0.5.15.bundle: OK
+The bundle contains this ref:
+db623505539c3ca55f55b1270aab829b8db102d7 refs/heads/release/v0.5.15-2026-10-10
+The bundle requires this ref:
+bf61b5ea276a0981870cdfa63578a822a65836f3 
+The bundle uses this hash algorithm: sha1
+Cloning into '/opt/cps-novel/releases/db623505539c3ca55f55b1270aab829b8db102d7'...
+done.
+/opt/cps-novel/shared/artifacts/staging/v0515/cps-novel-v0.5.15.bundle is okay
+From /opt/cps-novel/shared/artifacts/staging/v0515/cps-novel-v0.5.15.bundle
+ * branch                release/v0.5.15-2026-10-10 -> FETCH_HEAD
+Previous HEAD position was bf61b5ea2 发布：准备海阅 v0.5.14 六文件版本身份
+HEAD is now at db6235055 发布：准备海阅 v0.5.15 六文件版本身份
+REMOTE_CHECKOUT=PASS Final=db623505539c3ca55f55b1270aab829b8db102d7 tree=c8252747d2115d4cc36b2f85add9b985341f2adc
+IDENTITY=PASS
+  target            sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935 (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935
+  config            sha256:dd7b6cbe849ec74cf5368acea04243aac1bab1f113fa544094f030d1cf1f0bef
+  platform          linux/amd64
+  revision          db623505539c3ca55f55b1270aab829b8db102d7
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=db623505539c3ca55f55b1270aab829b8db102d7
+  archive_sha256=54f38dbc8d49e815db22c452825898f438af70c6ca320145aabfd4694a74d8c6
+  image_tag=cps-novel:0.5.15-db62350
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.5.15-db62350
+  target             =sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935
+  platform_manifest  =sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935
+  config             =sha256:dd7b6cbe849ec74cf5368acea04243aac1bab1f113fa544094f030d1cf1f0bef
+  platform           =linux/amd64
+  revision           =db623505539c3ca55f55b1270aab829b8db102d7
+REMOTE_ARTIFACTS=PASS

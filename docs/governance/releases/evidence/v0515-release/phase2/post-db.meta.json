@@ -1,0 +1,11 @@
+{
+  "name": "post-db",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/remote-script-client.py",
+    ".tmp/v0515-release/phase2/post-db.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791652160.333899,
+  "finishedAt": 1791652166.4109619
+}

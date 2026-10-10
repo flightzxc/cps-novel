@@ -1,0 +1,10 @@
+{
+  "name": "before-db-final",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/initial-client.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791651933.8309,
+  "finishedAt": 1791651970.60725
+}

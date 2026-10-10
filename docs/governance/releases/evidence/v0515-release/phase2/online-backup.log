@@ -1,0 +1,498 @@
+LOGICAL_BACKUP=PASS
+BACKUP_ARCHIVE=/var/lib/cps-novel/backups/logical/cps-novel-v0515-20261010T170346Z.dump
+;
+; Archive created at 2026-10-10 17:03:46 UTC
+;     dbname: cps_novel
+;     TOC Entries: 476
+;     Compression: gzip
+;     Dump Version: 1.15-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 16.14 (Debian 16.14-1.pgdg13+1)
+;     Dumped by pg_dump version: 16.14 (Debian 16.14-1.pgdg13+1)
+;
+;
+; Selected TOC Entries:
+;
+291; 1255 17257 FUNCTION public reject_operation_audit_mutation() migration_owner
+290; 1255 17255 FUNCTION public reject_promo_public_redirect_code_change() migration_owner
+292; 1255 152019 FUNCTION public reject_side_effect_manual_review_exit() migration_owner
+215; 1259 16395 TABLE public _prisma_migrations migration_owner
+256; 1259 17260 TABLE public admin_identity migration_owner
+261; 1259 17327 TABLE public admin_login_attempt migration_owner
+260; 1259 17316 TABLE public admin_recovery_code migration_owner
+257; 1259 17276 TABLE public admin_session migration_owner
+258; 1259 17290 TABLE public admin_two_factor migration_owner
+259; 1259 17303 TABLE public admin_two_factor_challenge migration_owner
+249; 1259 16730 TABLE public article migration_owner
+271; 1259 17606 TABLE public article_novel_rebind_batch migration_owner
+272; 1259 17627 TABLE public article_novel_rebind_batch_item migration_owner
+270; 1259 17594 TABLE public article_novel_rebind_preview migration_owner
+248; 1259 16719 TABLE public article_template migration_owner
+262; 1259 17362 TABLE public canonical_tag migration_owner
+264; 1259 17393 TABLE public canonical_tag_keyword migration_owner
+263; 1259 17383 TABLE public canonical_tag_translation migration_owner
+216; 1259 16404 TABLE public channel migration_owner
+220; 1259 16439 TABLE public channel_account migration_owner
+221; 1259 16446 TABLE public channel_account_credential migration_owner
+273; 1259 17657 TABLE public channel_account_hold migration_owner
+218; 1259 16418 TABLE public channel_app migration_owner
+219; 1259 16428 TABLE public channel_capability migration_owner
+222; 1259 16456 TABLE public channel_credential_active_fingerprint migration_owner
+236; 1259 16600 TABLE public channel_sync_task migration_owner
+237; 1259 16616 TABLE public channel_sync_task_item migration_owner
+224; 1259 16463 TABLE public credential_change_log migration_owner
+223; 1259 16462 SEQUENCE public credential_change_log_id_seq migration_owner
+4449; 0 0 SEQUENCE OWNED BY public credential_change_log_id_seq migration_owner
+247; 1259 16710 TABLE public cron_run migration_owner
+238; 1259 16628 TABLE public generic_task migration_owner
+239; 1259 16644 TABLE public generic_task_item migration_owner
+251; 1259 16748 TABLE public home_carousel_auto_batch migration_owner
+252; 1259 16758 TABLE public home_carousel_auto_candidate migration_owner
+255; 1259 16774 TABLE public home_carousel_change_log migration_owner
+254; 1259 16773 SEQUENCE public home_carousel_change_log_id_seq migration_owner
+4450; 0 0 SEQUENCE OWNED BY public home_carousel_change_log_id_seq migration_owner
+250; 1259 16741 TABLE public home_carousel_manual_slot migration_owner
+253; 1259 16767 TABLE public home_carousel_serving migration_owner
+243; 1259 16677 TABLE public indexnow_outbox migration_owner
+245; 1259 16689 TABLE public indexnow_outbox_attempt migration_owner
+244; 1259 16688 SEQUENCE public indexnow_outbox_attempt_id_seq migration_owner
+4451; 0 0 SEQUENCE OWNED BY public indexnow_outbox_attempt_id_seq migration_owner
+225; 1259 16473 TABLE public novel migration_owner
+268; 1259 17468 TABLE public novel_canonical_tag migration_owner
+227; 1259 16494 TABLE public novel_chapter migration_owner
+229; 1259 16513 TABLE public novel_chapter_content migration_owner
+228; 1259 16503 TABLE public novel_chapter_source_item migration_owner
+278; 1259 477212 TABLE public novel_effective_tag migration_owner
+230; 1259 16521 TABLE public novel_preview_policy migration_owner
+226; 1259 16483 TABLE public novel_source_item migration_owner
+232; 1259 16540 TABLE public novel_source_item_label migration_owner
+266; 1259 17429 TABLE public novel_tag_state migration_owner
+242; 1259 16668 TABLE public operation_audit migration_owner
+241; 1259 16667 SEQUENCE public operation_audit_id_seq migration_owner
+4452; 0 0 SEQUENCE OWNED BY public operation_audit_id_seq migration_owner
+233; 1259 16548 TABLE public promo_link migration_owner
+277; 1259 378224 TABLE public revenue_daily_stat migration_owner
+276; 1259 378206 TABLE public revenue_raw_snapshot migration_owner
+275; 1259 378176 TABLE public revenue_sync_batch migration_owner
+274; 1259 378161 TABLE public revenue_sync_scope migration_owner
+246; 1259 16700 TABLE public schedule_run migration_owner
+240; 1259 16656 TABLE public side_effect_intent migration_owner
+269; 1259 17553 TABLE public site_setting migration_owner
+4453; 0 0 COMMENT public COLUMN site_setting.carousel_config_json migration_owner
+4454; 0 0 COMMENT public COLUMN site_setting.yandex_verification migration_owner
+4455; 0 0 COMMENT public COLUMN site_setting.yandex_metrica_id migration_owner
+4456; 0 0 COMMENT public COLUMN site_setting.site_search_enabled migration_owner
+217; 1259 16411 TABLE public source_app migration_owner
+231; 1259 16532 TABLE public source_label migration_owner
+265; 1259 17413 TABLE public source_label_mapping migration_owner
+267; 1259 17441 TABLE public tag_classification_run migration_owner
+235; 1259 16561 TABLE public tracking_event migration_owner
+234; 1259 16560 SEQUENCE public tracking_event_id_seq migration_owner
+4457; 0 0 SEQUENCE OWNED BY public tracking_event_id_seq migration_owner
+3525; 2604 16466 DEFAULT public credential_change_log id migration_owner
+3637; 2604 16777 DEFAULT public home_carousel_change_log id migration_owner
+3601; 2604 16692 DEFAULT public indexnow_outbox_attempt id migration_owner
+3593; 2604 16671 DEFAULT public operation_audit id migration_owner
+3556; 2604 16564 DEFAULT public tracking_event id migration_owner
+4379; 0 16395 TABLE DATA public _prisma_migrations migration_owner
+4420; 0 17260 TABLE DATA public admin_identity migration_owner
+4425; 0 17327 TABLE DATA public admin_login_attempt migration_owner
+4424; 0 17316 TABLE DATA public admin_recovery_code migration_owner
+4421; 0 17276 TABLE DATA public admin_session migration_owner
+4422; 0 17290 TABLE DATA public admin_two_factor migration_owner
+4423; 0 17303 TABLE DATA public admin_two_factor_challenge migration_owner
+4413; 0 16730 TABLE DATA public article migration_owner
+4435; 0 17606 TABLE DATA public article_novel_rebind_batch migration_owner
+4436; 0 17627 TABLE DATA public article_novel_rebind_batch_item migration_owner
+4434; 0 17594 TABLE DATA public article_novel_rebind_preview migration_owner
+4412; 0 16719 TABLE DATA public article_template migration_owner
+4426; 0 17362 TABLE DATA public canonical_tag migration_owner
+4428; 0 17393 TABLE DATA public canonical_tag_keyword migration_owner
+4427; 0 17383 TABLE DATA public canonical_tag_translation migration_owner
+4380; 0 16404 TABLE DATA public channel migration_owner
+4384; 0 16439 TABLE DATA public channel_account migration_owner
+4385; 0 16446 TABLE DATA public channel_account_credential migration_owner
+4437; 0 17657 TABLE DATA public channel_account_hold migration_owner
+4382; 0 16418 TABLE DATA public channel_app migration_owner
+4383; 0 16428 TABLE DATA public channel_capability migration_owner
+4386; 0 16456 TABLE DATA public channel_credential_active_fingerprint migration_owner
+4400; 0 16600 TABLE DATA public channel_sync_task migration_owner
+4401; 0 16616 TABLE DATA public channel_sync_task_item migration_owner
+4388; 0 16463 TABLE DATA public credential_change_log migration_owner
+4411; 0 16710 TABLE DATA public cron_run migration_owner
+4402; 0 16628 TABLE DATA public generic_task migration_owner
+4403; 0 16644 TABLE DATA public generic_task_item migration_owner
+4415; 0 16748 TABLE DATA public home_carousel_auto_batch migration_owner
+4416; 0 16758 TABLE DATA public home_carousel_auto_candidate migration_owner
+4419; 0 16774 TABLE DATA public home_carousel_change_log migration_owner
+4414; 0 16741 TABLE DATA public home_carousel_manual_slot migration_owner
+4417; 0 16767 TABLE DATA public home_carousel_serving migration_owner
+4407; 0 16677 TABLE DATA public indexnow_outbox migration_owner
+4409; 0 16689 TABLE DATA public indexnow_outbox_attempt migration_owner
+4389; 0 16473 TABLE DATA public novel migration_owner
+4432; 0 17468 TABLE DATA public novel_canonical_tag migration_owner
+4391; 0 16494 TABLE DATA public novel_chapter migration_owner
+4393; 0 16513 TABLE DATA public novel_chapter_content migration_owner
+4392; 0 16503 TABLE DATA public novel_chapter_source_item migration_owner
+4442; 0 477212 TABLE DATA public novel_effective_tag migration_owner
+4394; 0 16521 TABLE DATA public novel_preview_policy migration_owner
+4390; 0 16483 TABLE DATA public novel_source_item migration_owner
+4396; 0 16540 TABLE DATA public novel_source_item_label migration_owner
+4430; 0 17429 TABLE DATA public novel_tag_state migration_owner
+4406; 0 16668 TABLE DATA public operation_audit migration_owner
+4397; 0 16548 TABLE DATA public promo_link migration_owner
+4441; 0 378224 TABLE DATA public revenue_daily_stat migration_owner
+4440; 0 378206 TABLE DATA public revenue_raw_snapshot migration_owner
+4439; 0 378176 TABLE DATA public revenue_sync_batch migration_owner
+4438; 0 378161 TABLE DATA public revenue_sync_scope migration_owner
+4410; 0 16700 TABLE DATA public schedule_run migration_owner
+4404; 0 16656 TABLE DATA public side_effect_intent migration_owner
+4433; 0 17553 TABLE DATA public site_setting migration_owner
+4381; 0 16411 TABLE DATA public source_app migration_owner
+4395; 0 16532 TABLE DATA public source_label migration_owner
+4429; 0 17413 TABLE DATA public source_label_mapping migration_owner
+4431; 0 17441 TABLE DATA public tag_classification_run migration_owner
+4399; 0 16561 TABLE DATA public tracking_event migration_owner
+4458; 0 0 SEQUENCE SET public credential_change_log_id_seq migration_owner
+4459; 0 0 SEQUENCE SET public home_carousel_change_log_id_seq migration_owner
+4460; 0 0 SEQUENCE SET public indexnow_outbox_attempt_id_seq migration_owner
+4461; 0 0 SEQUENCE SET public operation_audit_id_seq migration_owner
+4462; 0 0 SEQUENCE SET public tracking_event_id_seq migration_owner
+3850; 2606 16403 CONSTRAINT public _prisma_migrations _prisma_migrations_pkey migration_owner
+4050; 2606 17273 CONSTRAINT public admin_identity admin_identity_pkey migration_owner
+4074; 2606 17334 CONSTRAINT public admin_login_attempt admin_login_attempt_pkey migration_owner
+4071; 2606 17324 CONSTRAINT public admin_recovery_code admin_recovery_code_pkey migration_owner
+4056; 2606 17286 CONSTRAINT public admin_session admin_session_identity_pair_key migration_owner
+4058; 2606 17284 CONSTRAINT public admin_session admin_session_pkey migration_owner
+4065; 2606 17312 CONSTRAINT public admin_two_factor_challenge admin_two_factor_challenge_pkey migration_owner
+4062; 2606 17301 CONSTRAINT public admin_two_factor admin_two_factor_pkey migration_owner
+4126; 2606 17635 CONSTRAINT public article_novel_rebind_batch_item article_novel_rebind_batch_item_pkey migration_owner
+4118; 2606 17621 CONSTRAINT public article_novel_rebind_batch article_novel_rebind_batch_pkey migration_owner
+4115; 2606 17603 CONSTRAINT public article_novel_rebind_preview article_novel_rebind_preview_pkey migration_owner
+4018; 2606 16740 CONSTRAINT public article article_pkey migration_owner
+4011; 2606 16729 CONSTRAINT public article_template article_template_pkey migration_owner
+4085; 2606 17409 CONSTRAINT public canonical_tag_keyword canonical_tag_keyword_pkey migration_owner
+4076; 2606 17379 CONSTRAINT public canonical_tag canonical_tag_pkey migration_owner
+4083; 2606 17390 CONSTRAINT public canonical_tag_translation canonical_tag_translation_pkey migration_owner
+3874; 2606 16455 CONSTRAINT public channel_account_credential channel_account_credential_pkey migration_owner
+4131; 2606 17665 CONSTRAINT public channel_account_hold channel_account_hold_pkey migration_owner
+3871; 2606 16445 CONSTRAINT public channel_account channel_account_pkey migration_owner
+3861; 2606 16427 CONSTRAINT public channel_app channel_app_pkey migration_owner
+3866; 2606 16438 CONSTRAINT public channel_capability channel_capability_pkey migration_owner
+3883; 2606 16461 CONSTRAINT public channel_credential_active_fingerprint channel_credential_active_fingerprint_pkey migration_owner
+3853; 2606 16410 CONSTRAINT public channel channel_pkey migration_owner
+3958; 2606 16627 CONSTRAINT public channel_sync_task_item channel_sync_task_item_pkey migration_owner
+3947; 2606 16615 CONSTRAINT public channel_sync_task channel_sync_task_pkey migration_owner
+3885; 2606 16472 CONSTRAINT public credential_change_log credential_change_log_pkey migration_owner
+4007; 2606 16718 CONSTRAINT public cron_run cron_run_pkey migration_owner
+3974; 2606 16655 CONSTRAINT public generic_task_item generic_task_item_pkey migration_owner
+3967; 2606 16643 CONSTRAINT public generic_task generic_task_pkey migration_owner
+4034; 2606 16757 CONSTRAINT public home_carousel_auto_batch home_carousel_auto_batch_pkey migration_owner
+4040; 2606 16766 CONSTRAINT public home_carousel_auto_candidate home_carousel_auto_candidate_pkey migration_owner
+4048; 2606 16782 CONSTRAINT public home_carousel_change_log home_carousel_change_log_pkey migration_owner
+4030; 2606 16747 CONSTRAINT public home_carousel_manual_slot home_carousel_manual_slot_pkey migration_owner
+4044; 2606 16772 CONSTRAINT public home_carousel_serving home_carousel_serving_pkey migration_owner
+3999; 2606 16699 CONSTRAINT public indexnow_outbox_attempt indexnow_outbox_attempt_pkey migration_owner
+3992; 2606 16687 CONSTRAINT public indexnow_outbox indexnow_outbox_pkey migration_owner
+4106; 2606 17483 CONSTRAINT public novel_canonical_tag novel_canonical_tag_pkey migration_owner
+3916; 2606 16520 CONSTRAINT public novel_chapter_content novel_chapter_content_pkey migration_owner
+3907; 2606 16502 CONSTRAINT public novel_chapter novel_chapter_pkey migration_owner
+3912; 2606 16512 CONSTRAINT public novel_chapter_source_item novel_chapter_source_item_pkey migration_owner
+4149; 2606 477217 CONSTRAINT public novel_effective_tag novel_effective_tag_pkey migration_owner
+3894; 2606 16482 CONSTRAINT public novel novel_pkey migration_owner
+3919; 2606 16531 CONSTRAINT public novel_preview_policy novel_preview_policy_pkey migration_owner
+3926; 2606 16547 CONSTRAINT public novel_source_item_label novel_source_item_label_pkey migration_owner
+3900; 2606 16493 CONSTRAINT public novel_source_item novel_source_item_pkey migration_owner
+4097; 2606 17438 CONSTRAINT public novel_tag_state novel_tag_state_pkey migration_owner
+3986; 2606 16676 CONSTRAINT public operation_audit operation_audit_pkey migration_owner
+3934; 2606 16559 CONSTRAINT public promo_link promo_link_pkey migration_owner
+4146; 2606 378229 CONSTRAINT public revenue_daily_stat revenue_daily_stat_pkey migration_owner
+4143; 2606 378214 CONSTRAINT public revenue_raw_snapshot revenue_raw_snapshot_pkey migration_owner
+4137; 2606 378187 CONSTRAINT public revenue_sync_batch revenue_sync_batch_pkey migration_owner
+4134; 2606 378167 CONSTRAINT public revenue_sync_scope revenue_sync_scope_pkey migration_owner
+4003; 2606 16709 CONSTRAINT public schedule_run schedule_run_pkey migration_owner
+3979; 2606 16666 CONSTRAINT public side_effect_intent side_effect_intent_pkey migration_owner
+4111; 2606 17573 CONSTRAINT public site_setting site_setting_pkey migration_owner
+3857; 2606 16417 CONSTRAINT public source_app source_app_pkey migration_owner
+4092; 2606 17425 CONSTRAINT public source_label_mapping source_label_mapping_pkey migration_owner
+3923; 2606 16539 CONSTRAINT public source_label source_label_pkey migration_owner
+4102; 2606 17463 CONSTRAINT public tag_classification_run tag_classification_run_pkey migration_owner
+3939; 2606 16572 CONSTRAINT public tracking_event tracking_event_pkey migration_owner
+3879; 1259 16800 INDEX public active_fingerprint_account_type_idx migration_owner
+4051; 1259 17275 INDEX public admin_identity_status_updated_idx migration_owner
+4052; 1259 17274 INDEX public admin_identity_username_key migration_owner
+4072; 1259 17335 INDEX public admin_login_attempt_locked_idx migration_owner
+4068; 1259 17325 INDEX public admin_recovery_code_code_hash_key migration_owner
+4069; 1259 17326 INDEX public admin_recovery_code_identity_unused_idx migration_owner
+4053; 1259 17289 INDEX public admin_session_absolute_expiry_idx migration_owner
+4054; 1259 17288 INDEX public admin_session_identity_active_idx migration_owner
+4059; 1259 17287 INDEX public admin_session_token_hash_key migration_owner
+4063; 1259 17315 INDEX public admin_two_factor_challenge_identity_active_idx migration_owner
+4066; 1259 17314 INDEX public admin_two_factor_challenge_session_active_idx migration_owner
+4067; 1259 17313 INDEX public admin_two_factor_challenge_token_hash_key migration_owner
+4060; 1259 17302 INDEX public admin_two_factor_pending_expiry_idx migration_owner
+4014; 1259 17240 INDEX public article_locale_slug_active_uidx migration_owner
+4015; 1259 16876 INDEX public article_locale_status_idx migration_owner
+4016; 1259 16878 INDEX public article_novel_locale_key migration_owner
+4116; 1259 17624 INDEX public article_novel_rebind_batch_created_by_created_idx migration_owner
+4122; 1259 17638 INDEX public article_novel_rebind_batch_item_article_status_idx migration_owner
+4123; 1259 17636 INDEX public article_novel_rebind_batch_item_batch_article_key migration_owner
+4124; 1259 17637 INDEX public article_novel_rebind_batch_item_batch_status_id_idx migration_owner
+4127; 1259 17639 INDEX public article_novel_rebind_batch_item_processing_token_idx migration_owner
+4119; 1259 17625 INDEX public article_novel_rebind_batch_preview_idx migration_owner
+4120; 1259 17622 INDEX public article_novel_rebind_batch_request_token_key migration_owner
+4121; 1259 17623 INDEX public article_novel_rebind_batch_status_created_idx migration_owner
+4112; 1259 17604 INDEX public article_novel_rebind_preview_created_by_created_idx migration_owner
+4113; 1259 17605 INDEX public article_novel_rebind_preview_expires_idx migration_owner
+4019; 1259 16877 INDEX public article_promo_link_idx migration_owner
+4020; 1259 477232 INDEX public article_public_list_order_idx migration_owner
+4021; 1259 16874 INDEX public article_public_page_short_id_key migration_owner
+4022; 1259 17589 INDEX public article_seo_visibility_idx migration_owner
+4023; 1259 16875 INDEX public article_status_published_idx migration_owner
+4012; 1259 16872 INDEX public article_template_status_locale_idx migration_owner
+4013; 1259 16873 INDEX public article_template_version_key migration_owner
+4024; 1259 17590 INDEX public article_type_locale_status_published_idx migration_owner
+4086; 1259 17410 INDEX public canonical_tag_keyword_stable_key migration_owner
+4087; 1259 17411 INDEX public canonical_tag_keyword_tag_active_idx migration_owner
+4088; 1259 17412 INDEX public canonical_tag_keyword_version_active_idx migration_owner
+4077; 1259 17381 INDEX public canonical_tag_slug_key migration_owner
+4078; 1259 17380 INDEX public canonical_tag_stable_id_key migration_owner
+4079; 1259 17382 INDEX public canonical_tag_status_sort_idx migration_owner
+4080; 1259 17391 INDEX public canonical_tag_translation_locale_key migration_owner
+4081; 1259 17392 INDEX public canonical_tag_translation_locale_name_idx migration_owner
+4031; 1259 16883 INDEX public carousel_batch_run_date_idx migration_owner
+4032; 1259 16882 INDEX public carousel_batch_status_created_idx migration_owner
+4036; 1259 16884 INDEX public carousel_candidate_batch_locale_idx migration_owner
+4037; 1259 16885 INDEX public carousel_candidate_batch_locale_rank_key migration_owner
+4038; 1259 16886 INDEX public carousel_candidate_batch_novel_key migration_owner
+4045; 1259 16889 INDEX public carousel_change_locale_created_idx migration_owner
+4046; 1259 16890 INDEX public carousel_change_manual_slot_idx migration_owner
+4025; 1259 16880 INDEX public carousel_manual_article_idx migration_owner
+4026; 1259 16879 INDEX public carousel_manual_locale_enabled_idx migration_owner
+4027; 1259 17245 INDEX public carousel_manual_novel_active_uidx migration_owner
+4028; 1259 17244 INDEX public carousel_manual_position_active_uidx migration_owner
+4041; 1259 16887 INDEX public carousel_serving_article_idx migration_owner
+4042; 1259 16888 INDEX public carousel_serving_locale_position_key migration_owner
+3868; 1259 16792 INDEX public channel_account_business_id_key migration_owner
+3869; 1259 16793 INDEX public channel_account_channel_status_idx migration_owner
+4128; 1259 17671 INDEX public channel_account_hold_active_uidx migration_owner
+4129; 1259 17672 INDEX public channel_account_hold_history_idx migration_owner
+3872; 1259 16794 INDEX public channel_account_status_deleted_idx migration_owner
+3859; 1259 16789 INDEX public channel_app_binding_key migration_owner
+3862; 1259 16788 INDEX public channel_app_project_status_idx migration_owner
+3863; 1259 16787 INDEX public channel_app_status_idx migration_owner
+3864; 1259 16791 INDEX public channel_capability_app_key migration_owner
+3867; 1259 16790 INDEX public channel_capability_status_effect_idx migration_owner
+3851; 1259 16783 INDEX public channel_code_key migration_owner
+3880; 1259 16799 INDEX public channel_credential_active_fingerprint_credential_id_key migration_owner
+3881; 1259 16798 INDEX public channel_credential_active_fingerprint_fingerprint_key migration_owner
+3854; 1259 16784 INDEX public channel_status_idx migration_owner
+3944; 1259 16843 INDEX public channel_sync_account_app_idx migration_owner
+3945; 1259 17242 INDEX public channel_sync_active_scope_uidx migration_owner
+3950; 1259 16845 INDEX public channel_sync_item_source_idx migration_owner
+3951; 1259 16846 INDEX public channel_sync_item_source_key migration_owner
+3952; 1259 16844 INDEX public channel_sync_item_task_status_idx migration_owner
+3953; 1259 17251 INDEX public channel_sync_task_item_expired_lease_idx migration_owner
+3954; 1259 154396 INDEX public channel_sync_task_item_heartbeat_idx migration_owner
+3955; 1259 17249 INDEX public channel_sync_task_item_pending_claim_idx migration_owner
+3956; 1259 17250 INDEX public channel_sync_task_item_pending_global_idx migration_owner
+3948; 1259 16841 INDEX public channel_sync_task_request_token_key migration_owner
+3949; 1259 16842 INDEX public channel_sync_type_status_created_idx migration_owner
+3913; 1259 16818 INDEX public chapter_content_hash_idx migration_owner
+3908; 1259 16814 INDEX public chapter_source_chapter_idx migration_owner
+3909; 1259 16816 INDEX public chapter_source_identity_key migration_owner
+3910; 1259 16815 INDEX public chapter_source_updated_idx migration_owner
+3875; 1259 16795 INDEX public credential_account_status_idx migration_owner
+3876; 1259 17237 INDEX public credential_active_account_type_uidx migration_owner
+3877; 1259 16797 INDEX public credential_expires_at_idx migration_owner
+3886; 1259 16801 INDEX public credential_log_account_created_idx migration_owner
+3887; 1259 16803 INDEX public credential_log_action_created_idx migration_owner
+3888; 1259 16802 INDEX public credential_log_actor_created_idx migration_owner
+3878; 1259 16796 INDEX public credential_type_status_idx migration_owner
+4005; 1259 16870 INDEX public cron_run_generic_task_id_key migration_owner
+4008; 1259 16869 INDEX public cron_run_schedule_run_id_key migration_owner
+4009; 1259 16871 INDEX public cron_run_status_created_idx migration_owner
+3959; 1259 16849 INDEX public generic_task_account_app_idx migration_owner
+3960; 1259 17243 INDEX public generic_task_active_scope_uidx migration_owner
+3961; 1259 17582 INDEX public generic_task_catalog_scan_scope_idx migration_owner
+3962; 1259 17581 INDEX public generic_task_catalog_scan_status_created_idx migration_owner
+3963; 1259 16848 INDEX public generic_task_claim_idx migration_owner
+3969; 1259 17254 INDEX public generic_task_item_expired_lease_idx migration_owner
+3970; 1259 154395 INDEX public generic_task_item_heartbeat_idx migration_owner
+3971; 1259 17252 INDEX public generic_task_item_pending_claim_idx migration_owner
+3972; 1259 17253 INDEX public generic_task_item_pending_global_idx migration_owner
+3975; 1259 16852 INDEX public generic_task_item_target_key migration_owner
+3976; 1259 16851 INDEX public generic_task_item_task_status_idx migration_owner
+3964; 1259 16850 INDEX public generic_task_origin_key migration_owner
+3965; 1259 17654 INDEX public generic_task_parent_status_created_idx migration_owner
+3968; 1259 16847 INDEX public generic_task_request_token_key migration_owner
+4035; 1259 16881 INDEX public home_carousel_auto_batch_unique_key_key migration_owner
+3996; 1259 16865 INDEX public indexnow_attempt_number_key migration_owner
+3997; 1259 16864 INDEX public indexnow_attempt_request_batch_idx migration_owner
+3989; 1259 16862 INDEX public indexnow_outbox_article_idx migration_owner
+3990; 1259 17550 INDEX public indexnow_outbox_defer_reason_status_idx migration_owner
+3993; 1259 16861 INDEX public indexnow_outbox_status_available_idx migration_owner
+3994; 1259 16860 INDEX public indexnow_outbox_status_retry_idx migration_owner
+3995; 1259 16863 INDEX public indexnow_outbox_url_revision_key migration_owner
+3889; 1259 16804 INDEX public novel_business_id_key migration_owner
+4104; 1259 17485 INDEX public novel_canonical_tag_novel_source_idx migration_owner
+4107; 1259 17487 INDEX public novel_canonical_tag_run_idx migration_owner
+4108; 1259 17484 INDEX public novel_canonical_tag_source_key migration_owner
+4109; 1259 17486 INDEX public novel_canonical_tag_tag_source_idx migration_owner
+3914; 1259 16817 INDEX public novel_chapter_content_novel_chapter_id_key migration_owner
+3904; 1259 16813 INDEX public novel_chapter_listing_idx migration_owner
+3905; 1259 17239 INDEX public novel_chapter_number_active_uidx migration_owner
+4150; 1259 477219 INDEX public novel_effective_tag_rank_idx migration_owner
+4151; 1259 477218 INDEX public novel_effective_tag_tag_idx migration_owner
+3890; 1259 17238 INDEX public novel_locale_slug_active_uidx migration_owner
+3891; 1259 16806 INDEX public novel_locale_status_idx migration_owner
+3892; 1259 17593 INDEX public novel_locale_title_normalized_idx migration_owner
+3917; 1259 16819 INDEX public novel_preview_policy_novel_id_key migration_owner
+3896; 1259 16808 INDEX public novel_source_app_locale_idx migration_owner
+3897; 1259 16809 INDEX public novel_source_app_split_ratio_idx migration_owner
+3898; 1259 16812 INDEX public novel_source_identity_key migration_owner
+3924; 1259 16823 INDEX public novel_source_item_label_active_idx migration_owner
+3927; 1259 16822 INDEX public novel_source_label_active_idx migration_owner
+3928; 1259 16824 INDEX public novel_source_label_key migration_owner
+3901; 1259 16807 INDEX public novel_source_novel_idx migration_owner
+3902; 1259 16811 INDEX public novel_source_status_seen_idx migration_owner
+3903; 1259 16810 INDEX public novel_source_updated_idx migration_owner
+3895; 1259 16805 INDEX public novel_status_updated_idx migration_owner
+4094; 1259 17439 INDEX public novel_tag_state_current_auto_run_key migration_owner
+4095; 1259 17440 INDEX public novel_tag_state_mode_updated_idx migration_owner
+3983; 1259 17336 INDEX public operation_audit_admin_request_action_uidx migration_owner
+3984; 1259 16857 INDEX public operation_audit_entity_created_idx migration_owner
+3987; 1259 16858 INDEX public operation_audit_request_idx migration_owner
+3988; 1259 16859 INDEX public operation_audit_task_idx migration_owner
+3929; 1259 16829 INDEX public promo_link_account_status_idx migration_owner
+3930; 1259 16831 INDEX public promo_link_id_novel_key migration_owner
+3931; 1259 16826 INDEX public promo_link_idempotency_key_key migration_owner
+3932; 1259 16828 INDEX public promo_link_novel_status_idx migration_owner
+3935; 1259 16825 INDEX public promo_link_public_redirect_code_key migration_owner
+3936; 1259 16827 INDEX public promo_link_source_idx migration_owner
+3937; 1259 16830 INDEX public promo_link_status_fetched_idx migration_owner
+4147; 1259 378230 INDEX public revenue_daily_stat_scope_date_key migration_owner
+4140; 1259 378217 INDEX public revenue_raw_snapshot_batch_total_idx migration_owner
+4141; 1259 378215 INDEX public revenue_raw_snapshot_dedupe_key_key migration_owner
+4144; 1259 378216 INDEX public revenue_raw_snapshot_project_dimension_key_idx migration_owner
+4135; 1259 378190 INDEX public revenue_sync_batch_created_idx migration_owner
+4138; 1259 378188 INDEX public revenue_sync_batch_request_fingerprint_key migration_owner
+4139; 1259 378189 INDEX public revenue_sync_batch_scope_begin_idx migration_owner
+4132; 1259 378168 INDEX public revenue_sync_scope_account_project_key migration_owner
+4000; 1259 16867 INDEX public schedule_run_due_idx migration_owner
+4001; 1259 16866 INDEX public schedule_run_manual_trigger_id_key migration_owner
+4004; 1259 16868 INDEX public schedule_run_scheduled_key migration_owner
+3977; 1259 16853 INDEX public side_effect_intent_effect_key_key migration_owner
+3980; 1259 16856 INDEX public side_effect_operation_idempotency_key migration_owner
+3981; 1259 16855 INDEX public side_effect_status_created_idx migration_owner
+3982; 1259 16854 INDEX public side_effect_target_created_idx migration_owner
+3855; 1259 16785 INDEX public source_app_code_key migration_owner
+3858; 1259 16786 INDEX public source_app_status_idx migration_owner
+3920; 1259 16821 INDEX public source_label_identity_key migration_owner
+3921; 1259 16820 INDEX public source_label_kind_idx migration_owner
+4089; 1259 17426 INDEX public source_label_mapping_edge_key migration_owner
+4090; 1259 17427 INDEX public source_label_mapping_exact_active_idx migration_owner
+4093; 1259 17428 INDEX public source_label_mapping_tag_active_idx migration_owner
+4098; 1259 17465 INDEX public tag_classification_run_id_novel_key migration_owner
+4099; 1259 17466 INDEX public tag_classification_run_novel_created_idx migration_owner
+4100; 1259 17464 INDEX public tag_classification_run_novel_request_key migration_owner
+4103; 1259 17467 INDEX public tag_classification_run_task_idx migration_owner
+3940; 1259 16832 INDEX public tracking_event_type_time_idx migration_owner
+3941; 1259 16835 INDEX public tracking_novel_time_idx migration_owner
+3942; 1259 16834 INDEX public tracking_promo_time_idx migration_owner
+3943; 1259 16833 INDEX public tracking_public_code_time_idx migration_owner
+4235; 2620 17258 TRIGGER public operation_audit operation_audit_append_only migration_owner
+4233; 2620 17256 TRIGGER public promo_link promo_public_code_immutable_trigger migration_owner
+4234; 2620 152020 TRIGGER public side_effect_intent side_effect_manual_review_exit_guard migration_owner
+4210; 2606 17357 FK CONSTRAINT public admin_recovery_code admin_recovery_code_identity_id_fkey migration_owner
+4206; 2606 17337 FK CONSTRAINT public admin_session admin_session_identity_id_fkey migration_owner
+4208; 2606 17347 FK CONSTRAINT public admin_two_factor_challenge admin_two_factor_challenge_identity_id_fkey migration_owner
+4209; 2606 17352 FK CONSTRAINT public admin_two_factor_challenge admin_two_factor_challenge_session_id_identity_id_fkey migration_owner
+4207; 2606 17342 FK CONSTRAINT public admin_two_factor admin_two_factor_identity_id_fkey migration_owner
+4194; 2606 17111 FK CONSTRAINT public article article_novel_id_fkey migration_owner
+4223; 2606 17642 FK CONSTRAINT public article_novel_rebind_batch_item article_novel_rebind_batch_item_batch_id_fkey migration_owner
+4195; 2606 17121 FK CONSTRAINT public article article_promo_link_novel_fkey migration_owner
+4196; 2606 17116 FK CONSTRAINT public article article_template_id_fkey migration_owner
+4212; 2606 17493 FK CONSTRAINT public canonical_tag_keyword canonical_tag_keyword_tag_id_fkey migration_owner
+4211; 2606 17488 FK CONSTRAINT public canonical_tag_translation canonical_tag_translation_tag_id_fkey migration_owner
+4155; 2606 16906 FK CONSTRAINT public channel_account channel_account_channel_id_fkey migration_owner
+4156; 2606 16911 FK CONSTRAINT public channel_account_credential channel_account_credential_channel_account_id_fkey migration_owner
+4224; 2606 17666 FK CONSTRAINT public channel_account_hold channel_account_hold_channel_account_id_fkey migration_owner
+4152; 2606 16891 FK CONSTRAINT public channel_app channel_app_channel_id_fkey migration_owner
+4153; 2606 16896 FK CONSTRAINT public channel_app channel_app_source_app_id_fkey migration_owner
+4154; 2606 16901 FK CONSTRAINT public channel_capability channel_capability_channel_app_id_fkey migration_owner
+4157; 2606 16921 FK CONSTRAINT public channel_credential_active_fingerprint channel_credential_active_fingerprint_channel_account_id_fkey migration_owner
+4158; 2606 16916 FK CONSTRAINT public channel_credential_active_fingerprint channel_credential_active_fingerprint_credential_id_fkey migration_owner
+4179; 2606 17041 FK CONSTRAINT public channel_sync_task channel_sync_task_channel_account_id_fkey migration_owner
+4180; 2606 17046 FK CONSTRAINT public channel_sync_task channel_sync_task_channel_app_id_fkey migration_owner
+4181; 2606 17056 FK CONSTRAINT public channel_sync_task_item channel_sync_task_item_novel_source_item_id_fkey migration_owner
+4182; 2606 17051 FK CONSTRAINT public channel_sync_task_item channel_sync_task_item_task_id_fkey migration_owner
+4159; 2606 16926 FK CONSTRAINT public credential_change_log credential_change_log_channel_account_id_fkey migration_owner
+4160; 2606 16931 FK CONSTRAINT public credential_change_log credential_change_log_credential_id_fkey migration_owner
+4192; 2606 17106 FK CONSTRAINT public cron_run cron_run_generic_task_id_fkey migration_owner
+4193; 2606 17101 FK CONSTRAINT public cron_run cron_run_schedule_run_id_fkey migration_owner
+4183; 2606 17061 FK CONSTRAINT public generic_task generic_task_channel_account_id_fkey migration_owner
+4184; 2606 17066 FK CONSTRAINT public generic_task generic_task_channel_app_id_fkey migration_owner
+4186; 2606 17071 FK CONSTRAINT public generic_task_item generic_task_item_task_id_fkey migration_owner
+4185; 2606 17649 FK CONSTRAINT public generic_task generic_task_parent_task_id_fkey migration_owner
+4199; 2606 17146 FK CONSTRAINT public home_carousel_auto_candidate home_carousel_auto_candidate_article_id_fkey migration_owner
+4200; 2606 17136 FK CONSTRAINT public home_carousel_auto_candidate home_carousel_auto_candidate_batch_id_fkey migration_owner
+4201; 2606 17141 FK CONSTRAINT public home_carousel_auto_candidate home_carousel_auto_candidate_novel_id_fkey migration_owner
+4197; 2606 17131 FK CONSTRAINT public home_carousel_manual_slot home_carousel_manual_slot_article_id_fkey migration_owner
+4198; 2606 17126 FK CONSTRAINT public home_carousel_manual_slot home_carousel_manual_slot_novel_id_fkey migration_owner
+4202; 2606 17156 FK CONSTRAINT public home_carousel_serving home_carousel_serving_article_id_fkey migration_owner
+4203; 2606 17166 FK CONSTRAINT public home_carousel_serving home_carousel_serving_batch_id_fkey migration_owner
+4204; 2606 17161 FK CONSTRAINT public home_carousel_serving home_carousel_serving_manual_slot_id_fkey migration_owner
+4205; 2606 17151 FK CONSTRAINT public home_carousel_serving home_carousel_serving_novel_id_fkey migration_owner
+4190; 2606 17091 FK CONSTRAINT public indexnow_outbox indexnow_outbox_article_id_fkey migration_owner
+4191; 2606 17096 FK CONSTRAINT public indexnow_outbox_attempt indexnow_outbox_attempt_outbox_id_fkey migration_owner
+4219; 2606 17538 FK CONSTRAINT public novel_canonical_tag novel_canonical_tag_decided_by_fkey migration_owner
+4220; 2606 17523 FK CONSTRAINT public novel_canonical_tag novel_canonical_tag_novel_id_fkey migration_owner
+4221; 2606 17533 FK CONSTRAINT public novel_canonical_tag novel_canonical_tag_run_id_fkey migration_owner
+4222; 2606 17528 FK CONSTRAINT public novel_canonical_tag novel_canonical_tag_tag_id_fkey migration_owner
+4166; 2606 16961 FK CONSTRAINT public novel_chapter_content novel_chapter_content_novel_chapter_id_fkey migration_owner
+4167; 2606 16966 FK CONSTRAINT public novel_chapter_content novel_chapter_content_source_fetch_id_fkey migration_owner
+4163; 2606 16946 FK CONSTRAINT public novel_chapter novel_chapter_novel_id_fkey migration_owner
+4164; 2606 16956 FK CONSTRAINT public novel_chapter_source_item novel_chapter_source_item_novel_chapter_id_fkey migration_owner
+4165; 2606 16951 FK CONSTRAINT public novel_chapter_source_item novel_chapter_source_item_novel_source_item_id_fkey migration_owner
+4231; 2606 477225 FK CONSTRAINT public novel_effective_tag novel_effective_tag_canonical_tag_id_fkey migration_owner
+4232; 2606 477220 FK CONSTRAINT public novel_effective_tag novel_effective_tag_novel_id_fkey migration_owner
+4168; 2606 16971 FK CONSTRAINT public novel_preview_policy novel_preview_policy_novel_id_fkey migration_owner
+4161; 2606 16936 FK CONSTRAINT public novel_source_item novel_source_item_channel_app_id_fkey migration_owner
+4170; 2606 16981 FK CONSTRAINT public novel_source_item_label novel_source_item_label_novel_source_item_id_fkey migration_owner
+4171; 2606 16986 FK CONSTRAINT public novel_source_item_label novel_source_item_label_source_label_id_fkey migration_owner
+4162; 2606 16941 FK CONSTRAINT public novel_source_item novel_source_item_novel_id_fkey migration_owner
+4216; 2606 17543 FK CONSTRAINT public novel_tag_state novel_tag_state_current_auto_run_id_fkey migration_owner
+4217; 2606 17513 FK CONSTRAINT public novel_tag_state novel_tag_state_novel_id_fkey migration_owner
+4172; 2606 17006 FK CONSTRAINT public promo_link promo_link_channel_account_id_fkey migration_owner
+4173; 2606 17001 FK CONSTRAINT public promo_link promo_link_channel_app_id_fkey migration_owner
+4174; 2606 16991 FK CONSTRAINT public promo_link promo_link_novel_id_fkey migration_owner
+4175; 2606 16996 FK CONSTRAINT public promo_link promo_link_novel_source_item_id_fkey migration_owner
+4229; 2606 378231 FK CONSTRAINT public revenue_daily_stat revenue_daily_stat_revenue_sync_scope_id_fkey migration_owner
+4230; 2606 378236 FK CONSTRAINT public revenue_daily_stat revenue_daily_stat_source_batch_id_fkey migration_owner
+4228; 2606 378218 FK CONSTRAINT public revenue_raw_snapshot revenue_raw_snapshot_sync_batch_id_fkey migration_owner
+4226; 2606 378196 FK CONSTRAINT public revenue_sync_batch revenue_sync_batch_generic_task_id_fkey migration_owner
+4227; 2606 378191 FK CONSTRAINT public revenue_sync_batch revenue_sync_batch_revenue_sync_scope_id_fkey migration_owner
+4225; 2606 378169 FK CONSTRAINT public revenue_sync_scope revenue_sync_scope_channel_account_id_fkey migration_owner
+4187; 2606 17076 FK CONSTRAINT public side_effect_intent side_effect_intent_channel_account_id_fkey migration_owner
+4188; 2606 17081 FK CONSTRAINT public side_effect_intent side_effect_intent_channel_app_id_fkey migration_owner
+4189; 2606 17086 FK CONSTRAINT public side_effect_intent side_effect_intent_promo_link_id_fkey migration_owner
+4169; 2606 16976 FK CONSTRAINT public source_label source_label_channel_app_id_fkey migration_owner
+4213; 2606 17508 FK CONSTRAINT public source_label_mapping source_label_mapping_approved_by_fkey migration_owner
+4214; 2606 17498 FK CONSTRAINT public source_label_mapping source_label_mapping_channel_app_id_fkey migration_owner
+4215; 2606 17503 FK CONSTRAINT public source_label_mapping source_label_mapping_tag_id_fkey migration_owner
+4218; 2606 17518 FK CONSTRAINT public tag_classification_run tag_classification_run_novel_id_fkey migration_owner
+4176; 2606 17011 FK CONSTRAINT public tracking_event tracking_event_article_id_fkey migration_owner
+4177; 2606 17016 FK CONSTRAINT public tracking_event tracking_event_novel_id_fkey migration_owner
+4178; 2606 17021 FK CONSTRAINT public tracking_event tracking_event_promo_link_id_fkey migration_owner
+created_at=2026-10-10T17:05:16Z
+database=cps_novel
+server_version=16.14 (Debian 16.14-1.pgdg13+1)
+pg_dump_version=pg_dump (PostgreSQL) 16.14 (Debian 16.14-1.pgdg13+1)
+size_bytes=716586016
+sha256=20a1761508ef3c6bb17d9c3fbd98df9572dbe2ae71d88180af231c7f530e1f7f
+20a1761508ef3c6bb17d9c3fbd98df9572dbe2ae71d88180af231c7f530e1f7f  cps-novel-v0515-20261010T170346Z.dump
+cps-novel-v0515-20261010T170346Z.dump: OK
+BACKUP_LIST_VERIFY=PASS

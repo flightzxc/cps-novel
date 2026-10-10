@@ -19,7 +19,11 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.15 —— 第一阶段通过，尚未部署（2026-10-10）
+### v0.5.15 —— 已部署正式站（2026-10-11 02:07:56 JST）
+
+- Owner 明确授权，haiyue-vps 低流量窗口原 RELEASE=PASS / EXIT=0；维护 17:06:45.909804Z–17:07:55.279041Z，69.369237秒；新迁移16.301ms。A–E / F.1 全 PASS：26finished/0rollback/58表，导航123全true，投影0/0/0；health0.5.15/Final/metadata passed，五应用healthy、postgres CID不变；Next16.3.8/运行依赖门禁、写闸和白名单一致、六服务error/permissiondenied0、backup-timer RUNNING。首页100slug逐项零变化，外部2/10全代理。
+- IndexNow只推新发布：breaker关闭、无429等待/死信/积压、keyValidation verified，历史accepted urls3/requests3，delivery success3；legacy skipped0、旧单条历史success3对应accepted；分钟sweep正常。F.2待Owner首次发布1～3篇后补核，不阻断收官；首发100篇限制尚未解除。未改nginx/开关/导航保存或执行回填。
+- annotated v0.5.15 固定Final、生成CHANGELOG（七位SHA）、唯一发版日志及阶段二记录/证据已完成；GitHub与Notion收官回读稍后补记。以下第一阶段说明按当时状态保留。
 
 - 唯一基线 `75b7fcc1efe1dde0ab444e5619d56a98064ad84c`，来自 `integration/v0.5.15-2026-10-10`，基于 v0.5.14 收官 `1dd9f33`（Final `bf61b5e`），已合入收官后的六个纯文档提交；发布分支 `release/v0.5.15-2026-10-10`。
 - 两组合入：首页题材导航运营勾选与阿语 ICU plural（`feat/home-nav-curation-v0515@44b7509` / merge `40e1850`）；B-41 IndexNow 批量投递、熔断/429 等待、坏网址拆分定位、游标回填及只读状态工具（`fix/b41-indexnow-cps-parity-v0515@c420485` / merge `be3c9c8`）。
@@ -470,7 +474,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.15` | 2026-10-10 | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 第一阶段全部门禁与归档通过，GitHub 已回读；尚未部署 |
+| `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1 PASS；F.2待首次发布，首发100限制未解除 |
 | `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |
 | `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |
 | `v0.5.12` | 2026-10-09 | PATCH | 分类标题与可浏览总数、新文章短网址补词、Next 16.3.8、Naver 文件、任务类型中文名及多语种文案；无新迁移/grants/nginx/环境变量 | Final `84af0d7`；release/v0.5.12-2026-10-09 | 已部署正式站；A～E/自动F PASS；Owner验收通过（含F.4/F.5）；71本待运营生成后核对 |

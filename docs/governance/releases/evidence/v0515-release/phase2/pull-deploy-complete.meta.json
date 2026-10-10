@@ -1,0 +1,10 @@
+{
+  "name": "pull-deploy-complete",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/pull-deploy.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791652107.782892,
+  "finishedAt": 1791652112.716471
+}

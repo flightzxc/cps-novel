@@ -39,6 +39,15 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-11 02:07 - codex（GPT-6，正式发版执行；JST）
+
+**变更类型**：海阅 v0.5.15 PATCH 正式站部署，仅 haiyue-vps。Owner 明确授权 Final `db623505539c3ca55f55b1270aab829b8db102d7`；2026-10-10 17:07:56Z 原 RELEASE=PASS / EXIT=0、维护 OFF。A–E / F.1 PASS，F.2待首次发布后补核、不阻断收官，首发100篇限制未解除。
+**背景与 Owner 10-10 决定**：本版两组范围；首页导航“全部按推荐”；B-41“8项按推荐，加主控筛选过的GPT评审补充”；回填分两次单独放行；露骨简介推到下一版；本版交Codex发布。34本试读诊断：21本上游章节列表为null，13本空正文，后者登记B-42。IndexNow已于10-10开闸，仅推新发布。低流量依据为两轮连接观测1→0与发布/生成在途0，没有擅自提权读取nginx流量日志。
+**变更内容（两组与来源）**：首页题材导航运营勾选/后台权限、2FA、审计、冲突检测，阿语字数提示ICU plural及语种注释更正（`feat/home-nav-curation-v0515@44b7509` / merge `40e1850`）；B-41 IndexNow批量投递、熔断/429等待、拒绝批次拆半定位、游标回填及只读status/resume工具（`fix/b41-indexnow-cps-parity-v0515@c420485` / merge `be3c9c8`）。本轮无功能开发，沿用六文件升版范围；迁移新增 `20261010160000_canonical_tag_homepage_visible`。
+**影响范围**：两组改动在正式站生效；导航默认全部勾选，外观零变化；存量回填尚未执行。搜索保持关闭。env仅版本两行、其他字节cmp一致，IndexNow四true开关、登记和两白名单保留。26迁移/58表，未改nginx、证书、DNS、业务开关或公开网址，未后台保存导航、生成或代发文章、手工SQL写入、回滚或擅设兼容批准。
+**验证方式**：第一阶段11181passed/0failed/无Unhandled，36运行器全部通过，26迁移、字典1343/active1273/drift0，IndexNow20+20、投影44、strict proxy1742/0，B21/矩阵/完整变异/品牌镜像/Compose/归档镜像E2E全部PASS。服务器SHA/Final/tree/原--load/OCI PASS；两次只读暂停门禁和旧25checksum一致；在线备份716586016bytes/SHA20a17615…530e1f7f/restore-list PASS。维护69.369237秒（17:06:45.909804Z–17:07:55.279041Z），迁移16.301ms；26finished/0rolledback/全部checksum匹配，导航123全true/webUPDATE=t、投影0/0/0、五应用+postgreshealthy/旧CID；四容器无vitest/tinypool、Next16.3.8，六服务error/permissiondenied0，写闸相同、backup-timerRUNNING。IndexNowbreakerclosed/无429等待/无死信/积压0/keyValidationverified，历史accepted urls3/requests3/taskItems3，legacy skipped0、旧格式success3对应accepted，分钟sweep连续；首页100slug前后逐项相同、adventure首项，外部2/10全代理。包装器提前拉完成文件、容器白名单变量名、即席语法及远端rg不可用均修正登记，原门禁与部署未重跑。
+**后续待办与治理**：F.2已请Owner/运营发布1～3篇，待核约1～2分钟accepted、batch_size>=1/非空request_batch_id/一条目一请求；未完成前首发100篇限制保持。存量回填分两次另行授权、B-42空正文、露骨简介下一版、nginx搜索location/HSTS另行安排。annotated v0.5.15固定Final、原生成器七位SHA CHANGELOG、本台账/唯一日志/发布记录及证据已完成；GitHub和Notion同步回读另附收官补记。完整证据见 [v0.5.15 发布记录](releases/v0.5.15-preproduction.md)。回滚须Owner另批SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES且先确认无积压或关闭交接推送四项，不下迁移、不改nginx。
+
 ### 2026-10-09 23:14 - codex（GPT-6，正式发版执行；时间 +0800 / JST 2026-10-10 00:14）
 
 **变更类型**：海阅 v0.5.14 PATCH 正式站部署，仅 haiyue-vps。Owner 明确授权 Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；2026-10-09 15:14:32Z 原 RELEASE=PASS / EXIT=0，维护 OFF；A–E 与自动 F.1–F.3 PASS，F.4 Owner 登录及两步验证待反馈。

@@ -3,7 +3,35 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-09 · 共 1250 个 commit
+生成时间：2026-10-10 · 共 1275 个 commit
+- `53fd6a1` 2026-10-10 文档：登记海阅 v0.5.15 第一阶段门禁与不可变发布工件  — _codex · GPT-6_
+
+## v0.5.15
+
+- `db62350` 2026-10-10 发布：准备海阅 v0.5.15 六文件版本身份  — _codex · GPT-6_
+- `75b7fcc` 2026-10-10 合并 release/v0.5.14 收官后的运维文档到 v0.5.15 集成线  — _claude-code · claude-opus-5-5_
+- `38e42de` 2026-10-10 docs(ops): diagnose 34 production preview retries with B-36 evidence  — _codex · GPT-6_
+- `be3c9c8` 2026-10-10 合并：v0.5.15 B-41 IndexNow 对齐 CPS——批量推送（≤500/请求）、熔断与 429 全局等待、存量回填工具修复  — _海阅上线主控 · claude-opus-5-5_
+- `c420485` 2026-10-10 修复(B-41)：拆半不再凭单个网址或 403 判定问题网址；新增 inconclusive 结论  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `a72ee82` 2026-10-10 重构(B-41)：熔断状态码集合 INDEXNOW_BREAKER_HTTP_STATUSES 成为唯一来源  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `7a06af4` 2026-10-10 文档(B-41)：ADR、搬运登记、数据库治理与过时表述同步  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `1a514d8` 2026-10-10 实现(B-41)：IndexNow 存量回填改为游标全覆盖、分批等待与全局停止，新增状态与恢复命令  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `929aa18` 2026-10-10 实现(B-41)：IndexNow 批量投递与扫描——一批最多 500 个网址、一次请求，熔断与 429 全局等待  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `40e1850` 2026-10-10 合并：v0.5.15 首页题材导航运营勾选 + 阿语字数提示 ICU plural  — _海阅上线主控 · claude-opus-5-5_
+- `44b7509` 2026-10-10 功能(首页导航)：首页题材导航只显示运营勾选的分类 + ADR  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `b688028` 2026-10-10 功能(首页导航)：分类管理页新增首页题材导航勾选面板  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `58d419d` 2026-10-10 功能(首页导航)：后台保存首页导航名单（接口、审计、用例）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `8e561f2` 2026-10-10 功能(首页导航)：分类新增首页显示开关（迁移、字典、治理文档）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `274cd82` 2026-10-10 文档(i18n)：删去 ar/cs/pl 搜索键注释里指向已更正文件头的"No ICU 已过时"字样  — _claude-code · Claude Opus 5.5_
+- `0d048fe` 2026-10-10 文档(i18n)：更正 14 个语种文案目录文件头已过时的 "No ICU" 说明  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `239dcc2` 2026-10-10 修正(search)：阿拉伯语最短/最长字数提示的名词随数字变形（改 ICU plural）  — _claude-code · Claude Sonnet 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `e647110` 2026-10-10 docs(ops): record IndexNow delivery governance closure  — _codex · GPT-6_
+- `c98f648` 2026-10-10 docs(ops): accept production IndexNow delivery opening  — _codex · GPT-6_
+- `c55031d` 2026-10-10 docs(ops): accept IndexNow phase 1 first-publication observation  — _codex · GPT-6_
+- `c6bcd66` 2026-10-10 docs(ops): close IndexNow phase 1 governance readbacks  — _codex · GPT-6_
+- `b5f376b` 2026-10-10 docs(ops): record IndexNow outbox opening with delivery closed  — _codex · GPT-6_
+- `1dd9f33` 2026-10-10 文档：完成海阅 v0.5.14 Git 与 Notion 回读收官  — _codex · GPT-6_
+- `a73cf0f` 2026-10-10 发布：登记海阅 v0.5.14 正式站部署与 A–F 验收  — _codex · GPT-6_
 - `821a030` 2026-10-09 文档：登记海阅 v0.5.14 第一阶段门禁与不可变发布工件  — _codex · GPT-6_
 
 ## v0.5.14

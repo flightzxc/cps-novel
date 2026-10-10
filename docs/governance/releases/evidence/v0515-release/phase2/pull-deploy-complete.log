@@ -1,0 +1,29 @@
+DEPLOY_ORIGINAL_FILES=PASS RELEASE_EXIT=0
+[
+  {
+    "event": "DEPLOY_STARTED",
+    "at": "2026-10-10T17:06:36.535310+00:00"
+  },
+  {
+    "event": "MAINTENANCE=ON",
+    "at": "2026-10-10T17:06:45.909804+00:00"
+  },
+  {
+    "event": "DATABASE_MIGRATION=PASS",
+    "at": "2026-10-10T17:06:51.177830+00:00"
+  },
+  {
+    "event": "MAINTENANCE=OFF",
+    "at": "2026-10-10T17:07:55.279041+00:00"
+  },
+  {
+    "event": "RELEASE=PASS",
+    "at": "2026-10-10T17:07:56.461902+00:00"
+  },
+  {
+    "event": "DEPLOY_FINISHED",
+    "at": "2026-10-10T17:07:56.462380+00:00",
+    "exit": 0
+  }
+]
+

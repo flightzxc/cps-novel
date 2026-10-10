@@ -1,0 +1,11 @@
+{
+  "name": "before-home",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/external-home.py",
+    "before"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791651561.6965172,
+  "finishedAt": 1791651564.421294
+}

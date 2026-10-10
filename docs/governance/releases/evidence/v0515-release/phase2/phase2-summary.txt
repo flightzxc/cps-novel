@@ -1,0 +1,134 @@
+after-home.log: HOMEPAGE_NAV_ZERO_CHANGE=PASS
+after-home.log: HOME_NAV={"label": "after", "count": 100, "first": "adventure", "slugs": ["adventure", "age-gap-romance", "amnesia", "apocalypse", "arranged-marriage", "assassin", "betrayal", "blind-date", "broken-heart", "campus", "chef", "child-centered-romance", "childhood-sweethearts", "comeback", "comedy", "contemporary-setting", "contract-marriage", "court-intrigue", "crime", "crown-prince", "disability", "divorce", "doctor", "emotional-healing", "emperor", "entertainment-industry", "estrangement", "family", "family-feud", "fantasy", "fated-love", "female-audience", "first-love", "forbidden-love", "from-hate-to-love", "gaming-esports", "genius", "gradually-fall-in-love", "heir", "hidden-identity", "historical-fiction", "historical-romance", "horror", "impostor", "kidnapping", "kung-fu", "lawyer", "legitimate-daughter", "lgbtq-romance", "love-after-marriage", "love-at-first-sight", "love-triangle", "mafia", "maid", "male-audience", "marriage", "mature-content", "military", "miracle-healer", "misunderstanding", "modern-romance", "mother-in-law", "office-romance", "office-tension", "one-night-stand", "playboy", "pregnancy", "princess", "rebirth", "redemption", "regret", "rekindled-love", "revenge", "romance", "royalty", "science-fiction", "secret-baby", "secretary", "security-guard", "single-mother", "soul-swap", "student", "substitute", "sudden-wealth", "supernatural", "superpowers", "suspense", "sweetness", "time-travel", "unrequited-love", "urban-setting", "vampire", "warrior-protagonist", "wealthy-ceo", "werewolf", "werewolf-alpha", "werewolf-luna", "whirlwind-marriage", "xianxia", "young-adult"]}
+after-home.log: EXTERNAL_REQUEST_COUNT=2
+before-db-final.log: BACKUP_ENV_NONSECRET={"PGDATABASE": "cps_novel", "PGUSER": "backup_role", "PGPASSFILE": "/run/secrets/backup_role_pgpass", "PGPORT": "5432", "PGHOST": "postgres", "PG_MAJOR": "16", "PG_VERSION": "16.14-1.pgdg13+1", "PGDATA": "/var/lib/postgresql/data"}
+before-db-final.log: ENV_APPROVED_FLAGS={"FEATURE_INDEXNOW_OUTBOX": "true", "INDEXNOW_OUTBOX_ALLOW_WRITE": "true", "FEATURE_INDEXNOW_DELIVERY": "true", "INDEXNOW_DELIVERY_ALLOW_WRITE": "true", "PREPROD_APPROVED_OPEN_WRITE_GATES": "catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery", "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1", "WORKER_LIGHT_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery"}
+before-db-final.log: BASELINE_HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3", "builtAt": "2026-10-09T12:26:09Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+before-db-final.log: POSTGRES_BEFORE_ID=691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e
+before-db-final.log: NGINX_LOG_READABLE=False
+before-db-final.log: TRAFFIC_SAMPLE={"at": "2026-10-10T17:05:39.611821+00:00", "publicEstablished": 0}
+before-db-final.log: TRAFFIC_SAMPLE={"at": "2026-10-10T17:05:49.619690+00:00", "publicEstablished": 0}
+before-db-final.log: TRAFFIC_SAMPLE={"at": "2026-10-10T17:05:59.626315+00:00", "publicEstablished": 0}
+before-db-final.log: PUBLIC_CUTOVER_PAUSE_GATE=PASS
+before-db-final.log: PREPROD_SITE_MODE=public
+before-db-final.log: PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+before-db-final.log: SECRET_CONSUMER_MATRIX=PASS count=15
+before-db-final.log: MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+before-db-final.log: SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+before-db-final.log: PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+before-db-final.log: PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+before-db-final.log: PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+before-db-final.log: PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+before-db-final.log: PREPROD_PREFLIGHT=PASS
+before-db-final.log: BEFORE_DB_VALIDATION=PASS
+before-db-initial.log: BACKUP_ENV_NONSECRET={"PGDATABASE": "cps_novel", "PGUSER": "backup_role", "PGPASSFILE": "/run/secrets/backup_role_pgpass", "PGPORT": "5432", "PGHOST": "postgres", "PG_MAJOR": "16", "PG_VERSION": "16.14-1.pgdg13+1", "PGDATA": "/var/lib/postgresql/data"}
+before-db-initial.log: ENV_APPROVED_FLAGS={"FEATURE_INDEXNOW_OUTBOX": "true", "INDEXNOW_OUTBOX_ALLOW_WRITE": "true", "FEATURE_INDEXNOW_DELIVERY": "true", "INDEXNOW_DELIVERY_ALLOW_WRITE": "true", "PREPROD_APPROVED_OPEN_WRITE_GATES": "catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery", "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1", "WORKER_LIGHT_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery"}
+before-db-initial.log: BASELINE_HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3", "builtAt": "2026-10-09T12:26:09Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3"}}, "database": {"status": "passed", "reason": null, "durationMs": 2}, "reasons": []}
+before-db-initial.log: POSTGRES_BEFORE_ID=691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e
+before-db-initial.log: NGINX_LOG_READABLE=False
+before-db-initial.log: TRAFFIC_SAMPLE={"at": "2026-10-10T16:58:25.092144+00:00", "publicEstablished": 1}
+before-db-initial.log: TRAFFIC_SAMPLE={"at": "2026-10-10T16:58:35.098831+00:00", "publicEstablished": 1}
+before-db-initial.log: TRAFFIC_SAMPLE={"at": "2026-10-10T16:58:45.106677+00:00", "publicEstablished": 0}
+before-db-initial.log: PUBLIC_CUTOVER_PAUSE_GATE=PASS
+before-db-initial.log: PREPROD_SITE_MODE=public
+before-db-initial.log: PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+before-db-initial.log: SECRET_CONSUMER_MATRIX=PASS count=15
+before-db-initial.log: MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+before-db-initial.log: SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+before-db-initial.log: PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+before-db-initial.log: PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+before-db-initial.log: PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+before-db-initial.log: PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+before-db-initial.log: PREPROD_PREFLIGHT=PASS
+before-db-initial.log: BEFORE_DB_VALIDATION=PASS
+before-home.log: HOME_NAV={"label": "before", "count": 100, "first": "adventure", "slugs": ["adventure", "age-gap-romance", "amnesia", "apocalypse", "arranged-marriage", "assassin", "betrayal", "blind-date", "broken-heart", "campus", "chef", "child-centered-romance", "childhood-sweethearts", "comeback", "comedy", "contemporary-setting", "contract-marriage", "court-intrigue", "crime", "crown-prince", "disability", "divorce", "doctor", "emotional-healing", "emperor", "entertainment-industry", "estrangement", "family", "family-feud", "fantasy", "fated-love", "female-audience", "first-love", "forbidden-love", "from-hate-to-love", "gaming-esports", "genius", "gradually-fall-in-love", "heir", "hidden-identity", "historical-fiction", "historical-romance", "horror", "impostor", "kidnapping", "kung-fu", "lawyer", "legitimate-daughter", "lgbtq-romance", "love-after-marriage", "love-at-first-sight", "love-triangle", "mafia", "maid", "male-audience", "marriage", "mature-content", "military", "miracle-healer", "misunderstanding", "modern-romance", "mother-in-law", "office-romance", "office-tension", "one-night-stand", "playboy", "pregnancy", "princess", "rebirth", "redemption", "regret", "rekindled-love", "revenge", "romance", "royalty", "science-fiction", "secret-baby", "secretary", "security-guard", "single-mother", "soul-swap", "student", "substitute", "sudden-wealth", "supernatural", "superpowers", "suspense", "sweetness", "time-travel", "unrequited-love", "urban-setting", "vampire", "warrior-protagonist", "wealthy-ceo", "werewolf", "werewolf-alpha", "werewolf-luna", "whirlwind-marriage", "xianxia", "young-adult"]}
+before-home.log: EXTERNAL_REQUEST_COUNT=1
+env-update.log: ENV_TWO_LINES_ONLY=PASS
+online-backup.log: LOGICAL_BACKUP=PASS
+online-backup.log: BACKUP_ARCHIVE=/var/lib/cps-novel/backups/logical/cps-novel-v0515-20261010T170346Z.dump
+online-backup.log: BACKUP_LIST_VERIFY=PASS
+post-check.log: INDEXNOW_OUTBOX_UNCHANGED=PASS service=web
+post-check.log: service=web RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+post-check.log: STARTUP_ALLOWLIST={"service": "worker", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "effective": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "invalid": []}
+post-check.log: INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker
+post-check.log: service=worker RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+post-check.log: STARTUP_ALLOWLIST={"service": "worker-light", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "effective": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "invalid": []}
+post-check.log: INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker-light
+post-check.log: service=worker-light RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+post-check.log: service=scheduler RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+post-check.log: HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7", "builtAt": "2026-10-10T12:00:28Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+post-check.log: WEB_VERSIONS={"next":"16.3.8","nanoid":"3.3.18"}
+post-check.log: POST_NGINX_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}
+post-check.log: BACKUP_TIMER=RUNNING
+post-check.log: POST_CHECK=PASS
+post-check.log: PREPROD_SITE_MODE=public
+post-check.log: PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+post-check.log: SECRET_CONSUMER_MATRIX=PASS count=15
+post-check.log: MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+post-check.log: SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+post-check.log: PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+post-check.log: PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+post-check.log: PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+post-check.log: PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+post-check.log: PREPROD_PREFLIGHT=PASS
+post-check.log: POST_PREFLIGHT_UNCHANGED=PASS
+post-check.log: EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+post-check.log: INDEXNOW_STATUS={"generatedAt": "2026-10-10T17:09:09.114Z", "control": {"dbNow": "2026-10-10T17:09:09.112Z", "breaker": {"open": false}, "rateLimit": {"waiting": false}, "lastResume": null, "lastBisect": null}, "keyValidation": {"state": "verified", "lastAccepted": {"httpStatus": 200, "at": "2026-10-10T06:05:30.130Z", "requestBatchId": "1d0d6321-1342-4f8c-8a55-a92fb269d26b"}, "accepted": {"all": {"status200": {"urls": 2, "httpRequests": 2}, "status202": {"urls": 1, "httpRequests": 1}}, "last24h": {"status200": {"urls": 2, "httpRequests": 2}, "status202": {"urls": 1, "httpRequests": 1}}}}, "outbox": {"urlsByStatusAndSource": [{"status": "accepted", "source": "admin.article.publish", "urls": 3}], "dueUrls": 0, "cancelledUrlsByErrorKind": [], "invalidUrls": [], "deadLetters": []}, "attempts": {"all": [{"httpStatus": "200", "urls": 2, "httpRequests": 2}, {"httpStatus": "202", "urls": 1, "httpRequests": 1}], "last24h": [{"httpStatus": "200", "urls": 2, "httpRequests": 2}, {"httpStatus": "202", "urls": 1, "httpRequests": 1}]}, "tasks": {"deliveryTaskItemsByStatus": {"success": 3}, "scanTaskItemsByStatus": {"success": 665}, "inFlightBatchTasks": []}}
+post-check.log: INDEXNOW_POST_STATUS=PASS
+post-db.log: POST_DB_VALIDATION=PASS migrations=26 tables=58 homepage_visible=123 legacy_skipped=0
+post-extra-corrected.log: ENV_FLAGS_AND_ALLOWLISTS_UNCHANGED={"FEATURE_INDEXNOW_OUTBOX": "true", "INDEXNOW_OUTBOX_ALLOW_WRITE": "true", "FEATURE_INDEXNOW_DELIVERY": "true", "INDEXNOW_DELIVERY_ALLOW_WRITE": "true", "PREPROD_APPROVED_OPEN_WRITE_GATES": "catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery", "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1", "WORKER_LIGHT_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery"}
+post-extra-corrected.log: NEXT_VERSION=16.3.8 service=web
+post-extra-corrected.log: NEXT_VERSION=16.3.8 service=worker
+post-extra-corrected.log: NEXT_VERSION=16.3.8 service=worker-light
+post-extra-corrected.log: NEXT_VERSION=16.3.8 service=scheduler
+post-extra-corrected.log: CONSUMER_ENV_AND_NEXT=PASS
+post-extra.log: ENV_FLAGS_AND_ALLOWLISTS_UNCHANGED={"FEATURE_INDEXNOW_OUTBOX": "true", "INDEXNOW_OUTBOX_ALLOW_WRITE": "true", "FEATURE_INDEXNOW_DELIVERY": "true", "INDEXNOW_DELIVERY_ALLOW_WRITE": "true", "PREPROD_APPROVED_OPEN_WRITE_GATES": "catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery", "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1", "WORKER_LIGHT_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery"}
+post-extra.log: NEXT_VERSION=16.3.8 service=web
+post-extra.log: NEXT_VERSION=16.3.8 service=worker
+post-extra.log: NEXT_VERSION=16.3.8 service=worker-light
+pull-deploy-complete.log: DEPLOY_ORIGINAL_FILES=PASS RELEASE_EXIT=0
+release.log: DEPLOY_STARTED_AT=2026-10-10T17:06:36.535310+00:00
+release.log: IMAGE=PASS anchor=descriptor
+release.log: PREPROD_SITE_MODE=public
+release.log: IMAGE=PASS anchor=descriptor
+release.log: PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+release.log: SECRET_CONSUMER_MATRIX=PASS count=15
+release.log: MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+release.log: SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+release.log: PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+release.log: PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+release.log: PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+release.log: PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+release.log: PREPROD_PREFLIGHT=PASS
+release.log: MAINTENANCE=ON
+release.log: APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+release.log: DATABASE_MIGRATION=PASS
+release.log: DATABASE_GRANTS=PASS
+release.log: APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+release.log: RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+release.log: RUNTIME_IMAGE=PASS services=web
+release.log: HEALTH_WAIT=PASS service=web health=healthy
+release.log: PREPROD_SITE_MODE=public
+release.log: RELEASE_VERIFY=PASS
+release.log: APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+release.log: APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+release.log: RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+release.log: RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+release.log: RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+release.log: RUNTIME_IMAGE=PASS services=worker worker-light scheduler
+release.log: HEALTH_WAIT=PASS service=worker health=healthy
+release.log: HEALTH_WAIT=PASS service=worker-light health=healthy
+release.log: HEALTH_WAIT=PASS service=scheduler health=healthy
+release.log: BACKUP_TIMER=RUNNING container=43bb77638c4a
+release.log: MAINTENANCE=OFF
+release.log: PREPROD_SITE_MODE=public
+release.log: RELEASE_VERIFY=PASS mode=anonymous_only
+release.log: RELEASE=PASS
+release.log: RELEASE_EXIT=0
+remote-artifacts.log: REMOTE_CHECKOUT=PASS Final=db623505539c3ca55f55b1270aab829b8db102d7 tree=c8252747d2115d4cc36b2f85add9b985341f2adc
+remote-artifacts.log: IDENTITY=PASS
+remote-artifacts.log: VERIFY_OFFLINE=PASS
+remote-artifacts.log: IMAGE=PASS anchor=descriptor
+remote-artifacts.log: VERIFY=PASS
+remote-artifacts.log: REMOTE_ARTIFACTS=PASS
+upload.log: UPLOAD=PASS

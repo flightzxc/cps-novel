@@ -1,0 +1,97 @@
+DEPLOY_STARTED_AT=2026-10-10T17:06:36.535310+00:00
+IMAGE=PASS anchor=descriptor
+PREPROD_SITE_MODE=public
+IMAGE=PASS anchor=descriptor
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+PREPROD_PREFLIGHT=PASS
+MAINTENANCE=ON
+ Container cps-novel-scheduler-1 Stopping 
+ Container cps-novel-scheduler-1 Stopped 
+ Container cps-novel-worker-light-1 Stopping 
+ Container cps-novel-worker-1 Stopping 
+ Container cps-novel-worker-1 Stopped 
+ Container cps-novel-worker-light-1 Stopped 
+ Container cps-novel-web-1 Stopping 
+ Container cps-novel-web-1 Stopped 
+APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+ Container cps-novel-web-run-5af33e950906 Creating 
+ Container cps-novel-web-run-5af33e950906 Created 
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel", schema "public" at "postgres:5432"
+
+26 migrations found in prisma/migrations
+
+Applying migration `20261010160000_canonical_tag_homepage_visible`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261010160000_canonical_tag_homepage_visible/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+npm notice
+npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+npm notice To update run: npm install -g npm@11.21.0
+npm notice
+DATABASE_MIGRATION=PASS
+DATABASE_GRANTS=PASS
+APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+ Container cps-novel-web-1 Recreate 
+ Container cps-novel-web-1 Recreated 
+ Container cps-novel-web-1 Starting 
+ Container cps-novel-web-1 Started 
+ Container cps-novel-web-1 Waiting 
+ Container cps-novel-web-1 Healthy 
+RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+RUNTIME_IMAGE=PASS services=web
+HEALTH_WAIT=PASS service=web health=healthy
+PREPROD_SITE_MODE=public
+ Container cps-novel-web-run-9c3736a9b910 Creating 
+ Container cps-novel-web-run-9c3736a9b910 Created 
+RELEASE_VERIFY=PASS
+APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+ Container cps-novel-worker-1 Recreate 
+ Container cps-novel-worker-light-1 Recreate 
+ Container cps-novel-worker-light-1 Recreated 
+ Container cps-novel-worker-1 Recreated 
+ Container cps-novel-worker-1 Starting 
+ Container cps-novel-worker-light-1 Starting 
+ Container cps-novel-worker-1 Started 
+ Container cps-novel-worker-light-1 Started 
+ Container cps-novel-worker-1 Waiting 
+ Container cps-novel-worker-light-1 Waiting 
+ Container cps-novel-worker-1 Healthy 
+ Container cps-novel-worker-light-1 Healthy 
+APP_RUNTIME=PASS image=cps-novel:0.5.15-db62350 identity=verified
+ Container cps-novel-scheduler-1 Recreate 
+ Container cps-novel-scheduler-1 Recreated 
+ Container cps-novel-scheduler-1 Starting 
+ Container cps-novel-scheduler-1 Started 
+ Container cps-novel-scheduler-1 Waiting 
+ Container cps-novel-scheduler-1 Healthy 
+RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+RUNTIME_IMAGE=PASS services=worker worker-light scheduler
+HEALTH_WAIT=PASS service=worker health=healthy
+HEALTH_WAIT=PASS service=worker-light health=healthy
+HEALTH_WAIT=PASS service=scheduler health=healthy
+ Container cps-novel-backup-timer-1 Recreate 
+ Container cps-novel-backup-timer-1 Recreated 
+ Container cps-novel-backup-timer-1 Starting 
+ Container cps-novel-backup-timer-1 Started 
+BACKUP_TIMER=RUNNING container=43bb77638c4a
+MAINTENANCE=OFF
+PREPROD_SITE_MODE=public
+RELEASE_VERIFY=PASS mode=anonymous_only
+RELEASE=PASS
+RELEASE_EXIT=0

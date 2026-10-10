@@ -1,0 +1,11 @@
+{
+  "name": "online-backup",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/remote-script-client.py",
+    ".tmp/v0515-release/phase2/backup.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791651820.655862,
+  "finishedAt": 1791651922.977866
+}

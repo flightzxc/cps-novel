@@ -1,0 +1,11 @@
+{
+  "name": "env-update",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/remote-script-client.py",
+    ".tmp/v0515-release/phase2/env-v0515.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791651976.856582,
+  "finishedAt": 1791651980.91471
+}

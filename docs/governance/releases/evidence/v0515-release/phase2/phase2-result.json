@@ -1,0 +1,531 @@
+{
+  "stage": 2,
+  "status": "DEPLOYED_TECHNICAL_PASS",
+  "host": "haiyue-vps",
+  "final": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "tree": "c8252747d2115d4cc36b2f85add9b985341f2adc",
+  "image": "cps-novel:0.5.15-db62350",
+  "platform": "linux/amd64",
+  "timeline": [
+    {
+      "event": "DEPLOY_STARTED",
+      "at": "2026-10-10T17:06:36.535310+00:00"
+    },
+    {
+      "event": "MAINTENANCE=ON",
+      "at": "2026-10-10T17:06:45.909804+00:00"
+    },
+    {
+      "event": "DATABASE_MIGRATION=PASS",
+      "at": "2026-10-10T17:06:51.177830+00:00"
+    },
+    {
+      "event": "MAINTENANCE=OFF",
+      "at": "2026-10-10T17:07:55.279041+00:00"
+    },
+    {
+      "event": "RELEASE=PASS",
+      "at": "2026-10-10T17:07:56.461902+00:00"
+    },
+    {
+      "event": "DEPLOY_FINISHED",
+      "at": "2026-10-10T17:07:56.462380+00:00",
+      "exit": 0
+    }
+  ],
+  "maintenanceSeconds": 69.369237,
+  "migrationMs": 16.301,
+  "migrations": 26,
+  "tables": 58,
+  "homepageVisible": 123,
+  "webUpdate": true,
+  "projection": {
+    "missing": 0,
+    "extra": 0,
+    "changed": 0
+  },
+  "indexnow": {
+    "generatedAt": "2026-10-10T17:09:09.114Z",
+    "control": {
+      "dbNow": "2026-10-10T17:09:09.112Z",
+      "breaker": {
+        "open": false
+      },
+      "rateLimit": {
+        "waiting": false
+      },
+      "lastResume": null,
+      "lastBisect": null
+    },
+    "keyValidation": {
+      "state": "verified",
+      "lastAccepted": {
+        "httpStatus": 200,
+        "at": "2026-10-10T06:05:30.130Z",
+        "requestBatchId": "1d0d6321-1342-4f8c-8a55-a92fb269d26b"
+      },
+      "accepted": {
+        "all": {
+          "status200": {
+            "urls": 2,
+            "httpRequests": 2
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        },
+        "last24h": {
+          "status200": {
+            "urls": 2,
+            "httpRequests": 2
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        }
+      }
+    },
+    "outbox": {
+      "urlsByStatusAndSource": [
+        {
+          "status": "accepted",
+          "source": "admin.article.publish",
+          "urls": 3
+        }
+      ],
+      "dueUrls": 0,
+      "cancelledUrlsByErrorKind": [],
+      "invalidUrls": [],
+      "deadLetters": []
+    },
+    "attempts": {
+      "all": [
+        {
+          "httpStatus": "200",
+          "urls": 2,
+          "httpRequests": 2
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ],
+      "last24h": [
+        {
+          "httpStatus": "200",
+          "urls": 2,
+          "httpRequests": 2
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ]
+    },
+    "tasks": {
+      "deliveryTaskItemsByStatus": {
+        "success": 3
+      },
+      "scanTaskItemsByStatus": {
+        "success": 665
+      },
+      "inFlightBatchTasks": []
+    }
+  },
+  "legacySkippedItems": [],
+  "historicalLegacyFormatItemsByStatus": {
+    "success": 3
+  },
+  "navigation": {
+    "before": {
+      "count": 100,
+      "slugs": [
+        "adventure",
+        "age-gap-romance",
+        "amnesia",
+        "apocalypse",
+        "arranged-marriage",
+        "assassin",
+        "betrayal",
+        "blind-date",
+        "broken-heart",
+        "campus",
+        "chef",
+        "child-centered-romance",
+        "childhood-sweethearts",
+        "comeback",
+        "comedy",
+        "contemporary-setting",
+        "contract-marriage",
+        "court-intrigue",
+        "crime",
+        "crown-prince",
+        "disability",
+        "divorce",
+        "doctor",
+        "emotional-healing",
+        "emperor",
+        "entertainment-industry",
+        "estrangement",
+        "family",
+        "family-feud",
+        "fantasy",
+        "fated-love",
+        "female-audience",
+        "first-love",
+        "forbidden-love",
+        "from-hate-to-love",
+        "gaming-esports",
+        "genius",
+        "gradually-fall-in-love",
+        "heir",
+        "hidden-identity",
+        "historical-fiction",
+        "historical-romance",
+        "horror",
+        "impostor",
+        "kidnapping",
+        "kung-fu",
+        "lawyer",
+        "legitimate-daughter",
+        "lgbtq-romance",
+        "love-after-marriage",
+        "love-at-first-sight",
+        "love-triangle",
+        "mafia",
+        "maid",
+        "male-audience",
+        "marriage",
+        "mature-content",
+        "military",
+        "miracle-healer",
+        "misunderstanding",
+        "modern-romance",
+        "mother-in-law",
+        "office-romance",
+        "office-tension",
+        "one-night-stand",
+        "playboy",
+        "pregnancy",
+        "princess",
+        "rebirth",
+        "redemption",
+        "regret",
+        "rekindled-love",
+        "revenge",
+        "romance",
+        "royalty",
+        "science-fiction",
+        "secret-baby",
+        "secretary",
+        "security-guard",
+        "single-mother",
+        "soul-swap",
+        "student",
+        "substitute",
+        "sudden-wealth",
+        "supernatural",
+        "superpowers",
+        "suspense",
+        "sweetness",
+        "time-travel",
+        "unrequited-love",
+        "urban-setting",
+        "vampire",
+        "warrior-protagonist",
+        "wealthy-ceo",
+        "werewolf",
+        "werewolf-alpha",
+        "werewolf-luna",
+        "whirlwind-marriage",
+        "xianxia",
+        "young-adult"
+      ]
+    },
+    "after": {
+      "count": 100,
+      "slugs": [
+        "adventure",
+        "age-gap-romance",
+        "amnesia",
+        "apocalypse",
+        "arranged-marriage",
+        "assassin",
+        "betrayal",
+        "blind-date",
+        "broken-heart",
+        "campus",
+        "chef",
+        "child-centered-romance",
+        "childhood-sweethearts",
+        "comeback",
+        "comedy",
+        "contemporary-setting",
+        "contract-marriage",
+        "court-intrigue",
+        "crime",
+        "crown-prince",
+        "disability",
+        "divorce",
+        "doctor",
+        "emotional-healing",
+        "emperor",
+        "entertainment-industry",
+        "estrangement",
+        "family",
+        "family-feud",
+        "fantasy",
+        "fated-love",
+        "female-audience",
+        "first-love",
+        "forbidden-love",
+        "from-hate-to-love",
+        "gaming-esports",
+        "genius",
+        "gradually-fall-in-love",
+        "heir",
+        "hidden-identity",
+        "historical-fiction",
+        "historical-romance",
+        "horror",
+        "impostor",
+        "kidnapping",
+        "kung-fu",
+        "lawyer",
+        "legitimate-daughter",
+        "lgbtq-romance",
+        "love-after-marriage",
+        "love-at-first-sight",
+        "love-triangle",
+        "mafia",
+        "maid",
+        "male-audience",
+        "marriage",
+        "mature-content",
+        "military",
+        "miracle-healer",
+        "misunderstanding",
+        "modern-romance",
+        "mother-in-law",
+        "office-romance",
+        "office-tension",
+        "one-night-stand",
+        "playboy",
+        "pregnancy",
+        "princess",
+        "rebirth",
+        "redemption",
+        "regret",
+        "rekindled-love",
+        "revenge",
+        "romance",
+        "royalty",
+        "science-fiction",
+        "secret-baby",
+        "secretary",
+        "security-guard",
+        "single-mother",
+        "soul-swap",
+        "student",
+        "substitute",
+        "sudden-wealth",
+        "supernatural",
+        "superpowers",
+        "suspense",
+        "sweetness",
+        "time-travel",
+        "unrequited-love",
+        "urban-setting",
+        "vampire",
+        "warrior-protagonist",
+        "wealthy-ceo",
+        "werewolf",
+        "werewolf-alpha",
+        "werewolf-luna",
+        "whirlwind-marriage",
+        "xianxia",
+        "young-adult"
+      ]
+    },
+    "equal": true
+  },
+  "externalRequestCount": 2,
+  "postgresId": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+  "backup": {
+    "serverPath": "/opt/cps-novel/shared/backups/logical/cps-novel-v0515-20261010T170346Z.dump",
+    "bytes": 716586016,
+    "sha256": "20a1761508ef3c6bb17d9c3fbd98df9572dbe2ae71d88180af231c7f530e1f7f",
+    "restoreList": "PASS"
+  },
+  "envBeforeSha256": "95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7",
+  "envAfterSha256": "823adaf178fa543fd3b964038af043d97eb05af4ec2cfee0fe64a49f8773c603",
+  "envOtherBytesCmp": "PASS",
+  "firstPublication": "PENDING_OWNER",
+  "batchFirstPublication100Limit": "NOT_LIFTED",
+  "commands": [
+    {
+      "name": "pull-deploy",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/pull-deploy.py"
+      ],
+      "exitCode": 1,
+      "startedAt": 1791652065.410642,
+      "finishedAt": 1791652071.379769
+    },
+    {
+      "name": "pull-deploy-complete",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/pull-deploy.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791652107.782892,
+      "finishedAt": 1791652112.716471
+    },
+    {
+      "name": "upload",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/upload.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651593.509856,
+      "finishedAt": 1791651675.53389
+    },
+    {
+      "name": "remote-artifacts",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/remote-artifacts.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651768.241716,
+      "finishedAt": 1791651815.100084
+    },
+    {
+      "name": "launch-deploy",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/launch-deploy.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651990.227066,
+      "finishedAt": 1791651996.5867488
+    },
+    {
+      "name": "before-home",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/external-home.py",
+        "before"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651561.6965172,
+      "finishedAt": 1791651564.421294
+    },
+    {
+      "name": "after-home",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/external-home.py",
+        "after"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791652161.540079,
+      "finishedAt": 1791652163.768956
+    },
+    {
+      "name": "post-db",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/post-db.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791652160.333899,
+      "finishedAt": 1791652166.4109619
+    },
+    {
+      "name": "post-check",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/post-check-v0515.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791652124.436404,
+      "finishedAt": 1791652149.340201
+    },
+    {
+      "name": "post-extra-corrected",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/post-extra.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791652211.7381492,
+      "finishedAt": 1791652219.356225
+    },
+    {
+      "name": "env-update",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/env-v0515.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651976.856582,
+      "finishedAt": 1791651980.91471
+    },
+    {
+      "name": "before-db-final",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/initial-client.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651933.8309,
+      "finishedAt": 1791651970.60725
+    },
+    {
+      "name": "before-db-initial",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/initial-client.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651498.489857,
+      "finishedAt": 1791651533.931775
+    },
+    {
+      "name": "online-backup",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/backup.py"
+      ],
+      "exitCode": 0,
+      "startedAt": 1791651820.655862,
+      "finishedAt": 1791651922.977866
+    },
+    {
+      "name": "post-extra",
+      "command": [
+        "python3",
+        ".tmp/v0515-release/phase2/remote-script-client.py",
+        ".tmp/v0515-release/phase2/post-extra.py"
+      ],
+      "exitCode": 1,
+      "startedAt": 1791652187.1870358,
+      "finishedAt": 1791652195.7863889
+    }
+  ]
+}

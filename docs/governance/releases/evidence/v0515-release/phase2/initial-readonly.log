@@ -1,0 +1,13 @@
+haiyue-vps
+uid=1000(deploy) gid=1000(deploy) groups=1000(deploy),27(sudo),100(users),988(docker)
+2026-10-10T16:56:55Z
+/opt/cps-novel/releases/bf61b5ea276a0981870cdfa63578a822a65836f3
+95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7  /opt/cps-novel/shared/env/preprod.env
+cps-novel-scheduler-1 cps-novel:0.5.14-bf61b5e Up 11 hours (healthy)
+cps-novel-worker-light-1 cps-novel:0.5.14-bf61b5e Up 11 hours (healthy)
+cps-novel-worker-1 cps-novel:0.5.14-bf61b5e Up 11 hours (healthy)
+cps-novel-web-1 cps-novel:0.5.14-bf61b5e Up 12 hours (healthy)
+cps-novel-backup-timer-1 postgres:16.14 Up 26 hours (healthy)
+cps-novel-postgres-1 postgres:16.14 Up 13 days (healthy)
+d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe  /etc/nginx/conf.d/cps-novel-preprod.conf
+ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e  /etc/nginx/nginx.conf

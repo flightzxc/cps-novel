@@ -1,0 +1,11 @@
+{
+  "name": "after-home",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/external-home.py",
+    "after"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791652161.540079,
+  "finishedAt": 1791652163.768956
+}

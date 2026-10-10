@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.5.15/.tmp/v0515-release/phase2/pull-deploy.py", line 3, in <module>
+    r=subprocess.run(['ssh','-o','KexAlgorithms=curve25519-sha256','-o','ConnectTimeout=20','-o','BatchMode=yes','haiyue-vps','python3','-c',__import__('shlex').quote(remote)],capture_output=True,text=True,check=True)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['ssh', '-o', 'KexAlgorithms=curve25519-sha256', '-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes', 'haiyue-vps', 'python3', '-c', '\'import pathlib,json,base64; b=\'"\'"\'/opt/cps-novel/logs/release-v0.5.15-db62350\'"\'"\'; suffixes=[\'"\'"\'.log\'"\'"\',\'"\'"\'.timeline.json\'"\'"\',\'"\'"\'.exit.json\'"\'"\',\'"\'"\'.wrapper.log\'"\'"\']; print(json.dumps({s:base64.b64encode(pathlib.Path(b+s).read_bytes()).decode() for s in suffixes}))\'']' returned non-zero exit status 1.
