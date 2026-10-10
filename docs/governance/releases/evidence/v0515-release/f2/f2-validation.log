@@ -1,0 +1,7 @@
+F2=PASS urls=3 httpRequests=1 taskItems=1 batch_size=3 HTTP=200
+F2_REQUEST_BATCH_ID=3ef3e207-c94f-41d0-8b87-5b19a900c942
+F2_PUBLISH_TO_ACCEPTED_SECONDS=25.544,25.495,25.465
+INDEXNOW_CONTROL=PASS breaker=closed rateLimitWaiting=false deadLetters=0 dueUrls=0 keyValidation=verified
+TOTAL_COUNTS accepted_urls=6 httpRequests=4 delivery_success_taskItems=4
+MINUTE_SWEEP=PASS last10=10 interval_seconds=60
+BATCH_FIRST_PUBLICATION_100_LIMIT=MAY_BE_LIFTED

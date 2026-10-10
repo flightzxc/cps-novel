@@ -1,0 +1,11 @@
+{
+  "name": "readonly-sample",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/phase2/remote-script-client.py",
+    ".tmp/v0515-release/f2/remote-read.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791656730.133284,
+  "finishedAt": 1791656735.137954
+}

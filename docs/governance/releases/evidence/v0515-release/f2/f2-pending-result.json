@@ -1,0 +1,135 @@
+{
+  "status": "PENDING_PUBLICATION_IDENTIFICATION",
+  "F2": "NOT_PASSED_NO_NEW_PUBLICATION",
+  "batchFirstPublication100Limit": "NOT_LIFTED",
+  "approvedFinal": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "databaseReadOnlyTransactions": true,
+  "newOutboxCount": 0,
+  "newlyPublishedArticles": [],
+  "recentlyUpdatedArticles": [
+    {
+      "id": "6fe88958-8609-4f1b-8bbd-2019502da5d1",
+      "title": "Tempting My Brother's Best Friend",
+      "locale": "en",
+      "status": "draft",
+      "publish_at": null,
+      "published_at": null,
+      "updated_at": "2026-10-10T18:24:19.748+00:00"
+    },
+    {
+      "id": "af8acdca-924f-4aae-9619-447eb7369426",
+      "title": "La Revanche Parfumée de l'Ex-Femme Répudiée",
+      "locale": "fr",
+      "status": "draft",
+      "publish_at": null,
+      "published_at": null,
+      "updated_at": "2026-10-10T18:24:19.717+00:00"
+    },
+    {
+      "id": "109bceaa-e8d0-4b99-b839-a41a277ef92b",
+      "title": "Luz do Meu Destino (CASADA POR CONTRATO COM O VIÚVO)",
+      "locale": "pt-BR",
+      "status": "draft",
+      "publish_at": null,
+      "published_at": null,
+      "updated_at": "2026-10-10T18:24:19.676+00:00"
+    }
+  ],
+  "publishTasksAfterDeploy": [],
+  "indexnowStatus": {
+    "generatedAt": "2026-10-10T18:25:34.919Z",
+    "control": {
+      "dbNow": "2026-10-10T18:25:34.917Z",
+      "breaker": {
+        "open": false
+      },
+      "rateLimit": {
+        "waiting": false
+      },
+      "lastResume": null,
+      "lastBisect": null
+    },
+    "keyValidation": {
+      "state": "verified",
+      "lastAccepted": {
+        "httpStatus": 200,
+        "at": "2026-10-10T06:05:30.130Z",
+        "requestBatchId": "1d0d6321-1342-4f8c-8a55-a92fb269d26b"
+      },
+      "accepted": {
+        "all": {
+          "status200": {
+            "urls": 2,
+            "httpRequests": 2
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        },
+        "last24h": {
+          "status200": {
+            "urls": 2,
+            "httpRequests": 2
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        }
+      }
+    },
+    "outbox": {
+      "urlsByStatusAndSource": [
+        {
+          "status": "accepted",
+          "source": "admin.article.publish",
+          "urls": 3
+        }
+      ],
+      "dueUrls": 0,
+      "cancelledUrlsByErrorKind": [],
+      "invalidUrls": [],
+      "deadLetters": []
+    },
+    "attempts": {
+      "all": [
+        {
+          "httpStatus": "200",
+          "urls": 2,
+          "httpRequests": 2
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ],
+      "last24h": [
+        {
+          "httpStatus": "200",
+          "urls": 2,
+          "httpRequests": 2
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ]
+    },
+    "tasks": {
+      "deliveryTaskItemsByStatus": {
+        "success": 3
+      },
+      "scanTaskItemsByStatus": {
+        "success": 741
+      },
+      "inFlightBatchTasks": []
+    }
+  },
+  "externalSiteRequestsThisFollowup": 0,
+  "envSha256Unchanged": true,
+  "governanceRecordsChanged": false,
+  "awaitingOwner": "Article IDs/titles and backend displayed publication status"
+}

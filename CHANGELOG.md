@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-10 · 共 1275 个 commit
+生成时间：2026-10-10 · 共 1277 个 commit
+- `a111e9d` 2026-10-11 docs: 收官海阅 v0.5.15 同步回读与最终复验证据  — _codex · GPT-6_
+- `176529a` 2026-10-11 docs: 登记海阅 v0.5.15 正式站部署与阶段二验收证据  — _codex · GPT-6_
 - `53fd6a1` 2026-10-10 文档：登记海阅 v0.5.15 第一阶段门禁与不可变发布工件  — _codex · GPT-6_
 
 ## v0.5.15
