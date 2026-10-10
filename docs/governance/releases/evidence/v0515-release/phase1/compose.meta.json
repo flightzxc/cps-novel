@@ -1,0 +1,11 @@
+{
+  "name": "compose",
+  "command": [
+    "/bin/bash",
+    ".tmp/v0515-release/compose-check.sh"
+  ],
+  "startedAt": 1791633627.870039,
+  "finishedAt": 1791633628.335552,
+  "durationSeconds": 0.4655129909515381,
+  "exitCode": 0
+}

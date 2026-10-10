@@ -1,0 +1,257 @@
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_x9_empty_20261010202108_54912", schema "public" at "127.0.0.1:51776"
+
+26 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+Applying migration `20261010160000_canonical_tag_homepage_visible`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+  └─ 20261010160000_canonical_tag_homepage_visible/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+X9_MIGRATION_empty=PASS migrations=26 tables=58
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  20:21:16
+   Duration  1.07s (transform 485ms, setup 0ms, import 624ms, tests 239ms, environment 0ms)
+
+X9_GRANTS_REPLAY_empty_1=PASS
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  20:21:18
+   Duration  783ms (transform 312ms, setup 0ms, import 402ms, tests 253ms, environment 0ms)
+
+X9_GRANTS_REPLAY_empty_2=PASS
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+X9_DICTIONARY_DRIFT_empty=0
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_x9_empty_20261010202108_54912", schema "public" at "127.0.0.1:51776"
+
+26 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+Prisma schema loaded from ../../../../../var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-x9-secrets.VcLdPM/upgrade/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_x9_upgrade_20261010202108_54912", schema "public" at "127.0.0.1:51776"
+
+19 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+INSERT 0 5
+INSERT 0 1
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_x9_upgrade_20261010202108_54912", schema "public" at "127.0.0.1:51776"
+
+26 migrations found in prisma/migrations
+
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+Applying migration `20261010160000_canonical_tag_homepage_visible`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+  └─ 20261010160000_canonical_tag_homepage_visible/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+X9_UPGRADE_OLD_MIGRATIONS_AND_DATA=UNCHANGED
+X9_MIGRATION_upgrade=PASS migrations=26 tables=58
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  20:21:26
+   Duration  1.56s (transform 647ms, setup 0ms, import 841ms, tests 424ms, environment 0ms)
+
+X9_GRANTS_REPLAY_upgrade_1=PASS
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  20:21:29
+   Duration  1.21s (transform 485ms, setup 0ms, import 627ms, tests 398ms, environment 0ms)
+
+X9_GRANTS_REPLAY_upgrade_2=PASS
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+X9_DICTIONARY_DRIFT_upgrade=0
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_x9_upgrade_20261010202108_54912", schema "public" at "127.0.0.1:51776"
+
+26 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+X9_WEB_INTENT_COLUMN_GRANT=PASS
+X9_MANUAL_REVIEW_CAS_AND_AUDIT=PASS
+X9_WORKER_MANUAL_REVIEW_OUT_EDGES=DENIED
+X9_POSTGRES_VERIFICATION=PASS
+X9_DISPOSABLE_DATABASE_CLEANED=yes

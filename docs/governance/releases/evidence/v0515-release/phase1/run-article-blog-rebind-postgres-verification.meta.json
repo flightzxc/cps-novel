@@ -1,0 +1,11 @@
+{
+  "name": "run-article-blog-rebind-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-article-blog-rebind-postgres-verification.sh"
+  ],
+  "startedAt": 1791628737.6802418,
+  "finishedAt": 1791628748.312782,
+  "durationSeconds": 10.632540225982666,
+  "exitCode": 0
+}

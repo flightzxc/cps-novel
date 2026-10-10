@@ -1,0 +1,11 @@
+{
+  "name": "run-catalog-batch-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-catalog-batch-postgres-verification.sh"
+  ],
+  "startedAt": 1791628778.8377259,
+  "finishedAt": 1791628801.111729,
+  "durationSeconds": 22.27400302886963,
+  "exitCode": 0
+}

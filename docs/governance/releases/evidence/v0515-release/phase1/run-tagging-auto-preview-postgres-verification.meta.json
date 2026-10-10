@@ -1,0 +1,11 @@
+{
+  "name": "run-tagging-auto-preview-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-tagging-auto-preview-postgres-verification.sh"
+  ],
+  "startedAt": 1791630084.93608,
+  "finishedAt": 1791630936.919669,
+  "durationSeconds": 851.9835889339447,
+  "exitCode": 0
+}

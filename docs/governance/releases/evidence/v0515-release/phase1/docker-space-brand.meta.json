@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-brand",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1791633453.4052942,
+  "finishedAt": 1791633453.815561,
+  "durationSeconds": 0.4102668762207031,
+  "exitCode": 0
+}

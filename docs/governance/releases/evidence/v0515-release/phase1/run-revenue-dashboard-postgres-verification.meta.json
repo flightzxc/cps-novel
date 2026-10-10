@@ -1,0 +1,11 @@
+{
+  "name": "run-revenue-dashboard-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-revenue-dashboard-postgres-verification.sh"
+  ],
+  "startedAt": 1791629833.440626,
+  "finishedAt": 1791629842.248866,
+  "durationSeconds": 8.808240175247192,
+  "exitCode": 0
+}

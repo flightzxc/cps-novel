@@ -1,0 +1,11 @@
+{
+  "name": "nginx-matrix",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-nginx-matrix.sh"
+  ],
+  "startedAt": 1791633358.273716,
+  "finishedAt": 1791633414.627022,
+  "durationSeconds": 56.35330605506897,
+  "exitCode": 0
+}

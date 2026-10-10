@@ -1,0 +1,44 @@
+{
+  "version": "0.5.15",
+  "final": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "tree": "c8252747d2115d4cc36b2f85add9b985341f2adc",
+  "branch": "release/v0.5.15-2026-10-10",
+  "image": "cps-novel:0.5.15-db62350",
+  "platform": "linux/amd64",
+  "archive": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.15/.tmp/preproduction-archive/cps-novel-0.5.15-db62350.tar.zst",
+    "sha256": "54f38dbc8d49e815db22c452825898f438af70c6ca320145aabfd4694a74d8c6",
+    "bytes": 252833661
+  },
+  "oci": {
+    "target": {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "size": 3293
+    },
+    "platform_manifest": {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "size": 3293
+    },
+    "config": {
+      "mediaType": "application/vnd.oci.image.config.v1+json",
+      "digest": "sha256:dd7b6cbe849ec74cf5368acea04243aac1bab1f113fa544094f030d1cf1f0bef",
+      "size": 13674
+    }
+  },
+  "manifestSha256": "42df974741433fbf3e508fe1063edc33529855dbe90c95aacf05f73a4904faac",
+  "codeBundle": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.5.15/.tmp/v0515-release/cps-novel-v0.5.15.bundle",
+    "sha256": "3efaa95e5cc9b27aefd8be5a38382fd6199213a43da377976eeadc804e4042a3",
+    "bytes": 452234
+  },
+  "tests": {
+    "passed": 11181,
+    "skipped": 794,
+    "failed": 0,
+    "unhandled": 0
+  },
+  "runnerCount": 36,
+  "status": "phase1_pass_not_deployed"
+}

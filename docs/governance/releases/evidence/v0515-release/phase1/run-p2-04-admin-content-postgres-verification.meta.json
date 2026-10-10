@@ -1,0 +1,11 @@
+{
+  "name": "run-p2-04-admin-content-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-p2-04-admin-content-postgres-verification.sh"
+  ],
+  "startedAt": 1791629647.723988,
+  "finishedAt": 1791629651.1069472,
+  "durationSeconds": 3.3829591274261475,
+  "exitCode": 0
+}

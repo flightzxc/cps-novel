@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · cancel-backlog (real Postgres) > apply cancels every matched task across multiple batches, terminates pending items with the right reason, audits once per task, and leaves out-of-scope tasks untouched
+[preview-opening] cancel-backlog progress: batches=1 cancelled=2 terminatedItems=3 skippedNotPending=0
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · cancel-backlog (real Postgres) > apply cancels every matched task across multiple batches, terminates pending items with the right reason, audits once per task, and leaves out-of-scope tasks untouched
+[preview-opening] cancel-backlog progress: batches=2 cancelled=3 terminatedItems=6 skippedNotPending=0
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · cancel-backlog (real Postgres) > re-running to completion never writes a duplicate audit and only ever touches what is left
+[preview-opening] cancel-backlog progress: batches=1 cancelled=4 terminatedItems=4 skippedNotPending=0
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · cancel-backlog (real Postgres) > produces the same cancelled-task / terminated-item / audit shape abortTask itself produces, differing only in the documented actor fields
+[preview-opening] cancel-backlog progress: batches=1 cancelled=1 terminatedItems=3 skippedNotPending=0
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · enqueue-published (real Postgres) > apply produces the exact same task shape a live publish-time trigger would produce for the same article
+[preview-opening] enqueue-published progress: chunk=1 articles=1 groups=1
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · enqueue-published (real Postgres) > already-fresh, account-held, and in-flight books are skipped -- matching what a live trigger would also skip
+[preview-opening] enqueue-published progress: chunk=1 articles=2 groups=2
+
+stderr | tests/integration/tasks/preview-opening-postgres.test.ts > preview-opening · clearing the backlog unblocks publish-triggered previews > a book stuck behind a backlog task is skipped as in-flight before cancel-backlog, and enqueues cleanly after
+[preview-opening] cancel-backlog progress: batches=1 cancelled=1 terminatedItems=1 skippedNotPending=0
+
+ ✓ |node| tests/integration/tasks/preview-opening-postgres.test.ts (27 tests) 2072ms
+     ✓ stats gathers a 14,000-article universe in id-cursor chunks (one un-paged findMany would hit 54001 on the composite FK) and still plans exactly  1370ms
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  19:54:57
+   Duration  2.60s (transform 350ms, setup 0ms, import 447ms, tests 2.07s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-preview-opening-secrets.GjrVj2/integration-result.json
+PREVIEW_OPENING_INTEGRATION=PASS passed=27 skipped=0 filtered=false
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+PREVIEW_OPENING_DICTIONARY_DRIFT=0
+PREVIEW_OPENING_POSTGRES_VERIFICATION=PASS
+PREVIEW_OPENING_DISPOSABLE_DATABASE_CLEANED=yes

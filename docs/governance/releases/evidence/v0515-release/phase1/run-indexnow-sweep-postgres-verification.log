@@ -1,0 +1,212 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 500 retries only after a due scan creates a NEW batch task
+WO6_RETRY http=500 delay_ms=356187 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > 503 retries only after a due scan creates a NEW batch task
+WO6_RETRY http=503 delay_ms=328367 attempt=1
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > main backlog of 20000 claims does not delay light delivery beyond a polling cycle
+WO6_PRESSURE wait_ms=4 http_ms=19 poll_ms=1000 remaining=19995 main_calls=5
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates the batch delivery with actual sitemap and sweep without starvation
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":4}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates the batch delivery with actual sitemap and sweep without starvation
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"947b4421-2ab4-42c9-a3b1-b9d8bb4757fc","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":0}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > alternates the batch delivery with actual sitemap and sweep without starvation
+WO6_FAIRNESS scan_completion_position=3 urls_in_one_request=301 backlog=301
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":4}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"faf9e900-b904-47cc-ad9b-35f8813bb707","total":2,"kept":2,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":0}
+
+stdout | tests/integration/tasks/indexnow-sweep-postgres.test.ts > WO6 real publication, scheduler, lanes and HTTP > real 10 second timeout yields to a newly queued sitemap then retries via scan
+WO6_TIMEOUT sitemap_wait_ms=10059 http_timeout_ms=10000
+
+ ✓ |node| tests/integration/tasks/indexnow-sweep-postgres.test.ts (20 tests) 12774ms
+     ✓ main backlog of 20000 claims does not delay light delivery beyond a polling cycle  1291ms
+     ✓ real 10 second timeout yields to a newly queued sitemap then retries via scan  10149ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  19:40:16
+   Duration  14.12s (transform 540ms, setup 0ms, import 1.27s, tests 12.77s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-wo6-secrets.XswA8Q/integration-result-indexnow-sweep-postgres.json
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+stdout | tests/integration/tasks/indexnow-batch-postgres.test.ts > B-41 IndexNow batch delivery on real PostgreSQL roles > 501 due rows: ONE request carries exactly the 500 oldest URLs (FIFO), the next scan sends the last one — worker_app only, no permission denied
+B41_BATCH urls_first_request=500 urls_second_request=1
+
+stdout | tests/integration/tasks/indexnow-batch-postgres.test.ts > B-41 IndexNow batch delivery on real PostgreSQL roles > 7.11 the control-state SQL uses operation_audit_entity_created_idx on ≥ 750k rows > (a) all three streams empty and (b) a few events sandwiched between bulk rows
+B41_EXPLAIN_BEGIN scenario-a-empty-streams
+Nested Loop Left Join  (cost=25.37..25.55 rows=1 width=721) (actual time=0.021..0.022 rows=1 loops=1)
+  Buffers: shared hit=9
+  CTE clock
+    ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.000..0.000 rows=1 loops=1)
+  CTE breaker
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit  (cost=0.42..8.40 rows=1 width=136) (actual time=0.008..0.008 rows=0 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'breaker'::text))
+          Buffers: shared hit=3
+  CTE rate
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit operation_audit_1  (cost=0.42..8.40 rows=1 width=48) (actual time=0.001..0.001 rows=0 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'rate_limit'::text))
+          Buffers: shared hit=3
+  CTE bisect
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit operation_audit_2  (cost=0.42..8.40 rows=1 width=48) (actual time=0.003..0.003 rows=0 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'bisect'::text))
+          Buffers: shared hit=3
+  ->  Nested Loop Left Join  (cost=0.13..0.25 rows=1 width=668) (actual time=0.015..0.016 rows=1 loops=1)
+        Buffers: shared hit=6
+        ->  Nested Loop Left Join  (cost=0.10..0.19 rows=1 width=628) (actual time=0.013..0.014 rows=1 loops=1)
+              Buffers: shared hit=3
+              ->  Nested Loop Left Join  (cost=0.06..0.13 rows=1 width=580) (actual time=0.012..0.013 rows=1 loops=1)
+                    Buffers: shared hit=3
+                    ->  Nested Loop Left Join  (cost=0.03..0.08 rows=1 width=226) (actual time=0.012..0.012 rows=1 loops=1)
+                          Buffers: shared hit=3
+                          ->  CTE Scan on clock  (cost=0.00..0.02 rows=1 width=8) (actual time=0.001..0.001 rows=1 loops=1)
+                          ->  Limit  (cost=0.03..0.04 rows=1 width=596) (actual time=0.010..0.010 rows=0 loops=1)
+                                Buffers: shared hit=3
+                                ->  Sort  (cost=0.03..0.04 rows=1 width=596) (actual time=0.010..0.010 rows=0 loops=1)
+                                      Sort Key: breaker.id DESC
+                                      Sort Method: quicksort  Memory: 25kB
+                                      Buffers: shared hit=3
+                                      ->  CTE Scan on breaker  (cost=0.00..0.02 rows=1 width=596) (actual time=0.008..0.008 rows=0 loops=1)
+                                            Buffers: shared hit=3
+                    ->  Limit  (cost=0.03..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=0 loops=1)
+                          ->  Sort  (cost=0.03..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=0 loops=1)
+                                Sort Key: breaker_1.id DESC
+                                Sort Method: quicksort  Memory: 25kB
+                                ->  CTE Scan on breaker breaker_1  (cost=0.00..0.02 rows=1 width=596) (actual time=0.000..0.000 rows=0 loops=1)
+                                      Filter: ((action)::text = 'indexnow.delivery.breaker_resume'::text)
+              ->  Limit  (cost=0.04..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=0 loops=1)
+                    ->  Sort  (cost=0.04..0.04 rows=1 width=596) (actual time=0.000..0.001 rows=0 loops=1)
+                          Sort Key: breaker_2.id
+                          Sort Method: quicksort  Memory: 25kB
+                          ->  CTE Scan on breaker breaker_2  (cost=0.00..0.03 rows=1 width=596) (actual time=0.000..0.000 rows=0 loops=1)
+                                Filter: ((id > COALESCE(breaker_1.id, '0'::bigint)) AND ((action)::text = 'indexnow.delivery.breaker_trip'::text))
+        ->  Limit  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.002 rows=0 loops=1)
+              Buffers: shared hit=3
+              ->  Sort  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.002 rows=0 loops=1)
+                    Sort Key: rate.id DESC
+                    Sort Method: quicksort  Memory: 25kB
+                    Buffers: shared hit=3
+                    ->  CTE Scan on rate  (cost=0.00..0.02 rows=1 width=48) (actual time=0.001..0.001 rows=0 loops=1)
+                          Buffers: shared hit=3
+  ->  Limit  (cost=0.03..0.04 rows=1 width=48) (actual time=0.003..0.003 rows=0 loops=1)
+        Buffers: shared hit=3
+        ->  Sort  (cost=0.03..0.04 rows=1 width=48) (actual time=0.003..0.003 rows=0 loops=1)
+              Sort Key: bisect.id DESC
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=3
+              ->  CTE Scan on bisect  (cost=0.00..0.02 rows=1 width=48) (actual time=0.003..0.003 rows=0 loops=1)
+                    Buffers: shared hit=3
+  SubPlan 5
+    ->  Aggregate  (cost=0.03..0.04 rows=1 width=8) (actual time=0.001..0.001 rows=1 loops=1)
+          ->  CTE Scan on breaker breaker_3  (cost=0.00..0.03 rows=1 width=0) (actual time=0.000..0.000 rows=0 loops=1)
+                Filter: ((id > COALESCE(breaker_1.id, '0'::bigint)) AND ((action)::text = 'indexnow.delivery.breaker_trip'::text))
+Planning:
+  Buffers: shared hit=3
+Planning Time: 0.109 ms
+Execution Time: 0.062 ms
+B41_EXPLAIN_END scenario-a-empty-streams
+
+stdout | tests/integration/tasks/indexnow-batch-postgres.test.ts > B-41 IndexNow batch delivery on real PostgreSQL roles > 7.11 the control-state SQL uses operation_audit_entity_created_idx on ≥ 750k rows > (a) all three streams empty and (b) a few events sandwiched between bulk rows
+B41_EXPLAIN_BEGIN scenario-b-events-among-bulk-rows
+Nested Loop Left Join  (cost=25.50..25.69 rows=1 width=721) (actual time=0.024..0.026 rows=1 loops=1)
+  Buffers: shared hit=13
+  CTE clock
+    ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.000..0.000 rows=1 loops=1)
+  CTE breaker
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit  (cost=0.42..8.45 rows=1 width=276) (actual time=0.006..0.007 rows=3 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'breaker'::text))
+          Buffers: shared hit=5
+  CTE rate
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit operation_audit_1  (cost=0.42..8.45 rows=1 width=188) (actual time=0.001..0.002 rows=1 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'rate_limit'::text))
+          Buffers: shared hit=4
+  CTE bisect
+    ->  Index Scan using operation_audit_entity_created_idx on operation_audit operation_audit_2  (cost=0.42..8.45 rows=1 width=188) (actual time=0.001..0.001 rows=1 loops=1)
+          Index Cond: (((entity_type)::text = 'indexnow_delivery'::text) AND ((entity_id)::text = 'bisect'::text))
+          Buffers: shared hit=4
+  ->  Nested Loop Left Join  (cost=0.13..0.25 rows=1 width=668) (actual time=0.017..0.018 rows=1 loops=1)
+        Buffers: shared hit=9
+        ->  Nested Loop Left Join  (cost=0.10..0.19 rows=1 width=628) (actual time=0.014..0.015 rows=1 loops=1)
+              Buffers: shared hit=5
+              ->  Nested Loop Left Join  (cost=0.06..0.13 rows=1 width=580) (actual time=0.013..0.013 rows=1 loops=1)
+                    Buffers: shared hit=5
+                    ->  Nested Loop Left Join  (cost=0.03..0.08 rows=1 width=226) (actual time=0.011..0.012 rows=1 loops=1)
+                          Buffers: shared hit=5
+                          ->  CTE Scan on clock  (cost=0.00..0.02 rows=1 width=8) (actual time=0.001..0.001 rows=1 loops=1)
+                          ->  Limit  (cost=0.03..0.04 rows=1 width=596) (actual time=0.010..0.010 rows=1 loops=1)
+                                Buffers: shared hit=5
+                                ->  Sort  (cost=0.03..0.04 rows=1 width=596) (actual time=0.010..0.010 rows=1 loops=1)
+                                      Sort Key: breaker.id DESC
+                                      Sort Method: top-N heapsort  Memory: 25kB
+                                      Buffers: shared hit=5
+                                      ->  CTE Scan on breaker  (cost=0.00..0.02 rows=1 width=596) (actual time=0.006..0.008 rows=3 loops=1)
+                                            Buffers: shared hit=5
+                    ->  Limit  (cost=0.03..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=1 loops=1)
+                          ->  Sort  (cost=0.03..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=1 loops=1)
+                                Sort Key: breaker_1.id DESC
+                                Sort Method: quicksort  Memory: 25kB
+                                ->  CTE Scan on breaker breaker_1  (cost=0.00..0.02 rows=1 width=596) (actual time=0.000..0.001 rows=1 loops=1)
+                                      Filter: ((action)::text = 'indexnow.delivery.breaker_resume'::text)
+                                      Rows Removed by Filter: 2
+              ->  Limit  (cost=0.04..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=1 loops=1)
+                    ->  Sort  (cost=0.04..0.04 rows=1 width=596) (actual time=0.001..0.001 rows=1 loops=1)
+                          Sort Key: breaker_2.id
+                          Sort Method: quicksort  Memory: 25kB
+                          ->  CTE Scan on breaker breaker_2  (cost=0.00..0.03 rows=1 width=596) (actual time=0.000..0.001 rows=1 loops=1)
+                                Filter: ((id > COALESCE(breaker_1.id, '0'::bigint)) AND ((action)::text = 'indexnow.delivery.breaker_trip'::text))
+                                Rows Removed by Filter: 2
+        ->  Limit  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.003 rows=1 loops=1)
+              Buffers: shared hit=4
+              ->  Sort  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=1)
+                    Sort Key: rate.id DESC
+                    Sort Method: quicksort  Memory: 25kB
+                    Buffers: shared hit=4
+                    ->  CTE Scan on rate  (cost=0.00..0.02 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=1)
+                          Buffers: shared hit=4
+  ->  Limit  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=1)
+        Buffers: shared hit=4
+        ->  Sort  (cost=0.03..0.04 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=1)
+              Sort Key: bisect.id DESC
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=4
+              ->  CTE Scan on bisect  (cost=0.00..0.02 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=1)
+                    Buffers: shared hit=4
+  SubPlan 5
+    ->  Aggregate  (cost=0.03..0.04 rows=1 width=8) (actual time=0.001..0.001 rows=1 loops=1)
+          ->  CTE Scan on breaker breaker_3  (cost=0.00..0.03 rows=1 width=0) (actual time=0.000..0.000 rows=1 loops=1)
+                Filter: ((id > COALESCE(breaker_1.id, '0'::bigint)) AND ((action)::text = 'indexnow.delivery.breaker_trip'::text))
+                Rows Removed by Filter: 2
+Planning Time: 0.090 ms
+Execution Time: 0.046 ms
+B41_EXPLAIN_END scenario-b-events-among-bulk-rows
+
+ ✓ |node| tests/integration/tasks/indexnow-batch-postgres.test.ts (20 tests) 6060ms
+     ✓ 501 due rows: ONE request carries exactly the 500 oldest URLs (FIFO), the next scan sends the last one — worker_app only, no permission denied  549ms
+     ✓ [28] two connections reading the control state while a trip and then a resume commit only ever see a PREFIX of the committed events; afterwards both agree  322ms
+     ✓ [29a] a trip that holds the lock blocks a concurrent resume; the resume then covers THAT trip (commit order decides)  526ms
+     ✓ [29c] event ORDER is the id, not created_at: a resume whose transaction STARTED earlier (older created_at) but committed after the trip still covers it  364ms
+       ✓ the cursor walks ALL published novel articles across pages (1,300 rows, pages of 400), skipping those with any outbox row  365ms
+       ✓ (a) all three streams empty and (b) a few events sandwiched between bulk rows  3171ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  19:40:31
+   Duration  6.43s (transform 199ms, setup 0ms, import 289ms, tests 6.06s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-wo6-secrets.XswA8Q/integration-result-indexnow-batch-postgres.json
+WO6_INTEGRATION=PASS passed=40 skipped=0
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+WO6_DICTIONARY_DRIFT=0
+WO6_POSTGRES_VERIFICATION=PASS
+WO6_DISPOSABLE_DATABASE_CLEANED=yes

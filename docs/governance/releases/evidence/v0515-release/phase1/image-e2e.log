@@ -1,0 +1,113 @@
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel", schema "public" at "postgres:5432"
+
+26 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+Applying migration `20261010160000_canonical_tag_homepage_visible`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+  └─ 20261010160000_canonical_tag_homepage_visible/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+npm notice
+npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+npm notice To update run: npm install -g npm@11.21.0
+npm notice
+E2E_MIGRATIONS=PASS applied=26
+EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+Usage:
+  tsx scripts/indexnow-status.ts --help
+  tsx scripts/indexnow-status.ts
+  tsx scripts/indexnow-status.ts --batch <requestBatchId>
+
+Read-only. Counts are named by unit: urls (outbox/attempt rows), httpRequests (distinct request_batch_id),
+taskItems (GenericTaskItem rows; the delivery task and the minute scan task are counted separately).
+
+INDEXNOW_STATUS_HELP=PASS
+RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+IMAGE_VERSIONS=PASS next=16.3.8 nanoid=3.3.18 dev_absent=yes
+IMAGE_HEALTH=PASS {"ok":true,"status":"healthy","build":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7","builtAt":"2026-10-10T12:00:28Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7"}},"database":{"status":"passed","reason":null,"durationMs":152},"reasons":[]}
+f|t|f
+0
+t
+E2E_HOMEPAGE_COLUMN_GRANT=PASS
+IMAGE_E2E=PASS

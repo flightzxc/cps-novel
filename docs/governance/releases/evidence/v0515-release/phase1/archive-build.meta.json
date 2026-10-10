@@ -1,0 +1,11 @@
+{
+  "name": "archive-build",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/build-release-archive.sh"
+  ],
+  "startedAt": 1791633653.478271,
+  "finishedAt": 1791633663.879879,
+  "durationSeconds": 10.401607990264893,
+  "exitCode": 0
+}

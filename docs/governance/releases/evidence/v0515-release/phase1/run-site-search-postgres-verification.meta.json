@@ -1,0 +1,11 @@
+{
+  "name": "run-site-search-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-site-search-postgres-verification.sh"
+  ],
+  "startedAt": 1791629842.2493582,
+  "finishedAt": 1791629861.272714,
+  "durationSeconds": 19.023355722427368,
+  "exitCode": 0
+}

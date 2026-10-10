@@ -1,0 +1,11 @@
+{
+  "name": "run-task-claim-control-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-task-claim-control-postgres-verification.sh"
+  ],
+  "startedAt": 1791631201.81583,
+  "finishedAt": 1791631213.2299001,
+  "durationSeconds": 11.414070129394531,
+  "exitCode": 0
+}

@@ -1,0 +1,11 @@
+{
+  "name": "npm-ci",
+  "command": [
+    "npm",
+    "ci"
+  ],
+  "startedAt": 1791627844.713273,
+  "finishedAt": 1791627868.628177,
+  "durationSeconds": 23.91490387916565,
+  "exitCode": 0
+}

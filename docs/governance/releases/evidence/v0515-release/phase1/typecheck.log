@@ -1,0 +1,4 @@
+
+> cps-novel@0.5.15 typecheck
+> tsc --noEmit
+

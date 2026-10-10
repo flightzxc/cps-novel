@@ -1,0 +1,20 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+ ✓ |node| tests/integration/tasks/task-claim-skip-ineligible-parents-postgres.test.ts (12 tests) 1452ms
+ ✓ |node| tests/integration/tasks/x10-task-control-postgres.test.ts (7 tests) 1051ms
+     ✓ concurrent pause vs. a finishing worker never produces a paused parent with a runnable successor -- the guard holds under real interleaving, not only sequential ordering  387ms
+
+ Test Files  2 passed (2)
+      Tests  19 passed (19)
+   Start at  20:20:09
+   Duration  3.64s (transform 588ms, setup 0ms, import 818ms, tests 2.50s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-task-claim-control-secrets.Z9ywWK/integration-result.json
+  tests/integration/tasks/task-claim-skip-ineligible-parents-postgres.test.ts passed=12 skipped=0
+  tests/integration/tasks/x10-task-control-postgres.test.ts passed=7 skipped=0
+TASK_CLAIM_CONTROL_INTEGRATION=PASS files=2 passed=19 skipped=0
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+TASK_CLAIM_CONTROL_DICTIONARY_DRIFT=0
+TASK_CLAIM_CONTROL_POSTGRES_VERIFICATION=PASS
+TASK_CLAIM_CONTROL_DISPOSABLE_DATABASE_CLEANED=yes

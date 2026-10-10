@@ -1,0 +1,11 @@
+{
+  "name": "image-e2e",
+  "command": [
+    "/bin/bash",
+    ".tmp/v0515-release/image-e2e.sh"
+  ],
+  "startedAt": 1791633682.2393322,
+  "finishedAt": 1791633692.6857688,
+  "durationSeconds": 10.446436643600464,
+  "exitCode": 0
+}

@@ -1,0 +1,11 @@
+{
+  "name": "run-promo-claim-batch-control-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-promo-claim-batch-control-postgres-verification.sh"
+  ],
+  "startedAt": 1791629700.1669939,
+  "finishedAt": 1791629705.459708,
+  "durationSeconds": 5.2927141189575195,
+  "exitCode": 0
+}

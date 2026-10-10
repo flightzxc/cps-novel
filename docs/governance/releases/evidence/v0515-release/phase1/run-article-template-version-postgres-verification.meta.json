@@ -1,0 +1,11 @@
+{
+  "name": "run-article-template-version-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-article-template-version-postgres-verification.sh"
+  ],
+  "startedAt": 1791628772.717006,
+  "finishedAt": 1791628778.837446,
+  "durationSeconds": 6.1204400062561035,
+  "exitCode": 0
+}

@@ -1,0 +1,16 @@
+{
+  "name": "test-full",
+  "command": [
+    "npm",
+    "test",
+    "--",
+    "--maxWorkers=2",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/.tmp/v0515-release/phase1/test-full.json"
+  ],
+  "startedAt": 1791628160.2406762,
+  "finishedAt": 1791628448.1396842,
+  "durationSeconds": 287.8990080356598,
+  "exitCode": 0
+}

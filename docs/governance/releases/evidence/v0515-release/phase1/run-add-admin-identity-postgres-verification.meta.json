@@ -1,0 +1,11 @@
+{
+  "name": "run-add-admin-identity-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-add-admin-identity-postgres-verification.sh"
+  ],
+  "startedAt": 1791628733.198179,
+  "finishedAt": 1791628737.6798878,
+  "durationSeconds": 4.481708765029907,
+  "exitCode": 0
+}

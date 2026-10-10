@@ -1,0 +1,118 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.5.15
+
+ ✓ |node| tests/integration/tasks/sitemap-category-cap-postgres.test.ts (11 tests) 18187ms
+     ✓ 1) 分类的书全部不进列表（seo_only）→ 站点地图不列这个分类，而页面确实是 404  1163ms
+     ✓ 2) 分类有书进列表 → 照常列出；?page=N 到页面的总页数（无截断）；保留分类的 lastmod 仍按全量候选（含不进列表的书）算  723ms
+     ✓ 3) 其它网址与改前一致：首页、小说页、章节页、博客页、小语种的分类页  801ms
+     ✓ 4) 对照断言：站点地图列出的每个分类网址 getPublicCategoryPage 都不为 null；页面是 200 的分类也都在站点地图里  2393ms
+     ✓ 5) SEO 可见性开关：关闭时不区分 seo_only（所有书进列表，adventure 出现）；打开时 cap-299/300 变成 seo_only → staff-pick 消失，页面也 404；小说页照旧收  2313ms
+     ✓ 6) 性能：每个语种只读一次每语种每分类本数矩阵，与分类个数无关；其它家族不碰矩阵  845ms
+     ✓ 7) 详情页的可链接分类集合 === listPublicCategoryPageCounts 的键；集合里每个分类页面都 200、集合之外都 404；不进列表的书只有 200 的分类带 href  2396ms
+     ✓ 8) 推荐卡片同理：候选池只含进列表的书，所以每张卡片的每个标签页面都是 200、都带 href  1173ms
+     ✓ 9) seo_only：书在列表之外（详情页仍可达）→ 它独占的分类页面 404，详情视图里该标签没有 href；集合等价仍成立  717ms
+     ✓ 10) 语种错配（详情页）：判定集合按书自己的语种取——en 里有书而 es 里没有的分类无 href，只在 es 里有书的分类有 href  3114ms
+     ✓ 11) 语种错配（推荐卡片）：es 的推荐卡片按 es 的矩阵判定（相关推荐、新书推荐两处都走），标签 href 带 /es 前缀、页面都是 200  2539ms
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > re-queries candidates on two runs of one handler and promotes the second article into XML
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":55}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > re-queries candidates on two runs of one handler and promotes the second article into XML
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"a1997a2b-0902-4608-a2cb-116e6f500696","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":4}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > re-queries candidates on two runs of one handler and promotes the second article into XML
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":11}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > re-queries candidates on two runs of one handler and promotes the second article into XML
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"ffc926ae-a1c5-436d-85e6-76b3daa9cc68","total":2,"kept":2,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":3}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":17}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"bf2ecff5-6754-4744-948c-47f2c39517c2","total":15,"kept":10,"removed":5,"failed":0,"deferred":0,"freedBytes":780,"keptOrphans":0,"ignored":0,"durationMs":24}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":13}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":11}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > B-33: a successful worker refresh prunes old release directories down to the latest 10 and keeps current; a failed refresh prunes nothing and its fresh residue survives the next prune
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"4f271662-0be4-4c4e-95e7-7bcc9548282d","total":12,"kept":11,"removed":1,"failed":0,"deferred":0,"freedBytes":156,"keptOrphans":1,"ignored":0,"durationMs":9}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > covers processing-time publications with exactly one queued follow-up
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":13}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > covers processing-time publications with exactly one queued follow-up
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"c476a69e-6a8e-4111-b1f1-8b047c5d5352","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":2}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > covers processing-time publications with exactly one queued follow-up
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":8}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > covers processing-time publications with exactly one queued follow-up
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"2c90439b-d278-4a9b-96fb-6c2b1822c8d9","total":2,"kept":2,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":2}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > CLI apply enqueues as web_app; worker publishes atomically and status reports pending/processing/failure
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":17}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > CLI apply enqueues as web_app; worker publishes atomically and status reports pending/processing/failure
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"f6c67a8c-486d-4870-af69-b395cfbcf930","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":2}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > CLI apply enqueues as web_app; worker publishes atomically and status reports pending/processing/failure
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":43}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > worker_app lists the free preview chapters right after their book, and never a locked/stale/withdrawn/deleted/content-less chapter or an unpublished book's chapters
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":20}
+
+stdout | tests/integration/tasks/sitemap-refresh-postgres.test.ts > sitemap refresh on disposable PostgreSQL 16.14 > worker_app lists the free preview chapters right after their book, and never a locked/stale/withdrawn/deleted/content-less chapter or an unpublished book's chapters
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"a46ebd2c-68e3-4cec-8ac8-05aad634491c","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":1}
+
+ ✓ |node| tests/integration/tasks/sitemap-refresh-postgres.test.ts (15 tests) 5467ms
+     ✓ re-queries candidates on two runs of one handler and promotes the second article into XML  445ms
+     ✓ covers processing-time publications with exactly one queued follow-up  497ms
+     ✓ preserves the follow-up when an expired processing lease ends terminally  301ms
+     ✓ authorizes real web_app sessions, coalesces concurrent clicks and audits in one transaction  439ms
+     ✓ CLI dry-run computes locale counts with zero database and file writes  370ms
+     ✓ CLI apply enqueues as web_app; worker publishes atomically and status reports pending/processing/failure  720ms
+     ✓ worker_app lists the free preview chapters right after their book, and never a locked/stale/withdrawn/deleted/content-less chapter or an unpublished book's chapters  342ms
+     ✓ worker_app: a locale with no public content gets no shard at all (mainpage included) and the populated one does; site_setting's new Yandex columns are readable by the worker role  703ms
+     ✓ PN-09: web_app's active-locale set, worker_app's mainpage shards and the pages' robots agree on which locales are empty  370ms
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇
+[sitemap-scale] seeded in 52674 ms: en articles=30400 visible=30093
+
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇 > 场景 A/E · 整条链路：generateStaticSitemaps（与 sitemap_refresh 任务同款）写盘成功，每个语种的 XML 条目数等于该语种公开文章数（含章节）
+[sitemap-scale] full pipeline (en+ko+fr, mainpage+novelpage+blogpage) files=19 elapsedMs=31282 memory={"startRssMb":142,"peakRssMb":431,"deltaRssMb":288,"startHeapMb":39,"peakHeapMb":225,"deltaHeapMb":187}
+
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇 > 场景 A/B/E · novelpage：3 万篇一次生成成功，条目与顺序与独立 SQL 预期逐条一致，分片条目数 = SITEMAP_SHARD_SIZE，lastmod 正确
+[sitemap-scale] novelpage en articles=30093 chunk=500 entries=120372 shards=13 elapsedMs=28744 memory={"startRssMb":478,"peakRssMb":481,"deltaRssMb":3,"startHeapMb":242,"peakHeapMb":253,"deltaHeapMb":11}
+
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇 > 场景 A/B · 事故同款量级（de 14,000 篇）：改前 54001 stack depth limit exceeded，改后条目与独立预期逐条一致
+[sitemap-scale] novelpage de articles=13860 elapsedMs=6296
+
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇 > 场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开各一遍），首页 + 分类页条目与独立预期一致
+[sitemap-scale] mainpage en autoTagging=false elapsedMs=18978 memory={"startRssMb":414,"peakRssMb":421,"deltaRssMb":7,"startHeapMb":65,"peakHeapMb":102,"deltaHeapMb":37}
+
+stdout | tests/integration/tasks/sitemap-scale-postgres.test.ts > sitemap scale on disposable PostgreSQL 16.14 · 单语种 3 万篇 > 场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开各一遍），首页 + 分类页条目与独立预期一致
+[sitemap-scale] mainpage en autoTagging=true elapsedMs=45856 memory={"startRssMb":412,"peakRssMb":427,"deltaRssMb":15,"startHeapMb":97,"peakHeapMb":99,"deltaHeapMb":2}
+
+ ✓ |node| tests/integration/tasks/sitemap-scale-postgres.test.ts (8 tests) 186056ms
+     ✓ 场景 A/E · 整条链路：generateStaticSitemaps（与 sitemap_refresh 任务同款）写盘成功，每个语种的 XML 条目数等于该语种公开文章数（含章节）  31319ms
+     ✓ 场景 A/B/E · novelpage：3 万篇一次生成成功，条目与顺序与独立 SQL 预期逐条一致，分片条目数 = SITEMAP_SHARD_SIZE，lastmod 正确  29132ms
+     ✓ 场景 A/B · 事故同款量级（de 14,000 篇）：改前 54001 stack depth limit exceeded，改后条目与独立预期逐条一致  6624ms
+     ✓ 场景 A/B · mainpage：3 万个小说 id 走分类归属查询也不会撞绑定变量上限（自动标签关/开各一遍），首页 + 分类页条目与独立预期一致  65229ms
+     ✓ 场景 C：分块大小 1 / 2 / 3 / 7 / 恰好等于总数 / 比总数大 1 / 远大于总数，生成的全部 XML（含总索引）与默认分块逐字节一致，且非空  523ms
+
+ Test Files  3 passed (3)
+      Tests  34 passed (34)
+   Start at  19:57:50
+   Duration  214.19s (transform 1.93s, setup 0ms, import 3.38s, tests 209.71s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-sitemap-refresh-secrets.mNHqej/integration-result.json
+  tests/integration/tasks/sitemap-refresh-postgres.test.ts passed=15 skipped=0
+  tests/integration/tasks/sitemap-scale-postgres.test.ts passed=8 skipped=0
+  tests/integration/tasks/sitemap-category-cap-postgres.test.ts passed=11 skipped=0
+SITEMAP_REFRESH_INTEGRATION=PASS files=3 passed=34 skipped=0
+{"status":"ok","models":58,"recordCount":1343,"activeCount":1273,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":3}
+SITEMAP_REFRESH_DICTIONARY_DRIFT=0
+SITEMAP_REFRESH_POSTGRES_VERIFICATION=PASS
+SITEMAP_REFRESH_DISPOSABLE_DATABASE_CLEANED=yes

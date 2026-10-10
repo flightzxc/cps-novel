@@ -1,0 +1,15 @@
+NEXT_VERSION_UNDER_TEST=16.3.8
+PROBE_DATABASE=READY name=next_probe_194038_78142_24438 port=51763
+PROBE_BUILD=PASS next=16.3.8
+PROBE_SERVER=READY mode=next-start port=51810 next=16.3.8
+NAVER_VERIFICATION_FILE ok host=public probe=plain status=200 redirects=0 bytes=67 sha256=80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431 content-type=text/html; charset=UTF-8
+NAVER_VERIFICATION_FILE ok host=public probe=accept-language-ko status=200 redirects=0 bytes=67 sha256=80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431 content-type=text/html; charset=UTF-8
+NAVER_VERIFICATION_FILE ok host=public probe=naver-yeti-ua status=200 redirects=0 bytes=67 sha256=80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431 content-type=text/html; charset=UTF-8
+NAVER_VERIFICATION_FILE ok host=public probe=with-query status=200 redirects=0 bytes=67 sha256=80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431 content-type=text/html; charset=UTF-8
+NAVER_VERIFICATION_FILE ok host=public probe=head status=200 redirects=0 bytes=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content-type=text/html; charset=UTF-8
+NAVER_VERIFICATION_FILE ok host=admin probe=plain status=404 redirects=0 bytes=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content-type=-
+NEXT_PROXY_PROBE_SUMMARY {"nextVersion":"16.3.8","total":1742,"failed":0,"knownFindings":{},"byGroup":{"control":{"total":10,"failed":0},"public-host-admin-path":{"total":903,"failed":0},"public-host-legit-path":{"total":11,"failed":0},"public-host-static-verification-file":{"total":6,"failed":0},"host-smuggling":{"total":48,"failed":0},"public-page-hijack":{"total":10,"failed":0},"admin-host-protected-page":{"total":630,"failed":0},"admin-host-api":{"total":105,"failed":0},"proxy-redirect-integrity":{"total":4,"failed":0},"malformed-authorization":{"total":15,"failed":0}},"publicHostAdminPathOutcomes":{"404-empty(proxy-deny-signature)":746,"404-next-page":137,"[308->…":64,"308->…":4}}
+NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0
+PROBE_EVIDENCE=/Users/chenweifeng/Documents/cps海阅/release-v0.5.15/.tmp/next-proxy-probe/probe-next-16.3.8-next-start.json
+NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.8
+NEXT_PROBE_CLEANUP=PASS

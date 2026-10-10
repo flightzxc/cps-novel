@@ -1,0 +1,12 @@
+{
+  "name": "typecheck",
+  "command": [
+    "npm",
+    "run",
+    "typecheck"
+  ],
+  "startedAt": 1791628132.104521,
+  "finishedAt": 1791628146.8499541,
+  "durationSeconds": 14.74543309211731,
+  "exitCode": 0
+}

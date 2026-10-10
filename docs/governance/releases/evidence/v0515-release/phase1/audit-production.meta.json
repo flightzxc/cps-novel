@@ -1,0 +1,13 @@
+{
+  "name": "audit-production",
+  "command": [
+    "npm",
+    "audit",
+    "--omit=dev",
+    "--json"
+  ],
+  "startedAt": 1791628474.2916338,
+  "finishedAt": 1791628478.668791,
+  "durationSeconds": 4.377157211303711,
+  "exitCode": 1
+}

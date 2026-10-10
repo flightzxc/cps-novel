@@ -1,0 +1,11 @@
+{
+  "name": "code-bundle",
+  "command": [
+    "python3",
+    ".tmp/v0515-release/bundle.py"
+  ],
+  "startedAt": 1791633705.348175,
+  "finishedAt": 1791633705.837037,
+  "durationSeconds": 0.4888620376586914,
+  "exitCode": 0
+}

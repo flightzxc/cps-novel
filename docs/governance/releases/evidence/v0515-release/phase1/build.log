@@ -1,0 +1,172 @@
+
+> cps-novel@0.5.15 build
+> next build
+
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.ts took 3.8s
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 4.1s
+  Running TypeScript ...
+  Finished TypeScript in 13.3s ...
+  Collecting page data using 17 workers ...
+  Generating static pages using 17 workers (0/22) ...
+  Generating static pages using 17 workers (5/22) 
+  Generating static pages using 17 workers (10/22) 
+  Generating static pages using 17 workers (16/22) 
+✓ Generating static pages using 17 workers (22/22) in 1481ms
+Turbopack build encountered 1 warning:
+./src/lib/credentials/keyring.ts:26:13
+Warning: Dynamic filesystem access causes tracing of the whole project
+  [90m24 |[0m   [36mlet[0m value: string;
+  [90m25 |[0m   [36mtry[0m {
+[33m[1m>[0m [90m26 |[0m     value = readFileSync(filePath, [32m"utf8"[0m).trim();
+  [90m   |[0m             [33m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m27 |[0m   } [36mcatch[0m {
+  [90m28 |[0m     [36mthrow[0m [36mnew[0m [33mError[0m([32m`[0m${fileVariable[32m} must reference a readable secret file`[0m);
+  [90m29 |[0m   }
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+- opt out by adding an ignore comment to the highlighted call: fs.readFileSync(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import traces:
+  #1 [App Route]:
+    ./src/lib/credentials/keyring.ts
+    ./src/lib/credentials/web-ingress-crypto.ts
+    ./src/server/credentials/service.ts
+    ./src/app/api/admin/credentials/metadata/route.ts
+
+  #2 [App Route]:
+    ./src/lib/credentials/keyring.ts
+    ./src/lib/credentials/keyring.ts
+    ./src/lib/credentials/web-ingress-crypto.ts
+    ./src/server/credentials/service.ts
+    ./src/app/api/admin/credential-tasks/status/route.ts
+
+  #3 [Server Component]:
+    ./src/lib/credentials/keyring.ts
+    ./src/lib/credentials/web-ingress-crypto.ts
+    ./src/server/credentials/service.ts
+    ./src/server/credentials/index.ts
+    ./src/app/api/admin/_lib/registry.ts
+    ./src/app/api/admin/_lib/deps.ts
+    ./src/app/(admin)/tags/mappings/page.tsx
+
+
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /[locale]
+├ ƒ /[locale]/blog
+├ ƒ /[locale]/blog/[slug]
+├ ƒ /[locale]/browse
+├ ƒ /[locale]/category/[slug]
+├ ƒ /[locale]/novel/[slugParam]
+├ ƒ /[locale]/novel/[slugParam]/chapter/[chapterNumber]
+├ ƒ /[locale]/search
+├ ƒ /api/admin/canonical-tags
+├ ƒ /api/admin/canonical-tags/homepage-nav
+├ ƒ /api/admin/channel-accounts
+├ ƒ /api/admin/credential-tasks/status
+├ ƒ /api/admin/credentials/metadata
+├ ƒ /api/admin/novels
+├ ƒ /api/admin/novels/chapters
+├ ƒ /api/admin/novels/chapters/content
+├ ƒ /api/admin/novels/detail
+├ ƒ /api/admin/novels/tags
+├ ƒ /api/admin/promo-links
+├ ƒ /api/admin/site-settings
+├ ƒ /api/admin/sitemap
+├ ƒ /api/admin/tag-mappings
+├ ƒ /api/admin/tags
+├ ƒ /api/admin/tasks
+├ ƒ /api/admin/tasks/abort
+├ ƒ /api/admin/tasks/detail
+├ ƒ /api/admin/tasks/items
+├ ƒ /api/admin/tasks/manual-reviews
+├ ƒ /api/admin/tasks/manual-reviews/resolve
+├ ƒ /api/admin/tasks/pause
+├ ƒ /api/admin/tasks/progress
+├ ƒ /api/admin/tasks/promo-claim-batch/abort
+├ ƒ /api/admin/tasks/promo-claim-batch/pause
+├ ƒ /api/admin/tasks/promo-claim-batch/reapprove
+├ ƒ /api/admin/tasks/promo-claim-batch/resume
+├ ƒ /api/admin/tasks/resume
+├ ƒ /api/admin/tasks/retry-catalog-finalize
+├ ƒ /api/admin/tasks/retry-failed
+├ ƒ /api/health
+├ ƒ /api/health/backup
+├ ƒ /api/health/worker
+├ ƒ /api/novel-locale-check
+├ ○ /apple-icon
+├ ƒ /articles
+├ ƒ /articles/[articleId]
+├ ƒ /articles/batch-generate
+├ ƒ /articles/batch-novel-rebind
+├ ƒ /articles/generate
+├ ƒ /articles/new-blog
+├ ƒ /blog
+├ ƒ /blog/[slug]
+├ ƒ /browse
+├ ƒ /catalog-sync
+├ ƒ /categories
+├ ƒ /category/[slug]
+├ ƒ /channel-accounts
+├ ƒ /dev-preview
+├ ƒ /dev-preview/chapter/[chapterNumber]
+├ ƒ /dev-preview/collection
+├ ƒ /dev-preview/collection-empty
+├ ƒ /dev-preview/header
+├ ƒ /dev-preview/home
+├ ƒ /dev-preview/home-fallback
+├ ƒ /dev-preview/home-hero-plain
+├ ƒ /dev-preview/home-one
+├ ƒ /dev-preview/home-two
+├ ƒ /dev-preview/novel
+├ ƒ /dev-preview/novel-sparse
+├ ƒ /dev-preview/status/error
+├ ƒ /dev-preview/status/global-error
+├ ƒ /dev-preview/status/not-found
+├ ƒ /dev-preview/takedown
+├ ƒ /dev-preview/unavailable
+├ ƒ /go/[code]
+├ ƒ /home-carousel
+├ ○ /icon
+├ ƒ /indexnow-key.txt
+├ ƒ /login
+├ ƒ /novel/[slugParam]
+├ ƒ /novel/[slugParam]/chapter/[chapterNumber]
+├ ƒ /novels
+├ ƒ /novels/[novelId]
+├ ƒ /novels/[novelId]/chapters/[chapterId]
+├ ƒ /promo-links
+├ ƒ /revenue
+├ ƒ /robots.txt
+├ ƒ /search
+├ ƒ /settings
+├ ƒ /settings/security
+├ ƒ /sitemap.xml
+├ ƒ /sitemap/[fileName]
+├ ƒ /tags
+├ ƒ /tags/canonical
+├ ƒ /tags/mappings
+├ ƒ /tasks
+├ ƒ /tasks/[id]
+├ ƒ /templates
+├ ƒ /two-factor/challenge
+└ ƒ /two-factor/setup
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

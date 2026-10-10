@@ -1,0 +1,11 @@
+{
+  "name": "run-novel-article-decouple-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.5.15/scripts/run-novel-article-decouple-postgres-verification.sh"
+  ],
+  "startedAt": 1791628850.758782,
+  "finishedAt": 1791628859.0328572,
+  "durationSeconds": 8.274075269699097,
+  "exitCode": 0
+}
