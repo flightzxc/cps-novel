@@ -308,5 +308,14 @@
   "batchFirstPublication100Limit": "MAY_BE_LIFTED",
   "backfill": "NOT_EXECUTED",
   "businessFlags": "UNCHANGED",
-  "nginx": "UNCHANGED"
+  "nginx": "UNCHANGED",
+  "governance": {
+    "sourceCommit": "2cc389539efd974746c60e8c622dd2bb952d7fee",
+    "githubReadBack": "PASS",
+    "notionReadBack": "PASS",
+    "notionReceipt": "notion-readback.json"
+  },
+  "approvedFinalUnchanged": true,
+  "annotatedTagUnchanged": true,
+  "referenceReposUnchanged": true
 }

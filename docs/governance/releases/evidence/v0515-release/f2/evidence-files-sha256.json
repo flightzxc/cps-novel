@@ -1,0 +1,142 @@
+[
+  {
+    "path": "acceptance-addendum.md",
+    "bytes": 3609,
+    "sha256": "30a1c9d8c80444b3406292f21f3c1ec261b9347c0c0f654113bb07cdd36ba4b9"
+  },
+  {
+    "path": "evidence-scan.py",
+    "bytes": 1720,
+    "sha256": "2f933e71cfa2c9e2697b1e1959787118d9838d380450104134dd8096b98649ca"
+  },
+  {
+    "path": "evidence-secret-scan.log",
+    "bytes": 95,
+    "sha256": "79d2fbd9f067019e6bb26a338a572327a56cbe27358d649602bd56cf60a8f91d"
+  },
+  {
+    "path": "evidence-secret-scan.meta.json",
+    "bytes": 204,
+    "sha256": "5737693bb26309dbebe0a7791d4e5573c663b84be83126401db71691b714e9a1"
+  },
+  {
+    "path": "f2-pending-result.json",
+    "bytes": 3326,
+    "sha256": "3e8247ef1ec2d41b448acbe070a31bd9807bc1558e14dd617e4e5ed0f07ab605"
+  },
+  {
+    "path": "f2-result.json",
+    "bytes": 9389,
+    "sha256": "7037416ecd0a359cf41d7d5b18184f4d46d286d0baebf5d273691c5a411f128b"
+  },
+  {
+    "path": "f2-validation.log",
+    "bytes": 449,
+    "sha256": "813a3192012442d1eeec3278fca334d4880e33984630d47aeda09e0ae90400ad"
+  },
+  {
+    "path": "f2-validation.meta.json",
+    "bytes": 189,
+    "sha256": "9850388f2ec8c129cbbde03a1ef2df65353650a310e7b9fc18ed99315a086c30"
+  },
+  {
+    "path": "github-push.log",
+    "bytes": 118,
+    "sha256": "cd95de3302dfa72e9af590887986b4d535d23ee0b3013f4b454d04adc4016482"
+  },
+  {
+    "path": "github-push.meta.json",
+    "bytes": 204,
+    "sha256": "e9e87392855de96852ad16ffd976d5d96ec6d6d6ae7861bf04a40cf16768aa66"
+  },
+  {
+    "path": "github-readback.log",
+    "bytes": 141,
+    "sha256": "b4e49c441ddd48a160609fbbd17bc8ed9498fe7747a24cfd80d2c4696a0c76a8"
+  },
+  {
+    "path": "github-readback.meta.json",
+    "bytes": 250,
+    "sha256": "a261e7d479cc112efc8b4f3de634ed25a6386e0510542b9fbfe0d67fd45920e5"
+  },
+  {
+    "path": "indexnow-status.json",
+    "bytes": 1718,
+    "sha256": "6ced4401972485e87f87936766d09c02dc5cfbbd3558d2a7681791c5072fb783"
+  },
+  {
+    "path": "locate.sql",
+    "bytes": 1915,
+    "sha256": "56a466dbaf76f9076a6a4dd1920b73b9d1941d592a55affa63e47d41e39206b1"
+  },
+  {
+    "path": "notion-readback.json",
+    "bytes": 1254,
+    "sha256": "bfa73bea5ca810eec449cc106dc1d398ce34e658ca67e62ea98332bb6e815143"
+  },
+  {
+    "path": "notion-synced-f2.md",
+    "bytes": 8042,
+    "sha256": "55eebfb6c5d9377d686bd8073c93bfe0f044988d30dfdb9fa8a7ed06782118ab"
+  },
+  {
+    "path": "notion-updates.json",
+    "bytes": 13315,
+    "sha256": "d8fb2fdbe4e9a8ee7f70c8ff34aa1ffbfe6e65ce4f2e35e9e80bee0fc2bbbeae"
+  },
+  {
+    "path": "read.sql",
+    "bytes": 3039,
+    "sha256": "9156db9e689afd2eb280583b97918d66039b1c7ba011be72bf61897bab00c2e9"
+  },
+  {
+    "path": "readonly-locate.log",
+    "bytes": 3355,
+    "sha256": "ab05992561f10d813fa131d6ab5f4e4e6b86fd3137aa92d4e589e82182f25caa"
+  },
+  {
+    "path": "readonly-locate.meta.json",
+    "bytes": 255,
+    "sha256": "d2d5446b6d8ba032557702792ade53bcad56cb5efad95115eb41bfdfbbe1ca60"
+  },
+  {
+    "path": "readonly-sample-second.log",
+    "bytes": 7258,
+    "sha256": "d87673f0eb22b0729de2e730999ca931bf95af85a5971f2be4fec00439a62f51"
+  },
+  {
+    "path": "readonly-sample-second.meta.json",
+    "bytes": 259,
+    "sha256": "09e49d0bc20a5851854700d789484570b5cca9a1b4095e115105ce6e9261556d"
+  },
+  {
+    "path": "readonly-sample.log",
+    "bytes": 2614,
+    "sha256": "3e5aa68b2a6a5d65843396b91d6055a737098d4255312fbcfc23e39eac83c8b0"
+  },
+  {
+    "path": "readonly-sample.meta.json",
+    "bytes": 253,
+    "sha256": "33ae1a60c08db2993ac717f8f6b95554fae81bb9621192439189e9b495f477fc"
+  },
+  {
+    "path": "remote-locate.py",
+    "bytes": 2172,
+    "sha256": "b2add814ffe666a5c1998a677f0cbaccf966b4b54ac863bc440794d7f8fa46d4"
+  },
+  {
+    "path": "remote-read.py",
+    "bytes": 4168,
+    "sha256": "b1d06ce2ced26a973bcddf596b672db8ffd4452ae34074477005f65464915f0a"
+  },
+  {
+    "path": "run.py",
+    "bytes": 618,
+    "sha256": "81368cbb6c2b1b2a524e00f39e26ec98904a4482f0d76b8600656afcd7a2a15c"
+  },
+  {
+    "path": "verify.py",
+    "bytes": 4557,
+    "sha256": "60fe15d7e11b19cd42db055e9aab9f7b3d94bee5ac9e06e6a23b250d9e03e598"
+  }
+]

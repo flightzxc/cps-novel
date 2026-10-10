@@ -1,0 +1,26 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageURL": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "status": "PASS",
+  "readBackAt": "2026-10-10T18:36:45.094Z",
+  "sourceGovernanceCommit": "2cc389539efd974746c60e8c622dd2bb952d7fee",
+  "approvedFinal": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "F2": "PASS",
+  "batchFirstPublication100Limit": "MAY_BE_LIFTED",
+  "sections": {
+    "currentSnapshot": "PASS",
+    "versionRow": "PASS",
+    "detailedHandbook": "PASS",
+    "uniqueDevelopmentLogMirror": "PASS"
+  },
+  "verification": {
+    "updatedSnippets": "Current snapshot/table/handbook exactly equal; log mirror equal after removing blank lines and Notion escapes",
+    "unrelatedHistoryRulesTemplates": "Invert only the five F2 updates and rstrip trailing whitespace; all original content exactly equal",
+    "originalNormalizedSha256": "71736a638ab7e990a5dc7423353eb936902f7cf54f195aab7618a0301f05cfe6",
+    "recoveredNormalizedSha256": "71736a638ab7e990a5dc7423353eb936902f7cf54f195aab7618a0301f05cfe6"
+  },
+  "originalChars": 242571,
+  "updatedChars": 244935,
+  "pageLastEditedAt": "2026-10-10T18:36:16.833Z",
+  "readBackContentSha256": "c11d20511ff29c2752e2c48647e43c1e414967da0b95e0c3942a180de5de0573"
+}
