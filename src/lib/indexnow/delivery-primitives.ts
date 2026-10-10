@@ -19,24 +19,65 @@
  * `dead_letter` once the budget is exhausted). Keeping the two questions
  * separate mirrors this codebase's `outcome` vs `attemptState` split
  * documented on `IndexNowOutboxAttempt` in the schema.
+ *
+ * B-41 (batch delivery): `resolveOutboxDeliveryStatus` no longer maps a
+ * 400/403/422 attempt to a terminal `permanent_failed` row — see its doc
+ * comment. `docs/adr/ADR-B41-INDEXNOW-BATCH-DELIVERY.md` has the decision.
  */
+import type { Prisma } from "@prisma/client";
+
 import type { IndexNowAttemptOutcome } from "@/domain/database-statuses";
 
 export const INDEXNOW_ENDPOINT = "https://api.indexnow.org/IndexNow";
 /**
- * CPS batches up to 500 URLs per HTTP POST to conserve request count against
- * IndexNow's daily submission quota. This codebase's V1 worker handler
- * submits exactly one URL per `GenericTaskItem` (one delivery attempt = one
- * fenced, independently-leasable unit of work — see
- * `worker/handlers/indexnow-delivery.ts`'s header for why), so this constant
- * is not consumed by the handler today. It is kept as the protocol-documented
- * ceiling and exported for `chunkIndexNowDeliveries`, which the backfill
- * manifest tooling uses to size candidate pages; a future batched-HTTP
- * optimization (submitting several `GenericTaskItem`s' URLs in one POST) can
- * reuse it without redefining the ceiling.
+ * B-41: the protocol-documented ceiling of URLs per HTTP POST (CPS
+ * `indexnow-delivery-service.ts:17`), now actually consumed. One
+ * `indexnow_delivery` `GenericTaskItem` is one batch of at most this many
+ * outbox rows and one HTTP request (bisect probes are the only exception —
+ * see `worker/handlers/indexnow-delivery.ts`). It also sizes the backfill
+ * apply chunk (`scripts/indexnow-backfill-apply.ts`).
  */
 export const INDEXNOW_HTTP_BATCH_SIZE = 500;
 export const INDEXNOW_HTTP_TIMEOUT_MS = 10_000;
+
+/**
+ * B-41: HTTP statuses that open the delivery breaker. 400/403/422 are
+ * request-level / key-level / host-level problems (malformed JSON, key file
+ * not found, URL host not matching `host`), not a property of one URL — with
+ * 500 URLs per request, one such response says the whole batch (and the
+ * configuration behind it) is wrong.
+ */
+export const INDEXNOW_BREAKER_HTTP_STATUSES = [400, 403, 422] as const;
+
+export function isIndexNowBreakerStatus(httpStatus: number | null | undefined): boolean {
+  return typeof httpStatus === "number" && (INDEXNOW_BREAKER_HTTP_STATUSES as readonly number[]).includes(httpStatus);
+}
+
+/**
+ * "Due" predicate shared by the minute sweep, the delivery handler's candidate
+ * selection and its claim CAS: first-publish rows whose `availableAt` has
+ * passed (or never deferred), and `retry_wait` rows whose `nextAttemptAt` has
+ * passed. `now` is the DATABASE clock at the call site.
+ */
+export function indexNowDueWhere(now: Date): Prisma.IndexNowOutboxWhereInput {
+  return {
+    OR: [
+      { status: "pending", OR: [{ availableAt: null }, { availableAt: { lte: now } }] },
+      { status: "retry_wait", nextAttemptAt: { lte: now } },
+    ],
+  };
+}
+
+/**
+ * Extra attempts a row may need when a held (breaker-blocked) batch is
+ * bisected to isolate a bad URL: ⌈log2 500⌉ = 9 more probes at most.
+ */
+export const INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS = 9;
+/** Backfill apply waits at most this long for one chunk to leave pending/processing. */
+export const INDEXNOW_BACKFILL_SETTLE_TIMEOUT_MS = 10 * 60_000;
+export const INDEXNOW_BACKFILL_POLL_MS = 10_000;
+/** Minimum global wait after an HTTP 429: `waitUntil = db clock + max(Retry-After, this)`. */
+export const INDEXNOW_RATE_LIMIT_FALLBACK_WAIT_MS = 5 * 60_000;
 
 export function chunkIndexNowDeliveries<T>(rows: readonly T[], size = INDEXNOW_HTTP_BATCH_SIZE): T[][] {
   const chunks: T[][] = [];
@@ -46,14 +87,18 @@ export function chunkIndexNowDeliveries<T>(rows: readonly T[], size = INDEXNOW_H
   return chunks;
 }
 
-/** Redacts key/token/secret/Authorization/Bearer material before anything gets persisted to `lastErrorSummary`/`responseSummary`. */
-export function summarizeIndexNowValue(value: unknown): string {
-  const raw = value instanceof Error ? value.message : String(value ?? "");
+/** Redacts key/token/secret/Authorization/Bearer material (no truncation) — for anything that gets printed or persisted, URLs included. */
+export function redactIndexNowSecrets(raw: string): string {
   return raw
     .replace(/([?&](?:key|token|secret|authorization)=)[^&\s]+/gi, "$1[REDACTED]")
     .replace(/("?(?:key|keyLocation|authorization|cookie)"?\s*:\s*")[^"]+/gi, "$1[REDACTED]")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
-    .slice(0, 500);
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]");
+}
+
+/** Redacts key/token/secret/Authorization/Bearer material before anything gets persisted to `lastErrorSummary`/`responseSummary`. */
+export function summarizeIndexNowValue(value: unknown): string {
+  const raw = value instanceof Error ? value.message : String(value ?? "");
+  return redactIndexNowSecrets(raw).slice(0, 500);
 }
 
 /** Parses an HTTP `Retry-After` header: either delta-seconds or an HTTP-date. Unparseable/missing → 0. */
@@ -83,7 +128,7 @@ export function classifyIndexNowResult(
   errorKind?: string | null,
 ): IndexNowAttemptOutcome {
   if (httpStatus === 200 || httpStatus === 202) return "accepted";
-  if (httpStatus === 400 || httpStatus === 403 || httpStatus === 422) return "permanent_failed";
+  if (isIndexNowBreakerStatus(httpStatus)) return "permanent_failed";
   // 429/5xx and network/timeout errors (`errorKind` set, `httpStatus` null)
   // both land here — kept as an explicit branch (CPS's original has the same
   // two branches, both returning the retryable status) so the signature's
@@ -109,6 +154,15 @@ export type OutboxDeliveryDecision =
  * decides. `attemptNo` is the just-recorded attempt's 1-based number (i.e.
  * the row's new `attemptCount`), matching CPS's `attemptNo >= maxAttempts`
  * dead-letter check.
+ *
+ * B-41 semantics change: an attempt outcome of `permanent_failed` (HTTP
+ * 400/403/422) is NOT a row verdict any more. With up to 500 URLs per
+ * request it says the batch / configuration is wrong, not that every URL in
+ * it is bad. The row goes back to `retry_wait` with `nextAttemptAt = now`
+ * ("held": immediately due, but it is not claimed while the delivery breaker
+ * is open — `delivery-control.ts`), or to `dead_letter` once its attempt
+ * budget is spent. A row-level `permanent_failed` now only comes from the
+ * bisect step that isolates one bad URL (`lastErrorKind = isolated_bad_url`).
  */
 export function resolveOutboxDeliveryStatus(
   outcome: IndexNowAttemptOutcome,
@@ -118,8 +172,8 @@ export function resolveOutboxDeliveryStatus(
   retryAfterMs = 0,
 ): OutboxDeliveryDecision {
   if (outcome === "accepted") return { status: "accepted", nextAttemptAt: null };
-  if (outcome === "permanent_failed") return { status: "permanent_failed", nextAttemptAt: null };
   if (attemptNo >= maxAttempts) return { status: "dead_letter", nextAttemptAt: null };
+  if (outcome === "permanent_failed") return { status: "retry_wait", nextAttemptAt: new Date(now.getTime()) };
   return {
     status: "retry_wait",
     nextAttemptAt: new Date(now.getTime() + computeRetryDelayMs(attemptNo, Math.random(), retryAfterMs)),

@@ -430,8 +430,8 @@ describe.skipIf(!enabled).sequential("article publish batch task · real roles (
         SELECT action, entity_type, actor_type, actor_id, before_snapshot, after_snapshot
         FROM operation_audit WHERE entity_id = ${articleId} AND action = 'article.publish'`);
       // B-34：出站记录逐列对比，不只看"有一条"——事件、状态、语种、来源、是否立即投递、URL 形状
-      // （去掉文章自己的 slug / 短码后必须一样）、revision 是否等于文章 updated_at 毫秒，以及配套建出的
-      // 投递任务与条目（类型、条数、reason、triggeredBy、条目状态）。
+      // （去掉文章自己的 slug / 短码后必须一样）、revision 是否等于文章 updated_at 毫秒；以及 B-41 起
+      // 「发布不建投递任务」——下面 delivery_* 各列（任务类型、条数、reason、triggeredBy、条目状态）必须全为 NULL。
       const outbox = await owner.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
         SELECT o.event_type, o.status, o.locale, o.source, (o.available_at IS NULL) AS immediate,
                (o.defer_reason IS NULL) AS not_deferred, (o.source_task_id IS NULL) AS no_source_task,
@@ -465,14 +465,17 @@ describe.skipIf(!enabled).sequential("article publish batch task · real roles (
     const expectedOutbox = {
       event_type: "article_first_publish", status: "pending", locale: "en", source: "admin.article.publish",
       immediate: true, not_deferred: true, no_source_task: true, revision_is_article_updated_at: true,
-      delivery_task_type: "indexnow_delivery", delivery_total_count: 1,
-      delivery_reason: "article_first_publish", delivery_triggered_by: "admin.article.publish",
-      delivery_item_target: "indexnow_outbox", delivery_item_status: "pending",
+      // B-41：发布只写出站记录，不再建投递任务——任务由每分钟扫描统一打包。两条路径都必须如此。
+      delivery_task_type: null, delivery_total_count: null,
+      delivery_reason: null, delivery_triggered_by: null,
+      delivery_item_target: null, delivery_item_status: null,
     };
     expect(button.outbox).toEqual([expect.objectContaining(expectedOutbox)]);
     expect(task.outbox).toEqual([expect.objectContaining(expectedOutbox)]);
     expect(task.outbox[0]!.url_shape).toBe("https://publish-batch.example/novel/<slug>-p<short-id>");
     expect(await count(Prisma.sql`SELECT count(*) AS n FROM indexnow_outbox`)).toBe(2);
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM generic_task WHERE task_type = 'indexnow_delivery'`)).toBe(0);
+    expect(await count(Prisma.sql`SELECT count(*) AS n FROM indexnow_outbox WHERE delivery_task_id IS NOT NULL`)).toBe(0);
     // 逐项一致（请求编号按设计不同：按钮是调用方给的编号，任务是「批次:文章」）。
     expect({ ...task, label: "" }).toEqual({ ...button, label: "" });
 

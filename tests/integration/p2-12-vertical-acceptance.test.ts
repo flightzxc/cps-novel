@@ -270,7 +270,10 @@ describe("P2-12 vertical acceptance", () => {
       url: `${SITE_URL}/novel/${SLUG}-p${SHORT_ID}`,
       revision: BigInt(UPDATED_AT.getTime()),
     });
-    expect(taskRows.filter((task) => task.taskType === "indexnow_delivery")).toHaveLength(1);
+    // B-41: publishing only records the outbox row. The batch delivery task is created by the minute
+    // sweep (indexnow.sweep.v1), never by the publish path.
+    expect(taskRows.filter((task) => task.taskType === "indexnow_delivery")).toHaveLength(0);
+    expect(outboxRows[0]!.deliveryTaskId ?? null).toBeNull();
     expect(taskRows.filter((task) => task.taskType === "sitemap_refresh")).toHaveLength(1);
   });
 });

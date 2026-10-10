@@ -226,9 +226,9 @@ export const DATABASE_STATUS_SEMANTICS = {
     pending: "URL revision is durable and awaiting first claim.",
     processing: "A worker currently owns the delivery attempt.",
     accepted: "IndexNow accepted this URL revision; terminal success.",
-    retry_wait: "Retryable failure is waiting until next_attempt_at.",
-    permanent_failed: "Provider response is non-retryable; terminal failure.",
-    dead_letter: "Retry budget was exhausted and operator inspection is required.",
+    retry_wait: "Retryable failure is waiting until next_attempt_at. B-41: also where a batch rejected with HTTP 400/403/422 goes (\"held\": next_attempt_at = the response time, i.e. due immediately but not claimed while the delivery breaker is open).",
+    permanent_failed: "Terminal failure. B-41: since batching, an HTTP 400/403/422 on a whole batch is NOT a row verdict (held in retry_wait instead); only the bisect step that isolates one bad URL writes this status (last_error_kind = isolated_bad_url).",
+    dead_letter: "Retry budget was exhausted and operator inspection is required (also reached by a held 400/403/422 row whose attempts are used up). Dead letters go to the Owner; backfill stops while any exists.",
     cancelled: "Delivery was deliberately cancelled because the revision is no longer actionable.",
   },
   /**
@@ -242,7 +242,7 @@ export const DATABASE_STATUS_SEMANTICS = {
       started: "Attempt was created and its HTTP request has not yet been classified.",
       accepted: "IndexNow accepted this attempt (HTTP 200/202).",
       retryable_failed: "Attempt failed with a retryable HTTP status (429/5xx) or network error.",
-      permanent_failed: "Attempt failed with a non-retryable HTTP status (400/403/422).",
+      permanent_failed: "Attempt failed with HTTP 400/403/422 (attempt grain unchanged; the ROW consequence changed in B-41 — see indexnow_outbox.retry_wait/permanent_failed).",
     },
     attemptState: {
       started: "Request was sent but the worker has not yet recorded a response for this attempt.",

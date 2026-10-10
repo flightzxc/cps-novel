@@ -21,7 +21,25 @@
  * two constants from here rather than redefining them.
  */
 
+import { createHash } from "node:crypto";
+
 export const INDEXNOW_DELIVERY_TASK_TYPE = "indexnow_delivery";
+/**
+ * B-41: batch delivery task shape. One `indexnow_delivery` `GenericTask` has
+ * exactly one item (`targetType = "indexnow_batch"`, `payload = { mode:
+ * "batch" }`) and the item sends one batch of at most
+ * `INDEXNOW_HTTP_BATCH_SIZE` outbox rows. The fixed `operationScopeHash`
+ * below makes `generic_task_active_scope_uidx` (UNIQUE(task_type,
+ * channel_account_id, channel_app_id, operation_scope_hash) WHERE status IN
+ * ('pending','processing')) the guarantee that only one batch task is in
+ * flight at a time.
+ */
+export const INDEXNOW_BATCH_TARGET_TYPE = "indexnow_batch";
+export const INDEXNOW_BATCH_TARGET_ID = "batch";
+export const INDEXNOW_BATCH_PAYLOAD_MODE = "batch";
+export const INDEXNOW_BATCH_OPERATION_SCOPE_HASH = createHash("sha256")
+  .update("indexnow_delivery:batch", "utf8")
+  .digest("hex");
 export const SITEMAP_REFRESH_TASK_TYPE = "sitemap_refresh";
 export const INDEXNOW_SITEMAP_STALE_MS = 35 * 60 * 1000;
 

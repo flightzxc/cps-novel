@@ -75,30 +75,47 @@ docker exec \
   -e PGUSER=migration_owner -e PGPASSWORD="$migration_password" \
   "$container_name" psql --no-psqlrc --file=/workspace/infra/postgres/grants.sql >/dev/null
 
-WO6_DATABASE_TEST=1 \
-WO6_OWNER_DATABASE_URL="$owner_url" \
-WO6_WEB_DATABASE_URL="$web_url" \
-WO6_WORKER_DATABASE_URL="$worker_url" \
-WO6_SCHEDULER_DATABASE_URL="$scheduler_url" \
-npm exec vitest run -- --project node tests/integration/tasks/indexnow-sweep-postgres.test.ts \
-  --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
+# Two files, run one after the other: both reset the same tables in the shared disposable database,
+# so they must never run in parallel.
+#   indexnow-sweep-postgres   — WO6 scheduler / lanes / HTTP behaviour (adapted to batch delivery)
+#   indexnow-batch-postgres   — B-41: 500+1 batch, breaker/resume, 429 wait, bisect, control-plane
+#                               concurrency (28–34), backfill on real tables, 7.11 query plan on ≥750k rows
+for test_file in indexnow-sweep-postgres indexnow-batch-postgres; do
+  WO6_DATABASE_TEST=1 \
+  WO6_OWNER_DATABASE_URL="$owner_url" \
+  WO6_WEB_DATABASE_URL="$web_url" \
+  WO6_WORKER_DATABASE_URL="$worker_url" \
+  WO6_SCHEDULER_DATABASE_URL="$scheduler_url" \
+  npm exec vitest run -- --project node "tests/integration/tasks/${test_file}.test.ts" \
+    --reporter=default --reporter=json --outputFile="$secret_dir/integration-result-${test_file}.json"
+done
 
-node - "$secret_dir/integration-result.json" "$project_root/tests/integration/tasks/indexnow-sweep-postgres.test.ts" <<'NODE'
+# Minimum passed counts: sweep file 20, batch file 20. Never "0 files ran" and never a skipped test.
+node - "$secret_dir" "$project_root" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
-const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const expected = path.resolve(process.argv[3]);
-const files = report.testResults ?? [];
-const file = files[0];
-const passed = file?.assertionResults?.filter((test) => test.status === "passed").length ?? 0;
-const skipped = report.numPendingTests ?? -1;
-if (files.length !== 1 || path.resolve(file?.name ?? "") !== expected
-    || file.status !== "passed" || passed < 20 || skipped !== 0
-    || report.numFailedTests !== 0 || report.numPassedTests !== passed) {
-  console.error(`WO6_INTEGRATION=FAIL reason=not_executed passed=${passed} skipped=${skipped}`);
-  process.exit(1);
+const [secretDir, projectRoot] = process.argv.slice(2);
+const expectations = [
+  ["indexnow-sweep-postgres", 20],
+  ["indexnow-batch-postgres", 20],
+];
+let totalPassed = 0;
+for (const [name, minimum] of expectations) {
+  const report = JSON.parse(fs.readFileSync(path.join(secretDir, `integration-result-${name}.json`), "utf8"));
+  const expected = path.resolve(projectRoot, "tests/integration/tasks", `${name}.test.ts`);
+  const files = report.testResults ?? [];
+  const file = files[0];
+  const passed = file?.assertionResults?.filter((test) => test.status === "passed").length ?? 0;
+  const skipped = report.numPendingTests ?? -1;
+  if (files.length !== 1 || path.resolve(file?.name ?? "") !== expected
+      || file.status !== "passed" || passed < minimum || skipped !== 0
+      || report.numFailedTests !== 0 || report.numPassedTests !== passed) {
+    console.error(`WO6_INTEGRATION=FAIL file=${name} reason=not_executed passed=${passed} minimum=${minimum} skipped=${skipped}`);
+    process.exit(1);
+  }
+  totalPassed += passed;
 }
-console.log(`WO6_INTEGRATION=PASS passed=${passed} skipped=0`);
+console.log(`WO6_INTEGRATION=PASS passed=${totalPassed} skipped=0`);
 NODE
 
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs

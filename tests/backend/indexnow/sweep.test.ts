@@ -1,109 +1,124 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { INDEXNOW_BATCH_OPERATION_SCOPE_HASH, INDEXNOW_PROCESSING_STALE_MS } from "@/lib/indexnow/outbox-contract";
 import { sweepDueIndexNowDeliveries } from "@/lib/indexnow/sweep";
+import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 
-import { FakeIndexNowDb, testEnv } from "./fake-db";
+import { FakeIndexNowDb, installTestSiteUrl, testEnv } from "./fake-db";
+import { ENABLED_DELIVERY_ENV, T0, runSweep, seedDueRows } from "./helpers";
 
-const NOW = new Date("2026-01-01T12:00:00.000Z");
-const ENABLED_ENV = testEnv({ FEATURE_INDEXNOW_DELIVERY: "true", INDEXNOW_DELIVERY_ALLOW_WRITE: "true" });
+installTestSiteUrl();
+
+function newFake(): FakeIndexNowDb {
+  return new FakeIndexNowDb().setNow(T0);
+}
+
+beforeEach(() => {
+  invalidateSiteSettingCache();
+});
 
 describe("sweepDueIndexNowDeliveries — double-gate boundary", () => {
   it("is a no-op when both flags are off (default) — does not even run crash recovery", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "pending", availableAt: null });
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, testEnv());
-    expect(result).toEqual({ recovered: 0, swept: 0, skippedAlreadyLive: 0 });
-    expect(fake.genericTaskItems.size).toBe(0);
+    const fake = newFake();
+    seedDueRows(fake, 1);
+    const writes = fake.writes;
+    const result = await sweepDueIndexNowDeliveries(fake.asTransactionClient(), { now: T0 }, testEnv());
+    expect(result).toEqual({ recovered: 0, created: 0 });
+    expect(fake.genericTasks.size).toBe(0);
+    expect(fake.writes).toBe(writes);
   });
 
   it("is a no-op when only one of the two flags is true", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "pending", availableAt: null });
-    const result = await sweepDueIndexNowDeliveries(
-      fake.asPrismaClient(),
-      { now: NOW },
-      testEnv({ FEATURE_INDEXNOW_DELIVERY: "true" }),
-    );
-    expect(result.swept).toBe(0);
-    expect(fake.genericTaskItems.size).toBe(0);
+    const fake = newFake();
+    seedDueRows(fake, 1);
+    const result = await sweepDueIndexNowDeliveries(fake.asTransactionClient(), { now: T0 }, testEnv({ FEATURE_INDEXNOW_DELIVERY: "true" }));
+    expect(result).toEqual({ recovered: 0, created: 0 });
+    expect(fake.genericTasks.size).toBe(0);
   });
 });
 
-describe("sweepDueIndexNowDeliveries — due-row discovery and item creation", () => {
-  it("creates one delivery item for a pending row with no availableAt", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "pending", availableAt: null });
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.swept).toBe(1);
+describe("sweepDueIndexNowDeliveries — one batch task per scan", () => {
+  it("creates ONE batch task with ONE item (mode batch) however many rows are due — no per-row tasks", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 250);
+    const result = await runSweep(fake);
+    expect(result).toEqual({ recovered: 0, created: 1 });
+    expect(fake.genericTasks.size).toBe(1);
     expect(fake.genericTaskItems.size).toBe(1);
-    expect(fake.outbox.get("outbox-1")!.deliveryTaskId).not.toBeNull();
+    const task = [...fake.genericTasks.values()][0]!;
+    expect(task).toMatchObject({ taskType: "indexnow_delivery", operationScopeHash: INDEXNOW_BATCH_OPERATION_SCOPE_HASH, status: "pending", totalCount: 1 });
+    expect(task.params).toMatchObject({ mode: "batch", reason: "sweep_due", triggeredBy: "indexnow_delivery_sweep" });
+    expect(task.requestToken).toMatch(/^indexnow_delivery:batch:[0-9a-f-]{36}$/);
+    const item = [...fake.genericTaskItems.values()][0]!;
+    expect(item).toMatchObject({ taskId: task.id, targetType: "indexnow_batch", targetId: "batch", payload: { mode: "batch" } });
   });
 
-  it("creates an item for a retry_wait row whose nextAttemptAt has elapsed, but not one still in the future", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "due", url: "u1", revision: 1n, status: "retry_wait", nextAttemptAt: new Date(NOW.getTime() - 1000) });
-    fake.seedOutbox({ id: "not-due", url: "u2", revision: 1n, status: "retry_wait", nextAttemptAt: new Date(NOW.getTime() + 60_000) });
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.swept).toBe(1);
-    expect([...fake.genericTaskItems.values()][0]!.targetId).toBe("due");
+  it("the scope hash is sha256('indexnow_delivery:batch')", () => {
+    expect(INDEXNOW_BATCH_OPERATION_SCOPE_HASH).toBe(createHash("sha256").update("indexnow_delivery:batch").digest("hex"));
   });
 
-  it("does not sweep a pending row whose availableAt (defer) is still in the future", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "pending", availableAt: new Date(NOW.getTime() + 60_000) });
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.swept).toBe(0);
+  it("nothing due → nothing_due, no task", async () => {
+    const fake = newFake();
+    expect(await runSweep(fake)).toEqual({ recovered: 0, created: 0, reason: "nothing_due" });
+    expect(fake.genericTasks.size).toBe(0);
+  });
+
+  it("a retry_wait row whose nextAttemptAt has elapsed is due; one still in the future is not", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 1, { prefix: "future", status: "retry_wait", overrides: { nextAttemptAt: new Date(T0.getTime() + 60_000) } });
+    expect(await runSweep(fake)).toMatchObject({ created: 0, reason: "nothing_due" });
+    seedDueRows(fake, 1, { prefix: "due", status: "retry_wait", overrides: { nextAttemptAt: new Date(T0.getTime() - 1000) } });
+    expect(await runSweep(fake)).toMatchObject({ created: 1 });
+  });
+
+  it("a pending row whose availableAt (defer) is still in the future is not due", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 1, { overrides: { availableAt: new Date(T0.getTime() + 60_000) } });
+    expect(await runSweep(fake)).toMatchObject({ created: 0, reason: "nothing_due" });
+  });
+
+  it("a second scan while the batch task is still in flight creates nothing (already_live)", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 3);
+    expect(await runSweep(fake)).toMatchObject({ created: 1 });
+    expect(await runSweep(fake)).toEqual({ recovered: 0, created: 0, reason: "already_live" });
+    expect(fake.genericTasks.size).toBe(1);
+    expect(fake.genericTaskItems.size).toBe(1);
+  });
+
+  it("once the previous batch task finished, the next scan creates a new one", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 3);
+    await runSweep(fake);
+    [...fake.genericTasks.values()][0]!.status = "completed";
+    expect(await runSweep(fake)).toMatchObject({ created: 1 });
+    expect(fake.genericTasks.size).toBe(2);
+  });
+
+  it("the unique scope index is what merges: createMany(skipDuplicates) loses the race quietly instead of throwing", async () => {
+    const fake = newFake();
+    seedDueRows(fake, 1);
+    // A concurrent creator already holds the in-flight scope, but our pre-check cannot see it.
+    fake.genericTasks.set("racing", { id: "racing", taskType: "indexnow_delivery", status: "pending", operationScopeHash: INDEXNOW_BATCH_OPERATION_SCOPE_HASH });
+    const db = fake.asTransactionClient();
+    const originalFindFirst = db.genericTask.findFirst;
+    (db.genericTask as { findFirst: unknown }).findFirst = async () => null;
+    const result = await sweepDueIndexNowDeliveries(db, { now: T0 }, ENABLED_DELIVERY_ENV);
+    (db.genericTask as { findFirst: unknown }).findFirst = originalFindFirst;
+    expect(result).toEqual({ recovered: 0, created: 0, reason: "already_live" });
+    expect(fake.genericTasks.size).toBe(1);
     expect(fake.genericTaskItems.size).toBe(0);
   });
 
-  it("never creates a second live item for a row that already has one — the no-double-processing invariant", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "pending", availableAt: null });
-    fake.genericTasks.set("task-existing", { id: "task-existing", taskType: "indexnow_delivery", status: "pending", operationScopeHash: "x" });
-    fake.genericTaskItems.set("item-existing", {
-      id: "item-existing",
-      taskId: "task-existing",
-      targetType: "indexnow_outbox",
-      targetId: "outbox-1",
-      status: "pending",
-      payload: { outboxId: "outbox-1" },
-    });
-
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.swept).toBe(0);
-    expect(result.skippedAlreadyLive).toBe(1);
-    expect(fake.genericTaskItems.size).toBe(1);
-  });
-
-  it("does sweep a row whose only prior item already reached a terminal state", async () => {
-    const fake = new FakeIndexNowDb();
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "retry_wait", nextAttemptAt: new Date(NOW.getTime() - 1000) });
-    fake.genericTasks.set("task-existing", { id: "task-existing", taskType: "indexnow_delivery", status: "completed", operationScopeHash: "x" });
-    fake.genericTaskItems.set("item-existing", {
-      id: "item-existing",
-      taskId: "task-existing",
-      targetType: "indexnow_outbox",
-      targetId: "outbox-1",
-      status: "success",
-      payload: { outboxId: "outbox-1" },
-    });
-
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.swept).toBe(1);
-    expect(fake.genericTaskItems.size).toBe(2);
-  });
-
-  it("calls crash recovery before sweeping (a stale processing row is recovered, then re-swept in the same call if now due)", async () => {
-    const fake = new FakeIndexNowDb();
-    const staleUpdatedAt = new Date(NOW.getTime() - 3_600_000); // well beyond INDEXNOW_PROCESSING_STALE_MS
-    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "processing", updatedAt: staleUpdatedAt, attemptCount: 1, maxAttempts: 5 });
-    fake.seedAttempt({ outboxId: "outbox-1", attemptNo: 1, attemptState: "started", responseAt: null });
-
-    const result = await sweepDueIndexNowDeliveries(fake.asPrismaClient(), { now: NOW }, ENABLED_ENV);
-    expect(result.recovered).toBe(1);
-    // Recovery moves it to retry_wait with nextAttemptAt = now, so the same
-    // sweep call's due-query also picks it up.
-    expect(result.swept).toBe(1);
-    expect(fake.outbox.get("outbox-1")!.status).toBe("retry_wait");
+  it("calls crash recovery before sweeping (a stale processing row is recovered, then due in the same scan)", async () => {
+    const fake = newFake();
+    const [row] = seedDueRows(fake, 1, { status: "processing", overrides: { attemptCount: 1 } });
+    fake.outbox.get(row!.outboxId)!.updatedAt = new Date(T0.getTime() - INDEXNOW_PROCESSING_STALE_MS - 60_000);
+    fake.seedAttempt({ outboxId: row!.outboxId, attemptNo: 1, attemptState: "started", responseAt: null });
+    const result = await runSweep(fake);
+    expect(result).toMatchObject({ recovered: 1, created: 1 });
+    expect(fake.outbox.get(row!.outboxId)!.status).toBe("retry_wait");
   });
 });

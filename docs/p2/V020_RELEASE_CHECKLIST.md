@@ -276,12 +276,12 @@
 | 6 | 同次变更开 Sitemap 写闸并加 `sitemap_refresh` light allowlist——即 **Level R**（收益上线）的开闸动作：`FEATURE_SITEMAP_AUTO_REFRESH` + `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` + allowlist 三者同一次变更 | 任一侧不能同时生效即整体回滚 |
 | 7 | X11 已实现，核验候选版本与本地完整链路证据，待生产开闸验收 | delivery 仍关闭，生产不入队；核对版本、注册、通道及权限；分钟桶/去重/skip/扫描/投递/公平轮转已由同版本真实库与模拟端点验证，生产运行证据在步骤 8–9 补齐 |
 | 8 | 在 X11 PASS 后，于一次发布变更中打开 delivery 双闸 | **X11 未 PASS 时严禁改为 true**；步骤 8 不得单独部署；Level R 明确 IndexNow 仍 `false`，此步骤晚于 Level R 独立审批 |
-| 9 | 在与步骤 8 同一次变更中仅向 `WORKER_LIGHT_TASK_ALLOWLIST` 加入 `indexnow_delivery` 并验证 sweep/delivery | 步骤 8–9 必须原子同发/同回滚；403/422/终态失败率越线即同时回关双闸并从 light allowlist 移除投递类型 |
+| 9 | 在与步骤 8 同一次变更中仅向 `WORKER_LIGHT_TASK_ALLOWLIST` 加入 `indexnow_delivery` 并验证 sweep/delivery | 步骤 8–9 必须原子同发/同回滚；400/403/422（熔断打开）或终态失败率越线即同时回关双闸并从 light allowlist 移除投递类型 |
 
 Level UAT（步骤 0）与 Level R（步骤 6 的收益上线开闸）分别在“## 3. Flag 分级开放”中有完整字段清单，
 本表只标注它们在整体开闸顺序里的位置，不重复列出每个字段。
 
-**X11 misfire 裁决：**显式采用 `skip`，只生成当前时间桶。sweep 每分钟处理当前到期候选，定时 handler 每次最多 200 条；历史桶 `bounded_catch_up` 只会重复扫描并增加压力。
+**X11 misfire 裁决：**显式采用 `skip`，只生成当前时间桶。sweep 每分钟至多建 1 个批量投递任务（每任务 ≤ 500 个 URL、1 次请求，见 `docs/adr/ADR-B41-INDEXNOW-BATCH-DELIVERY.md`；发布只写出站记录、不建任务）；历史桶 `bounded_catch_up` 只会重复扫描并增加压力。
 X11 **已实现，待生产开闸验收**：`indexnow.sweep.v1` 与 `indexnow_delivery` 均只属于轻量通道，投递与其它轻量任务公平轮转。
 任一 delivery 闸未严格为 `true` 时不生成扫描时间桶；关闭环境每日不会新增 1,440 个空扫描。
 开启后保留空扫描，以覆盖陈旧 processing 回收；不增加 scheduler outbox 读权限。

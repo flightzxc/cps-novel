@@ -7,7 +7,14 @@ import {
   parseRetryAfter,
   resolveOutboxDeliveryStatus,
   summarizeIndexNowValue,
+  INDEXNOW_BACKFILL_POLL_MS,
+  INDEXNOW_BACKFILL_SETTLE_TIMEOUT_MS,
+  INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS,
+  INDEXNOW_BREAKER_HTTP_STATUSES,
   INDEXNOW_HTTP_BATCH_SIZE,
+  INDEXNOW_RATE_LIMIT_FALLBACK_WAIT_MS,
+  indexNowDueWhere,
+  isIndexNowBreakerStatus,
 } from "@/lib/indexnow/delivery-primitives";
 
 describe("chunkIndexNowDeliveries", () => {
@@ -118,11 +125,14 @@ describe("resolveOutboxDeliveryStatus", () => {
     expect(resolveOutboxDeliveryStatus("accepted", 1, 5, now)).toEqual({ status: "accepted", nextAttemptAt: null });
   });
 
-  it("permanent_failed -> terminal permanent_failed, no next attempt", () => {
-    expect(resolveOutboxDeliveryStatus("permanent_failed", 1, 5, now)).toEqual({
-      status: "permanent_failed",
-      nextAttemptAt: null,
-    });
+  it("permanent_failed (HTTP 400/403/422) under budget -> HELD: retry_wait with nextAttemptAt == now (due immediately, blocked by the breaker)", () => {
+    const decision = resolveOutboxDeliveryStatus("permanent_failed", 1, 5, now);
+    expect(decision.status).toBe("retry_wait");
+    expect((decision.nextAttemptAt as Date).getTime()).toBe(now.getTime());
+  });
+
+  it("permanent_failed at the attempt budget -> dead_letter", () => {
+    expect(resolveOutboxDeliveryStatus("permanent_failed", 5, 5, now)).toEqual({ status: "dead_letter", nextAttemptAt: null });
   });
 
   it("retryable_failed under budget -> retry_wait with a future nextAttemptAt", () => {
@@ -141,5 +151,35 @@ describe("resolveOutboxDeliveryStatus", () => {
 
   it("retryable_failed beyond budget -> still dead_letter (defensive)", () => {
     expect(resolveOutboxDeliveryStatus("retryable_failed", 6, 5, now).status).toBe("dead_letter");
+  });
+});
+
+describe("B-41 batch constants", () => {
+  it("consumes the 500 ceiling and pins the control constants", () => {
+    expect(INDEXNOW_HTTP_BATCH_SIZE).toBe(500);
+    expect(INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS).toBe(9);
+    expect(Math.ceil(Math.log2(INDEXNOW_HTTP_BATCH_SIZE))).toBe(INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS);
+    expect(INDEXNOW_BACKFILL_SETTLE_TIMEOUT_MS).toBe(10 * 60_000);
+    expect(INDEXNOW_BACKFILL_POLL_MS).toBe(10_000);
+    expect(INDEXNOW_RATE_LIMIT_FALLBACK_WAIT_MS).toBe(5 * 60_000);
+  });
+
+  it("the breaker statuses are exactly 400, 403 and 422 (and classification is unchanged)", () => {
+    expect([...INDEXNOW_BREAKER_HTTP_STATUSES]).toEqual([400, 403, 422]);
+    for (const status of [400, 403, 422]) {
+      expect(isIndexNowBreakerStatus(status)).toBe(true);
+      expect(classifyIndexNowResult(status)).toBe("permanent_failed");
+    }
+    for (const status of [200, 202, 404, 429, 500, 503, null, undefined]) expect(isIndexNowBreakerStatus(status)).toBe(false);
+  });
+
+  it("indexNowDueWhere is pending-and-available OR retry_wait-and-elapsed, against the database clock it is given", () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    expect(indexNowDueWhere(now)).toEqual({
+      OR: [
+        { status: "pending", OR: [{ availableAt: null }, { availableAt: { lte: now } }] },
+        { status: "retry_wait", nextAttemptAt: { lte: now } },
+      ],
+    });
   });
 });

@@ -1,11 +1,20 @@
 /**
  * IndexNow outbox writes: enqueue, manual defer/release, backfill candidate
- * differencing (Stream E, P2-11).
+ * differencing (Stream E, P2-11; batch delivery B-41).
  *
  * Ported COPY_THEN_ADAPT from CPS `src/lib/indexnow-outbox.ts`
  * (`enqueueIndexNowFirstPublish`/`findPublishedWithoutIndexNowDelivery`, plus
  * the review-defer pair narrowed per `outbox-contract.ts`'s header).
  * `docs/governance/port-registry.md` has the per-symbol registration.
+ *
+ * B-41: publishing and releasing only WRITE outbox rows — they no longer
+ * create delivery tasks. The minute sweep (`sweep.ts`) is the single place
+ * that creates the one batch delivery task (`ensureIndexNowBatchDeliveryTask`
+ * below), so a worker-side and an admin-side publish can never both create a
+ * task for the same rows, and a deployment that records rows without
+ * delivering them (outbox on, delivery off) leaves no pile of idle tasks.
+ * Delay from publish to push is "about one minute when there is no backlog",
+ * not a guarantee.
  *
  * Idempotency: CPS is `create()` + `catch(P2002)` against a single-column
  * `idempotencyKey` unique index, **not** an upsert
@@ -21,7 +30,7 @@
  * `computeIndexNowRevision` doc comment for why that behavior change from
  * CPS is intentional here, not an oversight.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -36,9 +45,15 @@ import {
   isBlogIndexNowEligible,
   isNovelIndexNowEligible,
   loadIndexNowCandidateArticle,
+  loadIndexNowCandidateArticles,
+  type IndexNowCandidateArticleRow,
   type IndexNowEligibilityOptions,
 } from "./eligibility";
 import {
+  INDEXNOW_BATCH_OPERATION_SCOPE_HASH,
+  INDEXNOW_BATCH_PAYLOAD_MODE,
+  INDEXNOW_BATCH_TARGET_ID,
+  INDEXNOW_BATCH_TARGET_TYPE,
   INDEXNOW_DELIVERY_TASK_TYPE,
   INDEXNOW_EVENT_TYPE_DEFAULT,
   type EnqueueIndexNowFirstPublishInput,
@@ -47,40 +62,82 @@ import {
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+export type EnsureIndexNowBatchDeliveryTaskResult = Readonly<{
+  /** True when this call created the task; false when one is already in flight. */
+  created: boolean;
+  /** The in-flight (or just created) task id; null when a concurrent creator won the race. */
+  taskId: string | null;
+}>;
+
 /**
- * Creates the `GenericTask` + single `GenericTaskItem` pair that makes one
- * `indexnow_outbox` row claimable by `worker/handlers/indexnow-delivery.ts`.
- * Shared between the immediate "just enqueued, deliver now" path below and
- * `sweep.ts`'s "a retry/release just became due" path — both create exactly
- * one item per due row (see `sweep.ts`'s header for why one row never has
- * two live items at once).
+ * Ensures there is exactly one in-flight batch delivery task: a `GenericTask`
+ * (`taskType = indexnow_delivery`, fixed `operationScopeHash`) with one
+ * `GenericTaskItem` (`targetType = indexnow_batch`, `payload = { mode:
+ * "batch" }`) that `worker/handlers/indexnow-delivery.ts` turns into one batch
+ * of up to 500 URLs and one HTTP request.
+ *
+ * Merging is done by the database: `generic_task_active_scope_uidx` allows
+ * only one `pending`/`processing` task per `(task_type, channel_account_id,
+ * channel_app_id, operation_scope_hash)`. This function adds two layers on
+ * top so the common case never touches the constraint and the racy case never
+ * poisons the caller's transaction:
+ *
+ *   1. look first — an in-flight batch task means `{ created: false }`;
+ *   2. otherwise `createMany({ skipDuplicates: true })`, i.e.
+ *      `INSERT … ON CONFLICT DO NOTHING`. A concurrent creator that wins the
+ *      race makes this insert a no-op (`count === 0`) instead of raising a
+ *      unique-violation, which in PostgreSQL would abort the surrounding
+ *      transaction and fail the whole sweep (we cannot catch-and-continue
+ *      inside one transaction).
+ *
+ * Must run inside a transaction: the task row and its only item have to
+ * commit together — a task without an item would occupy the unique scope
+ * forever and block every later batch. A bare `PrismaClient` is wrapped in a
+ * transaction here; the sweep passes its own transaction client.
  */
-export async function createIndexNowDeliveryTaskItem(
+export async function ensureIndexNowBatchDeliveryTask(
   db: Db,
-  outboxId: string,
   params: { reason: string; triggeredBy: string },
-): Promise<string> {
-  const task = await db.genericTask.create({
-    data: {
+): Promise<EnsureIndexNowBatchDeliveryTaskResult> {
+  if ("$transaction" in db) {
+    return (db as PrismaClient).$transaction((tx) => ensureIndexNowBatchDeliveryTask(tx, params));
+  }
+  const live = await db.genericTask.findFirst({
+    where: {
       taskType: INDEXNOW_DELIVERY_TASK_TYPE,
-      // Not used for a concurrency dedup check here (unlike moboreader's use
-      // of the same field) — this task is always created 1:1 with a single
-      // `GenericTaskItem` for a single outbox row, and `sweep.ts`/
-      // `outbox.ts` are what guarantee only one live item ever exists per
-      // row. Still required (`GenericTaskCreateInput.operationScopeHash` has
-      // no default) and kept deterministic per row for audit traceability.
-      operationScopeHash: createHash("sha256").update(outboxId).digest("hex"),
-      requestToken: `indexnow_delivery:${outboxId}:${randomUUID()}`,
-      totalCount: 1,
-      params: { reason: params.reason, triggeredBy: params.triggeredBy, outboxId },
-      items: {
-        create: [{ targetType: "indexnow_outbox", targetId: outboxId, payload: { outboxId } }],
-      },
+      operationScopeHash: INDEXNOW_BATCH_OPERATION_SCOPE_HASH,
+      status: { in: ["pending", "processing"] },
     },
     select: { id: true },
   });
-  await db.indexNowOutbox.update({ where: { id: outboxId }, data: { deliveryTaskId: task.id } });
-  return task.id;
+  if (live) return { created: false, taskId: live.id };
+
+  const taskId = randomUUID();
+  const inserted = await db.genericTask.createMany({
+    data: [
+      {
+        id: taskId,
+        taskType: INDEXNOW_DELIVERY_TASK_TYPE,
+        operationScopeHash: INDEXNOW_BATCH_OPERATION_SCOPE_HASH,
+        requestToken: `indexnow_delivery:batch:${randomUUID()}`,
+        totalCount: 1,
+        params: { mode: INDEXNOW_BATCH_PAYLOAD_MODE, reason: params.reason, triggeredBy: params.triggeredBy },
+      },
+    ],
+    skipDuplicates: true,
+  });
+  if (inserted.count === 0) return { created: false, taskId: null };
+  await db.genericTaskItem.createMany({
+    data: [
+      {
+        taskId,
+        targetType: INDEXNOW_BATCH_TARGET_TYPE,
+        targetId: INDEXNOW_BATCH_TARGET_ID,
+        payload: { mode: INDEXNOW_BATCH_PAYLOAD_MODE },
+      },
+    ],
+  });
+  return { created: true, taskId };
 }
 
 /**
@@ -157,14 +214,8 @@ export async function enqueueIndexNowFirstPublish(
     throw error;
   }
 
-  if (!deferred) {
-    await createIndexNowDeliveryTaskItem(db, outboxId, {
-      reason: eventType,
-      triggeredBy: input.sourceTaskId ? `${input.source}#${input.sourceTaskId}` : input.source,
-    });
-    return { outcome: "enqueued", outboxId };
-  }
-  return { outcome: "deferred", outboxId };
+  // B-41: record only — the minute sweep batches due rows into one delivery task.
+  return { outcome: deferred ? "deferred" : "enqueued", outboxId };
 }
 
 export type ReleaseDeferredIndexNowOutboxInput = Readonly<{
@@ -201,7 +252,6 @@ export async function releaseDeferredIndexNowOutbox(
   // cap on `outboxIds.length` to cite as a hard bound -- chunked
   // defensively rather than recorded as bounded.
   let releasedCount = 0;
-  const releasedIds: string[] = [];
   for (const idChunk of chunkIds(ids)) {
     const result = await db.indexNowOutbox.updateMany({
       where: {
@@ -218,80 +268,189 @@ export async function releaseDeferredIndexNowOutbox(
       },
     });
     releasedCount += result.count;
-    if (result.count > 0) releasedIds.push(...idChunk);
   }
-  if (releasedCount === 0) return { released: 0 };
-
-  for (const idChunk of chunkIds(releasedIds)) {
-    const released = await db.indexNowOutbox.findMany({
-      where: { id: { in: idChunk }, releasedAt: now, releaseReason: input.reason },
-      select: { id: true },
-    });
-    for (const row of released) {
-      await createIndexNowDeliveryTaskItem(db, row.id, { reason: "review_defer_release", triggeredBy: input.reason });
-    }
-  }
+  // B-41: no delivery task here either — released rows are due immediately
+  // (`availableAt = now`) and the next minute sweep batches them.
   return { released: releasedCount };
 }
 
+// ---------------------------------------------------------------------------
+// Backfill candidates (cursor-complete difference query)
+// ---------------------------------------------------------------------------
+
 /**
- * Backfill candidate source. Ported ADAPT from CPS
- * `findPublishedWithoutIndexNowDelivery` — the difference-query approach the
- * audit recommends *instead of* porting the 236-line manifest-generation
- * script's `batchTaskItem`-keyed candidate query, which is tied to CPS's AI
- * batch-generation task table this codebase does not have
- * (`P2-07-12-移植审计-2026-08-12/P2-11.md` §5). Published Articles minus
- * Articles that already have at least one `indexnow_outbox` row, each
- * re-checked through the same eligibility gate `enqueueIndexNowFirstPublish`
- * uses.
+ * Whether the article has ANY `indexnow_outbox` row — any status, any source,
+ * any revision. This is the backfill's de-duplication unit: **the backfill
+ * de-duplicates per article** (an article with any record is skipped). The
+ * database unique key stays `(url, revision)` — unchanged, so a later
+ * substantive update could still be pushed again — but this change adds no
+ * update-push entry point.
  */
-export async function findPublishedWithoutIndexNowDelivery(
-  db: Db,
-  limit = 500,
+export async function articleHasAnyIndexNowOutbox(db: Db, articleId: string): Promise<boolean> {
+  const row = await db.indexNowOutbox.findFirst({ where: { articleId }, select: { id: true } });
+  return row !== null;
+}
+
+export type IndexNowBackfillCandidate = {
+  articleId: string;
+  novelId: string;
+  locale: string;
+  canonicalUrl: string;
+  /** `Article.publishedAt`; null when never stamped. Carried into manifest `published_at`. */
+  publishedAt: Date | null;
+};
+
+export type IndexNowBackfillStats = {
+  /** Published novel articles visited by the cursor. */
+  scanned: number;
+  /** Visited articles that already have at least one outbox row. */
+  alreadyHasDelivery: number;
+  /** Candidates (no outbox row) that failed the eligibility recheck. */
+  ineligible: number;
+  eligible: number;
+};
+
+/** Eligibility + canonical URL for one loaded article; null when it is not a backfill candidate. */
+export function toIndexNowBackfillCandidate(
+  article: IndexNowCandidateArticleRow | null | undefined,
   eligibilityOptions?: IndexNowEligibilityOptions,
-): Promise<Array<{ articleId: string; novelId: string; locale: string; canonicalUrl: string }>> {
-  const boundedLimit = Math.max(1, Math.min(limit, 5000));
-  const candidates = await db.article.findMany({
-    // C-29b: scoped to `novel_article` — this backfill's output
-    // (`IndexNowBackfillEntry.novel_id`, non-null,
-    // `scripts/indexnow-backfill-manifest.ts`) is a `novel_article`-only
-    // concept. A blog Article's own outbox row is already produced at
-    // first-publish time by `enqueueIndexNowFirstPublish` above (wired from
-    // `publish-gate/service.ts`'s `dispatchFirstPublicPublication` call);
-    // extending this offline manifest tool to the blog family (a null
-    // `novel_id`) is a separate, unscoped schema/contract change, not part
-    // of C-29b.
-    where: { status: "published", deletedAt: null, articleType: "novel_article" },
-    orderBy: { id: "asc" },
-    take: boundedLimit,
-    select: { id: true },
-  });
-  if (candidates.length === 0) return [];
+): IndexNowBackfillCandidate | null {
+  // Defense-in-depth narrowing: callers already scope to `novel_article`, but
+  // the loader's return type is the shared union — narrow explicitly rather
+  // than casting, so a blog-shaped row can never reach the Novel-only calls.
+  if (!article || article.articleType !== "novel_article") return null;
+  if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) return null;
+  return {
+    articleId: article.id,
+    novelId: article.novelId,
+    locale: article.locale,
+    canonicalUrl: buildIndexNowCanonicalUrl(article),
+    publishedAt: article.publishedAt ?? null,
+  };
+}
 
-  const existing = await db.indexNowOutbox.findMany({
-    where: { articleId: { in: candidates.map((row) => row.id) } },
-    select: { articleId: true },
-  });
-  const delivered = new Set(existing.map((row) => row.articleId));
-  const missingIds = candidates.map((row) => row.id).filter((id) => !delivered.has(id));
-
-  const results: Array<{ articleId: string; novelId: string; locale: string; canonicalUrl: string }> = [];
-  for (const id of missingIds) {
-    const article = await loadIndexNowCandidateArticle(db, id);
-    // Defense-in-depth narrowing: the query above already scopes to
-    // `novel_article`, but `loadIndexNowCandidateArticle`'s return type is
-    // the shared `IndexNowCandidateArticleRow` union — narrow explicitly
-    // rather than casting, so a future change to that query's `where`
-    // cannot silently start passing a blog-shaped row into
-    // `isNovelIndexNowEligible`/`buildIndexNowCanonicalUrl` below.
-    if (!article || article.articleType !== "novel_article") continue;
-    if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) continue;
-    results.push({
-      articleId: article.id,
-      novelId: article.novelId,
-      locale: article.locale,
-      canonicalUrl: buildIndexNowCanonicalUrl(article),
+async function articleIdsWithAnyOutbox(db: Db, articleIds: readonly string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (const chunk of chunkIds(articleIds)) {
+    const rows = await db.indexNowOutbox.findMany({
+      where: { articleId: { in: chunk } },
+      select: { articleId: true },
     });
+    for (const row of rows) if (row.articleId) found.add(row.articleId);
   }
-  return results;
+  return found;
+}
+
+/**
+ * Backfill candidate source (B-41, replaces the 5,000-capped
+ * `findPublishedWithoutIndexNowDelivery`). Ported ADAPT from CPS — the
+ * difference-query approach the P2-11 audit recommends instead of porting the
+ * 236-line manifest-generation script's `batchTaskItem`-keyed query.
+ *
+ * Walks every published `novel_article` by `id` cursor (`id > cursor ORDER BY
+ * id ASC LIMIT pageSize`) until the cursor returns an **empty** page — "the
+ * page was shorter than `pageSize`" is deliberately NOT used as the end
+ * condition (a short page is not proof of the end for a cursor over a table
+ * being written to, and it would silently drop everything after it). Per
+ * page: articles with any outbox row are excluded (`articleHasAnyIndexNowOutbox`
+ * semantics, one chunked `IN` query), the rest are batch-loaded
+ * (`loadIndexNowCandidateArticles`) and run through the same eligibility gate
+ * `enqueueIndexNowFirstPublish` uses.
+ *
+ * Scope is `novel_article`: this manifest's `novel_id` is non-null. Blog
+ * articles take the outbox at first publication (C-29b); extending this
+ * offline tool to the blog family is a separate change (ADR-B41 known
+ * limits).
+ */
+export async function listPublishedWithoutIndexNowDelivery(
+  db: Db,
+  options: { pageSize?: number; eligibilityOptions?: IndexNowEligibilityOptions } = {},
+): Promise<{ candidates: IndexNowBackfillCandidate[]; stats: IndexNowBackfillStats }> {
+  const pageSize = Math.max(1, Math.floor(options.pageSize ?? 1000));
+  const candidates: IndexNowBackfillCandidate[] = [];
+  const stats: IndexNowBackfillStats = { scanned: 0, alreadyHasDelivery: 0, ineligible: 0, eligible: 0 };
+
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await db.article.findMany({
+      where: {
+        status: "published",
+        deletedAt: null,
+        articleType: "novel_article",
+        ...(cursor === undefined ? {} : { id: { gt: cursor } }),
+      },
+      orderBy: { id: "asc" },
+      take: pageSize,
+      select: { id: true },
+    });
+    if (page.length === 0) break;
+    cursor = page[page.length - 1]!.id;
+    stats.scanned += page.length;
+
+    const ids = page.map((row) => row.id);
+    const withOutbox = await articleIdsWithAnyOutbox(db, ids);
+    const missingIds = ids.filter((id) => !withOutbox.has(id));
+    stats.alreadyHasDelivery += ids.length - missingIds.length;
+
+    const loaded = await loadIndexNowCandidateArticles(db, missingIds);
+    for (const id of missingIds) {
+      const candidate = toIndexNowBackfillCandidate(loaded.get(id), options.eligibilityOptions);
+      if (candidate) {
+        candidates.push(candidate);
+        stats.eligible++;
+      } else {
+        stats.ineligible++;
+      }
+    }
+  }
+  return { candidates, stats };
+}
+
+export type IndexNowArticleIdClassification = {
+  /** No such article (or soft-deleted). */
+  nonexistent: string[];
+  /** Exists, but is not "a published novel_article with no outbox row". */
+  outsideCandidates: string[];
+  /** A candidate that fails the eligibility recheck. */
+  ineligible: string[];
+  eligible: IndexNowBackfillCandidate[];
+};
+
+/**
+ * Classifies an explicit `--article-ids` selection into the four CPS 7e57779
+ * buckets by querying ONLY the requested ids (not the cursor result). Order of
+ * the returned id lists follows the input order.
+ */
+export async function classifyIndexNowBackfillArticleIds(
+  db: Db,
+  articleIds: readonly string[],
+  eligibilityOptions?: IndexNowEligibilityOptions,
+): Promise<IndexNowArticleIdClassification> {
+  const existing = new Map<string, { status: string; articleType: string }>();
+  for (const chunk of chunkIds(articleIds)) {
+    const rows = await db.article.findMany({
+      where: { id: { in: chunk }, deletedAt: null },
+      select: { id: true, status: true, articleType: true },
+    });
+    for (const row of rows) existing.set(row.id, { status: row.status, articleType: row.articleType });
+  }
+  const nonexistent = articleIds.filter((id) => !existing.has(id));
+  const present = articleIds.filter((id) => existing.has(id));
+  const withOutbox = await articleIdsWithAnyOutbox(db, present);
+  const outsideCandidates = present.filter((id) => {
+    const row = existing.get(id)!;
+    return row.status !== "published" || row.articleType !== "novel_article" || withOutbox.has(id);
+  });
+  const outside = new Set(outsideCandidates);
+  const remaining = present.filter((id) => !outside.has(id));
+
+  const loaded = await loadIndexNowCandidateArticles(db, remaining);
+  const eligible: IndexNowBackfillCandidate[] = [];
+  const ineligible: string[] = [];
+  for (const id of remaining) {
+    const candidate = toIndexNowBackfillCandidate(loaded.get(id), eligibilityOptions);
+    if (candidate) eligible.push(candidate);
+    else ineligible.push(id);
+  }
+  return { nonexistent: [...nonexistent], outsideCandidates, ineligible, eligible };
 }

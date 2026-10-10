@@ -93,13 +93,40 @@ describe("recoverStaleIndexNowDeliveries", () => {
     expect(row.nextAttemptAt!.getTime()).toBeGreaterThan(responseAt.getTime());
   });
 
-  it("completed + 400 (permanent) response never applied to the row -> reapplies permanent_failed", async () => {
+  it("completed + 400 response never applied to the row -> reapplies a HELD retry_wait (due now), not permanent_failed (B-41)", async () => {
     const fake = new FakeIndexNowDb();
+    const responseAt = new Date(STALE_UPDATED_AT.getTime() + 1000);
     fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "processing", updatedAt: STALE_UPDATED_AT, attemptCount: 1, maxAttempts: 5 });
-    fake.seedAttempt({ outboxId: "outbox-1", attemptNo: 1, attemptState: "completed", httpStatus: 400, errorKind: "http_4xx", responseAt: new Date() });
+    fake.seedAttempt({ outboxId: "outbox-1", attemptNo: 1, attemptState: "completed", httpStatus: 400, errorKind: "http_4xx", responseAt });
 
     await recoverStaleIndexNowDeliveries(fake.asPrismaClient(), NOW);
-    expect(fake.outbox.get("outbox-1")!.status).toBe("permanent_failed");
+    const row = fake.outbox.get("outbox-1")!;
+    expect(row.status).toBe("retry_wait");
+    expect(row.nextAttemptAt!.getTime()).toBe(responseAt.getTime());
+    expect(row.lastHttpStatus).toBe(400);
+  });
+
+  it("completed + 422 at the attempt budget -> dead_letter", async () => {
+    const fake = new FakeIndexNowDb();
+    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "processing", updatedAt: STALE_UPDATED_AT, attemptCount: 5, maxAttempts: 5 });
+    fake.seedAttempt({ outboxId: "outbox-1", attemptNo: 5, attemptState: "completed", httpStatus: 422, errorKind: "http_4xx", responseAt: new Date() });
+    await recoverStaleIndexNowDeliveries(fake.asPrismaClient(), NOW);
+    expect(fake.outbox.get("outbox-1")!.status).toBe("dead_letter");
+  });
+
+  it("a row that something else already moved out of processing is not overwritten by recovery's conditional write", async () => {
+    const fake = new FakeIndexNowDb();
+    fake.seedOutbox({ id: "outbox-1", url: "u", revision: 1n, status: "processing", updatedAt: STALE_UPDATED_AT, attemptCount: 1, maxAttempts: 5 });
+    fake.seedAttempt({ outboxId: "outbox-1", attemptNo: 1, attemptState: "started", responseAt: null });
+    const db = fake.asPrismaClient();
+    // The row is read as stale/processing, then a late write-back accepts it before recovery's own write lands.
+    const original = db.indexNowOutboxAttempt.update;
+    (db.indexNowOutboxAttempt as { update: unknown }).update = async (args: Parameters<typeof original>[0]) => {
+      fake.outbox.get("outbox-1")!.status = "accepted";
+      return original(args);
+    };
+    await recoverStaleIndexNowDeliveries(db, NOW);
+    expect(fake.outbox.get("outbox-1")!.status).toBe("accepted");
   });
 
   it("a row with no attempt at all resets defensively to pending", async () => {

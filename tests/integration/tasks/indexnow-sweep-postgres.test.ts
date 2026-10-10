@@ -9,6 +9,8 @@ import { applyPublishTransition } from "@/server/publish-gate/service";
 import { buildIndexNowSweepSchedule, INDEXNOW_SWEEP_TASK_TYPE } from "@/lib/tasks/indexnow-sweep";
 import { runSchedulerOnce, enqueueScheduledTask, createHandlerRegistry, enqueueSitemapRefresh, claimPendingItem, finalizeTaskItem } from "@/lib/tasks";
 import { sweepDueIndexNowDeliveries } from "@/lib/indexnow/sweep";
+import { ensureIndexNowBatchDeliveryTask } from "@/lib/indexnow/outbox";
+import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 import { INDEXNOW_PROCESSING_STALE_MS } from "@/lib/indexnow/outbox-contract";
 import { SCHEDULER_HANDLERS, SCHEDULES } from "../../../scheduler";
 import { createWorkerHandlers, resolveWorkerStartupAllowlist } from "../../../worker";
@@ -95,7 +97,9 @@ async function publish() {
     publicPageShortId: suffix.slice(0, 12), title: novel.title, body: "fixture", status: "draft" } });
   expect(await applyPublishTransition(web, { articleId: article.id, requestId: randomUUID(), actor: { type: "system", source: "wo6-test" } })).toMatchObject({ outcome: "published" });
   const row = await owner.indexNowOutbox.findFirstOrThrow({ where: { articleId: article.id } });
-  expect(await owner.genericTaskItem.count({ where: { taskId: row.deliveryTaskId! } })).toBe(1);
+  // B-41: publishing only records the outbox row — no task, no item; the minute scan creates the batch task.
+  expect(row.deliveryTaskId).toBeNull();
+  expect(await owner.genericTask.count({ where: { taskType: deliveryType } })).toBe(0);
   return row;
 }
 async function tick(unique = false) {
@@ -122,7 +126,8 @@ describe.skipIf(!enabled).sequential("WO6 real publication, scheduler, lanes and
   });
   beforeEach(async () => {
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-    await owner.$executeRawUnsafe("TRUNCATE generic_task, schedule_run, article, novel CASCADE");
+    await owner.$executeRawUnsafe("TRUNCATE generic_task, schedule_run, article, novel, operation_audit CASCADE");
+    invalidateSiteSettingCache();
     statuses = []; requests = []; claimCalls = 0; executed = [];
     await owner.siteSetting.upsert({ where: { id: 1 }, create: { id: 1, indexNowHost: "indexnow.test", indexNowKey: "wo6-local-test-key", indexNowKeyLocation: "https://indexnow.test/indexnow-key.txt" },
       update: { indexNowHost: "indexnow.test", indexNowKey: "wo6-local-test-key", indexNowKeyLocation: "https://indexnow.test/indexnow-key.txt" } });
@@ -162,58 +167,79 @@ describe.skipIf(!enabled).sequential("WO6 real publication, scheduler, lanes and
     const row = await publish();
     vi.stubEnv("FEATURE_INDEXNOW_DELIVERY", feature); vi.stubEnv("INDEXNOW_DELIVERY_ALLOW_WRITE", write);
     expect(await tick()).toEqual([]);
-    expect(await sweepDueIndexNowDeliveries(worker)).toEqual({ recovered: 0, swept: 0, skippedAlreadyLive: 0 });
+    expect(await sweepDueIndexNowDeliveries(worker)).toEqual({ recovered: 0, created: 0 });
     expect(await owner.scheduleRun.count()).toBe(0);
-    expect(await owner.genericTask.count()).toBe(1);
+    expect(await owner.genericTask.count()).toBe(0);
     expect(await owner.indexNowOutbox.findUnique({ where: { id: row.id } })).toEqual(row);
     expect(requests).toHaveLength(0);
   });
-  it("published first delivery is deduplicated by scan and sent by light with exact protocol", async () => {
+  it("a published row is batched by the minute scan (ONE batch task) and sent by light with the exact protocol", async () => {
     const row = await publish(); const [scheduled] = await tick();
     startWorker(scanType);
-    expect(await scanResult(scheduled.taskId!)).toMatchObject({ recovered: 0, swept: 0, skippedAlreadyLive: 1 });
+    expect(await scanResult(scheduled.taskId!)).toMatchObject({ recovered: 0, created: 1 });
+    const batch = await owner.genericTask.findFirstOrThrow({ where: { taskType: deliveryType } });
+    expect(await owner.genericTaskItem.findMany({ where: { taskId: batch.id } })).toMatchObject([{ targetType: "indexnow_batch", targetId: "batch", payload: { mode: "batch" } }]);
     await stopWorkers(); startWorker(); await accepted(row.id);
     expect(requests).toHaveLength(1);
     expect(requests[0].body).toEqual({ host: "indexnow.test", key: "wo6-local-test-key", keyLocation: "https://indexnow.test/indexnow-key.txt", urlList: [row.url] });
-    expect(executed).toContainEqual({ taskId: row.deliveryTaskId, workerId: "wo6-light" });
+    expect(executed).toContainEqual({ taskId: batch.id, workerId: "wo6-light" });
+    expect((await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).deliveryTaskId).toBe(batch.id);
   });
-  it.each([429, 500, 503])("%s retries only after due scan creates a new delivery", async code => {
-    const row = await publish(); statuses = [code, 200]; startWorker();
+  it.each([500, 503])("%s retries only after a due scan creates a NEW batch task", async code => {
+    const row = await publish(); statuses = [code, 200];
+    const [first] = await tick(true); startWorker();
     await until(async () => (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).status === "retry_wait");
     await stopWorkers();
+    const firstTask = (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).deliveryTaskId;
+    expect(first.taskId).toBeTruthy();
     const retry = await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } });
     const attempt = await owner.indexNowOutboxAttempt.findFirstOrThrow({ where: { outboxId: row.id } });
     const delay = retry.nextAttemptAt!.getTime() - attempt.responseAt!.getTime();
     expect(delay).toBeGreaterThanOrEqual(300000); expect(delay).toBeLessThan(360000);
     console.log(`WO6_RETRY http=${code} delay_ms=${delay} attempt=1`);
-    const [notDue] = await tick(); startWorker(scanType);
-    expect(await scanResult(notDue.taskId!)).toMatchObject({ swept: 0 }); await stopWorkers();
+    // 5xx is not a control event: no breaker, no 429 wait.
+    expect(await owner.operationAudit.count({ where: { entityType: "indexnow_delivery" } })).toBe(0);
+    const [notDue] = await tick(true); startWorker(scanType);
+    expect(await scanResult(notDue.taskId!)).toMatchObject({ created: 0, reason: "nothing_due" }); await stopWorkers();
     expect(requests).toHaveLength(1);
     // Accelerate fixture time only, after validating the genuine backoff above.
     await owner.indexNowOutbox.update({ where: { id: row.id }, data: { nextAttemptAt: new Date(0) } });
     const [due] = await tick(true); startWorker();
-    expect(await scanResult(due.taskId!)).toMatchObject({ swept: 1 }); await accepted(row.id);
+    expect(await scanResult(due.taskId!)).toMatchObject({ created: 1 }); await accepted(row.id);
     const final = await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } });
-    expect(final.deliveryTaskId).not.toBe(row.deliveryTaskId); expect(final.attemptCount).toBe(2);
+    expect(final.deliveryTaskId).not.toBe(firstTask); expect(final.attemptCount).toBe(2);
     expect(requests).toHaveLength(2);
   });
-  it.each([403, 422])("%s is terminal and later scans never retry", async code => {
-    const row = await publish(); statuses = [code]; startWorker();
-    await until(async () => (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).status === "permanent_failed");
-    await stopWorkers(); const [scheduled] = await tick(); startWorker();
-    expect(await scanResult(scheduled.taskId!)).toMatchObject({ swept: 0 });
+  it("429 sets a global wait of at least 5 minutes: later scans create nothing and nothing is sent", async () => {
+    const row = await publish(); statuses = [429, 200];
+    await tick(true); startWorker();
+    await until(async () => (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).status === "retry_wait");
+    await stopWorkers();
+    const event = await owner.operationAudit.findFirstOrThrow({ where: { entityType: "indexnow_delivery", entityId: "rate_limit" } });
+    const waitMs = new Date((event.afterSnapshot as { waitUntil: string }).waitUntil).getTime() - event.createdAt.getTime();
+    expect(waitMs).toBeGreaterThanOrEqual(5 * 60_000 - 1000);
+    const [scheduled] = await tick(true); startWorker(scanType);
+    expect(await scanResult(scheduled.taskId!)).toMatchObject({ created: 0, reason: "rate_limited" });
     expect(requests).toHaveLength(1);
-    expect(await owner.indexNowOutbox.findUnique({ where: { id: row.id } })).toMatchObject({ nextAttemptAt: null, attemptCount: 1 });
+    expect(await owner.genericTask.count({ where: { taskType: deliveryType } })).toBe(1);
+  });
+  it.each([403, 422])("%s opens the breaker: the row is held (not failed), later scans create nothing", async code => {
+    const row = await publish(); statuses = [code];
+    await tick(true); startWorker();
+    await until(async () => (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).status === "retry_wait");
+    await stopWorkers(); const [scheduled] = await tick(true); startWorker(scanType);
+    expect(await scanResult(scheduled.taskId!)).toMatchObject({ created: 0, reason: "breaker_open", breakerOpen: true });
+    expect(requests).toHaveLength(1);
+    expect(await owner.indexNowOutbox.findUnique({ where: { id: row.id } })).toMatchObject({ status: "retry_wait", lastHttpStatus: code, attemptCount: 1 });
+    expect(await owner.operationAudit.count({ where: { entityType: "indexnow_delivery", entityId: "breaker", action: "indexnow.delivery.breaker_trip" } })).toBe(1);
   });
   it("recovers stale processing and delivers the unknown outcome again", async () => {
     const row = await publish();
-    await owner.genericTaskItem.updateMany({ data: { status: "failed" } });
-    await owner.genericTask.updateMany({ data: { status: "failed" } });
     const old = new Date(Date.now() - INDEXNOW_PROCESSING_STALE_MS - 60000);
     await owner.indexNowOutboxAttempt.create({ data: { outboxId: row.id, attemptNo: 1, outcome: "started", attemptState: "started", requestBatchId: randomUUID(), batchSize: 1, startedAt: old, requestAt: old } });
     await owner.indexNowOutbox.update({ where: { id: row.id }, data: { status: "processing", attemptCount: 1, updatedAt: old } });
     const [scheduled] = await tick(); startWorker();
-    expect(await scanResult(scheduled.taskId!)).toMatchObject({ recovered: 1, swept: 1 }); await accepted(row.id);
+    expect(await scanResult(scheduled.taskId!)).toMatchObject({ recovered: 1, created: 1 }); await accepted(row.id);
     expect(await owner.indexNowOutboxAttempt.findFirst({ where: { outboxId: row.id, attemptNo: 1 } })).toMatchObject({ attemptState: "unknown_outcome" });
   });
   it("fences scan writes when its lease ownership is stale", async () => {
@@ -223,12 +249,13 @@ describe.skipIf(!enabled).sequential("WO6 real publication, scheduler, lanes and
     await expect(finalizeTaskItem(worker, { ...lease, executionToken: randomUUID() }, outcome)).rejects.toThrow();
     expect(await owner.genericTaskItem.count()).toBe(1);
   });
-  it("limits due work to 200 and empty outbox still admits recovery scans", async () => {
-    const [empty] = await tick(); startWorker(scanType); expect(await scanResult(empty.taskId!)).toMatchObject({ swept: 0 }); await stopWorkers();
+  it("205 due rows still yield ONE batch task (no per-scan row budget) and an empty outbox still admits recovery scans", async () => {
+    const [empty] = await tick(); startWorker(scanType); expect(await scanResult(empty.taskId!)).toMatchObject({ created: 0, reason: "nothing_due" }); await stopWorkers();
     await owner.indexNowOutbox.createMany({ data: Array.from({ length: 205 }, (_, i) => ({ url: `https://indexnow.test/${i}`, revision: 1n, eventType: "first_public_publish", locale: "ko", source: "fixture" })) });
     const [full] = await tick(true); startWorker(scanType);
-    expect(await scanResult(full.taskId!)).toMatchObject({ swept: 200 });
-    expect(await owner.genericTask.count({ where: { taskType: deliveryType } })).toBe(200);
+    expect(await scanResult(full.taskId!)).toMatchObject({ created: 1 });
+    expect(await owner.genericTask.count({ where: { taskType: deliveryType } })).toBe(1);
+    expect(await owner.genericTaskItem.count({ where: { task: { taskType: deliveryType } } })).toBe(1);
   });
   it("main backlog of 20000 claims does not delay light delivery beyond a polling cycle", async () => {
     const task = await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", requestToken: randomUUID(), operationScopeHash: "a".repeat(64), totalCount: 20000, createdAt: new Date(0) } });
@@ -236,36 +263,35 @@ describe.skipIf(!enabled).sequential("WO6 real publication, scheduler, lanes and
       SELECT gen_random_uuid(), ${task.id}::uuid, 'novel_source_item', n::text, '{}'::jsonb, '2020-01-01'::timestamptz, now() FROM generate_series(1,20000) n`;
     startWorker("promo_link.claim.v1", "main"); startWorker();
     await until(() => claimCalls > 0);
-    const row = await publish(); await accepted(row.id);
-    const delivery = await owner.genericTask.findUniqueOrThrow({ where: { id: row.deliveryTaskId! } });
+    const row = await publish(); await tick(true); await accepted(row.id);
+    const deliveryTaskId = (await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } })).deliveryTaskId!;
+    const delivery = await owner.genericTask.findUniqueOrThrow({ where: { id: deliveryTaskId } });
     const wait = delivery.startedAt!.getTime() - delivery.createdAt.getTime();
     const http = requests[0].at - delivery.createdAt.getTime();
     const remaining = await owner.genericTaskItem.count({ where: { taskId: task.id, status: "pending" } });
     console.log(`WO6_PRESSURE wait_ms=${wait} http_ms=${http} poll_ms=1000 remaining=${remaining} main_calls=${claimCalls}`);
     expect(wait).toBeLessThanOrEqual(1200); expect(http).toBeLessThanOrEqual(1250); expect(remaining).toBeGreaterThan(19000);
   });
-  it("alternates delivery backlog with actual sitemap and sweep without starvation", async () => {
+  it("alternates the batch delivery with actual sitemap and sweep without starvation", async () => {
     const row = await publish();
-    // Distinct revisions on one eligible URL represent already queued publication backlog.
+    // Distinct revisions on one eligible URL represent already queued publication backlog (301 rows → ONE batch).
     const base = await owner.indexNowOutbox.findUniqueOrThrow({ where: { id: row.id } });
-    const { createIndexNowDeliveryTaskItem } = await import("@/lib/indexnow/outbox");
-    for (let i = 0; i < 300; i++) {
-      const next = await owner.indexNowOutbox.create({ data: { articleId: base.articleId, url: base.url, revision: BigInt(i + 1), eventType: "first_public_publish", locale: "ko", source: "fixture" } });
-      await createIndexNowDeliveryTaskItem(owner, next.id, { reason: "load", triggeredBy: "test" });
-    }
+    await owner.indexNowOutbox.createMany({ data: Array.from({ length: 300 }, (_, i) => ({ articleId: base.articleId, url: base.url, revision: BigInt(i + 1), eventType: "first_public_publish", locale: "ko", source: "fixture" })) });
+    const delivery = await ensureIndexNowBatchDeliveryTask(owner, { reason: "load", triggeredBy: "test" });
+    expect(delivery.created).toBe(true);
     const refresh = await enqueueSitemapRefresh({ reason: "wo6-load", triggeredBy: "test" }, worker, { env: { ...env, FEATURE_SITEMAP_AUTO_REFRESH: "true", SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "true" } });
     if (refresh.status !== "queued") throw new Error("refresh not queued");
     const [scan] = await tick();
     const order: string[] = [];
     startWorker(lightTypes, "light", id => order.push(id));
     await until(() => order.includes(scan.taskId!));
-    expect(order[0]).toBe(refresh.taskId); expect(order[1]).toBe(row.deliveryTaskId); expect(order[2]).toBe(scan.taskId);
-    expect(requests.length).toBeGreaterThan(0); expect(requests.length).toBeLessThan(301);
+    expect(order[0]).toBe(refresh.taskId); expect(order[1]).toBe(delivery.taskId); expect(order[2]).toBe(scan.taskId);
+    expect(requests).toHaveLength(1); expect((requests[0].body.urlList as string[])).toHaveLength(301);
     expect((await readdir(path.join(root, "sitemaps"))).length).toBeGreaterThan(0);
-    console.log(`WO6_FAIRNESS scan_completion_position=${order.indexOf(scan.taskId!) + 1} delivered_before_scan=${requests.length} backlog=301`);
+    console.log(`WO6_FAIRNESS scan_completion_position=${order.indexOf(scan.taskId!) + 1} urls_in_one_request=${(requests[0].body.urlList as string[]).length} backlog=301`);
   });
   it("real 10 second timeout yields to a newly queued sitemap then retries via scan", async () => {
-    const row = await publish(); statuses = ["timeout", 200]; startWorker(); await until(() => requests.length === 1);
+    const row = await publish(); statuses = ["timeout", 200]; await tick(true); startWorker(); await until(() => requests.length === 1);
     const queuedAt = Date.now();
     const refresh = await enqueueSitemapRefresh({ reason: "timeout", triggeredBy: "test" }, worker, { env: { ...env, FEATURE_SITEMAP_AUTO_REFRESH: "true", SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "true" } });
     if (refresh.status !== "queued") throw new Error("refresh not queued");
@@ -275,6 +301,6 @@ describe.skipIf(!enabled).sequential("WO6 real publication, scheduler, lanes and
     expect(retry).toMatchObject({ status: "retry_wait", lastErrorKind: "timeout" }); expect(waited).toBeGreaterThan(9000); expect(waited).toBeLessThan(13000);
     console.log(`WO6_TIMEOUT sitemap_wait_ms=${waited} http_timeout_ms=10000`);
     await stopWorkers(); await owner.indexNowOutbox.update({ where: { id: row.id }, data: { nextAttemptAt: new Date(0) } });
-    await tick(); startWorker(); await accepted(row.id);
+    await tick(true); startWorker(); await accepted(row.id);
   }, 20000);
 });

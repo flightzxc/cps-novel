@@ -24,6 +24,19 @@
  * IndexNow submission actually landed — `unknown_outcome` plus "submission
  * is idempotent, safe to retry" is what closes that gap, exactly as CPS
  * documents on its own version.
+ *
+ * B-41: one delivery request now covers up to 500 rows, so a worker crash
+ * mid-request leaves a whole batch in `processing`. This function is unchanged
+ * in shape — it still walks the stale rows one by one — and therefore
+ * recovers a whole batch as "outcome unknown, safe to re-push" (attempt
+ * numbers keep increasing, nothing is double-recorded). Every row write is
+ * conditional on `status = 'processing'` so a row that something else already
+ * moved on (e.g. a late write-back) is never overwritten. The "completed"
+ * branch reuses `resolveOutboxDeliveryStatus`, which means a completed
+ * 400/403/422 attempt becomes a held `retry_wait` (not `permanent_failed`);
+ * since B-41 writes the attempt and row results (and the breaker trip event)
+ * in ONE transaction this branch only matters for rows left over from the
+ * single-URL era, which have no trip event.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
@@ -52,7 +65,10 @@ export async function recoverStaleIndexNowDeliveries(db: Db, now: Date = new Dat
       // Defensive only — the handler always writes a `started` attempt row
       // before flipping the outbox row to `processing`, so this branch
       // should be unreachable in practice.
-      await db.indexNowOutbox.update({ where: { id: row.id }, data: { status: "pending", deliveryTaskId: null } });
+      await db.indexNowOutbox.updateMany({
+        where: { id: row.id, status: "processing" },
+        data: { status: "pending", deliveryTaskId: null },
+      });
       recovered++;
       continue;
     }
@@ -73,8 +89,8 @@ export async function recoverStaleIndexNowDeliveries(db: Db, now: Date = new Dat
       // branch. Still respects the same attempt-budget dead-letter
       // threshold, so exhausted rows do not retry forever.
       const exhausted = attempt.attemptNo >= row.maxAttempts;
-      await db.indexNowOutbox.update({
-        where: { id: row.id },
+      await db.indexNowOutbox.updateMany({
+        where: { id: row.id, status: "processing" },
         data: {
           status: exhausted ? "dead_letter" : "retry_wait",
           lastErrorKind: "unknown_outcome",
@@ -98,8 +114,8 @@ export async function recoverStaleIndexNowDeliveries(db: Db, now: Date = new Dat
         row.maxAttempts,
         attempt.responseAt ?? now,
       );
-      await db.indexNowOutbox.update({
-        where: { id: row.id },
+      await db.indexNowOutbox.updateMany({
+        where: { id: row.id, status: "processing" },
         data: {
           status: decision.status,
           lastHttpStatus: attempt.httpStatus,
