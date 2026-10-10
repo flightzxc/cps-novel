@@ -1,0 +1,851 @@
+[
+  {
+    "section": "identity",
+    "role": "worker_app",
+    "readAt": "2026-10-10T09:12:10.959322+00:00",
+    "readOnly": "on"
+  },
+  {
+    "section": "task",
+    "id": "943f0f7f-1196-4792-b28f-2ea53bcdf7d1",
+    "taskType": "moboreader.preview_refresh.v1",
+    "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+    "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+    "mode": "apply",
+    "status": "failed",
+    "totalCount": 34,
+    "successCount": 0,
+    "failedCount": 34,
+    "skippedCount": 0,
+    "requestedAt": "2026-10-10T09:09:12.857+00:00",
+    "startedAt": "2026-10-10T09:09:13.303742+00:00",
+    "completedAt": "2026-10-10T09:10:05.551007+00:00"
+  },
+  {
+    "section": "itemStatusCounts",
+    "counts": [
+      {
+        "status": "failed",
+        "count": 34
+      }
+    ]
+  },
+  {
+    "section": "failureGroups",
+    "groups": [
+      {
+        "kind": "chapter_content_invalid",
+        "stage": "getchapterinfo",
+        "count": 13,
+        "representatives": [
+          {
+            "sourceItemId": "031216f8-1a1b-463b-856a-74b4712c889b",
+            "receivedType": "empty_string",
+            "chapterIndex": 1,
+            "chapterOrdinal": 2
+          },
+          {
+            "sourceItemId": "056374b0-ec90-4b5d-9543-aef5b081aeaf",
+            "receivedType": "empty_string",
+            "chapterIndex": 2,
+            "chapterOrdinal": 3
+          }
+        ]
+      },
+      {
+        "kind": "chapter_list_not_array",
+        "stage": "getchapterinfo",
+        "count": 21,
+        "representatives": [
+          {
+            "sourceItemId": "02b6dff3-d973-4922-ad43-d4ab61a895b5",
+            "receivedType": "null",
+            "chapterIndex": null,
+            "chapterOrdinal": null
+          },
+          {
+            "sourceItemId": "0325c057-214b-46d1-a1f5-5f481e03d7b1",
+            "receivedType": "null",
+            "chapterIndex": null,
+            "chapterOrdinal": null
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "detailKeys",
+    "keys": [
+      {
+        "key": "adapterCode",
+        "count": 34
+      },
+      {
+        "key": "chapterCount",
+        "count": 13
+      },
+      {
+        "key": "chapterIndex",
+        "count": 13
+      },
+      {
+        "key": "chapterOrdinal",
+        "count": 13
+      },
+      {
+        "key": "errorClass",
+        "count": 34
+      },
+      {
+        "key": "kind",
+        "count": 34
+      },
+      {
+        "key": "receivedType",
+        "count": 34
+      },
+      {
+        "key": "stage",
+        "count": 34
+      }
+    ]
+  },
+  {
+    "section": "items",
+    "items": [
+      {
+        "itemId": "0a4ff64e-502a-46d2-b654-f1a67b18cf04",
+        "sourceItemId": "02b6dff3-d973-4922-ad43-d4ab61a895b5",
+        "novelId": "7781e177-99e1-4cd2-ad05-51eb6cf9d6a8",
+        "title": " Wessex Tales",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:16.129367+00:00",
+        "finishedAt": "2026-10-10T09:09:17.595375+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "9079b39a-a30a-4731-a665-87843c55964d",
+        "sourceItemId": "031216f8-1a1b-463b-856a-74b4712c889b",
+        "novelId": "581501ea-da86-4be2-88d5-8a6a4a73e40b",
+        "title": "The History of Cuba, vol. 3",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:38.572457+00:00",
+        "finishedAt": "2026-10-10T09:09:40.054432+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "dfddf177-1c13-4484-ba6e-f3e638abd3c0",
+        "sourceItemId": "0325c057-214b-46d1-a1f5-5f481e03d7b1",
+        "novelId": "02a68b43-375c-4d23-9b45-703a7fe464e1",
+        "title": " The Lady of the Camellias",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:58.051061+00:00",
+        "finishedAt": "2026-10-10T09:09:59.545571+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "5e5b0747-90a9-408e-9d3e-4effa39ebddd",
+        "sourceItemId": "056374b0-ec90-4b5d-9543-aef5b081aeaf",
+        "novelId": "47a40ac4-eeb5-4ccb-b7cb-0767b2de3d78",
+        "title": "A Leap in the Dark",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 2,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 3
+        },
+        "startedAt": "2026-10-10T09:09:26.551888+00:00",
+        "finishedAt": "2026-10-10T09:09:28.057371+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "a41b72be-67e3-416b-829f-525122039bff",
+        "sourceItemId": "0dd6a38a-e438-4654-b608-3bc60743c304",
+        "novelId": "62729dc9-647f-490f-9b34-74561f68bb36",
+        "title": "They Who Knock at Our Gates",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:43.049952+00:00",
+        "finishedAt": "2026-10-10T09:09:44.632224+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "5e0f73de-23e2-4b0f-ad62-104843c217a8",
+        "sourceItemId": "0faed754-957d-461f-abe6-00c1b1e9e32b",
+        "novelId": "cc9d20ab-1809-4864-b57e-d62c64dc0170",
+        "title": "Come Back",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:25.051244+00:00",
+        "finishedAt": "2026-10-10T09:09:26.542439+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "d317c58a-f40c-400b-9c8a-2ca6701fd211",
+        "sourceItemId": "1044615d-8566-4134-910e-b5220166b0a9",
+        "novelId": "44d30de5-8739-4b92-a11c-53b0d561d0c5",
+        "title": "Don Quixote",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:53.545588+00:00",
+        "finishedAt": "2026-10-10T09:09:55.038547+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "190feb0a-abba-4ac5-8f30-2948cf5c0695",
+        "sourceItemId": "11e79e01-415e-4c38-9429-3b2bb3157cd6",
+        "novelId": "3ae09229-d70c-49f1-a50b-b4e923ff5707",
+        "title": "U.S. Copyright Renewals, 1952 July - December",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:19.440447+00:00",
+        "finishedAt": "2026-10-10T09:09:20.54779+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "7e74130c-d777-43ef-97fc-8a86df4bd73b",
+        "sourceItemId": "14006896-96c5-4acd-b833-9d830e2f3101",
+        "novelId": "ba912bad-c42f-417b-80dd-7455691bae9e",
+        "title": "Ecclesiastical Curiosities",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:37.059314+00:00",
+        "finishedAt": "2026-10-10T09:09:38.56225+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "aa54db77-9d62-4de8-b186-a83bc8be1fde",
+        "sourceItemId": "175c6473-dbbd-41a7-9b5a-e720f1ada72c",
+        "novelId": "46590824-8755-43b4-a76f-b6d4b02419ce",
+        "title": "Little Women",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:46.048049+00:00",
+        "finishedAt": "2026-10-10T09:09:47.539236+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "7adbb0cc-9915-47fe-9528-fba5a964fdb8",
+        "sourceItemId": "182ae182-d5c2-4ab3-a45e-c312051fd04c",
+        "novelId": "21721548-0e10-43b1-8f49-0a7d15cbfdb2",
+        "title": "Makers of Electricity",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:35.96634+00:00",
+        "finishedAt": "2026-10-10T09:09:37.048909+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "c6c57e1f-87f2-48c4-b11e-0d0af1823f16",
+        "sourceItemId": "185d2e13-e620-483d-8fde-21441afb372e",
+        "novelId": "1421bed3-2a1e-4ebb-96fa-7e46c687e090",
+        "title": "Rich Dad Poor Dad",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:50.549231+00:00",
+        "finishedAt": "2026-10-10T09:09:52.039379+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "d3c3fe9e-08ce-4d6a-927b-e2d1ede96659",
+        "sourceItemId": "1df34abe-29f9-4b4f-a897-ebb5101ae8fc",
+        "novelId": "75ca466a-03a4-430c-862c-8c759f309b48",
+        "title": "Violet Forster's Lover",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:55.047342+00:00",
+        "finishedAt": "2026-10-10T09:09:56.54424+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "d86d0f97-fca0-49f9-bb19-60e4c6d65a10",
+        "sourceItemId": "1f0df82e-498b-44cb-b66e-06c57d6d1890",
+        "novelId": "95d89a43-9b6d-4b18-b30d-c2bd98f0bede",
+        "title": "Oliver Twist",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:56.556481+00:00",
+        "finishedAt": "2026-10-10T09:09:58.041802+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "6b043239-c981-440c-a539-9273a268ef5d",
+        "sourceItemId": "1f9c9b7b-d58a-4557-8f1a-ed2c441569cb",
+        "novelId": "1600b837-a99d-42b8-acfa-105e0d6f4a12",
+        "title": "HIS MAFIA HEIR SHE HID FOR SEVEN YEARS ",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:29.559775+00:00",
+        "finishedAt": "2026-10-10T09:09:31.049143+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "e689abad-e1af-4c92-b76d-94a7974b7ac0",
+        "sourceItemId": "217e972c-1b14-43f9-86e9-c40606e9f7bb",
+        "novelId": "eb05f5d6-767f-4e58-bf93-d969f9c40a52",
+        "title": " The Hound of Baskervilles",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:10:01.069525+00:00",
+        "finishedAt": "2026-10-10T09:10:02.555355+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "0d32fd29-5414-469a-a4a5-88389a90fe79",
+        "sourceItemId": "234abdc6-224c-4dab-b73b-565bebf51302",
+        "novelId": "87593459-f52d-42d5-aac1-f91677ff9ce4",
+        "title": "Our Mutual Friend",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:17.607541+00:00",
+        "finishedAt": "2026-10-10T09:09:19.429096+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "00698908-5e16-4873-8287-8dfafe4f8986",
+        "sourceItemId": "24c306c7-1fd0-4700-baa4-3a484cd46837",
+        "novelId": "63f6ccbc-7060-4b59-b50d-755436f9f22a",
+        "title": "Immortal Memories",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:13.303742+00:00",
+        "finishedAt": "2026-10-10T09:09:16.117718+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "69298854-35cf-44b9-8ffd-6d00bb5c36f4",
+        "sourceItemId": "2cb5ec08-7a37-4ec3-8258-52cd10ea1d73",
+        "novelId": "655ff0c8-308c-406c-ad08-c7282f75784e",
+        "title": "A Fuga da Garota da Gaiola Dourada",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 1,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 2
+        },
+        "startedAt": "2026-10-10T09:09:28.066716+00:00",
+        "finishedAt": "2026-10-10T09:09:29.551269+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "4cd2e4d4-db97-4b56-a434-aee480d5b6d5",
+        "sourceItemId": "3236281e-8892-422f-8f46-f23e916ae834",
+        "novelId": "bb38cdd8-3e4a-4c0b-93d2-97277fe6795d",
+        "title": "Character Sketches of Romance, Fiction and the Drama, Vol 1",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 2,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 3
+        },
+        "startedAt": "2026-10-10T09:09:22.047744+00:00",
+        "finishedAt": "2026-10-10T09:09:24.201457+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "70944f2f-9559-474d-a416-5440c00467ba",
+        "sourceItemId": "35980fa4-b3f3-4057-adcd-28cb74b02523",
+        "novelId": "42f4f206-af4b-49b4-94c3-d6ac207010cb",
+        "title": "The Brothers Karamazov",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:31.058735+00:00",
+        "finishedAt": "2026-10-10T09:09:32.544003+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "e3552bd4-ce7e-445d-b32c-b5c645189806",
+        "sourceItemId": "366461bb-fbe3-418a-ab65-04b184cf0140",
+        "novelId": "5dea56d0-88e8-4c1a-a786-53fda5bca603",
+        "title": "The Doppelganger",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:59.555377+00:00",
+        "finishedAt": "2026-10-10T09:10:01.057994+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "a1edb6e8-caaf-4207-9dac-1f78fcb77ec7",
+        "sourceItemId": "38c5670b-242e-403d-b921-0c2bbe1b2e66",
+        "novelId": "319bf8e0-cc25-43f5-9dc8-5bf23a655044",
+        "title": "The Bodyguard's Princess",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:40.065247+00:00",
+        "finishedAt": "2026-10-10T09:09:41.538684+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "29dfa5b0-2abf-4f79-83d9-483003ade191",
+        "sourceItemId": "3b2987f7-1ff4-48ba-9b55-8363a5783d53",
+        "novelId": "89675844-f5f6-4114-8a1b-03065e4343ff",
+        "title": "　The Magician",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:20.559072+00:00",
+        "finishedAt": "2026-10-10T09:09:22.036423+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "5b0670e4-6ba9-4087-9445-df6b0c45dfbb",
+        "sourceItemId": "3cda0227-f309-40ea-989a-0411a8fa5460",
+        "novelId": "058ee325-ed77-4b4c-8755-558e68c7ab75",
+        "title": " The Lost World",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:24.212474+00:00",
+        "finishedAt": "2026-10-10T09:09:25.042368+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "71896a87-ead1-42ee-b432-77059bd89f42",
+        "sourceItemId": "3d427bac-d7cc-440a-829c-cc5c319ccc74",
+        "novelId": "65666038-7463-49c0-bfad-9526b91d0d8f",
+        "title": "How to Listen to Music, 7th ed. / Hints and Suggestions to Untaught Lovers of the Art",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 2,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 3
+        },
+        "startedAt": "2026-10-10T09:09:32.553112+00:00",
+        "finishedAt": "2026-10-10T09:09:34.078312+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "fc6e848d-cb1f-4ba8-a136-076d2edcbe58",
+        "sourceItemId": "3d5c16dd-44ed-44b7-af61-26dfe50d794a",
+        "novelId": "2e8d4495-f966-4471-9241-c1bd0c17a8b2",
+        "title": " Bleak House",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:10:04.051979+00:00",
+        "finishedAt": "2026-10-10T09:10:05.551007+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "752c1521-e49e-46f2-a539-47ae9645ead9",
+        "sourceItemId": "3e858f0f-c235-4224-9783-d4dddbdf77a9",
+        "novelId": "1583d476-069b-4928-9932-42607ceebb40",
+        "title": "The Tempest / The Works of William Shakespeare [Cambridge Edition] [9 vols.]",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 2,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 3
+        },
+        "startedAt": "2026-10-10T09:09:34.086999+00:00",
+        "finishedAt": "2026-10-10T09:09:35.956727+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "a9123b27-ceed-4820-a198-a8f3a45c34ca",
+        "sourceItemId": "48652907-0196-4ec7-a3ad-c9ad3e1df6fa",
+        "novelId": "e7f3856d-e196-4f53-9ab7-5bc9189a6983",
+        "title": " The Return of the Native",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:44.641817+00:00",
+        "finishedAt": "2026-10-10T09:09:46.037039+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "ba5d22eb-563f-4944-a6fa-3811993b2308",
+        "sourceItemId": "4b87f14c-e188-4205-b612-a7cdfd634e7f",
+        "novelId": "e1a7352d-a077-4372-8bc8-5f3afb5f7ceb",
+        "title": "Vineland ",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:49.056032+00:00",
+        "finishedAt": "2026-10-10T09:09:50.539035+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "c8b6553e-ebad-49ce-b77e-69162c81153b",
+        "sourceItemId": "4cc30b02-93c4-4fac-a5d1-754a79222a35",
+        "novelId": "15ceba58-e558-4bf4-868b-7fc5f6ed6533",
+        "title": " Washington Square",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:52.05088+00:00",
+        "finishedAt": "2026-10-10T09:09:53.536043+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "fb34033c-ba05-4ae0-9814-0e9f9fa38461",
+        "sourceItemId": "4d46f103-1780-4000-9ecd-86b6dafb9ccf",
+        "novelId": "858bbc2f-1437-4406-b1d5-07e21f2c1688",
+        "title": " Pickwick Papers",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:10:02.583997+00:00",
+        "finishedAt": "2026-10-10T09:10:04.041814+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "ae0a9d86-f363-4d34-b9ef-160f501d0f8f",
+        "sourceItemId": "537aab35-9d84-4f4f-a02a-d48c2a1234a7",
+        "novelId": "901d3e0f-f9fb-42f0-b75c-cdab86ce9d22",
+        "title": "The Yellow Book",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_content_invalid",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "chapterCount": 3,
+          "chapterIndex": 2,
+          "receivedType": "empty_string",
+          "chapterOrdinal": 3
+        },
+        "startedAt": "2026-10-10T09:09:47.550582+00:00",
+        "finishedAt": "2026-10-10T09:09:49.046387+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      },
+      {
+        "itemId": "a2a81929-b396-4d14-9128-c12b052fbc79",
+        "sourceItemId": "6681979c-cfed-459d-8669-1f1d5f5d20e8",
+        "novelId": "9cb66af3-18fa-427f-bd6e-d4ddcf0e95de",
+        "title": "Mit dem Alpha-Stiefbruder verbunden",
+        "status": "failed",
+        "attemptCount": 1,
+        "errorCode": "upstream_preview_read_failed",
+        "detail": {
+          "kind": "chapter_list_not_array",
+          "stage": "getchapterinfo",
+          "errorClass": "MoboreaderAdapterError",
+          "adapterCode": "malformed_payload",
+          "receivedType": "null"
+        },
+        "startedAt": "2026-10-10T09:09:41.547553+00:00",
+        "finishedAt": "2026-10-10T09:09:43.038482+00:00",
+        "writtenChapterCount": 0,
+        "readablePreviewChapterCount": 0
+      }
+    ]
+  },
+  {
+    "section": "oldComparison",
+    "counts": [
+      {
+        "status": "failed",
+        "code": "upstream_preview_read_failed",
+        "count": 34
+      }
+    ]
+  },
+  {
+    "section": "postActiveHolds",
+    "holds": []
+  }
+]

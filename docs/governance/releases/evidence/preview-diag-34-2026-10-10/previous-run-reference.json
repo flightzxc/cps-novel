@@ -1,0 +1,12 @@
+{
+  "mode": "apply",
+  "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+  "requestId": "preview-retry-34-20261007",
+  "candidateCount": 34,
+  "truncated": false,
+  "failureBreakdown": {
+    "MoboReader Preview read failed": 34
+  },
+  "taskId": "36e3a15b-61f3-4960-8bcf-c585f648db1f",
+  "sourceFile": "/Users/chenweifeng/Documents/产品原型及文档/cps海阅/执行日志_试读定向补抓34本_2026-10-07.json"
+}

@@ -1,0 +1,21 @@
+{
+  "sourceItems": 34,
+  "taskItems": 34,
+  "matchingB36LogEvents": 34,
+  "sourceIdSetExact": true,
+  "persistedDetailMatchesLog": true,
+  "allAttemptCounts": 1,
+  "writtenChapters": 0,
+  "successfulBooks": [],
+  "publicationSlugLocaleAndChapterCountsUnchanged": true,
+  "runtimeContainerAndEnvNginxHashesUnchanged": true,
+  "activePreviewHoldsAfter": 0,
+  "classificationCounts": {
+    "chapter_content_invalid": 13,
+    "chapter_list_not_array": 21
+  },
+  "chapterContentEmptyIndexCounts": {
+    "1": 8,
+    "2": 5
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "section": "task",
+    "readAt": "2026-10-10T09:09:56.641941+00:00",
+    "id": "943f0f7f-1196-4792-b28f-2ea53bcdf7d1",
+    "status": "processing",
+    "totalCount": 34,
+    "successCount": 0,
+    "failedCount": 28,
+    "skippedCount": 0,
+    "startedAt": "2026-10-10T09:09:13.303742+00:00",
+    "completedAt": null
+  },
+  {
+    "section": "itemStatusCounts",
+    "counts": [
+      {
+        "status": "failed",
+        "count": 28
+      },
+      {
+        "status": "pending",
+        "count": 5
+      },
+      {
+        "status": "processing",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "section": "failureGroups",
+    "groups": [
+      {
+        "kind": "chapter_content_invalid",
+        "stage": "getchapterinfo",
+        "receivedType": "empty_string",
+        "chapterIndex": "1",
+        "count": 8
+      },
+      {
+        "kind": "chapter_content_invalid",
+        "stage": "getchapterinfo",
+        "receivedType": "empty_string",
+        "chapterIndex": "2",
+        "count": 5
+      },
+      {
+        "kind": "chapter_list_not_array",
+        "stage": "getchapterinfo",
+        "receivedType": "null",
+        "chapterIndex": null,
+        "count": 15
+      }
+    ]
+  }
+]
