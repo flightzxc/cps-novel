@@ -9,6 +9,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
+import { selectHomepageNavCategories } from "@/lib/site/home-nav";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
@@ -108,6 +109,16 @@ export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
 }
 
 export async function HomeBody({ locale }: { locale: SiteLocale }) {
+  // 该语种有书的全部分类（完整列表，每一项带运营勾选的 `homepageVisible`）。
+  //
+  // 🔴 这一份有三个用途，只有第一个可以按勾选过滤：
+  //   1. 首页题材导航（下面交给 `HomeScreen`）——显示"勾选的 ∩ 该语种有书的"，见 `selectHomepageNavCategories`；
+  //   2. 页脚（`loadChrome` → `chromeFromSiteSetting` 取前 8 个）——必须仍拿**未过滤**的完整列表；
+  //   3. 详情页"可链接分类集合"（`loadNovelDetail` → `withLinkableTagHrefs` 用的是同一个请求内去重的
+  //      `loadPublicCategories(locale)`，不经过这里）。
+  // 过滤只发生在交给 `HomeScreen` 的那一刻，不回写 `categories`，所以页脚与可链接集合的集合和顺序都不受勾选影响；
+  // 勾选只决定首页那一排按钮，不能顺带改变任何站内链接与收录（网址冻结，方案第五节）。
+  // `buildHomeMetadata` 同样只取完整列表喂 `loadChrome`，不受影响。
   const categories = await loadPublicCategories(locale);
   const activeLocales = await loadActiveLocales();
   const [{ settings, chrome }, novels, featuredList] = await Promise.all([
@@ -134,7 +145,7 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
         featuredList={featuredList}
         novels={novels}
         browseAllHref={`${localePrefix(locale)}/browse`}
-        categories={categories}
+        categories={selectHomepageNavCategories(categories)}
       />
     </>
   );

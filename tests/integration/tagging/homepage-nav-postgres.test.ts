@@ -101,14 +101,15 @@ async function save(visible: readonly string[], expected: readonly string[], req
   }, { db: web, identities: stores, sessions: stores, env: adminEnv, now: NOW });
 }
 
-/** 前台首页 / 页脚 / 详情页可链接集合共用的那一份。去掉 `homepageVisible` 后应当与保存前逐项相同。 */
-async function publicCategories(locale: "en" | "es" | "ko") {
+/** 前台首页 / 页脚 / 详情页可链接集合共用的那一份（完整，带 `homepageVisible`）。 */
+async function publicCategoriesFull(locale: "en" | "es" | "ko") {
   clearPublicCategoryCountsCacheForTest();
-  return (await listPublicCategories(web, locale, publicEnv)).map((tag) => {
-    const { homepageVisible: _ignored, ...rest } = tag as typeof tag & { homepageVisible?: boolean };
-    void _ignored;
-    return rest;
-  });
+  return listPublicCategories(web, locale, publicEnv);
+}
+
+/** 同一份去掉 `homepageVisible`：保存前后应当逐项相同（集合、顺序、名字、链接、排序号、updatedAt）。 */
+async function publicCategories(locale: "en" | "es" | "ko") {
+  return (await publicCategoriesFull(locale)).map(({ homepageVisible: _flag, ...rest }) => (void _flag, rest));
 }
 
 async function homepageNavAudits() {
@@ -149,6 +150,7 @@ describe.skipIf(!enabled).sequential("v0.5.15 首页题材导航勾选（真实 
   it("2·3·4·7·用 web_app 真实保存成功；H5 updated_at 逐行不变；审计行内容正确；H1 前台分类集合与顺序不变", async () => {
     const before = await snapshot();
     const publicBefore = { en: await publicCategories("en"), es: await publicCategories("es"), ko: await publicCategories("ko") };
+    const publicBeforeFull = { en: await publicCategoriesFull("en") };
     expect(publicBefore.en.length).toBeGreaterThan(3);
 
     const keep = ["alpha", "gamma", "omega"].map((slug) => idOf(before, slug));
@@ -187,10 +189,17 @@ describe.skipIf(!enabled).sequential("v0.5.15 首页题材导航勾选（真实 
       changedCount: 8,
     });
 
-    // 7·H1：页脚 / 首页导航 / 详情页可链接集合共用的分类列表，集合与顺序与保存前完全相同（逐项深比较）。
+    // 7·H1：页脚 / 首页导航 / 详情页可链接集合共用的分类列表，集合与顺序与保存前完全相同（逐项深比较），
+    // 唯一变的是每一项上的 homepageVisible（只有首页导航读它）。
     expect(await publicCategories("en")).toEqual(publicBefore.en);
     expect(await publicCategories("es")).toEqual(publicBefore.es);
     expect(await publicCategories("ko")).toEqual(publicBefore.ko);
+    for (const locale of ["en", "es", "ko"] as const) {
+      const full = await publicCategoriesFull(locale);
+      expect(full.every((tag) => tag.homepageVisible === ["alpha", "gamma", "omega"].includes(tag.slug)), locale).toBe(true);
+    }
+    // 保存前 homepageVisible 全是 true（迁移默认值）。
+    expect(publicBeforeFull.en.every((tag) => tag.homepageVisible)).toBe(true);
   });
 
   it("面板数据：全部启用分类 + 当前勾选 + 英语书数 / 有书语种数；读到的勾选与库一致", async () => {

@@ -126,7 +126,7 @@ npm exec vitest run -- --project node \
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs B38_PUBLIC_LIST "$secret_dir/integration-result.json" \
   tests/integration/site/promo-ready-sql-equivalence-postgres.test.ts=6 \
   tests/integration/site/list-equivalence-postgres.test.ts=34 \
-  tests/integration/site/consistency-invariants-postgres.test.ts=70 \
+  tests/integration/site/consistency-invariants-postgres.test.ts=71 \
   tests/integration/site/card-taxonomy-from-table-postgres.test.ts=11 \
   tests/integration/site/blog-pagination-postgres.test.ts=9 \
   tests/integration/site/real-roles-postgres.test.ts=5 \
