@@ -2,12 +2,13 @@
 
 ## 当前状态
 
-**阶段 0 PASS；阶段 1 配置已生效，首次发布观察待补；delivery 关闭；阶段 2 未执行。**
+**阶段 0 PASS；阶段 1 配置与三篇首次发布观察全部 PASS；delivery 关闭；阶段 2 未执行。**
 
 Owner 本会话明确请求实施已核对的分阶段计划，授权阶段 0～1。另确认首次 HTTP 422 即回关，阶段 1 的首次发布观察完成后才能进入阶段 2；阶段 2 仍须 Owner 明确说“继续阶段 2”。
 
 - 配置变更开始：2026-10-10 14:08:45.688730 JST（05:08:45.688730Z）。
 - 配置读回完成：2026-10-10 14:09:18.949425 JST（05:09:18.949425Z）。
+- 首次发布观察完成：2026-10-10 14:50:41.699193 JST（05:50:41.699193Z）。
 - 正式站：`pulsenovels.com`，目标机仅 `haiyue-vps`；版本仍为 v0.5.14，Final `bf61b5ea276a0981870cdfa63578a822a65836f3`。
 - 镜像仍为 `cps-novel:0.5.14-bf61b5e`，既有 manifest 的 descriptor、平台、revision 和运行容器身份核对均 PASS。
 - 没有发新版本、build/pull 镜像、执行迁移、手工 SQL 写入、修改 nginx 或公开网址、存量回填、删除或重置任何记录。
@@ -68,15 +69,29 @@ Owner 本会话明确请求实施已核对的分阶段计划，授权阶段 0～
 
 重建后内部及公开 health 均为 healthy / 0.5.14 / Final。公开取样经 `http://127.0.0.1:7899`，共 2 次（key route、health），无自动重试或跟随跳转；自动 IndexNow 外呼=0。
 
-### 首次发布观察：待补
+### 首次发布观察：PASS（Owner 提供三篇网址后补验）
 
-配置完成时 outbox、attempt、sweep schedule 仍均为 0。已请 Owner 或运营在后台首次发布 1～3 篇合格文章，并提供文章 ID 或页面网址；执行者未代发布。观察未完成，不标记整个阶段 1 已验收，也不进入阶段 2。
+配置完成时 outbox、attempt、sweep schedule 均为 0，最初停在观察待补。Owner 随后安排首次发布并提供三篇页面网址；执行者未代发布。三篇在 2026-10-10 14:39:54 JST（05:39:54Z）发布，本次只读补验完成于 14:50:41.699193 JST（05:50:41.699193Z）。
 
-补验须满足：每篇一条 pending outbox、正确 locale/revision、无 hidden 或重复、URL 等于正式域 canonical，对应 pending delivery 任务及条目；attempt 和 sweep schedule 相对零基线无新增。每篇页面各取样一次，总外部取样预算不超过 10。
+| 页面 short ID | locale | article ID | outbox / delivery 任务 / 条目 | HTTP / canonical |
+| --- | --- | --- | --- | --- |
+| pn8w150zv | en | 2a20c872-a938-4188-be05-886fa9cca3d7 | 各 1 条，均 pending | 200，无跳转，与 outbox URL 完全一致 |
+| p2j93jiyj | en | 9e45f0d5-f9c8-4d61-93a1-c0673460e4ee | 各 1 条，均 pending | 200，无跳转，与 outbox URL 完全一致 |
+| p48zq4bs4 | fr | bc10e6c5-7c3f-4b65-92f2-4b6fb72e0d25 | 各 1 条，均 pending | 200，无跳转，与 outbox URL 完全一致 |
+
+三篇都是 published / novel_article / seoVisibility=public；outbox locale 与文章及 HTML lang 一致，revision 与文章 updatedAt 的毫秒时间戳一致，无 hidden、无重复。投递条目 targetType=indexnow_outbox、targetId 与 outbox ID 一致。总 outbox=3、pending delivery 任务=3、attempt=0、sweep schedule=0，均无新增外呼或扫描。web/worker/worker-light 自重建以来 error/permission denied 仍为 0；worker/worker-light/scheduler delivery 双闸读回均 false，主通道不含两种 IndexNow 类型，light 不含 delivery，env SHA 不变。
+
+每篇页面仅取样一次，经既有代理、无重试或跟随跳转；本轮累计外部取样 5 次（原 2 次加本次 3 次），仍在 10 次预算内。原“待补”SQL 快照和原 Notion 回读收据保留为历史。新增证据：`phase1-first-publish-readonly.log`、`phase1-first-publish-canonical.json`、`phase1-first-publish-result.json`。
+
+核对的网址：
+
+- https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv
+- https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj
+- https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4
 
 ## 阶段 2 前提、判据与回关
 
-阶段 2 未授权、未执行。首次发布观察补齐后，仍须 Owner 明确说“继续阶段 2”。重新检查最新 env SHA、站点设置、空闲窗口；同一配置单元开启 delivery 双闸、登记 `indexnow_delivery`、仅向 light 追加 delivery 类型。开闸期间不做超过 100 篇的批量首次发布。
+阶段 2 未授权、未执行。首次发布观察已 PASS，仍须 Owner 明确说“继续阶段 2”。届时重新检查最新 env SHA、站点设置、空闲窗口；同一配置单元开启 delivery 双闸、登记 `indexnow_delivery`、仅向 light 追加 delivery 类型。开闸期间不做超过 100 篇的批量首次发布。
 
 配置生效及回关均按 WO6：先停止 scheduler 新入队和 worker-light 消费，按既有 SIGTERM/drain 流程等待在途完成，整组配置就绪后恢复；不得宣称已发送的 HTTP 能被撤销。第一、六、十二分钟取三份 SQL 快照，间隔中检查异常。
 
@@ -95,8 +110,9 @@ Owner 本会话明确请求实施已核对的分阶段计划，授权阶段 0～
 
 证据目录：[indexnow-opening-2026-10-10](evidence/indexnow-opening-2026-10-10/)。包含只读核查及原调用失败、受限 diff/cmp/SHA 链、preflight、重建及镜像身份、容器读回、发布观察状态、公开请求账本；没有密钥原文或完整 env。
 
-本次只追加配置运维记录和 v0.5.14 快照，不新增版本、修改 Final tag、重新生成 CHANGELOG 或增加正式发版级 development-log 条目。Git 文档推送回读及 Notion 手账同步回读的收据另存于证据目录；首次发布观察仍待 Owner/运营安排。
+本次只追加配置运维记录和 v0.5.14 快照，不新增版本、修改 Final tag、重新生成 CHANGELOG 或增加正式发版级 development-log 条目。Git 文档推送回读及 Notion 手账同步回读的收据另存于证据目录；阶段 1 首次发布观察现已补齐。
 
 - Git 首份治理提交 `b5f376b4bf515aa3ec283eddf04d6c55149aea8e` 已推送并回读 PASS；release 分支远端一致，v0.5.14 annotated tag peeled 仍为批准 Final。收据：`github-readback.json`。
 - Notion [海阅版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2) 当前快照及本次开闸条目已同步，2026-10-10 14:13:04.885 JST（05:13:04.885Z）回读 PASS；去除本次新增条目和快照追加句后，原历史/规则/模板正文一致。收据：`notion-readback.json`。
-- 阶段 1 配置已生效；首次发布观察仍待补。阶段 2 未执行，delivery 仍关闭；没有首批 accepted URL。
+- 阶段 1 配置与首次发布观察全部 PASS。阶段 2 未执行，delivery 仍关闭；三个网址均 pending，没有首批 accepted URL。
+- 首次发布补验已同步 Notion 当前快照与本次开闸手账，2026-10-10 14:52:29.107 JST（05:52:29.107Z）回读 PASS；四处定点修改逐项验证，撤销这四处修改后其余正文保持一致。新增收据：`phase1-first-publish-notion-readback.json`；原待补收据保留为历史。

@@ -1,8 +1,8 @@
 {
-  "status": "PHASE1_CONFIG_PASS_OBSERVATION_PENDING_OWNER_FIRST_PUBLISH",
+  "status": "PHASE1_PASS_DELIVERY_CLOSED",
   "phase0": "PASS",
   "phase1Configuration": "PASS",
-  "phase1PublicationObservation": "PENDING_OWNER_FIRST_PUBLISH",
+  "phase1PublicationObservation": "PASS",
   "phase2": "NOT_AUTHORIZED_NOT_EXECUTED",
   "delivery": "CLOSED",
   "runtimeFinal": "bf61b5ea276a0981870cdfa63578a822a65836f3",
@@ -128,7 +128,7 @@
       "unchanged": true
     }
   ],
-  "externalProbeRequests": 2,
+  "externalProbeRequests": 5,
   "indexnowAttempts": 0,
   "indexnowSweepSchedules": 0,
   "x11Evidence": "../v0514-release/phase1/run-indexnow-sweep-postgres-verification.log",
@@ -137,11 +137,11 @@
   "stage0InvocationIncident": "Initial caller omitted manifest GIT_COMMIT export; fixed caller, full rerun PASS; no production mutation during incident.",
   "lastReadOnlyCounts": {
     "kind": "counts",
-    "readAt": "2026-10-10T05:13:26.535202+00:00",
-    "outboxTotal": 0,
+    "readAt": "2026-10-10T05:50:41.699193+00:00",
+    "outboxTotal": 3,
     "attemptTotal": 0,
     "sweepScheduleTotal": 0,
-    "newPublishedArticles": 0,
+    "newPublishedArticles": 3,
     "hiddenOutbox": 0,
     "duplicateOutboxGroups": 0
   },
@@ -150,6 +150,11 @@
     "branchReadback": "PASS",
     "annotatedTagFinalReadback": "PASS",
     "notionReadback": "PASS",
-    "notionOriginalContentPreserved": true
-  }
+    "notionOriginalContentPreserved": true,
+    "publicationNotionReadback": "PASS",
+    "publicationNotionReceipt": "phase1-first-publish-notion-readback.json"
+  },
+  "phase1": "PASS",
+  "publicationObservedAtUTC": "2026-10-10T05:50:41.699193+00:00",
+  "publicationEvidence": "phase1-first-publish-result.json"
 }

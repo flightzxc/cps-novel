@@ -21,7 +21,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.5.14 —— 已部署正式站（2026-10-09 23:14:32 +0800 / 2026-10-10 00:14:32 JST）
 
-- IndexNow 阶段 0 PASS；阶段 1 outbox 配置于 2026-10-10 14:09:18 JST（05:09:18Z）生效，首次发布观察待补；delivery 仍关闭，阶段 2 未执行。仅 env 三行及 web/worker/worker-light 重建，preflight/镜像身份/健康/日志读回 PASS；版本和 Final 不变。见 [开闸运维记录](releases/indexnow-opening-2026-10-10.md)。
+- IndexNow 阶段 0 PASS；阶段 1 outbox 配置于 2026-10-10 14:09:18 JST（05:09:18Z）生效，三篇首次发布观察于 14:50:41 JST（05:50:41Z）PASS：各一条 pending outbox/任务/条目，en/en/fr、revision、canonical、去重、零外呼及零 sweep 全通过；delivery 仍关闭，阶段 2 未执行。仅 env 三行及 web/worker/worker-light 重建，preflight/镜像身份/健康/日志读回 PASS；版本和 Final 不变。见 [开闸运维记录](releases/indexnow-opening-2026-10-10.md)。
 - Owner 明确授权 Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；原 RELEASE=PASS / EXIT=0，维护 OFF。维护 15:13:42.742847Z–15:14:31.224573Z，48.481726 秒；新迁移 16.316ms。tree `38e87f2331aad0667c6b27250477ba0e6e76bfcd`，image `cps-novel:0.5.14-bf61b5e`，linux/amd64；服务器原归档 --load / SHA / OCI / revision 全 PASS。
 - A–E 与自动 F.1–F.3 PASS：env 仅两版本行、其余真实 cmp 一致，两白名单不变；在线逻辑备份 707,597,780 字节 / restore-list PASS；25 条迁移全部 finished / 0 rollback、58 表；搜索 false，web UPDATE=t / scheduler SELECT=f；标签投影 missing=0 extra=0 changed=0；health 0.5.14/Final/metadata passed，五应用和 postgres healthy、postgres CID 不变；四容器生产依赖门禁 PASS / Next16.3.8 / nanoid3.3.18；写闸相同、备份定时器 RUNNING、六服务错误及 permission denied 0。
 - F 外部 7 次全经代理：search404 / 英文首页 header 无搜索；一分类及一小说 URL/canonical/hreflang 前后相同。B-1 唯一 active 凭据 ok=t / same=f，无 credential_not_ready 暂停生命周期批次；不需 Owner 补点校验。F.4 Owner 正常后台登录及两步验证已请求、待反馈，未冒充完成。
