@@ -6,9 +6,14 @@
  */
 import Link from "next/link";
 
-import { projectAdminCanonicalTagList, type AdminCanonicalTagListView } from "@/contracts";
+import {
+  projectAdminCanonicalTagList,
+  projectAdminHomepageNav,
+  type AdminCanonicalTagListView,
+  type AdminHomepageNavView,
+} from "@/contracts";
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
-import { listAdminCanonicalTags } from "@/server/tagging/admin-service";
+import { listAdminCanonicalTags, listHomepageNavCandidates } from "@/server/tagging/admin-service";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
@@ -21,6 +26,7 @@ import { readTaggingFlagState } from "../tags/_lib/tagging-flag-checklist";
 import { CanonicalTagFilters } from "../tags/canonical/_components/canonical-tag-filters";
 import { CanonicalTagsClient } from "../tags/canonical/_components/canonical-tags-client";
 import { ClassifierDiagnosticsPanel } from "../tags/canonical/_components/classifier-diagnostics-panel";
+import { HomepageNavPanel } from "../tags/canonical/_components/homepage-nav-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +48,12 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
   const { context, granted } = await requireContentPage("/categories", "content:view");
   const taggingFlags = readTaggingFlagState();
   let page: AdminCanonicalTagListView | null = null;
+  let homepageNav: AdminHomepageNavView | null = null;
   if (granted && taggingFlags.readEnabled) {
     page = projectAdminCanonicalTagList(await listAdminCanonicalTags(prisma, params));
+    // v0.5.15 首页题材导航面板的数据：全部启用分类 + 当前勾选 + 书数。面板显示只看读开关，不看写开关
+    // （生产写开关为关，首页勾选不受它约束；能不能保存另由 `tag:manage` 决定）。
+    homepageNav = projectAdminHomepageNav(await listHomepageNavCandidates(prisma));
   }
   const tagManage = findCapabilityState(capabilityViews(context), "tag:manage");
 
@@ -61,6 +71,11 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
           <TaggingDisabledPanel state={taggingFlags} />
         ) : page ? (
           <>
+            {/*
+              面板放在"写入未开启"提示之上：那条提示说的"以下为只读视图、编辑按钮已禁用"只针对下面的分类列表，
+              首页题材导航面板不受分类写入开关约束（只要求读开关 + tag:manage）。
+            */}
+            {homepageNav && <HomepageNavPanel data={homepageNav} tagManage={tagManage} />}
             {!taggingFlags.writeEnabled && <TaggingWriteDisabledNotice />}
             <CanonicalTagFilters values={{ search: params.search, active: params.active }} />
             <CanonicalTagsClient

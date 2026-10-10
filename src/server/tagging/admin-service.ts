@@ -332,6 +332,7 @@ async function projectCanonicalTag(
     canonicalDefinition: row.canonicalDefinition,
     facet: row.facet,
     sortOrder: row.sortOrder,
+    isHomepageVisible: row.isHomepageVisible,
     taxonomyVersion: row.taxonomyVersion,
     translations: row.translations
       .map((translation) => ({ locale: translation.locale, displayName: translation.displayName }))

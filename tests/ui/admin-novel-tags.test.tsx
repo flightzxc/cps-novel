@@ -79,6 +79,7 @@ function canonicalTagKernel(overrides: Partial<AdminCanonicalTagItem> = {}): Adm
     canonicalDefinition: "Revenge-driven plot",
     facet: null,
     sortOrder: 1,
+    isHomepageVisible: true,
     taxonomyVersion: "v1",
     translations: [{ locale: "zh", displayName: "复仇" }],
     aliases: [],

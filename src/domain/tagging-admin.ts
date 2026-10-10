@@ -74,6 +74,8 @@ export type AdminCanonicalTagItem = Readonly<{
   canonicalDefinition: string;
   facet: string | null;
   sortOrder: number;
+  /** v0.5.15：是否在前台首页题材导航里显示（运营在 /categories 的"首页题材导航"面板勾选）。 */
+  isHomepageVisible: boolean;
   taxonomyVersion: string;
   translations: readonly AdminCanonicalTagTranslation[];
   aliases: readonly string[];

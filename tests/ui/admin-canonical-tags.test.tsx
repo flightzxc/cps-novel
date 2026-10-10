@@ -71,6 +71,7 @@ function canonicalTagItem(overrides: Partial<AdminCanonicalTagItem> = {}): Admin
       "武侠题材：以武功、江湖恩怨、侠义精神为核心叙事，常见门派、修炼与快意恩仇的桥段。",
     facet: "genre",
     sortOrder: 10,
+    isHomepageVisible: true,
     taxonomyVersion: "v1",
     translations: [
       { locale: "zh", displayName: "武侠" },

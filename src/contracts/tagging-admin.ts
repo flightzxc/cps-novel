@@ -46,6 +46,8 @@ export type AdminCanonicalTagView = Readonly<{
   canonicalDefinition: string;
   facet: string | null;
   sortOrder: number;
+  /** v0.5.15：是否在前台首页题材导航里显示。 */
+  isHomepageVisible: boolean;
   taxonomyVersion: string;
   translations: readonly Readonly<{ locale: string; displayName: string }>[];
   aliases: readonly string[];
@@ -269,6 +271,7 @@ export function projectAdminCanonicalTag(input: AdminCanonicalTagItem): AdminCan
     canonicalDefinition: string;
     facet: string | null;
     sortOrder: number;
+    isHomepageVisible: boolean;
     taxonomyVersion: string;
     translations: readonly Readonly<{ locale: string; displayName: string }>[];
     aliases: readonly string[];
@@ -286,6 +289,7 @@ export function projectAdminCanonicalTag(input: AdminCanonicalTagItem): AdminCan
     canonicalDefinition: input.canonicalDefinition,
     facet: input.facet,
     sortOrder: input.sortOrder,
+    isHomepageVisible: input.isHomepageVisible,
     taxonomyVersion: input.taxonomyVersion,
     translations: Object.freeze(input.translations.map((item) => Object.freeze({
       locale: item.locale,

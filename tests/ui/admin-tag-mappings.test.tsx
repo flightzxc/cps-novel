@@ -90,6 +90,7 @@ function canonicalTagItem(overrides: Partial<AdminCanonicalTagItem> = {}): Admin
     canonicalDefinition: "言情题材：以情感线索为核心叙事。",
     facet: "genre",
     sortOrder: 10,
+    isHomepageVisible: true,
     taxonomyVersion: "v1",
     translations: [{ locale: "zh", displayName: "言情" }],
     aliases: [],

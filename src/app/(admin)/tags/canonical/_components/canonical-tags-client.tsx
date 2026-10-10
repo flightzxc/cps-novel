@@ -166,6 +166,7 @@ export function CanonicalTagsClient({
                 <th className="px-4 py-3 text-left font-medium text-gray-500">Slug</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">中文展示名</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">状态</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">首页</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">定义</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">译名 · 别名 · Keyword</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">更新时间</th>
@@ -193,6 +194,10 @@ export function CanonicalTagsClient({
                           {tag.active ? "启用" : "停用"}
                         </StatusBadge>
                       </td>
+                      {/* v0.5.15 只读标记：是否在前台首页题材导航里显示（在页面顶部的"首页题材导航"面板里改）。 */}
+                      <td className="px-4 py-3 text-gray-600" data-testid={`canonical-tag-homepage-${tag.id}`}>
+                        {tag.isHomepageVisible ? "显示" : <span className="text-gray-400">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">
                         <span className="block max-w-xs truncate" title={tag.canonicalDefinition}>
                           {tag.canonicalDefinition}
@@ -216,7 +221,7 @@ export function CanonicalTagsClient({
                     </tr>
                     {expanded && (
                       <tr>
-                        <td colSpan={7} className="bg-gray-50 px-4 py-4">
+                        <td colSpan={8} className="bg-gray-50 px-4 py-4">
                           <CanonicalTagEditor
                             // Remount on every `updatedAt` change so the
                             // editor's local draft state (status select,
