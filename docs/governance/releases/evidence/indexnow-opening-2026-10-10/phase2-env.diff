@@ -1,0 +1,11 @@
+--- /opt/cps-novel/shared/env/preprod.env.bak-indexnow-stage2-20261010T060508Z
++++ /opt/cps-novel/shared/env/preprod.env
+@@ -1,4 +1,4 @@
+-FEATURE_INDEXNOW_DELIVERY=false
+-INDEXNOW_DELIVERY_ALLOW_WRITE=false
+-PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox
+-WORKER_LIGHT_TASK_ALLOWLIST=sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1
++FEATURE_INDEXNOW_DELIVERY=true
++INDEXNOW_DELIVERY_ALLOW_WRITE=true
++PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
++WORKER_LIGHT_TASK_ALLOWLIST=sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery

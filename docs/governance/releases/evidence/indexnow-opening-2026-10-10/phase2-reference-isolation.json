@@ -1,0 +1,18 @@
+{
+  "checkedAtUTC": "2026-10-10T06:23:46.731825+00:00",
+  "references": [
+    {
+      "reference": "CPS legacy frozen reference",
+      "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+      "statusLineCount": 0,
+      "unchanged": "PASS"
+    },
+    {
+      "reference": "CPS X-series read-only reference",
+      "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+      "statusLineCount": 198,
+      "unchanged": "PASS"
+    }
+  ],
+  "noWritesToReferences": true
+}

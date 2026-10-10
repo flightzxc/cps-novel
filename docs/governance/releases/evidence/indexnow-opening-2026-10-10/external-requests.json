@@ -45,5 +45,23 @@
     "status": 200,
     "effectiveURL": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
     "redirectCount": 0
+  },
+  {
+    "requestNumber": 6,
+    "url": "https://pulsenovels.com/indexnow-key.txt",
+    "atUTC": "2026-10-10T06:03:04.553954+00:00",
+    "status": 200,
+    "cacheControl": [
+      "no-store"
+    ],
+    "bodyBytes": 32,
+    "bodySha256": "e33f183b9663a625cdc0e23d469f0c0b5b44d43e48f91da3fa430d470a548e1c",
+    "matchesDatabaseEffectiveKey": true
+  },
+  {
+    "requestNumber": 7,
+    "url": "https://pulsenovels.com/api/health",
+    "atUTC": "2026-10-10T06:06:31.773769+00:00",
+    "status": 200
   }
 ]

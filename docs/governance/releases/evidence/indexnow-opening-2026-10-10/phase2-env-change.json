@@ -1,0 +1,13 @@
+{
+  "atUTC": "2026-10-10T06:05:08.817230+00:00",
+  "backup": "/opt/cps-novel/shared/env/preprod.env.bak-indexnow-stage2-20261010T060508Z",
+  "beforeSha256": "6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58",
+  "afterSha256": "95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7",
+  "otherBytesCmp": "PASS",
+  "changedKeys": [
+    "FEATURE_INDEXNOW_DELIVERY",
+    "INDEXNOW_DELIVERY_ALLOW_WRITE",
+    "PREPROD_APPROVED_OPEN_WRITE_GATES",
+    "WORKER_LIGHT_TASK_ALLOWLIST"
+  ]
+}

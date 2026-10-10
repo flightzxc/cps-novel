@@ -1,0 +1,24 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageUrl": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "lastEditedAtUTC": "2026-10-10T06:20:43.239Z",
+  "readAtUTC": "2026-10-10T06:22:11.030Z",
+  "operation": "stage 2 delivery acceptance snapshot and new operations entry; preserve phase 0-1 as history",
+  "targetedChanges": [
+    {
+      "found": true,
+      "unique": true
+    },
+    {
+      "found": true,
+      "unique": true,
+      "newEntryContent": "PASS",
+      "nativeRendering": "Notion escaped empty brackets and collapsed one blank line"
+    }
+  ],
+  "unrelatedBodyAfterUndo": "PASS",
+  "beforeBodyCharacters": 232869,
+  "afterBodyCharacters": 235519,
+  "status": "DELIVERY_ACCEPTED",
+  "asyncTaskId": "task_cf13a67ef2fb4b76aa95348a752a0848"
+}
