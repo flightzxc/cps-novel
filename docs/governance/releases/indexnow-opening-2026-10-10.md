@@ -96,3 +96,7 @@ Owner 本会话明确请求实施已核对的分阶段计划，授权阶段 0～
 证据目录：[indexnow-opening-2026-10-10](evidence/indexnow-opening-2026-10-10/)。包含只读核查及原调用失败、受限 diff/cmp/SHA 链、preflight、重建及镜像身份、容器读回、发布观察状态、公开请求账本；没有密钥原文或完整 env。
 
 本次只追加配置运维记录和 v0.5.14 快照，不新增版本、修改 Final tag、重新生成 CHANGELOG 或增加正式发版级 development-log 条目。Git 文档推送回读及 Notion 手账同步回读的收据另存于证据目录；首次发布观察仍待 Owner/运营安排。
+
+- Git 首份治理提交 `b5f376b4bf515aa3ec283eddf04d6c55149aea8e` 已推送并回读 PASS；release 分支远端一致，v0.5.14 annotated tag peeled 仍为批准 Final。收据：`github-readback.json`。
+- Notion [海阅版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2) 当前快照及本次开闸条目已同步，2026-10-10 14:13:04.885 JST（05:13:04.885Z）回读 PASS；去除本次新增条目和快照追加句后，原历史/规则/模板正文一致。收据：`notion-readback.json`。
+- 阶段 1 配置已生效；首次发布观察仍待补。阶段 2 未执行，delivery 仍关闭；没有首批 accepted URL。
