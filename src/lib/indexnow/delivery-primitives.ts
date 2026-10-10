@@ -50,7 +50,7 @@ export const INDEXNOW_HTTP_TIMEOUT_MS = 10_000;
 export const INDEXNOW_BREAKER_HTTP_STATUSES = [400, 403, 422] as const;
 
 export function isIndexNowBreakerStatus(httpStatus: number | null | undefined): boolean {
-  return httpStatus === 400 || httpStatus === 403 || httpStatus === 422;
+  return typeof httpStatus === "number" && (INDEXNOW_BREAKER_HTTP_STATUSES as readonly number[]).includes(httpStatus);
 }
 
 /**
@@ -128,7 +128,7 @@ export function classifyIndexNowResult(
   errorKind?: string | null,
 ): IndexNowAttemptOutcome {
   if (httpStatus === 200 || httpStatus === 202) return "accepted";
-  if (httpStatus === 400 || httpStatus === 403 || httpStatus === 422) return "permanent_failed";
+  if (isIndexNowBreakerStatus(httpStatus)) return "permanent_failed";
   // 429/5xx and network/timeout errors (`errorKind` set, `httpStatus` null)
   // both land here — kept as an explicit branch (CPS's original has the same
   // two branches, both returning the retryable status) so the signature's
