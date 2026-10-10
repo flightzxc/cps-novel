@@ -23,7 +23,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 - Owner 明确授权，haiyue-vps 低流量窗口原 RELEASE=PASS / EXIT=0；维护 17:06:45.909804Z–17:07:55.279041Z，69.369237秒；新迁移16.301ms。A–E / F.1 全 PASS：26finished/0rollback/58表，导航123全true，投影0/0/0；health0.5.15/Final/metadata passed，五应用healthy、postgres CID不变；Next16.3.8/运行依赖门禁、写闸和白名单一致、六服务error/permissiondenied0、backup-timer RUNNING。首页100slug逐项零变化，外部2/10全代理。
 - IndexNow只推新发布：breaker关闭、无429等待/死信/积压、keyValidation verified，历史accepted urls3/requests3，delivery success3；legacy skipped0、旧单条历史success3对应accepted；分钟sweep正常。F.2待Owner首次发布1～3篇后补核，不阻断收官；首发100篇限制尚未解除。未改nginx/开关/导航保存或执行回填。
-- annotated v0.5.15 固定Final、生成CHANGELOG（七位SHA）、唯一发版日志及阶段二记录/证据已完成；GitHub与Notion收官回读稍后补记。以下第一阶段说明按当时状态保留。
+- annotated v0.5.15 固定Final、生成CHANGELOG（七位SHA）、唯一发版日志及阶段二记录/证据已完成；GitHub分支/annotated tag回读PASS，peeled固定Final；Notion四处同步回读PASS（2026-10-10T17:17:10.036Z），原历史规则模板逐字保留，收据见阶段二证据。以下第一阶段说明按当时状态保留。
 
 - 唯一基线 `75b7fcc1efe1dde0ab444e5619d56a98064ad84c`，来自 `integration/v0.5.15-2026-10-10`，基于 v0.5.14 收官 `1dd9f33`（Final `bf61b5e`），已合入收官后的六个纯文档提交；发布分支 `release/v0.5.15-2026-10-10`。
 - 两组合入：首页题材导航运营勾选与阿语 ICU plural（`feat/home-nav-curation-v0515@44b7509` / merge `40e1850`）；B-41 IndexNow 批量投递、熔断/429 等待、坏网址拆分定位、游标回填及只读状态工具（`fix/b41-indexnow-cps-parity-v0515@c420485` / merge `be3c9c8`）。

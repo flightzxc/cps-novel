@@ -1,0 +1,36 @@
+{"service": "web", "id": "4a2547abb17ae53f735ccae1aa9bdd58c081d22c37a7663964c5286306dbcc4f", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=web
+service=web RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "worker", "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+STARTUP_ALLOWLIST={"service": "worker", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "effective": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "invalid": []}
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker
+service=worker RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "worker-light", "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+STARTUP_ALLOWLIST={"service": "worker-light", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "effective": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "invalid": []}
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker-light
+service=worker-light RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "scheduler", "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+service=scheduler RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "backup-timer", "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+{"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "since": "2026-10-10T17:06:36.535310+00:00"}
+HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7", "builtAt": "2026-10-10T12:00:28Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+WEB_VERSIONS={"next":"16.3.8","nanoid":"3.3.18"}
+POST_NGINX_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}
+BACKUP_TIMER=RUNNING
+POST_CHECK=PASS
+PREPROD_SITE_MODE=public
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+PREPROD_PREFLIGHT=PASS
+
+
+POST_PREFLIGHT_UNCHANGED=PASS
+EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+INDEXNOW_STATUS={"generatedAt": "2026-10-10T17:15:18.265Z", "control": {"dbNow": "2026-10-10T17:15:18.262Z", "breaker": {"open": false}, "rateLimit": {"waiting": false}, "lastResume": null, "lastBisect": null}, "keyValidation": {"state": "verified", "lastAccepted": {"httpStatus": 200, "at": "2026-10-10T06:05:30.130Z", "requestBatchId": "1d0d6321-1342-4f8c-8a55-a92fb269d26b"}, "accepted": {"all": {"status200": {"urls": 2, "httpRequests": 2}, "status202": {"urls": 1, "httpRequests": 1}}, "last24h": {"status200": {"urls": 2, "httpRequests": 2}, "status202": {"urls": 1, "httpRequests": 1}}}}, "outbox": {"urlsByStatusAndSource": [{"status": "accepted", "source": "admin.article.publish", "urls": 3}], "dueUrls": 0, "cancelledUrlsByErrorKind": [], "invalidUrls": [], "deadLetters": []}, "attempts": {"all": [{"httpStatus": "200", "urls": 2, "httpRequests": 2}, {"httpStatus": "202", "urls": 1, "httpRequests": 1}], "last24h": [{"httpStatus": "200", "urls": 2, "httpRequests": 2}, {"httpStatus": "202", "urls": 1, "httpRequests": 1}]}, "tasks": {"deliveryTaskItemsByStatus": {"success": 3}, "scanTaskItemsByStatus": {"success": 671}, "inFlightBatchTasks": []}}
+INDEXNOW_POST_STATUS=PASS

@@ -527,5 +527,142 @@
       "startedAt": 1791652187.1870358,
       "finishedAt": 1791652195.7863889
     }
-  ]
+  ],
+  "finalCheck": {
+    "status": "PASS",
+    "indexnow": {
+      "generatedAt": "2026-10-10T17:15:18.265Z",
+      "control": {
+        "dbNow": "2026-10-10T17:15:18.262Z",
+        "breaker": {
+          "open": false
+        },
+        "rateLimit": {
+          "waiting": false
+        },
+        "lastResume": null,
+        "lastBisect": null
+      },
+      "keyValidation": {
+        "state": "verified",
+        "lastAccepted": {
+          "httpStatus": 200,
+          "at": "2026-10-10T06:05:30.130Z",
+          "requestBatchId": "1d0d6321-1342-4f8c-8a55-a92fb269d26b"
+        },
+        "accepted": {
+          "all": {
+            "status200": {
+              "urls": 2,
+              "httpRequests": 2
+            },
+            "status202": {
+              "urls": 1,
+              "httpRequests": 1
+            }
+          },
+          "last24h": {
+            "status200": {
+              "urls": 2,
+              "httpRequests": 2
+            },
+            "status202": {
+              "urls": 1,
+              "httpRequests": 1
+            }
+          }
+        }
+      },
+      "outbox": {
+        "urlsByStatusAndSource": [
+          {
+            "status": "accepted",
+            "source": "admin.article.publish",
+            "urls": 3
+          }
+        ],
+        "dueUrls": 0,
+        "cancelledUrlsByErrorKind": [],
+        "invalidUrls": [],
+        "deadLetters": []
+      },
+      "attempts": {
+        "all": [
+          {
+            "httpStatus": "200",
+            "urls": 2,
+            "httpRequests": 2
+          },
+          {
+            "httpStatus": "202",
+            "urls": 1,
+            "httpRequests": 1
+          }
+        ],
+        "last24h": [
+          {
+            "httpStatus": "200",
+            "urls": 2,
+            "httpRequests": 2
+          },
+          {
+            "httpStatus": "202",
+            "urls": 1,
+            "httpRequests": 1
+          }
+        ]
+      },
+      "tasks": {
+        "deliveryTaskItemsByStatus": {
+          "success": 3
+        },
+        "scanTaskItemsByStatus": {
+          "success": 671
+        },
+        "inFlightBatchTasks": []
+      }
+    },
+    "originalLog": "final-post-check.log"
+  },
+  "notion": {
+    "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+    "pageURL": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+    "readBackAt": "2026-10-10T17:17:10.036Z",
+    "status": "PASS",
+    "sourceGovernanceCommit": "176529ac4d7b6964c1ea064521bfb988caf20c5b",
+    "final": "db623505539c3ca55f55b1270aab829b8db102d7",
+    "sections": {
+      "currentSnapshot": "PASS",
+      "versionRow": "PASS",
+      "detailedHandbook": "PASS",
+      "uniqueDevelopmentLogMirror": "PASS"
+    },
+    "historyRulesTemplates": {
+      "comparison": "Remove only added v0515 snapshot, historical heading, table row, and appended handbook/log; rstrip trailing whitespace; original bytes equal",
+      "unchanged": true,
+      "normalizedOriginalSha256": "ab82b376fa55aa8c721817f9da2664192c143e14f5e141398d73b37d30301bf8",
+      "recoveredOriginalSha256": "ab82b376fa55aa8c721817f9da2664192c143e14f5e141398d73b37d30301bf8"
+    },
+    "insertedTextComparison": "Ignore blank lines, Notion escapes of brackets/greater sign and code formatting only; full new handbook and log text equal",
+    "originalChars": 235519,
+    "updatedChars": 242571,
+    "pageLastEditedAt": "2026-10-10T17:16:50.164Z",
+    "firstPublication": "PENDING_OWNER",
+    "batchFirstPublication100Limit": "NOT_LIFTED",
+    "closeoutStatusText": "Notion four parts synchronized and verified PASS",
+    "verification": "PASS",
+    "finalPageContentSha256": "71736a638ab7e990a5dc7423353eb936902f7cf54f195aab7618a0301f05cfe6"
+  },
+  "git": {
+    "sourceGovernanceCommit": "176529ac4d7b6964c1ea064521bfb988caf20c5b",
+    "branchReadback": "176529ac4d7b6964c1ea064521bfb988caf20c5b",
+    "annotatedTagObject": "5608a716c9d08e1ab660c1c457971e42888b2677",
+    "peeledFinal": "db623505539c3ca55f55b1270aab829b8db102d7",
+    "status": "PASS"
+  },
+  "referenceRepos": "UNCHANGED",
+  "localHeavyLock": {
+    "usedInPhase2": false,
+    "existsAtCloseout": false
+  }
 }

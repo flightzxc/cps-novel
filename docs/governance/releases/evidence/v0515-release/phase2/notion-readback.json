@@ -1,0 +1,29 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageURL": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "readBackAt": "2026-10-10T17:17:10.036Z",
+  "status": "PASS",
+  "sourceGovernanceCommit": "176529ac4d7b6964c1ea064521bfb988caf20c5b",
+  "final": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "sections": {
+    "currentSnapshot": "PASS",
+    "versionRow": "PASS",
+    "detailedHandbook": "PASS",
+    "uniqueDevelopmentLogMirror": "PASS"
+  },
+  "historyRulesTemplates": {
+    "comparison": "Remove only added v0515 snapshot, historical heading, table row, and appended handbook/log; rstrip trailing whitespace; original bytes equal",
+    "unchanged": true,
+    "normalizedOriginalSha256": "ab82b376fa55aa8c721817f9da2664192c143e14f5e141398d73b37d30301bf8",
+    "recoveredOriginalSha256": "ab82b376fa55aa8c721817f9da2664192c143e14f5e141398d73b37d30301bf8"
+  },
+  "insertedTextComparison": "Ignore blank lines, Notion escapes of brackets/greater sign and code formatting only; full new handbook and log text equal",
+  "originalChars": 235519,
+  "updatedChars": 242571,
+  "pageLastEditedAt": "2026-10-10T17:16:50.164Z",
+  "firstPublication": "PENDING_OWNER",
+  "batchFirstPublication100Limit": "NOT_LIFTED",
+  "closeoutStatusText": "Notion four parts synchronized and verified PASS",
+  "verification": "PASS",
+  "finalPageContentSha256": "71736a638ab7e990a5dc7423353eb936902f7cf54f195aab7618a0301f05cfe6"
+}

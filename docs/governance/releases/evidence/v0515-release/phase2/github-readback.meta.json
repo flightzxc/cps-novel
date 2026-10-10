@@ -1,0 +1,14 @@
+{
+  "name": "github-readback",
+  "command": [
+    "git",
+    "ls-remote",
+    "origin",
+    "refs/heads/release/v0.5.15-2026-10-10",
+    "refs/tags/v0.5.15",
+    "refs/tags/v0.5.15^{}"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791652406.691992,
+  "finishedAt": 1791652410.695824
+}
