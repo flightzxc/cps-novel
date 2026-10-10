@@ -1,0 +1,72 @@
+START_UTC=2026-10-10T18:54:46.212782+00:00
+deploy
+COMMAND_EXIT=0
+cps-novel-backup-timer-1 postgres:16.14 Up 2 hours (healthy)
+cps-novel-scheduler-1 cps-novel:0.5.15-db62350 Up 2 hours (healthy)
+cps-novel-worker-light-1 cps-novel:0.5.15-db62350 Up 2 hours (healthy)
+cps-novel-worker-1 cps-novel:0.5.15-db62350 Up 2 hours (healthy)
+cps-novel-web-1 cps-novel:0.5.15-db62350 Up 2 hours (healthy)
+cps-novel-postgres-1 postgres:16.14 Up 13 days (healthy)
+COMMAND_EXIT=0
+{"ok":true,"status":"healthy","build":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7","builtAt":"2026-10-10T12:00:28Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7"}},"database":{"status":"passed","reason":null,"durationMs":2},"reasons":[]}COMMAND_EXIT=0
+db623505539c3ca55f55b1270aab829b8db102d7
+COMMAND_EXIT=0
+FLAG=FEATURE_INDEXNOW_OUTBOX
+true
+COMMAND_EXIT=0
+FLAG=INDEXNOW_OUTBOX_ALLOW_WRITE
+true
+COMMAND_EXIT=0
+FLAG=FEATURE_INDEXNOW_DELIVERY
+true
+COMMAND_EXIT=0
+FLAG=INDEXNOW_DELIVERY_ALLOW_WRITE
+true
+COMMAND_EXIT=0
+COMMAND_EXIT=1
+BACKFILL_ENV=ABSENT
+[{"current_user":"worker_app"}]
+COMMAND_EXIT=0
+Usage:
+  tsx scripts/indexnow-status.ts --help
+  tsx scripts/indexnow-status.ts
+  tsx scripts/indexnow-status.ts --batch <requestBatchId>
+
+Read-only. Counts are named by unit: urls (outbox/attempt rows), httpRequests (distinct request_batch_id),
+taskItems (GenericTaskItem rows; the delivery task and the minute scan task are counted separately).
+
+COMMAND_EXIT=0
+Usage:
+  tsx scripts/indexnow-backfill-manifest.ts --help
+  tsx scripts/indexnow-backfill-manifest.ts --count-only [--article-ids <uuid,uuid,...>] [--cutover-at <ISO>]
+  tsx scripts/indexnow-backfill-manifest.ts --expected-count <N> --output <path> [--article-ids <uuid,uuid,...>] [--cutover-at <ISO>]
+
+  --count-only        print the candidate count and scan stats; write nothing (no file, exit 0)
+  --expected-count N  required for every mode except --count-only/--help: the count the Owner confirmed.
+                      A different actual count still writes the file, then exits 1.
+  --output <path>     manifest file (alias --out); refuses to overwrite an existing file
+  --article-ids       explicit selection; any duplicate, empty item, non-UUID, nonexistent id, id outside the
+                      candidates or ineligible id rejects the WHOLE selection
+  --cutover-at <ISO>  record the "new publications are pushed" cutover; adds per-entry published_at stats
+
+COMMAND_EXIT=0
+Usage:
+  tsx scripts/indexnow-backfill-apply.ts --help
+  tsx scripts/indexnow-backfill-apply.ts --manifest <path> [--offset N] [--limit N] [--canary-locales a,b,...] [--confirm]
+
+  Without --confirm this is a dry run: it writes nothing, waits for nothing, and prints how many entries are
+  eligible / drifted / already have a delivery record.
+  With --confirm (and INDEXNOW_BACKFILL_ALLOW_WRITE=true, and outbox + delivery switched on in this process) it
+  enqueues the entries in chunks of 500, waits for each chunk to be delivered, and runs the global stop
+  check before every chunk.
+
+  --offset N / --limit N   integers; offset >= 0, limit >= 1; no upper cap. Without --limit: from the offset to the
+                           end of the manifest.
+  --canary-locales a,b,..  trial sample: round-robin over the given locales (>= 2, each present in the manifest), each
+                           locale's entries in ascending article_id; needs --limit; deterministic. The main run
+                           (--offset 0) later skips the entries already pushed.
+
+COMMAND_EXIT=0
+PREFLIGHT_IDENTITY_FLAGS_HELP=PASS
+
+EXIT=0

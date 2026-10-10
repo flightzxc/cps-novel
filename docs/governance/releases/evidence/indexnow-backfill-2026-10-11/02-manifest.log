@@ -1,0 +1,112 @@
+{
+  "output": "/tmp/indexnow-backfill-20261011.json",
+  "count": 30801,
+  "expectedCount": 30801,
+  "sha256": "672a513641b42b99609147b3e31c14e1e94f43993bb985f896798695804a1de8",
+  "stats": {
+    "scanned": 30807,
+    "alreadyHasDelivery": 6,
+    "ineligible": 0,
+    "eligible": 30801,
+    "urls": 30801,
+    "publishedBeforeCutover": 28745,
+    "publishedAfterCutover": 2056,
+    "publishedAtMissing": 0,
+    "cutoverAt": "2026-10-07T10:39:15.000Z",
+    "byLocale": {
+      "id": {
+        "urls": 1614,
+        "publishedBeforeCutover": 1573,
+        "publishedAfterCutover": 41,
+        "publishedAtMissing": 0
+      },
+      "en": {
+        "urls": 14073,
+        "publishedBeforeCutover": 12947,
+        "publishedAfterCutover": 1126,
+        "publishedAtMissing": 0
+      },
+      "ru": {
+        "urls": 2986,
+        "publishedBeforeCutover": 2957,
+        "publishedAfterCutover": 29,
+        "publishedAtMissing": 0
+      },
+      "es": {
+        "urls": 2795,
+        "publishedBeforeCutover": 2671,
+        "publishedAfterCutover": 124,
+        "publishedAtMissing": 0
+      },
+      "pt-BR": {
+        "urls": 2434,
+        "publishedBeforeCutover": 2312,
+        "publishedAfterCutover": 122,
+        "publishedAtMissing": 0
+      },
+      "th": {
+        "urls": 986,
+        "publishedBeforeCutover": 932,
+        "publishedAfterCutover": 54,
+        "publishedAtMissing": 0
+      },
+      "fr": {
+        "urls": 2620,
+        "publishedBeforeCutover": 2447,
+        "publishedAfterCutover": 173,
+        "publishedAtMissing": 0
+      },
+      "vi": {
+        "urls": 828,
+        "publishedBeforeCutover": 828,
+        "publishedAfterCutover": 0,
+        "publishedAtMissing": 0
+      },
+      "de": {
+        "urls": 852,
+        "publishedBeforeCutover": 843,
+        "publishedAfterCutover": 9,
+        "publishedAtMissing": 0
+      },
+      "ko": {
+        "urls": 782,
+        "publishedBeforeCutover": 766,
+        "publishedAfterCutover": 16,
+        "publishedAtMissing": 0
+      },
+      "ar": {
+        "urls": 39,
+        "publishedBeforeCutover": 31,
+        "publishedAfterCutover": 8,
+        "publishedAtMissing": 0
+      },
+      "ja": {
+        "urls": 648,
+        "publishedBeforeCutover": 383,
+        "publishedAfterCutover": 265,
+        "publishedAtMissing": 0
+      },
+      "pl": {
+        "urls": 126,
+        "publishedBeforeCutover": 40,
+        "publishedAfterCutover": 86,
+        "publishedAtMissing": 0
+      },
+      "zh-Hant": {
+        "urls": 18,
+        "publishedBeforeCutover": 15,
+        "publishedAfterCutover": 3,
+        "publishedAtMissing": 0
+      }
+    }
+  },
+  "articleIds": null
+}
+COMMAND_EXIT=0
+COMMAND_EXIT=0
+54d8c26f61a4f4ea5ae8881bcd88d3b6e67c7a706bf3acea857770d6c3585a5b  /tmp/indexnow-backfill-20261011.json
+COMMAND_EXIT=0
+{"hostPath": "/opt/cps-novel/shared/indexnow-backfill/20261011/indexnow-backfill-20261011.json", "fileSha256": "54d8c26f61a4f4ea5ae8881bcd88d3b6e67c7a706bf3acea857770d6c3585a5b", "contentSha256": "672a513641b42b99609147b3e31c14e1e94f43993bb985f896798695804a1de8", "count": 30801, "releaseCommit": "db623505539c3ca55f55b1270aab829b8db102d7", "schemaVersion": 2}
+MANIFEST_ARCHIVE=PASS
+
+EXIT=0

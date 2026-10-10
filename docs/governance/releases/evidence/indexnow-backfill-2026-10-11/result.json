@@ -1,0 +1,594 @@
+{
+  "acceptance": "PASS",
+  "final": "db623505539c3ca55f55b1270aab829b8db102d7",
+  "confirmedN": 30801,
+  "confirmation": "independent published minus distinct articles having any outbox = script eligible count",
+  "manifest": {
+    "hostPath": "/opt/cps-novel/shared/indexnow-backfill/20261011/indexnow-backfill-20261011.json",
+    "fileSha256": "54d8c26f61a4f4ea5ae8881bcd88d3b6e67c7a706bf3acea857770d6c3585a5b",
+    "contentSha256": "672a513641b42b99609147b3e31c14e1e94f43993bb985f896798695804a1de8",
+    "count": 30801,
+    "releaseCommit": "db623505539c3ca55f55b1270aab829b8db102d7",
+    "schemaVersion": 2
+  },
+  "countStats": {
+    "scanned": 30807,
+    "alreadyHasDelivery": 6,
+    "ineligible": 0,
+    "eligible": 30801,
+    "urls": 30801,
+    "publishedBeforeCutover": 28745,
+    "publishedAfterCutover": 2056,
+    "publishedAtMissing": 0,
+    "cutoverAt": "2026-10-07T10:39:15.000Z",
+    "byLocale": {
+      "id": {
+        "urls": 1614,
+        "publishedBeforeCutover": 1573,
+        "publishedAfterCutover": 41,
+        "publishedAtMissing": 0
+      },
+      "en": {
+        "urls": 14073,
+        "publishedBeforeCutover": 12947,
+        "publishedAfterCutover": 1126,
+        "publishedAtMissing": 0
+      },
+      "ru": {
+        "urls": 2986,
+        "publishedBeforeCutover": 2957,
+        "publishedAfterCutover": 29,
+        "publishedAtMissing": 0
+      },
+      "es": {
+        "urls": 2795,
+        "publishedBeforeCutover": 2671,
+        "publishedAfterCutover": 124,
+        "publishedAtMissing": 0
+      },
+      "pt-BR": {
+        "urls": 2434,
+        "publishedBeforeCutover": 2312,
+        "publishedAfterCutover": 122,
+        "publishedAtMissing": 0
+      },
+      "th": {
+        "urls": 986,
+        "publishedBeforeCutover": 932,
+        "publishedAfterCutover": 54,
+        "publishedAtMissing": 0
+      },
+      "fr": {
+        "urls": 2620,
+        "publishedBeforeCutover": 2447,
+        "publishedAfterCutover": 173,
+        "publishedAtMissing": 0
+      },
+      "vi": {
+        "urls": 828,
+        "publishedBeforeCutover": 828,
+        "publishedAfterCutover": 0,
+        "publishedAtMissing": 0
+      },
+      "de": {
+        "urls": 852,
+        "publishedBeforeCutover": 843,
+        "publishedAfterCutover": 9,
+        "publishedAtMissing": 0
+      },
+      "ko": {
+        "urls": 782,
+        "publishedBeforeCutover": 766,
+        "publishedAfterCutover": 16,
+        "publishedAtMissing": 0
+      },
+      "ar": {
+        "urls": 39,
+        "publishedBeforeCutover": 31,
+        "publishedAfterCutover": 8,
+        "publishedAtMissing": 0
+      },
+      "ja": {
+        "urls": 648,
+        "publishedBeforeCutover": 383,
+        "publishedAfterCutover": 265,
+        "publishedAtMissing": 0
+      },
+      "pl": {
+        "urls": 126,
+        "publishedBeforeCutover": 40,
+        "publishedAfterCutover": 86,
+        "publishedAtMissing": 0
+      },
+      "zh-Hant": {
+        "urls": 18,
+        "publishedBeforeCutover": 15,
+        "publishedAfterCutover": 3,
+        "publishedAtMissing": 0
+      }
+    }
+  },
+  "independentCounts": {
+    "counts": [
+      {
+        "locale": "ALL",
+        "published": 30807,
+        "article_type": "novel_article",
+        "independent_n": 30801,
+        "already_outbox": 6
+      },
+      {
+        "locale": "ar",
+        "published": 39,
+        "article_type": "novel_article",
+        "independent_n": 39,
+        "already_outbox": 0
+      },
+      {
+        "locale": "de",
+        "published": 852,
+        "article_type": "novel_article",
+        "independent_n": 852,
+        "already_outbox": 0
+      },
+      {
+        "locale": "en",
+        "published": 14076,
+        "article_type": "novel_article",
+        "independent_n": 14073,
+        "already_outbox": 3
+      },
+      {
+        "locale": "es",
+        "published": 2795,
+        "article_type": "novel_article",
+        "independent_n": 2795,
+        "already_outbox": 0
+      },
+      {
+        "locale": "fr",
+        "published": 2622,
+        "article_type": "novel_article",
+        "independent_n": 2620,
+        "already_outbox": 2
+      },
+      {
+        "locale": "id",
+        "published": 1614,
+        "article_type": "novel_article",
+        "independent_n": 1614,
+        "already_outbox": 0
+      },
+      {
+        "locale": "ja",
+        "published": 648,
+        "article_type": "novel_article",
+        "independent_n": 648,
+        "already_outbox": 0
+      },
+      {
+        "locale": "ko",
+        "published": 782,
+        "article_type": "novel_article",
+        "independent_n": 782,
+        "already_outbox": 0
+      },
+      {
+        "locale": "pl",
+        "published": 126,
+        "article_type": "novel_article",
+        "independent_n": 126,
+        "already_outbox": 0
+      },
+      {
+        "locale": "pt-BR",
+        "published": 2435,
+        "article_type": "novel_article",
+        "independent_n": 2434,
+        "already_outbox": 1
+      },
+      {
+        "locale": "ru",
+        "published": 2986,
+        "article_type": "novel_article",
+        "independent_n": 2986,
+        "already_outbox": 0
+      },
+      {
+        "locale": "th",
+        "published": 986,
+        "article_type": "novel_article",
+        "independent_n": 986,
+        "already_outbox": 0
+      },
+      {
+        "locale": "vi",
+        "published": 828,
+        "article_type": "novel_article",
+        "independent_n": 828,
+        "already_outbox": 0
+      },
+      {
+        "locale": "zh-Hant",
+        "published": 18,
+        "article_type": "novel_article",
+        "independent_n": 18,
+        "already_outbox": 0
+      }
+    ],
+    "inflight": [],
+    "readOnly": "on"
+  },
+  "dryrun": {
+    "mode": "dry-run",
+    "selectedUrls": 500,
+    "chunks": 1,
+    "eligibleUrls": 500,
+    "driftedUrls": 0,
+    "alreadyHasDeliveryUrls": 0,
+    "enqueuedUrls": 0,
+    "duplicateUrls": 0,
+    "ineligibleUrls": 0,
+    "disabledUrls": 0,
+    "acceptedUrls": 0,
+    "accepted200Urls": 0,
+    "accepted202Urls": 0,
+    "notAcceptedUrls": 0,
+    "cancelledUrls": 0,
+    "httpRequests": 0,
+    "canary": {
+      "en": 111,
+      "ja": 111,
+      "ru": 111,
+      "pl": 110,
+      "ar": 39,
+      "zh-Hant": 18
+    }
+  },
+  "trial": {
+    "mode": "apply",
+    "selectedUrls": 500,
+    "chunks": 1,
+    "eligibleUrls": 500,
+    "driftedUrls": 0,
+    "alreadyHasDeliveryUrls": 0,
+    "enqueuedUrls": 500,
+    "duplicateUrls": 0,
+    "ineligibleUrls": 0,
+    "disabledUrls": 0,
+    "acceptedUrls": 500,
+    "accepted200Urls": 500,
+    "accepted202Urls": 0,
+    "notAcceptedUrls": 0,
+    "cancelledUrls": 0,
+    "httpRequests": 1,
+    "canary": {
+      "en": 111,
+      "ja": 111,
+      "ru": 111,
+      "pl": 110,
+      "ar": 39,
+      "zh-Hant": 18
+    }
+  },
+  "batch": {
+    "items": [
+      {
+        "id": "796530b8-a13a-418b-9bae-8dd8d897079e",
+        "status": "success",
+        "task_id": "a851f294-5bc1-4ac9-9390-437570d71e46",
+        "started_at": "2026-10-10T18:57:03.92859+00:00",
+        "finished_at": "2026-10-10T18:57:05.657111+00:00",
+        "target_type": "indexnow_batch"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "a851f294-5bc1-4ac9-9390-437570d71e46",
+        "status": "completed",
+        "task_type": "indexnow_delivery",
+        "total_count": 1,
+        "completed_at": "2026-10-10T18:57:05.657111+00:00",
+        "failed_count": 0,
+        "success_count": 1
+      }
+    ],
+    "batches": [
+      {
+        "urls": 500,
+        "outcome": "accepted",
+        "batch_size": 500,
+        "http_status": 200,
+        "attempt_state": "completed",
+        "request_at_utc": "2026-10-10T18:57:04.051+00:00",
+        "response_at_jst": "2026-10-11T03:57:05.624",
+        "response_at_utc": "2026-10-10T18:57:05.624+00:00",
+        "request_batch_id": "392aefcf-b923-41cc-8fb6-339d50beccbd"
+      }
+    ],
+    "locales": [
+      {
+        "urls": 39,
+        "locale": "ar"
+      },
+      {
+        "urls": 111,
+        "locale": "en"
+      },
+      {
+        "urls": 111,
+        "locale": "ja"
+      },
+      {
+        "urls": 110,
+        "locale": "pl"
+      },
+      {
+        "urls": 111,
+        "locale": "ru"
+      },
+      {
+        "urls": 18,
+        "locale": "zh-Hant"
+      }
+    ],
+    "samples": [
+      {
+        "id": "e866f27f-74cf-45c8-8eea-f5ece3128643",
+        "url": "https://pulsenovels.com/ar/novel/%D8%A7%D9%84%D8%B9%D9%88%D8%AF%D8%A9-%D8%A7%D9%84%D9%85%D8%B0%D9%87%D9%84%D8%A9-%D9%84%D9%84%D8%B2%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D9%85%D9%86%D8%A8%D9%88%D8%B0%D8%A9-%D8%B0%D8%A7%D8%AA-%D8%A7%D9%84%D9%87%D9%88%D9%8A%D8%A9-%D8%A7%D9%84%D8%BA%D8%A7%D9%85%D8%B6%D8%A9-pbc5w8cmp",
+        "locale": "ar"
+      },
+      {
+        "id": "28e67868-c71c-4aad-8984-16afa03badf7",
+        "url": "https://pulsenovels.com/pl/novel/odrzucona-luna-powraca-jako-najwy%C5%BCszy-bia%C5%82y-wilk-pp1ai0sol",
+        "locale": "pl"
+      },
+      {
+        "id": "fda33af0-a9a0-406a-945c-b733f1c2bd0c",
+        "url": "https://pulsenovels.com/novel/le-13e-hussards-types-profils-esquisses-et-croquis-militaires-%C3%A1-pied-et-%C3%A1-cheval-pfmc9y94l",
+        "locale": "en"
+      }
+    ],
+    "readOnly": "on",
+    "batchRows": 500,
+    "acceptedRows": 500,
+    "cancelledRows": 0,
+    "globalAccepted": 506,
+    "globalDeadLetters": 0,
+    "globalHttpRequests": 5,
+    "globalInvalidCancelled": 0
+  },
+  "statusBefore": {
+    "generatedAt": "2026-10-10T18:55:05.270Z",
+    "control": {
+      "dbNow": "2026-10-10T18:55:05.268Z",
+      "breaker": {
+        "open": false
+      },
+      "rateLimit": {
+        "waiting": false
+      },
+      "lastResume": null,
+      "lastBisect": null
+    },
+    "keyValidation": {
+      "state": "verified",
+      "lastAccepted": {
+        "httpStatus": 200,
+        "at": "2026-10-10T18:32:05.366Z",
+        "requestBatchId": "3ef3e207-c94f-41d0-8b87-5b19a900c942"
+      },
+      "accepted": {
+        "all": {
+          "status200": {
+            "urls": 5,
+            "httpRequests": 3
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        },
+        "last24h": {
+          "status200": {
+            "urls": 5,
+            "httpRequests": 3
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        }
+      }
+    },
+    "outbox": {
+      "urlsByStatusAndSource": [
+        {
+          "status": "accepted",
+          "source": "admin.article.publish",
+          "urls": 6
+        }
+      ],
+      "dueUrls": 0,
+      "cancelledUrlsByErrorKind": [],
+      "invalidUrls": [],
+      "deadLetters": []
+    },
+    "attempts": {
+      "all": [
+        {
+          "httpStatus": "200",
+          "urls": 5,
+          "httpRequests": 3
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ],
+      "last24h": [
+        {
+          "httpStatus": "200",
+          "urls": 5,
+          "httpRequests": 3
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ]
+    },
+    "tasks": {
+      "deliveryTaskItemsByStatus": {
+        "success": 4
+      },
+      "scanTaskItemsByStatus": {
+        "success": 771
+      },
+      "inFlightBatchTasks": []
+    }
+  },
+  "statusAfter": {
+    "generatedAt": "2026-10-10T18:57:24.801Z",
+    "control": {
+      "dbNow": "2026-10-10T18:57:24.799Z",
+      "breaker": {
+        "open": false
+      },
+      "rateLimit": {
+        "waiting": false
+      },
+      "lastResume": null,
+      "lastBisect": null
+    },
+    "keyValidation": {
+      "state": "verified",
+      "lastAccepted": {
+        "httpStatus": 200,
+        "at": "2026-10-10T18:57:05.624Z",
+        "requestBatchId": "392aefcf-b923-41cc-8fb6-339d50beccbd"
+      },
+      "accepted": {
+        "all": {
+          "status200": {
+            "urls": 505,
+            "httpRequests": 4
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        },
+        "last24h": {
+          "status200": {
+            "urls": 505,
+            "httpRequests": 4
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        }
+      }
+    },
+    "outbox": {
+      "urlsByStatusAndSource": [
+        {
+          "status": "accepted",
+          "source": "admin.article.publish",
+          "urls": 6
+        },
+        {
+          "status": "accepted",
+          "source": "backfill",
+          "urls": 500
+        }
+      ],
+      "dueUrls": 0,
+      "cancelledUrlsByErrorKind": [],
+      "invalidUrls": [],
+      "deadLetters": []
+    },
+    "attempts": {
+      "all": [
+        {
+          "httpStatus": "200",
+          "urls": 505,
+          "httpRequests": 4
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ],
+      "last24h": [
+        {
+          "httpStatus": "200",
+          "urls": 505,
+          "httpRequests": 4
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ]
+    },
+    "tasks": {
+      "deliveryTaskItemsByStatus": {
+        "success": 5
+      },
+      "scanTaskItemsByStatus": {
+        "success": 773
+      },
+      "inFlightBatchTasks": []
+    }
+  },
+  "publicSamples": [
+    {
+      "articleId": "e866f27f-74cf-45c8-8eea-f5ece3128643",
+      "locale": "ar",
+      "url": "https://pulsenovels.com/ar/novel/%D8%A7%D9%84%D8%B9%D9%88%D8%AF%D8%A9-%D8%A7%D9%84%D9%85%D8%B0%D9%87%D9%84%D8%A9-%D9%84%D9%84%D8%B2%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D9%85%D9%86%D8%A8%D9%88%D8%B0%D8%A9-%D8%B0%D8%A7%D8%AA-%D8%A7%D9%84%D9%87%D9%88%D9%8A%D8%A9-%D8%A7%D9%84%D8%BA%D8%A7%D9%85%D8%B6%D8%A9-pbc5w8cmp",
+      "httpStatus": 200,
+      "canonical": [
+        "https://pulsenovels.com/ar/novel/%D8%A7%D9%84%D8%B9%D9%88%D8%AF%D8%A9-%D8%A7%D9%84%D9%85%D8%B0%D9%87%D9%84%D8%A9-%D9%84%D9%84%D8%B2%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D9%85%D9%86%D8%A8%D9%88%D8%B0%D8%A9-%D8%B0%D8%A7%D8%AA-%D8%A7%D9%84%D9%87%D9%88%D9%8A%D8%A9-%D8%A7%D9%84%D8%BA%D8%A7%D9%85%D8%B6%D8%A9-pbc5w8cmp"
+      ],
+      "requests": 1,
+      "proxy": "http://127.0.0.1:7899",
+      "checkedAtUtc": "2026-10-10T18:58:06.744609+00:00"
+    },
+    {
+      "articleId": "28e67868-c71c-4aad-8984-16afa03badf7",
+      "locale": "pl",
+      "url": "https://pulsenovels.com/pl/novel/odrzucona-luna-powraca-jako-najwy%C5%BCszy-bia%C5%82y-wilk-pp1ai0sol",
+      "httpStatus": 200,
+      "canonical": [
+        "https://pulsenovels.com/pl/novel/odrzucona-luna-powraca-jako-najwy%C5%BCszy-bia%C5%82y-wilk-pp1ai0sol"
+      ],
+      "requests": 1,
+      "proxy": "http://127.0.0.1:7899",
+      "checkedAtUtc": "2026-10-10T18:58:08.613637+00:00"
+    },
+    {
+      "articleId": "fda33af0-a9a0-406a-945c-b733f1c2bd0c",
+      "locale": "en",
+      "url": "https://pulsenovels.com/novel/le-13e-hussards-types-profils-esquisses-et-croquis-militaires-%C3%A1-pied-et-%C3%A1-cheval-pfmc9y94l",
+      "httpStatus": 200,
+      "canonical": [
+        "https://pulsenovels.com/novel/le-13e-hussards-types-profils-esquisses-et-croquis-militaires-%C3%A1-pied-et-%C3%A1-cheval-pfmc9y94l"
+      ],
+      "requests": 1,
+      "proxy": "http://127.0.0.1:7899",
+      "checkedAtUtc": "2026-10-10T18:58:10.285270+00:00"
+    }
+  ],
+  "externalRequests": 3,
+  "bingObservationStartUtc": "2026-10-10T18:58:56.421821+00:00",
+  "bingObservationStartJst": "2026-10-11T03:58:56.421821+09:00",
+  "exceptions": [],
+  "secondReleaseExecuted": false,
+  "referenceRepositories": "UNCHANGED"
+}

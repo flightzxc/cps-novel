@@ -1,0 +1,5 @@
+{"canary":{"en":111,"ja":111,"ru":111,"pl":110,"ar":39,"zh-Hant":18},"selectedUrls":500}
+{"chunkIndex":0,"urls":500,"eligibleUrls":500,"driftedUrls":0,"alreadyHasDeliveryUrls":0,"enqueuedUrls":0,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":0,"accepted200Urls":0,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":0,"elapsedMs":602}
+{"summary":{"mode":"dry-run","selectedUrls":500,"chunks":1,"eligibleUrls":500,"driftedUrls":0,"alreadyHasDeliveryUrls":0,"enqueuedUrls":0,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":0,"accepted200Urls":0,"accepted202Urls":0,"notAcceptedUrls":0,"cancelledUrls":0,"httpRequests":0,"canary":{"en":111,"ja":111,"ru":111,"pl":110,"ar":39,"zh-Hant":18}}}
+
+EXIT=0

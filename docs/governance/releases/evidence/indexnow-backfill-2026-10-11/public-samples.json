@@ -1,0 +1,38 @@
+[
+  {
+    "articleId": "e866f27f-74cf-45c8-8eea-f5ece3128643",
+    "locale": "ar",
+    "url": "https://pulsenovels.com/ar/novel/%D8%A7%D9%84%D8%B9%D9%88%D8%AF%D8%A9-%D8%A7%D9%84%D9%85%D8%B0%D9%87%D9%84%D8%A9-%D9%84%D9%84%D8%B2%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D9%85%D9%86%D8%A8%D9%88%D8%B0%D8%A9-%D8%B0%D8%A7%D8%AA-%D8%A7%D9%84%D9%87%D9%88%D9%8A%D8%A9-%D8%A7%D9%84%D8%BA%D8%A7%D9%85%D8%B6%D8%A9-pbc5w8cmp",
+    "httpStatus": 200,
+    "canonical": [
+      "https://pulsenovels.com/ar/novel/%D8%A7%D9%84%D8%B9%D9%88%D8%AF%D8%A9-%D8%A7%D9%84%D9%85%D8%B0%D9%87%D9%84%D8%A9-%D9%84%D9%84%D8%B2%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D9%85%D9%86%D8%A8%D9%88%D8%B0%D8%A9-%D8%B0%D8%A7%D8%AA-%D8%A7%D9%84%D9%87%D9%88%D9%8A%D8%A9-%D8%A7%D9%84%D8%BA%D8%A7%D9%85%D8%B6%D8%A9-pbc5w8cmp"
+    ],
+    "requests": 1,
+    "proxy": "http://127.0.0.1:7899",
+    "checkedAtUtc": "2026-10-10T18:58:06.744609+00:00"
+  },
+  {
+    "articleId": "28e67868-c71c-4aad-8984-16afa03badf7",
+    "locale": "pl",
+    "url": "https://pulsenovels.com/pl/novel/odrzucona-luna-powraca-jako-najwy%C5%BCszy-bia%C5%82y-wilk-pp1ai0sol",
+    "httpStatus": 200,
+    "canonical": [
+      "https://pulsenovels.com/pl/novel/odrzucona-luna-powraca-jako-najwy%C5%BCszy-bia%C5%82y-wilk-pp1ai0sol"
+    ],
+    "requests": 1,
+    "proxy": "http://127.0.0.1:7899",
+    "checkedAtUtc": "2026-10-10T18:58:08.613637+00:00"
+  },
+  {
+    "articleId": "fda33af0-a9a0-406a-945c-b733f1c2bd0c",
+    "locale": "en",
+    "url": "https://pulsenovels.com/novel/le-13e-hussards-types-profils-esquisses-et-croquis-militaires-%C3%A1-pied-et-%C3%A1-cheval-pfmc9y94l",
+    "httpStatus": 200,
+    "canonical": [
+      "https://pulsenovels.com/novel/le-13e-hussards-types-profils-esquisses-et-croquis-militaires-%C3%A1-pied-et-%C3%A1-cheval-pfmc9y94l"
+    ],
+    "requests": 1,
+    "proxy": "http://127.0.0.1:7899",
+    "checkedAtUtc": "2026-10-10T18:58:10.285270+00:00"
+  }
+]
