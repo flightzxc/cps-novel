@@ -136,6 +136,12 @@ const REGISTRY: readonly Entry[] = [
     ],
   },
   {
+    file: "src/server/tagging/admin-service.ts", table: "canonical_tag", op: "UPDATE",
+    sites: [
+      { category: "not_membership_relevant", contains: "SET is_homepage_visible", reason: "v0.5.15 replaceHomepageNavSelection：只更新 is_homepage_visible（首页题材导航是否显示该分类），不改 status / slug / 排序号 / updated_at，不改任何书属于哪些分类，所以不重算归属表、不拿投影锁" },
+    ],
+  },
+  {
     file: "src/server/tagging/admin-service.ts", table: "source_label_mapping", op: "update",
     sites: [
       { category: "full_reconcile", contains: "active: true", reason: "mutateAdminSourceLabelMapping approve_edge（已有边改版 / 重新启用）：同事务 reconcileAllEffectiveTags(tx)" },

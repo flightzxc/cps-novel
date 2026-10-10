@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
+  ADMIN_HOMEPAGE_NAV_MAX_IDS,
   ADMIN_TAG_AUDIT_LIMIT,
   ADMIN_TAG_DEFAULT_PAGE_SIZE,
   ADMIN_TAG_MAX_PAGE_SIZE,
@@ -12,6 +13,10 @@ import {
   type AdminCanonicalTagKeyword,
   type AdminCanonicalTagList,
   type AdminCanonicalTagMutation,
+  type AdminHomepageNavCandidate,
+  type AdminHomepageNavCandidates,
+  type AdminHomepageNavMutation,
+  type AdminHomepageNavMutationResult,
   type AdminMappingChannel,
   type AdminMappingTarget,
   type AdminNovelTagMutation,
@@ -49,6 +54,7 @@ import {
   CURRENT_KEYWORD_ELIGIBILITY_VERSION,
 } from "@/lib/tagging/keyword-eligibility";
 import { fingerprint } from "@/lib/tagging/stable-json";
+import { getPublicCategoryCounts } from "@/lib/site/public-list";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -119,16 +125,26 @@ export type NormalizedSourceLabelMappingGet =
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DECIMAL_REVISION_PATTERN = /^(?:0|[1-9]\d*)$/;
+/**
+ * v0.5.15：首页题材导航整份名单替换。放进 `CANONICAL_ACTIONS` 是为了让"同一个请求号被另一类分类写入复用"
+ * 在 `mutateAdminCanonicalTag` 与 `replaceHomepageNavSelection` 两边都按 `idempotency_conflict` 拒绝。
+ */
+const HOMEPAGE_NAV_ACTION = "tag.canonical.homepage_nav.replace" as const;
+const HOMEPAGE_NAV_ENTITY_ID = "homepage-nav";
+const HOMEPAGE_NAV_NAMESPACE = "v0515:homepage-nav";
 const CANONICAL_ACTIONS = [
   "tag.canonical.status",
   "tag.canonical.translations.replace",
   "tag.canonical.aliases.replace",
   "tag.canonical.keywords.replace",
+  HOMEPAGE_NAV_ACTION,
 ] as const;
 const MAPPING_ACTIONS = ["tag.mapping.approve", "tag.mapping.deactivate"] as const;
 const AUDIT_VISIBLE_KEYS = new Set([
   "status", "translations", "aliases", "keywords", "active", "mappingVersion",
   "rawLanguageScope", "rawToken", "canonicalTagId", "mode", "revision",
+  // v0.5.15 首页题材导航名单（保存前后各一份，加本次新增 / 去掉的 slug）。
+  "homepageNav", "added", "removed",
 ]);
 
 function invalid(message: string): never {
@@ -316,6 +332,7 @@ async function projectCanonicalTag(
     canonicalDefinition: row.canonicalDefinition,
     facet: row.facet,
     sortOrder: row.sortOrder,
+    isHomepageVisible: row.isHomepageVisible,
     taxonomyVersion: row.taxonomyVersion,
     translations: row.translations
       .map((translation) => ({ locale: translation.locale, displayName: translation.displayName }))
@@ -886,6 +903,209 @@ export async function mutateAdminCanonicalTag(
     }
     throw error;
   }
+}
+
+// ───────────────────────────── v0.5.15 首页题材导航勾选 ─────────────────────────────
+
+function compareSlug(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** 校验并规范化一份分类编号名单：必须是数组、不超过上限、每项是 UUID、无重复；返回小写后排序的副本。 */
+function homepageNavIds(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) invalid(`${field} must be an array`);
+  if (value.length > ADMIN_HOMEPAGE_NAV_MAX_IDS) invalid(`${field} has too many entries`);
+  const ids = value.map((id) => requireUuid(id, field));
+  if (new Set(ids).size !== ids.length) invalid(`${field} must not contain duplicates`);
+  return ids.sort();
+}
+
+function sameIdSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((id) => rightSet.has(id));
+}
+
+function replayHomepageNav(
+  audit: { afterSnapshot: Prisma.JsonValue | null },
+  payloadFingerprint: string,
+): AdminHomepageNavMutationResult {
+  const payload = auditObject(audit.afterSnapshot);
+  if (payload.payloadFingerprint !== payloadFingerprint) {
+    throw new TaggingAdminError("idempotency_conflict", 409);
+  }
+  if (typeof payload.visibleCount !== "number" || typeof payload.changedCount !== "number") {
+    throw new TaggingAdminError("data_invariant_violation", 409, "Admin audit result binding is invalid");
+  }
+  return { visibleCount: payload.visibleCount, changedCount: payload.changedCount, replayed: true };
+}
+
+/** 面板最多展示最近几条首页导航保存记录（审计行 entityId 固定为 `homepage-nav`）。 */
+const HOMEPAGE_NAV_AUDIT_LIMIT = 10;
+
+/**
+ * 首页导航勾选面板的数据：全部启用中的分类（按前台同一把尺子排序：分类排序号，再 slug）、各自当前是否勾选，
+ * 以及帮运营挑选的"英语有几本书 / 几个语种有书"（取自 `public-list.ts` 的每语种每分类本数矩阵，web 侧 60 秒
+ * 进程内缓存，不另写 SQL）。只要求分类读开关，不看写开关——面板的显示与可编辑由页面按读开关 / `tag:manage` 决定。
+ */
+export async function listHomepageNavCandidates(
+  db: PrismaClient,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<AdminHomepageNavCandidates> {
+  requireTaggingRead(env);
+  const [rows, counts, audits] = await Promise.all([
+    db.canonicalTag.findMany({
+      where: { status: "active" },
+      select: {
+        id: true,
+        slug: true,
+        facet: true,
+        sortOrder: true,
+        isHomepageVisible: true,
+        translations: { where: { locale: { in: ["zh", "en"] } }, select: { locale: true, displayName: true } },
+      },
+    }),
+    getPublicCategoryCounts(db, env),
+    readAudits(db, "CanonicalTag", HOMEPAGE_NAV_ENTITY_ID, HOMEPAGE_NAV_AUDIT_LIMIT),
+  ]);
+  const enBooks = new Map<string, number>();
+  const localesWithBooks = new Map<string, Set<string>>();
+  for (const row of counts.rows) {
+    if (row.locale === "en") enBooks.set(row.canonicalTagId, (enBooks.get(row.canonicalTagId) ?? 0) + row.count);
+    const locales = localesWithBooks.get(row.canonicalTagId) ?? new Set<string>();
+    locales.add(row.locale);
+    localesWithBooks.set(row.canonicalTagId, locales);
+  }
+  const items = rows
+    .map((row): AdminHomepageNavCandidate => ({
+      id: row.id,
+      slug: row.slug,
+      facet: row.facet,
+      sortOrder: row.sortOrder,
+      zhName: row.translations.find((item) => item.locale === "zh")?.displayName ?? null,
+      enName: row.translations.find((item) => item.locale === "en")?.displayName ?? null,
+      isHomepageVisible: row.isHomepageVisible,
+      enBookCount: enBooks.get(row.id) ?? 0,
+      localeCount: localesWithBooks.get(row.id)?.size ?? 0,
+    }))
+    // 与前台首页同一个次序（`sortPublicTaxonomyTags`）：分类排序号，再 slug。
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug, "en"));
+  return {
+    items,
+    visibleCount: items.filter((item) => item.isHomepageVisible).length,
+    audit: audits,
+  };
+}
+
+/**
+ * 保存首页题材导航名单（一次替换整份，全站 15 个语种共用）。
+ *
+ * 与其它分类写入的区别（方案决定 3 / H6）：
+ *   - 只要求分类**读**开关（`FEATURE_P2_06_5_TAGGING`），**不**要求写开关（`FEATURE_P2_06_5_TAG_ADMIN_WRITE`，
+ *     生产为关）。理由：写开关保护的是分类数据本身（停用分类会触发全站归属重算）；首页勾选只决定"首页显示哪些
+ *     按钮"，不改任何书属于哪个分类。所以这里不调用 `requireTaggingMutation`。
+ *   - 仍然要求 `tag:manage` + 两步验证 + 会话新鲜（`requireFreshAdminServiceMutation`）。
+ *   - 不触发归属重算、不拿投影锁（H7）：不调用 `reconcileAllEffectiveTags` / `lockEffectiveTagProjectionExclusive`。
+ *
+ * 事务内的顺序（锁顺序纪律）：请求号咨询锁 → 命名空间咨询锁 → 幂等重放 → 行锁 → 比对现值 → 校验 → 更新 → 审计。
+ *   - 行锁用 `FOR NO KEY UPDATE`，**不**用 `FOR UPDATE`（H8）：归属表重算时给投影行做外键检查要拿 `canonical_tag`
+ *     行的 KEY SHARE，`FOR UPDATE` 与它冲突、可能与重算互相等待成死锁（见 `mutateAdminCanonicalTag` 里
+ *     `set_status` 那段注释）；`FOR NO KEY UPDATE` 不与 KEY SHARE 冲突。
+ *   - 原生 SQL 只更新 `is_homepage_visible`，**不碰 `updated_at`**（H5）：分类页站点地图的 lastmod 取自它，勾选不是
+ *     分类页内容变化；Prisma 的 `canonicalTag.update` 会因 `@updatedAt` 自动改时间，所以这里不能用。
+ *   - 只更新启用中的分类；停用分类的值保持不动。
+ */
+export async function replaceHomepageNavSelection(
+  input: {
+    authorization: AdminServiceAuthorization;
+    entryId: "admin.api.canonical_tag.homepage_nav.write";
+    mutation: AdminHomepageNavMutation;
+  },
+  deps: MutationDependencies,
+): Promise<AdminHomepageNavMutationResult> {
+  const mutation = input.mutation;
+  const env = deps.env ?? process.env;
+  requireTaggingRead(env);
+  const actor = await requireFreshAdminServiceMutation(input.authorization, "tag:manage", {
+    identities: deps.identities,
+    sessions: deps.sessions,
+    now: deps.now,
+    env,
+    entryId: input.entryId,
+    requestId: mutation.requestId,
+  });
+  const visibleIds = homepageNavIds(mutation.visibleCanonicalTagIds, "visibleCanonicalTagIds");
+  const expectedIds = homepageNavIds(mutation.expectedVisibleCanonicalTagIds, "expectedVisibleCanonicalTagIds");
+  const payloadFingerprint = fingerprint({
+    action: HOMEPAGE_NAV_ACTION,
+    requestId: mutation.requestId,
+    visibleCanonicalTagIds: visibleIds,
+    expectedVisibleCanonicalTagIds: expectedIds,
+    actorId: actor.identity.id,
+  });
+
+  return deps.db.$transaction(async (tx) => {
+    await lockRequest(tx, mutation.requestId);
+    await lockNamespace(tx, HOMEPAGE_NAV_NAMESPACE);
+    const prior = await tx.operationAudit.findFirst({
+      where: { actorType: "admin", requestId: mutation.requestId, action: { in: [...CANONICAL_ACTIONS] } },
+      select: { action: true, afterSnapshot: true },
+    });
+    if (prior) {
+      if (prior.action !== HOMEPAGE_NAV_ACTION) throw new TaggingAdminError("idempotency_conflict", 409);
+      return replayHomepageNav(prior, payloadFingerprint);
+    }
+
+    const rows = await tx.$queryRaw<Array<{ id: string; slug: string; is_homepage_visible: boolean }>>(Prisma.sql`
+      SELECT id, slug, is_homepage_visible
+      FROM canonical_tag
+      WHERE status = 'active'
+      ORDER BY sort_order, slug
+      FOR NO KEY UPDATE
+    `);
+    const activeIds = new Set(rows.map((row) => row.id));
+    const currentVisibleIds = rows.filter((row) => row.is_homepage_visible).map((row) => row.id);
+    // 当前可见集合（只算启用中的分类）与页面加载时看到的名单按"集合"比较，不等 = 别人在这之间改过。
+    if (!sameIdSet(currentVisibleIds, expectedIds)) throw new TaggingAdminError("homepage_nav_conflict", 409);
+    if (visibleIds.some((id) => !activeIds.has(id))) throw new TaggingAdminError("invalid_homepage_nav", 400);
+
+    const requested = new Set(visibleIds);
+    const before = rows.filter((row) => row.is_homepage_visible).map((row) => row.slug).sort(compareSlug);
+    const after = rows.filter((row) => requested.has(row.id)).map((row) => row.slug).sort(compareSlug);
+    const beforeSet = new Set(before);
+    const afterSet = new Set(after);
+    const added = after.filter((slug) => !beforeSet.has(slug));
+    const removed = before.filter((slug) => !afterSet.has(slug));
+
+    const changedCount = await tx.$executeRaw(Prisma.sql`
+      UPDATE canonical_tag
+      SET is_homepage_visible = (id = ANY(${visibleIds}::uuid[]))
+      WHERE status = 'active'
+        AND is_homepage_visible IS DISTINCT FROM (id = ANY(${visibleIds}::uuid[]))
+    `);
+
+    await tx.operationAudit.create({ data: {
+      actorType: "admin",
+      actorId: actor.identity.id,
+      action: HOMEPAGE_NAV_ACTION,
+      entityType: "CanonicalTag",
+      entityId: HOMEPAGE_NAV_ENTITY_ID,
+      requestId: mutation.requestId,
+      beforeSnapshot: { homepageNav: before },
+      afterSnapshot: {
+        homepageNav: after,
+        added,
+        removed,
+        visibleCount: after.length,
+        changedCount,
+        payloadFingerprint,
+      },
+    } });
+    return { visibleCount: after.length, changedCount, replayed: false };
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    timeout: PROJECTION_RECONCILE_TRANSACTION_TIMEOUT_MS,
+  });
 }
 
 function mappingAuditAction(action: AdminSourceLabelMappingMutation["action"]): (typeof MAPPING_ACTIONS)[number] {

@@ -200,6 +200,40 @@ describe.skipIf(!enabled).sequential("B-38 一致性不变量（站点地图 / �
     });
   }
 
+  it("v0.5.15·运营取消某个有书分类的「首页显示」后：分类页仍 200、站点地图页数映射仍含它、listPublicCategories 仍含它（homepageVisible=false）", async () => {
+    const env = envFor({ autoTags: true, seoVisibility: true });
+    clearPublicCategoryCountsCacheForTest();
+    const before = await listPublicCategories(web, "en", env);
+    expect(before.length).toBeGreaterThan(2);
+    expect(before.every((tag) => tag.homepageVisible)).toBe(true); // 迁移默认值
+    const target = before[0]!;
+    const pageBefore = await getPublicCategoryPage(web, "en", target.slug, 1, env);
+    const countsBefore = await listPublicCategoryPageCounts(worker, "en", env);
+    expect(pageBefore).not.toBeNull();
+    expect(countsBefore.has(target.slug)).toBe(true);
+
+    // 运营在后台取消勾选（保存路径只改这一列、不动 updated_at；这里用 owner 直接模拟结果）。
+    await owner.$executeRaw`UPDATE canonical_tag SET is_homepage_visible = false WHERE slug = ${target.slug}`;
+    try {
+      clearPublicCategoryCountsCacheForTest();
+      const after = await listPublicCategories(web, "en", env);
+      // 页脚 / 可链接集合用的那一份：集合与顺序完全相同，只有该分类的 homepageVisible 变成 false。
+      expect(after.map((tag) => tag.slug)).toEqual(before.map((tag) => tag.slug));
+      expect(after.find((tag) => tag.slug === target.slug)?.homepageVisible).toBe(false);
+      expect(after.filter((tag) => tag.slug !== target.slug).every((tag) => tag.homepageVisible)).toBe(true);
+      // 分类页仍 200（总页数、总本数与取消前相同），站点地图页数映射仍含它。
+      const pageAfter = await getPublicCategoryPage(web, "en", target.slug, 1, env);
+      expect(pageAfter).not.toBeNull();
+      expect(pageAfter?.totalPages).toBe(pageBefore!.totalPages);
+      expect(pageAfter?.totalCount).toBe(pageBefore!.totalCount);
+      const countsAfter = await listPublicCategoryPageCounts(worker, "en", env);
+      expect([...countsAfter.keys()].sort()).toEqual([...countsBefore.keys()].sort());
+      expect(countsAfter.get(target.slug)).toBe(countsBefore.get(target.slug));
+    } finally {
+      await owner.$executeRaw`UPDATE canonical_tag SET is_homepage_visible = true WHERE slug = ${target.slug}`;
+    }
+  }, 120_000);
+
   it("矩阵缓存是 60 秒窗口：缓存期内矩阵不变，而分页 / 计数 / 404 判定是实时的", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {

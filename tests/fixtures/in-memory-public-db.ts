@@ -41,6 +41,11 @@ export type Category = {
   ordinals: ReadonlyArray<readonly [number, number]>;
   /** 只对这个语种的书生效；缺省 = 所有语种。 */
   locale?: string;
+  /**
+   * v0.5.15：运营在后台勾选的"是否在首页题材导航显示"（`canonical_tag.is_homepage_visible`）。
+   * 缺省 = true（上线默认）。同一个 slug 的多条声明里任何一条写了 false 就算 false。
+   */
+  homepageVisible?: boolean;
 };
 
 export function bookRow(ordinal: number, locale = "en", listed = true) {
@@ -154,6 +159,7 @@ export function makeFakeDb(rows: readonly Row[], categories: readonly Category[]
     requested_display_name: slug[0]!.toUpperCase() + slug.slice(1),
     en_display_name: null, zh_display_name: null, sort_order: sortOrderOf(slug, categories),
     updated_at: new Date("2025-01-01T00:00:00.000Z"), locale,
+    is_homepage_visible: !categories.some((category) => category.slug === slug && category.homepageVisible === false),
   });
 
   const db = {

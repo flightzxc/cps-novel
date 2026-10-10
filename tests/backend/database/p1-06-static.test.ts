@@ -186,8 +186,11 @@ describe("P1-06 database operations static contracts", () => {
     // article_public_list_order_idx on article -- 1326 + 15 = 1341.
     // PN-15 (20261009150000_site_setting_site_search_enabled) adds one site_setting
     // field record (site_search_enabled) -- no new physical constraint/index -- 1341 + 1 = 1342.
-    expect(records).toHaveLength(1342);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1342);
+    // v0.5.15 首页题材导航勾选 (20261010160000_canonical_tag_homepage_visible) adds one
+    // canonical_tag field record (is_homepage_visible) -- no new physical constraint/index,
+    // no new table (58 tables unchanged) -- 1342 + 1 = 1343.
+    expect(records).toHaveLength(1343);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1343);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

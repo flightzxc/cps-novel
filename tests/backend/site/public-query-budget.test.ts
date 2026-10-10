@@ -11,6 +11,7 @@ import {
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 import { clearPublicCategoryCountsCacheForTest } from "@/lib/site/public-list";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { selectHomepageNavCategories } from "@/lib/site/home-nav";
 
 import { classifyPublicListQuery } from "../../fixtures/in-memory-public-db";
 
@@ -128,6 +129,8 @@ const TAG_ROW = {
   zh_display_name: null,
   sort_order: 1,
   updated_at: new Date("2026-09-01T00:00:00.000Z"),
+  // v0.5.15：首页题材导航勾选标记，与分类名同一条语句读出（不新增查询）。
+  is_homepage_visible: true,
 };
 
 /**
@@ -311,5 +314,28 @@ describe.each(["false", "true"])("公开侧一次渲染的查询数（auto=%s）
     await loadPublicChrome(warmClient, PUBLIC_SITE_LOCALE);
     expect(warm.histogram()).toEqual(sumOf(CHAPTER, SETTINGS, NAMES));
     expect(warm.calls).toHaveLength(6);
+  });
+});
+
+describe("v0.5.15 首页题材导航勾选 · 不新增查询（H2）", () => {
+  it("勾选标记搭车在「分类名」那一条语句里读出：语句清单与勾选前逐条相同，过滤是纯内存操作", async () => {
+    const db = new CountingFakeDb();
+    const client = db.asPrismaClient();
+
+    const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
+    // 分类名那条语句只有一次，且读出了 `homepageVisible`。
+    expect(db.histogram()).toEqual(sumOf(MATRIX, NAMES));
+    expect(categories.map((tag) => [tag.slug, tag.homepageVisible])).toEqual([["fantasy", true]]);
+
+    const callsBefore = db.calls.length;
+    const homeNav = selectHomepageNavCategories(categories);
+    expect(homeNav).toEqual(categories);
+    expect(db.calls).toHaveLength(callsBefore); // 过滤不碰数据库
+
+    // 整页首页：与 N-9 / B-38 钉的冷 7 条、暖 5 条完全相同（见上面的首页用例），这里再确认一遍过滤之后没有多出语句。
+    await loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories);
+    await listHomeNovels(client, PUBLIC_SITE_LOCALE);
+    expect(db.histogram()).toEqual(sumOf(SETTINGS, MATRIX, NAMES, HOME_GRID));
+    expect(db.calls).toHaveLength(7);
   });
 });

@@ -115,6 +115,9 @@ export const ADMIN_TASK_ROUTES = [
 export const ADMIN_TAGGING_ROUTES = [
   { id: "admin.api.canonical_tag.read", path: "/api/admin/canonical-tags", methods: ["GET"], capability: "content:view" },
   { id: "admin.api.canonical_tag.write", path: "/api/admin/canonical-tags", methods: ["PUT"], capability: "tag:manage" },
+  // v0.5.15 首页题材导航勾选：一次替换整份名单。路径精确匹配（不是 /api/admin/canonical-tags 的前缀继承），
+  // 单独成条，不放大既有 `canonical_tag.write` 的 action 联合。
+  { id: "admin.api.canonical_tag.homepage_nav.write", path: "/api/admin/canonical-tags/homepage-nav", methods: ["PUT"], capability: "tag:manage" },
   { id: "admin.api.tag_mapping.read", path: "/api/admin/tag-mappings", methods: ["GET"], capability: "content:view" },
   { id: "admin.api.tag_mapping.write", path: "/api/admin/tag-mappings", methods: ["PUT"], capability: "tag:manage" },
   { id: "admin.api.novel_tag.read", path: "/api/admin/novels/tags", methods: ["GET"], capability: "content:view" },

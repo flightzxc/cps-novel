@@ -57,6 +57,21 @@ export type PublicTaxonomyTag = SiteTag & Readonly<{
   updatedAt: Date;
 }>;
 
+/**
+ * 页脚 / 首页题材导航 / 详情页"可链接分类集合"共用的那一份分类列表里的一项（`loadPublicCategoryTags` /
+ * `listPublicCategories` 返回）：在卡片标签形状（`PublicTaxonomyTag`）之上多一个只读布尔字段
+ * `homepageVisible`——运营在后台"分类管理"勾选的"是否在首页题材导航显示"（`canonical_tag.is_homepage_visible`，
+ * v0.5.15，默认 true）。
+ *
+ * 🔴 只有首页 `HomeBody` 读它（`src/lib/site/home-nav.ts` 的 `selectHomepageNavCategories`）。页脚（`chrome.ts`
+ * 的 `categories.slice(0, 8)`）、详情页可链接集合（`public-load.ts` 的 `withLinkableTagHrefs`）、分类页、站点地图
+ * 都不读它，所以这一份列表本身的集合与顺序不因勾选而变（字段是搭车读出来的：同一条 SELECT 多读一列，不新增查询）。
+ * 卡片标签（`loadPublicTaxonomyByNovelIds`）的形状不动。
+ */
+export type PublicCategoryTag = PublicTaxonomyTag & Readonly<{
+  homepageVisible: boolean;
+}>;
+
 type PublicTaxonomyRow = {
   novel_id: string;
   id: string;
@@ -192,18 +207,19 @@ export async function loadPublicCategoryTags(
   db: Db,
   tagIds: readonly string[],
   locale: string,
-): Promise<readonly PublicTaxonomyTag[]> {
+): Promise<readonly PublicCategoryTag[]> {
   const uniqueIds = [...new Set(tagIds)];
   if (uniqueIds.length === 0) return [];
   const ids = Prisma.join(uniqueIds.map((id) => Prisma.sql`${id}::uuid`));
-  const rows = await db.$queryRaw<Array<Omit<PublicTaxonomyRow, "novel_id">>>(Prisma.sql`
+  const rows = await db.$queryRaw<Array<Omit<PublicTaxonomyRow, "novel_id"> & { is_homepage_visible: boolean }>>(Prisma.sql`
     SELECT ct.id,
            ct.slug,
            requested.display_name AS requested_display_name,
            en.display_name AS en_display_name,
            zh.display_name AS zh_display_name,
            ct.sort_order,
-           ct.updated_at
+           ct.updated_at,
+           ct.is_homepage_visible
     FROM canonical_tag ct
     LEFT JOIN canonical_tag_translation requested
       ON requested.canonical_tag_id = ct.id AND requested.locale = ${locale}
@@ -213,10 +229,13 @@ export async function loadPublicCategoryTags(
       ON zh.canonical_tag_id = ct.id AND zh.locale = 'zh'
     WHERE ct.id IN (${ids}) AND ct.status = 'active'
   `);
-  return sortPublicTaxonomyTags(rows.map((row) => projectPublicTaxonomyTag(row, locale)));
+  return sortPublicTaxonomyTags(rows.map((row): PublicCategoryTag => Object.freeze({
+    ...projectPublicTaxonomyTag(row, locale),
+    homepageVisible: row.is_homepage_visible,
+  })));
 }
 
-function sortPublicTaxonomyTags(tags: readonly PublicTaxonomyTag[]): PublicTaxonomyTag[] {
+function sortPublicTaxonomyTags<T extends PublicTaxonomyTag>(tags: readonly T[]): T[] {
   return [...tags].sort(
     (left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug, "en"),
   );

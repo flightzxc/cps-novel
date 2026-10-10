@@ -3,6 +3,9 @@ import type {
   AdminCanonicalTagItem,
   AdminCanonicalTagKeyword,
   AdminCanonicalTagList,
+  AdminHomepageNavCandidate,
+  AdminHomepageNavCandidates,
+  AdminHomepageNavMutationResult,
   AdminNovelTagMutationResult,
   AdminNovelTags,
   AdminResolvedTag,
@@ -43,6 +46,8 @@ export type AdminCanonicalTagView = Readonly<{
   canonicalDefinition: string;
   facet: string | null;
   sortOrder: number;
+  /** v0.5.15：是否在前台首页题材导航里显示。 */
+  isHomepageVisible: boolean;
   taxonomyVersion: string;
   translations: readonly Readonly<{ locale: string; displayName: string }>[];
   aliases: readonly string[];
@@ -76,6 +81,32 @@ export type AdminTagMutationResultView = Readonly<{
   id: string;
   updatedAt: string;
   replayed: boolean;
+}>;
+
+/** v0.5.15 首页题材导航勾选：保存结果。 */
+export type AdminHomepageNavMutationResultView = Readonly<{
+  visibleCount: number;
+  changedCount: number;
+  replayed: boolean;
+}>;
+
+/** v0.5.15 面板里的一行：一个启用中的分类，连同帮运营挑选的书数信息。 */
+export type AdminHomepageNavCandidateView = Readonly<{
+  id: string;
+  slug: string;
+  facet: string | null;
+  sortOrder: number;
+  zhName: string | null;
+  enName: string | null;
+  isHomepageVisible: boolean;
+  enBookCount: number;
+  localeCount: number;
+}>;
+
+export type AdminHomepageNavView = Readonly<{
+  items: readonly AdminHomepageNavCandidateView[];
+  visibleCount: number;
+  audit: readonly AdminTagAuditEntryView[];
 }>;
 
 export type AdminSourceLabelMappingView = Readonly<{
@@ -149,6 +180,10 @@ const AUDIT_KEYS = [
   "canonicalTagId",
   "mode",
   "revision",
+  // v0.5.15 首页题材导航名单（保存前后各一份，加本次新增 / 去掉的 slug）。
+  "homepageNav",
+  "added",
+  "removed",
 ] as const;
 
 function copyJson(value: unknown, depth = 0): unknown {
@@ -236,6 +271,7 @@ export function projectAdminCanonicalTag(input: AdminCanonicalTagItem): AdminCan
     canonicalDefinition: string;
     facet: string | null;
     sortOrder: number;
+    isHomepageVisible: boolean;
     taxonomyVersion: string;
     translations: readonly Readonly<{ locale: string; displayName: string }>[];
     aliases: readonly string[];
@@ -253,6 +289,7 @@ export function projectAdminCanonicalTag(input: AdminCanonicalTagItem): AdminCan
     canonicalDefinition: input.canonicalDefinition,
     facet: input.facet,
     sortOrder: input.sortOrder,
+    isHomepageVisible: input.isHomepageVisible,
     taxonomyVersion: input.taxonomyVersion,
     translations: Object.freeze(input.translations.map((item) => Object.freeze({
       locale: item.locale,
@@ -293,6 +330,38 @@ export function projectAdminCanonicalTagDetail(input: AdminCanonicalTagDetail): 
 
 export function projectAdminTagMutationResult(input: AdminTagAuditMutationResult): AdminTagMutationResultView {
   return Object.freeze({ id: input.id, updatedAt: input.updatedAt, replayed: input.replayed });
+}
+
+export function projectAdminHomepageNavMutationResult(
+  input: AdminHomepageNavMutationResult,
+): AdminHomepageNavMutationResultView {
+  return Object.freeze({
+    visibleCount: input.visibleCount,
+    changedCount: input.changedCount,
+    replayed: input.replayed,
+  });
+}
+
+function projectHomepageNavCandidate(input: AdminHomepageNavCandidate): AdminHomepageNavCandidateView {
+  return Object.freeze({
+    id: input.id,
+    slug: input.slug,
+    facet: input.facet,
+    sortOrder: input.sortOrder,
+    zhName: input.zhName,
+    enName: input.enName,
+    isHomepageVisible: input.isHomepageVisible,
+    enBookCount: input.enBookCount,
+    localeCount: input.localeCount,
+  });
+}
+
+export function projectAdminHomepageNav(input: AdminHomepageNavCandidates): AdminHomepageNavView {
+  return Object.freeze({
+    items: Object.freeze(input.items.map(projectHomepageNavCandidate)),
+    visibleCount: input.visibleCount,
+    audit: Object.freeze(input.audit.map(projectAdminTagAuditEntry)),
+  });
 }
 
 export function projectAdminSourceLabelMapping(

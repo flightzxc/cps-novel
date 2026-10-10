@@ -57,6 +57,8 @@ const EXPECTED_TASK_ROUTES = [
 ] as const;
 const EXPECTED_TAGGING_ROUTES = [
   { path: "/api/admin/canonical-tags", methods: ["GET", "PUT"] },
+  // v0.5.15 首页题材导航勾选：只有 PUT。
+  { path: "/api/admin/canonical-tags/homepage-nav", methods: ["PUT"] },
   { path: "/api/admin/novels/tags", methods: ["GET", "PUT"] },
   { path: "/api/admin/tag-mappings", methods: ["GET", "PUT"] },
 ] as const;

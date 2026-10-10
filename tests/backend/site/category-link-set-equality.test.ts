@@ -137,4 +137,40 @@ describe("详情页的可链接分类集合 === 分类页返回 200 的分类集
     expect(await listCategoryPublicLocales(db, "wuxia", candidates)).toEqual(["ko"]);
     expect(await listCategoryPublicLocales(db, "missing", candidates)).toEqual([]);
   });
+
+  it("v0.5.15：某分类被运营取消「首页显示」后，页脚用的列表、可链接集合、页数映射、分类页、hreflang 全都不变，只有 homepageVisible 变", async () => {
+    const rows = [...books(300, "en", 60), ...books(300, "ko", 60)];
+    const base: Category[] = [
+      { slug: "fantasy", sortOrder: 2, ordinals: [[70, 114], [10, 40]] },
+      { slug: "romance", sortOrder: 3, ordinals: [[30, 30], [200, 200]] },
+      { slug: "mystery", sortOrder: 4, ordinals: [[250, 252]] },
+    ];
+    // fantasy 被取消首页显示（有书、分类页 200、3 页）。
+    const hidden: Category[] = base.map((category) => (category.slug === "fantasy" ? { ...category, homepageVisible: false } : category));
+
+    const before = makeFakeDb(rows, base).db;
+    const after = makeFakeDb(rows, hidden).db;
+    clearPublicCategoryCountsCacheForTest();
+    const listBefore = await listPublicCategories(before, "en");
+    clearPublicCategoryCountsCacheForTest();
+    const listAfter = await listPublicCategories(after, "en");
+
+    // 集合与顺序完全相同（页脚取这一份的前 8 个，详情页可链接集合取这一份的 slug 集合）。
+    expect(listAfter.map((tag) => tag.slug)).toEqual(listBefore.map((tag) => tag.slug));
+    expect(listAfter.map((tag) => tag.slug)).toEqual(["fantasy", "romance", "mystery"]);
+    // 其余字段（名字、链接、排序号）逐项相同，只有 homepageVisible 不同。
+    const strip = (tags: typeof listAfter) => tags.map(({ homepageVisible: _flag, ...rest }) => (void _flag, rest));
+    expect(strip(listAfter)).toEqual(strip(listBefore));
+    expect(listBefore.map((tag) => tag.homepageVisible)).toEqual([true, true, true]);
+    expect(listAfter.map((tag) => tag.homepageVisible)).toEqual([false, true, true]);
+
+    // 可链接集合仍含 fantasy（详情页的 fantasy 标签仍可点）。
+    expect([...toLinkableCategorySlugs(listAfter)].sort()).toEqual(["fantasy", "mystery", "romance"]);
+    // 分类页仍然 200，页数映射仍含它，hreflang 语种集合不变。
+    clearPublicCategoryCountsCacheForTest();
+    expect(await getPublicCategoryPage(after, "en", "fantasy", 1)).not.toBeNull();
+    expect(Object.fromEntries(await listPublicCategoryPageCounts(after, "en"))).toEqual({ fantasy: 3, romance: 1, mystery: 1 });
+    expect(await listCategoryPublicLocales(after, "fantasy", ["en", "ko", "es"]))
+      .toEqual(await listCategoryPublicLocales(before, "fantasy", ["en", "ko", "es"]));
+  });
 });

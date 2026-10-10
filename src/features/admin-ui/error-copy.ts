@@ -91,6 +91,9 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   idempotency_conflict: "该请求标识已用于另一次不同的提交",
   data_invariant_violation: "来源数据不满足标签解析约束，请先检查数据",
   manual_mode_conflict: "小说当前不处于 manual 标签模式",
+  // v0.5.15 首页题材导航勾选。
+  homepage_nav_conflict: "首页导航名单已被别人改过，请刷新后再保存",
+  invalid_homepage_nav: "名单里有不存在或已停用的分类",
 });
 
 /**

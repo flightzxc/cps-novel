@@ -27,6 +27,7 @@ import {
 import {
   loadPublicCategoryTags,
   loadPublicTaxonomyByNovelIds,
+  type PublicCategoryTag,
   type PublicTaxonomyTag,
 } from "./public-taxonomy";
 
@@ -208,12 +209,16 @@ export async function getPublicBrowsePage(
  * 分类名（请求语种 → en → zh → slug，链接带语种前缀，与卡片标签同一个投影函数）。
  * 与分类页是否返回 200 用的是同一段筛选条件，所以这份集合与"分类页会返回 200 的分类"恒等
  * （真实库用例 `tests/integration/site/consistency-invariants-postgres.test.ts` 钉死；缓存让它最多晚 60 秒）。
+ *
+ * v0.5.15：每一项多带一个只读 `homepageVisible`（运营在后台勾选的"首页题材导航是否显示"），随分类名同一条
+ * SELECT 读出，不新增查询。**集合与顺序不因它而变**——只有首页 `HomeBody` 用它过滤（`home-nav.ts`），
+ * 页脚与详情页可链接集合照旧用这一份完整列表。
  */
 export async function listPublicCategories(
   db: PrismaClient | Prisma.TransactionClient,
   locale: SiteLocale,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<readonly PublicTaxonomyTag[]> {
+): Promise<readonly PublicCategoryTag[]> {
   const counts = await getPublicCategoryCounts(db, env);
   return loadPublicCategoryTags(db, [...categoryCountsForLocale(counts, locale).keys()], locale);
 }

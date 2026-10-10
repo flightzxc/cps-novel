@@ -39,7 +39,10 @@ vi.mock("@/features/admin-ui/sidebar", () => ({
 }));
 
 const listAdminCanonicalTags = vi.hoisted(() => vi.fn());
-vi.mock("@/server/tagging/admin-service", () => ({ listAdminCanonicalTags }));
+// v0.5.15：页面多调一个 `listHomepageNavCandidates`（首页题材导航面板的数据），mock 必须同时提供，
+// 否则页面一读到这个导出 vitest 就抛 "No export is defined on the mock"。
+const listHomepageNavCandidates = vi.hoisted(() => vi.fn());
+vi.mock("@/server/tagging/admin-service", () => ({ listAdminCanonicalTags, listHomepageNavCandidates }));
 
 vi.mock("@/app/api/admin/_lib/deps", () => ({ prisma: {} }));
 
@@ -74,6 +77,7 @@ function canonicalTagItem(overrides: Partial<AdminCanonicalTagItem> = {}): Admin
     canonicalDefinition: "武侠题材：以武功、江湖恩怨、侠义精神为核心叙事。",
     facet: "genre",
     sortOrder: 10,
+    isHomepageVisible: true,
     taxonomyVersion: "v1",
     translations: [{ locale: "zh", displayName: "武侠" }],
     aliases: ["武侠", "wuxia"],
@@ -126,8 +130,21 @@ function setFlags(input: { read: boolean; write: boolean }): void {
   process.env.FEATURE_P2_06_5_TAG_ADMIN_WRITE = String(input.write);
 }
 
+function homepageNavFixture() {
+  return {
+    items: [
+      { id: TAG_ID, slug: "wuxia", facet: "genre", sortOrder: 10, zhName: "武侠", enName: "Wuxia",
+        isHomepageVisible: true, enBookCount: 12, localeCount: 3 },
+    ],
+    visibleCount: 1,
+    audit: [],
+  };
+}
+
 beforeEach(() => {
   listAdminCanonicalTags.mockReset();
+  listHomepageNavCandidates.mockReset();
+  listHomepageNavCandidates.mockResolvedValue(homepageNavFixture());
   requireContentPage.mockReset();
   requireContentPage.mockResolvedValue({ context: {}, granted: true });
   routerRefresh.mockClear();
@@ -147,6 +164,9 @@ describe("PR6 fix (lane F): /categories renders a disabled-state panel instead o
     expect(screen.getByTestId(`tagging-flag-row-FEATURE_P2_06_5_TAGGING`).textContent).toContain("未开启");
     expect(screen.getByTestId(`tagging-flag-row-FEATURE_P2_06_5_TAG_ADMIN_WRITE`).textContent).toContain("未开启");
     expect(listAdminCanonicalTags).not.toHaveBeenCalled();
+    // v0.5.15：读开关关闭时，首页题材导航面板不渲染，也不读它的数据。
+    expect(screen.queryByTestId("homepage-nav-panel")).toBeNull();
+    expect(listHomepageNavCandidates).not.toHaveBeenCalled();
     // The RBAC-denied panel must not also render — these are two distinct gates.
     expect(screen.queryByTestId("content-capability-denied")).toBeNull();
   });
@@ -186,5 +206,47 @@ describe("PR6 fix (lane F): /categories renders a disabled-state panel instead o
       .getByTestId(`canonical-tag-status-form-${TAG_ID}`)
       .querySelector("button[type=submit]");
     expect((statusButton as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("v0.5.15 /categories 的首页题材导航面板", () => {
+  it("写开关为 false（生产现状）时面板照常渲染，且 tag:manage 在手时勾选框与保存入口可用——不看写开关", async () => {
+    setFlags({ read: true, write: false });
+    listAdminCanonicalTags.mockResolvedValue(canonicalTagList([canonicalTagItem()]));
+    render(await CategoriesPage({ searchParams: Promise.resolve({}) }));
+
+    expect(listHomepageNavCandidates).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("homepage-nav-panel")).toBeTruthy();
+    // 分类列表那条"写入未开启"提示仍在，列表编辑仍是禁用的（前面的用例已证明）——但面板不受它约束。
+    expect(screen.getByTestId("tagging-write-disabled-notice")).toBeTruthy();
+    expect((screen.getByTestId(`homepage-nav-${TAG_ID}`) as HTMLInputElement).disabled).toBe(false);
+    expect(screen.queryByTestId("homepage-nav-blocked")).toBeNull();
+    // 面板排在"写入未开启"提示之上。
+    const panel = screen.getByTestId("homepage-nav-panel");
+    const notice = screen.getByTestId("tagging-write-disabled-notice");
+    expect(panel.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("读开关为 true 且两个开关都开：面板渲染；分类列表多一列只读「首页」", async () => {
+    setFlags({ read: true, write: true });
+    listAdminCanonicalTags.mockResolvedValue(canonicalTagList([canonicalTagItem()]));
+    render(await CategoriesPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByTestId("homepage-nav-panel")).toBeTruthy();
+    expect(screen.getByTestId(`canonical-tag-homepage-${TAG_ID}`).textContent).toBe("显示");
+  });
+
+  it("没有 tag:manage 能力位：面板仍然渲染，但勾选框 disabled 并显示原因", async () => {
+    setFlags({ read: true, write: false });
+    listAdminCanonicalTags.mockResolvedValue(canonicalTagList([canonicalTagItem()]));
+    const mutableSession = SESSION as { -readonly [K in keyof AdminSessionView]: AdminSessionView[K] };
+    mutableSession.capabilities = [{ capability: "tag:manage", state: "denied" }];
+    try {
+      render(await CategoriesPage({ searchParams: Promise.resolve({}) }));
+      expect((screen.getByTestId(`homepage-nav-${TAG_ID}`) as HTMLInputElement).disabled).toBe(true);
+      expect(screen.getByTestId("homepage-nav-blocked").textContent).toContain("tag:manage");
+      expect((screen.getByTestId("homepage-nav-save") as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      mutableSession.capabilities = [{ capability: "tag:manage", state: "granted" }];
+    }
   });
 });

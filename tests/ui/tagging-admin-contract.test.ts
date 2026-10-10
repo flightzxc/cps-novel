@@ -48,12 +48,19 @@ const TOKEN = "tagging-admin-ui-test-token";
 const ORIGIN = "https://admin.example.com";
 
 describe("P2-06.5 Tagging Admin registry", () => {
-  it("registers exactly six method-specific entries with frozen capabilities", () => {
-    expect(ADMIN_TAGGING_ROUTES).toHaveLength(6);
+  it("registers exactly seven method-specific entries with frozen capabilities", () => {
+    // v0.5.15：6 -> 7，新增首页题材导航勾选的保存入口（PUT，tag:manage，路径精确匹配）。
+    expect(ADMIN_TAGGING_ROUTES).toHaveLength(7);
     expect(ADMIN_TAGGING_ROUTES.map((route) => [route.id, route.path, route.methods, route.capability]))
       .toEqual([
         ["admin.api.canonical_tag.read", "/api/admin/canonical-tags", ["GET"], "content:view"],
         ["admin.api.canonical_tag.write", "/api/admin/canonical-tags", ["PUT"], "tag:manage"],
+        [
+          "admin.api.canonical_tag.homepage_nav.write",
+          "/api/admin/canonical-tags/homepage-nav",
+          ["PUT"],
+          "tag:manage",
+        ],
         ["admin.api.tag_mapping.read", "/api/admin/tag-mappings", ["GET"], "content:view"],
         ["admin.api.tag_mapping.write", "/api/admin/tag-mappings", ["PUT"], "tag:manage"],
         ["admin.api.novel_tag.read", "/api/admin/novels/tags", ["GET"], "content:view"],
@@ -73,6 +80,26 @@ describe("P2-06.5 Tagging Admin registry", () => {
         expect(resolveAdminRoute(pathname, method, P2_04_ADMIN_REGISTRY)).toBeNull();
       }
     }
+  });
+});
+
+describe("v0.5.15 首页题材导航勾选 · 路由登记", () => {
+  it("homepage-nav 只登记 PUT + tag:manage，路径精确匹配，其它方法与近似路径一律默认拒绝", () => {
+    expect(resolveAdminRoute("/api/admin/canonical-tags/homepage-nav", "PUT", P2_04_ADMIN_REGISTRY))
+      .toMatchObject({ id: "admin.api.canonical_tag.homepage_nav.write", capability: "tag:manage", methods: ["PUT"] });
+    for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+      expect(resolveAdminRoute("/api/admin/canonical-tags/homepage-nav", method, P2_04_ADMIN_REGISTRY)).toBeNull();
+    }
+    for (const pathname of [
+      "/api/admin/canonical-tags/homepage-nav/extra",
+      "/api/admin/canonical-tags/homepage",
+      "/api/admin/canonical-tags/homepage-navs",
+    ]) {
+      expect(resolveAdminRoute(pathname, "PUT", P2_04_ADMIN_REGISTRY), pathname).toBeNull();
+    }
+    // 既有的 canonical-tags 写入入口不因此放大：路径与 id 都没变。
+    expect(resolveAdminRoute("/api/admin/canonical-tags", "PUT", P2_04_ADMIN_REGISTRY))
+      .toMatchObject({ id: "admin.api.canonical_tag.write" });
   });
 });
 
