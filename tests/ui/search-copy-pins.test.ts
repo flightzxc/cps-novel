@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
-import { CATALOGS, getPublicT } from "@/lib/locale/messages";
+import { CATALOGS, getPublicT, t as renderWithCatalog, type Messages } from "@/lib/locale/messages";
 import { SITE_SEARCH_MAX_QUERY_LENGTH, SITE_SEARCH_MIN_QUERY_LENGTH } from "@/lib/site-search/types";
 
 /**
@@ -137,5 +137,78 @@ describe("search.hintMinLength / hintMaxLength：cs、pl 的名词形式随数�
     const t = getPublicT("ru");
     expect(t("search.hintMinLength", { min: 2 })).toBe("Введите не менее 2 символов для поиска.");
     expect(t("search.hintMaxLength", { max: 500 })).toBe("Введите не более 500 символов.");
+  });
+});
+
+/**
+ * 第三件事（v0.5.15 紧随 cs/pl 之后）：阿拉伯语的数词词形。
+ *
+ * 阿语名词随数字变六种形式（CLDR：zero/one/two/few/many/other），且这两句里数词短语是动词 أدخل 的宾语（宾格）：
+ *   0（zero）    数字 + 单数名词            "0 حرف"（沿用 other 的写法；0 不是真实取值，仅为满足"六类写全"的守卫）
+ *   1（one）     宾格单数 + 形容词，不带数字  "حرفًا واحدًا"
+ *   2（two）     宾格双数，不带数字          "حرفين"（不写成 "2 حرفين"）
+ *   3～10（few） 数字 + 复数名词            "3 أحرف"
+ *   11～99（many）数字 + 宾格不定单数        "11 حرفًا"
+ *   100 起（other）数字 + 属格单数           "100 حرف"、"500 حرف"（旧写法 "500 حرفًا" 是错的）
+ * 最短长度常量是 2，旧文案写死 "حرفًا" 会显示成 "2 حرفًا"（应为双数 "حرفين"）。
+ *
+ * 期望表是人工核对过的字面值（不从 Intl.PluralRules 推导，否则等于拿答案对答案）；类别一列另用 Intl.PluralRules 核对，
+ * 这样 Node/ICU 版本升级改变了某个数落入的类别时，是这里变红，而不是被悄悄吞掉。
+ * 渲染走原始阿语目录（CATALOGS.ar，不经 loadMessages 的英文兜底合并）+ 真实 t()：
+ * 若 ar 的这两个键被删掉或改空，不会被英文文案悄悄补上。
+ */
+describe("search.hintMinLength / hintMaxLength：ar 的名词形式随数字变（六类全覆盖）", () => {
+  type ArCategory = "zero" | "one" | "two" | "few" | "many" | "other";
+
+  const AR_CASES: ReadonlyArray<readonly [number, ArCategory, string, string]> = [
+    [0, "zero", "أدخل 0 حرف على الأقل للبحث.", "أدخل بحد أقصى 0 حرف."],
+    [1, "one", "أدخل حرفًا واحدًا على الأقل للبحث.", "أدخل بحد أقصى حرفًا واحدًا."],
+    [2, "two", "أدخل حرفين على الأقل للبحث.", "أدخل بحد أقصى حرفين."],
+    [3, "few", "أدخل 3 أحرف على الأقل للبحث.", "أدخل بحد أقصى 3 أحرف."],
+    [10, "few", "أدخل 10 أحرف على الأقل للبحث.", "أدخل بحد أقصى 10 أحرف."],
+    [11, "many", "أدخل 11 حرفًا على الأقل للبحث.", "أدخل بحد أقصى 11 حرفًا."],
+    [99, "many", "أدخل 99 حرفًا على الأقل للبحث.", "أدخل بحد أقصى 99 حرفًا."],
+    [100, "other", "أدخل 100 حرف على الأقل للبحث.", "أدخل بحد أقصى 100 حرف."],
+    [101, "other", "أدخل 101 حرف على الأقل للبحث.", "أدخل بحد أقصى 101 حرف."],
+    [102, "other", "أدخل 102 حرف على الأقل للبحث.", "أدخل بحد أقصى 102 حرف."],
+    [500, "other", "أدخل 500 حرف على الأقل للبحث.", "أدخل بحد أقصى 500 حرف."],
+  ];
+
+  const renderRawAr = (key: "search.hintMinLength" | "search.hintMaxLength", vars: { min: number } | { max: number }) =>
+    renderWithCatalog(CATALOGS.ar as unknown as Messages, key, "ar", vars);
+
+  it("期望表覆盖阿语全部六个 CLDR 类别，且每行的类别与运行时 Intl.PluralRules 一致", () => {
+    const rules = new Intl.PluralRules("ar");
+    expect(new Set(AR_CASES.map(([, category]) => category))).toEqual(new Set(rules.resolvedOptions().pluralCategories));
+    for (const [n, category] of AR_CASES) {
+      expect(rules.select(n), `n=${n}`).toBe(category);
+    }
+  });
+
+  it.each(AR_CASES)("n=%i（%s）：hintMinLength / hintMaxLength 渲染出对应词形", (n, _category, min, max) => {
+    expect(renderRawAr("search.hintMinLength", { min: n })).toBe(min);
+    expect(renderRawAr("search.hintMaxLength", { max: n })).toBe(max);
+  });
+
+  // 页面实际传入的是这两个常量。词形按 Intl.PluralRules 选出的类别查表（表里是各类别的正确写法），
+  // 所以常量改成任何整数这条都不会误报，只会在"词形没跟着数字走"时变红。
+  const PHRASE_BY_CATEGORY: Readonly<Record<ArCategory, (n: number) => string>> = {
+    zero: (n) => `${n} حرف`,
+    one: () => "حرفًا واحدًا",
+    two: () => "حرفين",
+    few: (n) => `${n} أحرف`,
+    many: (n) => `${n} حرفًا`,
+    other: (n) => `${n} حرف`,
+  };
+
+  it("页面实际用的最短/最长常量渲染出与其数值对应的词形（逐字）", () => {
+    const rules = new Intl.PluralRules("ar");
+    const phraseFor = (n: number) => PHRASE_BY_CATEGORY[rules.select(n) as ArCategory](n);
+    expect(renderRawAr("search.hintMinLength", { min: SITE_SEARCH_MIN_QUERY_LENGTH })).toBe(
+      `أدخل ${phraseFor(SITE_SEARCH_MIN_QUERY_LENGTH)} على الأقل للبحث.`,
+    );
+    expect(renderRawAr("search.hintMaxLength", { max: SITE_SEARCH_MAX_QUERY_LENGTH })).toBe(
+      `أدخل بحد أقصى ${phraseFor(SITE_SEARCH_MAX_QUERY_LENGTH)}.`,
+    );
   });
 });

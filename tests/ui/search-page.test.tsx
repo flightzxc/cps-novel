@@ -216,6 +216,14 @@ describe("各状态文案", () => {
     }
   });
 
+  it("ar：名词形式随数字变（最短 2 → 双数 حرفين，最长 500 → 属格单数 حرف），不是写死的宾格 حرفًا", async () => {
+    const expected = { tooShort: "أدخل حرفين على الأقل للبحث.", tooLong: "أدخل بحد أقصى 500 حرف." } as const;
+    loadSearchPage.mockResolvedValue(response({ status: "too_short", displayQuery: "a" }));
+    expect(status(await renderPage("ar", { q: "a" })).textContent, "ar too_short").toBe(expected.tooShort);
+    loadSearchPage.mockResolvedValue(response({ status: "too_long", displayQuery: "a".repeat(501) }));
+    expect(status(await renderPage("ar", { q: "a".repeat(501) })).textContent, "ar too_long").toBe(expected.tooLong);
+  });
+
   it("unavailable：暂时不可用，页面不报错", async () => {
     loadSearchPage.mockResolvedValue(response({ status: "unavailable", displayQuery: "alpha" }));
     const container = await renderPage("en", { q: "alpha" });

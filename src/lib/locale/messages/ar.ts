@@ -219,8 +219,21 @@ const messages = {
   search: {
     title: "بحث",
     submit: "بحث",
-    hintMinLength: "أدخل {min} حرفًا على الأقل للبحث.",
-    hintMaxLength: "أدخل بحد أقصى {max} حرفًا.",
+    // 阿语数词-名词一致规则（与本文件 chapterCount 同一套）：名词随数字变形，写死单一词形必有一段数值是错的。
+    // 这两句里数词短语是动词 أدخل 的宾语（宾格）：
+    //   0 → 数字 + 单数名词（CLDR zero 档，沿用 other 的写法；0 不是真实取值，仅为满足"六类写全"的守卫）
+    //   1 → "حرفًا واحدًا"（宾格单数+形容词，不带数字）  2 → "حرفين"（宾格双数，不带数字，不写"2 حرفين"）
+    //   3～10 → 数字 + 复数名词 "أحرف"（少数复数，属格）  11～99 → 数字 + 宾格不定单数 "حرفًا"（带 tanwin）
+    //   100 起（other，含 100/101/102、500）→ 数字 + 属格单数 "حرف"（不带宾格 tanwin 的 ا）
+    // 旧写法把 "حرفًا" 写死：最短长度常量 SITE_SEARCH_MIN_QUERY_LENGTH 现为 2，会显示成错误的 "2 حرفًا"（应为双数 "حرفين"）；
+    // 最长 SITE_SEARCH_MAX_QUERY_LENGTH 现为 500，"500 حرفًا" 也不对（100 以上名词用属格单数，应为 "500 حرف"）。
+    // 改用 ICU plural，词形跟着数值走，常量以后改成任何整数都不需要有人记得回来改文案。
+    // t() 走 intl-messageformat（见 index.ts 的 t()）；plural 六档与 Intl.PluralRules("ar") 一致，分支内用 {min}/{max}、不用 #。
+    // 本文件头部"No ICU"的说明已过时，由紧随其后的"文档(i18n)"提交统一更正。
+    hintMinLength:
+      "أدخل {min, plural, zero {{min} حرف} one {حرفًا واحدًا} two {حرفين} few {{min} أحرف} many {{min} حرفًا} other {{min} حرف}} على الأقل للبحث.",
+    hintMaxLength:
+      "أدخل بحد أقصى {max, plural, zero {{max} حرف} one {حرفًا واحدًا} two {حرفين} few {{max} أحرف} many {{max} حرفًا} other {{max} حرف}}.",
     resultsHeading: "نتائج البحث عن \"{query}\"",
     empty: "لم يتم العثور على نتائج لـ \"{query}\".",
     unavailable: "البحث غير متاح مؤقتًا. حاول مرة أخرى لاحقًا.",
