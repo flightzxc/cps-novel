@@ -81,6 +81,40 @@ describe("[8] status after a repeated failure lists the tripping batch and flags
   });
 });
 
+describe("[8b] status says a one-url repeat failure needs a person", () => {
+  it("lastBisect is inconclusive with the explanation and manualJudgementRequired; the url is listed under the tripping batch", async () => {
+    const fake = newFake();
+    const [row] = seedDueRows(fake, 1);
+    const fetchImpl = fetchStub(() => ({ status: 422 }));
+    await runDelivery(fake, fetchImpl);
+    await resumeIndexNowDelivery(fake.asPrismaClient(), { actorId: RESUME_ACTOR, reason: "retry" });
+    await runDelivery(fake, fetchImpl);
+
+    const status = (await collectIndexNowStatus(fake.asPrismaClient())) as any;
+    expect(status.control.lastBisect).toMatchObject({
+      conclusion: "inconclusive",
+      httpRequests: 0,
+      culprits: [],
+      raisedMaxAttemptsBy: 0,
+      manualJudgementRequired: true,
+      note: "single url cannot distinguish a bad url from a configuration problem",
+    });
+    expect(status.control.breaker.repeatAfterResume).toBe(true);
+    expect(status.breaker.batch.map((entry: any) => entry.url)).toEqual([row!.url]);
+  });
+
+  it("a local conclusion does not ask for manual judgement of a single url", async () => {
+    const fake = newFake();
+    const rows = seedDueRows(fake, 4);
+    const fetchImpl = fetchStub((body) => ({ status: body.urlList.includes(rows[2]!.url) ? 422 : 200 }));
+    await runDelivery(fake, fetchImpl);
+    await resumeIndexNowDelivery(fake.asPrismaClient(), { actorId: RESUME_ACTOR, reason: "retry" });
+    await runDelivery(fake, fetchImpl);
+    const status = (await collectIndexNowStatus(fake.asPrismaClient())) as any;
+    expect(status.control.lastBisect).toMatchObject({ conclusion: "local", manualJudgementRequired: false, note: null });
+  });
+});
+
 describe("[22] status lists cancelled rows by kind and the URLs of invalid ones", () => {
   it("url_invalid and url_host_mismatch rows are counted by lastErrorKind and listed with their URLs (redacted diagnosis)", async () => {
     const fake = newFake();

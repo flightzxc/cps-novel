@@ -115,7 +115,7 @@ type FetchLike = typeof fetch;
 const DUE_STATUSES = ["pending", "retry_wait"] as const;
 const MAX_URL_LENGTH = 2048;
 const TX_TIMEOUT_MS = 30_000;
-/** `attemptState` value of an attempt that carries a 202 ("accepted for processing, key validation pending"). */
+/** `errorKind` recorded on an attempt that carries an HTTP 202 ("accepted for processing, key validation pending"). The attempt's `outcome` is still `accepted`. */
 export const INDEXNOW_KEY_VALIDATION_PENDING_ERROR_KIND = "key_validation_pending";
 
 type BatchPayload = { mode: typeof INDEXNOW_BATCH_PAYLOAD_MODE };
@@ -505,7 +505,19 @@ async function claimAndSend(ctx: DeliveryContext, rows: BatchRow[], options: Sen
 // Bisect (held batch failed again after a manual resume)
 // ---------------------------------------------------------------------------
 
-export type IndexNowBisectConclusion = "local" | "global" | "interrupted" | "probe_cap";
+/**
+ * - `local`        — bad URL(s) isolated (or none reproduced), everything else accepted;
+ * - `global`       — a configuration problem: HTTP 403 (invalid key) anywhere, or both halves of the
+ *                    first split rejected. Nothing is marked, every row stays held;
+ * - `inconclusive` — a held batch of ONE row failed again with 400/422: one URL cannot tell "this
+ *                    URL is bad" from "the configuration is bad". Nothing is marked, the row stays held;
+ * - `interrupted`  — a sub-request got 429/5xx/timeout/network error, or the lease was lost;
+ * - `probe_cap`    — the sub-request budget `2 + 4⌈log2 n⌉` ran out.
+ */
+export type IndexNowBisectConclusion = "local" | "global" | "inconclusive" | "interrupted" | "probe_cap";
+
+export const INDEXNOW_BISECT_INCONCLUSIVE_NOTE = "single url cannot distinguish a bad url from a configuration problem";
+export const INDEXNOW_BISECT_FORBIDDEN_NOTE = "HTTP 403 means the key is invalid: a configuration problem, not a URL problem; no bisect, nothing marked";
 
 export type IndexNowBisectSummary = {
   conclusion: IndexNowBisectConclusion;
@@ -513,7 +525,10 @@ export type IndexNowBisectSummary = {
   probes: number;
   acceptedCount: number;
   culprits: Array<{ outboxId: string; url: string }>;
+  /** 9 when the bisect raised the suspects' attempt limit; 0 when it ended before any probe was needed. */
   raisedMaxAttemptsBy: number;
+  /** Human-readable reason for the conclusions that need a person to judge (`inconclusive`, `global`). */
+  note?: string;
 };
 
 /** `2 + 4 × ⌈log2 n⌉` sub-requests at most: 38 for n = 500. */
@@ -547,14 +562,27 @@ async function raiseMaxAttempts(db: PrismaClient, rows: ClaimedRow[]): Promise<v
  * The batch was held by a breaker trip, a human resumed, and the SAME rows
  * failed again with 400/403/422. Find out whether one bad URL is the cause.
  *
- * Split the rows in half and send each half as its own sub-request:
+ * Two cases are decided WITHOUT sending anything and without touching a row:
+ *   - the repeat failure was HTTP 403 → `global`. 403 means the key is
+ *     invalid; that is never one URL's fault and splitting cannot help;
+ *   - only ONE row is left → `inconclusive` (400/422). With a single URL there
+ *     is no way to tell "this URL is bad" from "the key/host/configuration is
+ *     bad" (e.g. a key outage that happened to hold back one fresh
+ *     publication). Marking it permanently failed would kill it for good, so
+ *     the row stays held and a person judges it from `indexnow-status`.
+ *
+ * Otherwise split the rows in half and send each half as its own sub-request:
  *   - layer 1, both halves rejected → `global`: it is the configuration, not a
  *     URL; stop after those 2 requests, every row stays held;
+ *   - any sub-request that returns 403 → `global`, stop at once;
  *   - a half accepted → its rows are `accepted` (written by the normal
  *     write-back);
  *   - a half rejected with more than one row → split that half the same way;
- *   - a single row rejected → that URL is the culprit: `permanent_failed`,
- *     `lastErrorKind = isolated_bad_url`, never auto-pushed again;
+ *   - a single row rejected at a DEEPER layer → bad URL. This is sound because
+ *     reaching a deeper layer needs at least one accepted half at layer 1, i.e.
+ *     the configuration demonstrably works. Such rows are marked
+ *     `permanent_failed`/`isolated_bad_url` (never auto-pushed again), but only
+ *     AFTER the whole bisect ended, and not at all if it ended `global`;
  *   - a sub-request that gets 429 / 5xx / timeout / network error, a lost
  *     lease, or the probe budget (`2 + 4⌈log2 n⌉`) → stop (`interrupted` /
  *     `probe_cap`), leave the rest to a human.
@@ -565,12 +593,14 @@ async function raiseMaxAttempts(db: PrismaClient, rows: ClaimedRow[]): Promise<v
  * (after the operator read `indexnow-status`) closes it.
  *
  * Because a URL may be probed ~9 more times, the rows' `maxAttempts` is first
- * raised to `attemptCount + 9` (never lowered); the audit record says so.
+ * raised to `attemptCount + 9` (never lowered); the audit record says so. The
+ * two short-circuit cases above do not raise it.
  */
 async function bisectHeldBatch(
   ctx: DeliveryContext,
   suspects: ClaimedRow[],
   originalRequestBatchId: string,
+  originalHttpStatus: number | null,
   heartbeat: () => Promise<boolean>,
 ): Promise<IndexNowBisectSummary> {
   const { db } = ctx;
@@ -579,12 +609,28 @@ async function bisectHeldBatch(
     probes: 0,
     acceptedCount: 0,
     culprits: [],
-    raisedMaxAttemptsBy: INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS,
+    raisedMaxAttemptsBy: 0,
   };
 
-  await raiseMaxAttempts(db, suspects);
-  const cap = indexNowBisectProbeCap(suspects.length);
+  // Decided without a single request and without touching a row.
+  const shortCircuit: { conclusion: IndexNowBisectConclusion; note: string } | null =
+    originalHttpStatus === 403
+      ? { conclusion: "global", note: INDEXNOW_BISECT_FORBIDDEN_NOTE }
+      : suspects.length === 1
+        ? { conclusion: "inconclusive", note: INDEXNOW_BISECT_INCONCLUSIVE_NOTE }
+        : null;
+
   let stop: IndexNowBisectConclusion | null = null;
+  const pendingCulprits: ClaimedRow[] = [];
+
+  if (shortCircuit) {
+    summary.conclusion = shortCircuit.conclusion;
+    summary.note = shortCircuit.note;
+  } else {
+    await raiseMaxAttempts(db, suspects);
+    summary.raisedMaxAttemptsBy = INDEXNOW_BISECT_MAX_EXTRA_ATTEMPTS;
+  }
+  const cap = indexNowBisectProbeCap(suspects.length);
 
   const markCulprit = async (row: ClaimedRow) => {
     await db.indexNowOutbox.updateMany({
@@ -613,6 +659,12 @@ async function bisectHeldBatch(
       summary.acceptedCount += sent.claimed.length;
       return { result: "accepted", rows: sent.claimed };
     }
+    if (sent.httpStatus === 403) {
+      // An invalid key explains every rejection seen so far: stop, mark nothing.
+      stop = "global";
+      summary.note = INDEXNOW_BISECT_FORBIDDEN_NOTE;
+      return { result: "stop", rows: sent.claimed };
+    }
     if (isIndexNowBreakerStatus(sent.httpStatus)) return { result: "rejected", rows: sent.claimed };
     stop = "interrupted";
     return { result: "stop", rows };
@@ -620,7 +672,9 @@ async function bisectHeldBatch(
 
   const resolveRejected = async (rows: ClaimedRow[], depth: number): Promise<void> => {
     if (rows.length === 1) {
-      await markCulprit(rows[0]!);
+      // Only reachable at depth >= 1 (the single-row batch was short-circuited above), i.e. after
+      // a sibling half was accepted. Marking is deferred until the bisect ended without `global`.
+      pendingCulprits.push(rows[0]!);
       return;
     }
     const middle = Math.ceil(rows.length / 2);
@@ -630,6 +684,7 @@ async function bisectHeldBatch(
     if (second.result === "stop") return;
     if (depth === 0 && first.result === "rejected" && second.result === "rejected") {
       stop = "global";
+      summary.note = "both halves of the first split were rejected: a configuration problem, not a URL problem; nothing marked";
       return;
     }
     if (first.result === "rejected") {
@@ -639,8 +694,15 @@ async function bisectHeldBatch(
     if (second.result === "rejected") await resolveRejected(second.rows, depth + 1);
   };
 
-  await resolveRejected(suspects, 0);
-  summary.conclusion = stop ?? "local";
+  if (!shortCircuit) {
+    await resolveRejected(suspects, 0);
+    // `stop` is assigned inside the closures above; read it back through its declared type.
+    const concluded: IndexNowBisectConclusion = (stop as IndexNowBisectConclusion | null) ?? "local";
+    summary.conclusion = concluded;
+    // A `global` conclusion (403 mid-bisect, or both halves rejected) means the configuration is at
+    // fault: whatever looked like a culprit earlier is not one. Otherwise mark them now.
+    if (concluded !== "global") for (const row of pendingCulprits) await markCulprit(row);
+  }
 
   await db.$transaction(
     async (tx) => {
@@ -661,6 +723,7 @@ async function bisectHeldBatch(
             raisedMaxAttemptsBy: summary.raisedMaxAttemptsBy,
             originalRequestBatchId,
             urlCount: suspects.length,
+            ...(summary.note ? { note: summary.note } : {}),
           },
         },
       });
@@ -747,7 +810,7 @@ export function createIndexNowDeliveryHandler(
     if (heldRetry && isIndexNowBreakerStatus(sent.httpStatus)) {
       const suspects = sent.claimed.filter((row) => sent.decisions.get(row.id)?.status === "retry_wait");
       if (suspects.length > 0) {
-        bisect = await bisectHeldBatch(ctx, suspects, sent.requestBatchId, heartbeat);
+        bisect = await bisectHeldBatch(ctx, suspects, sent.requestBatchId, sent.httpStatus, heartbeat);
       }
     }
 

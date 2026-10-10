@@ -25,6 +25,13 @@
  * included (`breaker.batch`), because "which URLs were in the request" is the
  * first thing an operator needs before deciding to resume.
  *
+ * `control.lastBisect.conclusion` tells what the automatic bisect could decide:
+ * `local` (bad URLs isolated), `global` (configuration problem: HTTP 403 or both
+ * halves rejected), `inconclusive` (a held batch of ONE url failed again — a single
+ * url cannot distinguish a bad url from a configuration problem, so
+ * `manualJudgementRequired` is true and the row stays held), `interrupted`,
+ * `probe_cap`. Only `local` marks any URL permanently failed.
+ *
  * Usage:
  *   tsx scripts/indexnow-status.ts --help
  *   tsx scripts/indexnow-status.ts
@@ -139,6 +146,9 @@ export function describeControl(control: IndexNowDeliveryControlState) {
             raisedMaxAttemptsBy: snapshot.raisedMaxAttemptsBy ?? null,
             originalRequestBatchId: snapshot.originalRequestBatchId ?? null,
             urls: snapshot.urlCount ?? null,
+            note: snapshot.note ?? null,
+            // `inconclusive` = ONE url failed again; the system cannot tell a bad URL from a configuration problem.
+            manualJudgementRequired: snapshot.conclusion === "inconclusive",
           };
         })()
       : null,

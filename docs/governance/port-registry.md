@@ -987,7 +987,7 @@ CPS 参考：只读 `/Users/chenweifeng/Documents/产品原型及文档/cps项�
 | `assertBackfillStopConditions`（全局汇总版） | `scripts/indexnow-backfill-apply.ts` | `26-61` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `ADAPT` | 此前登记为 COPY（按当前页的行数组判 403 / 422 > 3 条 / 终态失败 5% / 任务失败）；**改**为接收全站聚合汇总：熔断打开（Owner 修改②，任何一次 400/403/422 即停）、429 等待、终态失败比例按全部回填记录、投递任务失败按全部回填记录、上一批未全部接受、全站死信、全站 url_invalid / url_host_mismatch 取消；每批开始前都检查 | Claude |
 | 熔断（400/403/422）+ 控制事件流（`breaker_trip` / `breaker_resume`） | 不适用（CPS 把 403 / 422 判行级永久失败，无熔断） | 不适用 | 不适用 | `NOVEL_ONLY` | 批量后一次 4xx 影响 500 个网址，行级永久失败会让它们再也不被推；改为整体暂停、人工恢复；状态存 `operation_audit` 控制事件流（零迁移），恢复写审计 | Claude |
 | 429 全局等待（`rate_limited` 事件，`waitUntil`） | 不适用（CPS 只对本批退避） | 不适用 | 不适用 | `NOVEL_ONLY` | 对方限流后全局暂停到 `数据库时钟 + max(Retry-After, 5 分钟)`，截止时间只来自事件本身 | Claude |
-| 拆半定位问题网址（`bisect`） | 不适用 | 不适用 | 不适用 | `NOVEL_ONLY` | 恢复后被挡批次再次失败时二分定位，子请求上限 `2 + 4⌈log2 n⌉`，临时放宽重试上限 +9 并写审计 | Claude |
+| 拆半定位问题网址（`bisect`） | 不适用 | 不适用 | 不适用 | `NOVEL_ONLY` | 恢复后被挡批次再次失败时二分定位，子请求上限 `2 + 4⌈log2 n⌉`，临时放宽重试上限 +9 并写审计；再次失败是 403（密钥无效）或被挡批次只剩 1 行时不拆半、不标问题网址（结论 `global` / `inconclusive`），拆半中遇到 403 立即 `global`，问题网址在拆半结束后才标记 | Claude |
 | IndexNow host = `SITE_URL` 域名检查；推前整批网址格式 / 域名 / canonical 校验 | 不适用 | 不适用 | 不适用 | `NOVEL_ONLY` | 域名不一致是 422 最常见原因，本地挡住不花请求、不触发熔断；不合格的行取消为 `url_invalid` / `url_host_mismatch` / `eligibility_failed` | Claude |
 | 202 留痕（`key_validation_pending`）与 `keyValidation` | 不适用 | 不适用 | 不适用 | `NOVEL_ONLY` | 200 / 202 都算被接受（Owner 修改①），202 的尝试记录 `errorKind` 写 `key_validation_pending`，状态命令输出验证状态 | Claude |
 | 回填试推 `--canary-locales`、清单 `cutover_at` / `published_at` | 不适用 | 不适用 | 不适用 | `NOVEL_ONLY` | 按语种轮流取样的确定性试推；清单 `schema_version` 2，stats 给出切换前后数量与语种分布；apply 兼容 1 和 2 | Claude |

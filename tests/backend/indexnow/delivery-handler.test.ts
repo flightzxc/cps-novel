@@ -386,13 +386,40 @@ describe("[8] bisect — a held batch that fails again isolates the bad URL", ()
 
   });
 
-  it("a single-row held batch that fails again is the culprit directly (no probes)", async () => {
-    const fake = newFake();
-    const { bad, fetchImpl } = await failTwice(fake, 1, 0);
-    expect(fake.outbox.get(bad.outboxId)).toMatchObject({ status: "permanent_failed", lastErrorKind: "isolated_bad_url" });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(lastBisectSnapshot(fake)).toMatchObject({ conclusion: "local", probes: 0 });
-  });
+  it.each([400, 422])(
+    "[8b] a ONE-row held batch that fails again with %i is INCONCLUSIVE: no probe, the row stays held (retry_wait, not permanent_failed), maxAttempts unchanged",
+    async (code) => {
+      const fake = newFake();
+      const [row] = seedDueRows(fake, 1);
+      const fetchImpl = fetchStub(() => ({ status: code }));
+      await runDelivery(fake, fetchImpl); // first failure: the row is held, the breaker trips
+      await resumeIndexNowDelivery(fake.asPrismaClient(), { actorId: RESUME_ACTOR, reason: "operator checked, retry" });
+      const callsBefore = fetchImpl.mock.calls.length;
+      const outcome = await runDelivery(fake, fetchImpl);
+
+      expect(fetchImpl.mock.calls.length - callsBefore).toBe(1); // the re-push itself, nothing else
+      const stored = fake.outbox.get(row!.outboxId)!;
+      expect(stored.status).toBe("retry_wait");
+      expect(stored.status).not.toBe("permanent_failed");
+      expect(stored.lastErrorKind).not.toBe("isolated_bad_url");
+      expect(stored.nextAttemptAt).not.toBeNull();
+      expect(stored.maxAttempts).toBe(5); // not raised
+      expect(stored.attemptCount).toBe(2);
+      expect(lastBisectSnapshot(fake)).toEqual(
+        expect.objectContaining({
+          conclusion: "inconclusive",
+          probes: 0,
+          acceptedCount: 0,
+          culprits: [],
+          raisedMaxAttemptsBy: 0,
+          urlCount: 1,
+          note: "single url cannot distinguish a bad url from a configuration problem",
+        }),
+      );
+      expect(outcome).toMatchObject({ status: "success", result: { bisect: { conclusion: "inconclusive", probes: 0 } } });
+      expect((await controlOf(fake)).breaker.open).toBe(true); // still waiting for a person
+    },
+  );
 
   it("several culprits: probes stay within 2 + 4·⌈log2 n⌉ and every culprit is isolated (local)", async () => {
     const fake = newFake();
@@ -425,20 +452,80 @@ describe("[8] bisect — a held batch that fails again isolates the bad URL", ()
   });
 });
 
-describe("[9] bisect concludes global when both halves fail", () => {
-  it("always 403 → exactly 2 extra requests, conclusion global, every row stays held, no culprit", async () => {
-    const fake = newFake();
-    const rows = seedDueRows(fake, 4);
-    const always403 = fetchStub(() => ({ status: 403 }));
-    await runDelivery(fake, always403); // trip
+describe("[9] bisect concludes global without marking anything", () => {
+  async function failTwice(fake: FakeIndexNowDb, rowCount: number, responder: Parameters<typeof fetchStub>[0]) {
+    const rows = seedDueRows(fake, rowCount);
+    const fetchImpl = fetchStub(responder);
+    await runDelivery(fake, fetchImpl); // call 1: breaker trips
     await resumeIndexNowDelivery(fake.asPrismaClient(), { actorId: RESUME_ACTOR, reason: "retry" });
-    await runDelivery(fake, always403); // held retry → 403 → bisect
-    // 2 (batch attempts) + 2 (the two halves)
-    expect(always403).toHaveBeenCalledTimes(4);
-    const snapshot = lastBisectSnapshot(fake);
-    expect(snapshot).toMatchObject({ conclusion: "global", probes: 2, acceptedCount: 0, culprits: [] });
-    for (const row of rows) expect(fake.outbox.get(row.outboxId)!.status).toBe("retry_wait");
+    await runDelivery(fake, fetchImpl); // call 2: the held batch again
+    return { rows, fetchImpl };
+  }
+  const noRowMarked = (fake: FakeIndexNowDb) =>
+    [...fake.outbox.values()].every((row) => row.status !== "permanent_failed" && row.lastErrorKind !== "isolated_bad_url");
+
+  it("[9a] the held batch fails again with 403: global, ZERO sub-requests, maxAttempts not raised, every row stays held", async () => {
+    const fake = newFake();
+    const { rows, fetchImpl } = await failTwice(fake, 4, () => ({ status: 403 }));
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // first failure + the re-push; no probe at all
+    expect(lastBisectSnapshot(fake)).toEqual(
+      expect.objectContaining({
+        conclusion: "global",
+        probes: 0,
+        acceptedCount: 0,
+        culprits: [],
+        raisedMaxAttemptsBy: 0,
+        note: expect.stringContaining("403"),
+      }),
+    );
+    for (const row of rows) {
+      expect(fake.outbox.get(row.outboxId)).toMatchObject({ status: "retry_wait", maxAttempts: 5, attemptCount: 2 });
+    }
+    expect(noRowMarked(fake)).toBe(true);
     expect((await controlOf(fake)).breaker.open).toBe(true);
+  });
+
+  it("[9b] 422 on BOTH halves of the first split: global after exactly 2 sub-requests, every row stays held", async () => {
+    const fake = newFake();
+    const { rows, fetchImpl } = await failTwice(fake, 4, () => ({ status: 422 }));
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // 2 batch attempts + the 2 halves
+    expect(lastBisectSnapshot(fake)).toMatchObject({ conclusion: "global", probes: 2, acceptedCount: 0, culprits: [], raisedMaxAttemptsBy: 9 });
+    for (const row of rows) expect(fake.outbox.get(row.outboxId)!.status).toBe("retry_wait");
+    expect(noRowMarked(fake)).toBe(true);
+  });
+
+  it("[9c] a sub-request that returns 403 ends the bisect at once as global: nothing is marked and the accepted half stays accepted", async () => {
+    const fake = newFake();
+    // call 1 and 2: 422 (batch, held retry); call 3 (first half): 200; call 4 (second half): 403
+    const { rows, fetchImpl } = await failTwice(fake, 4, (_body, call) => ({ status: call <= 2 ? 422 : call === 3 ? 200 : 403 }));
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(lastBisectSnapshot(fake)).toMatchObject({ conclusion: "global", probes: 2, acceptedCount: 2, culprits: [] });
+    expect(fake.outbox.get(rows[0]!.outboxId)!.status).toBe("accepted");
+    expect(fake.outbox.get(rows[1]!.outboxId)!.status).toBe("accepted");
+    expect(fake.outbox.get(rows[2]!.outboxId)!.status).toBe("retry_wait");
+    expect(fake.outbox.get(rows[3]!.outboxId)!.status).toBe("retry_wait");
+    expect(noRowMarked(fake)).toBe(true);
+  });
+
+  it("[9d] a 403 deep in the bisect also discards a culprit found EARLIER in the same bisect (marking waits for the end)", async () => {
+    const fake = newFake();
+    // 8 rows. 1,2: 422 | 3 [0-3]: 422 | 4 [4-7]: 200 | 5 [0,1]: 422 | 6 [2,3]: 422 | 7 [0]: 422 | 8 [1]: 200
+    // → row 0 would be a culprit; 9 [2]: 403 → the key is invalid, so row 0 must NOT be marked either.
+    const plan: Record<number, number> = { 1: 422, 2: 422, 3: 422, 4: 200, 5: 422, 6: 422, 7: 422, 8: 200, 9: 403 };
+    const { rows, fetchImpl } = await failTwice(fake, 8, (_body, call) => ({ status: plan[call] ?? 200 }));
+    expect(fetchImpl).toHaveBeenCalledTimes(9);
+    const snapshot = lastBisectSnapshot(fake);
+    expect(snapshot).toMatchObject({ conclusion: "global", culprits: [] });
+    expect(fake.outbox.get(rows[0]!.outboxId)!.status).toBe("retry_wait");
+    expect(noRowMarked(fake)).toBe(true);
+  });
+
+  it("a culprit at a deeper layer is still marked when the bisect ends without 403 (rule unchanged)", async () => {
+    const fake = newFake();
+    const plan: Record<number, number> = { 1: 422, 2: 422, 3: 422, 4: 200, 5: 422, 6: 200, 7: 422, 8: 200 };
+    const { rows } = await failTwice(fake, 8, (_body, call) => ({ status: plan[call] ?? 200 }));
+    expect(lastBisectSnapshot(fake)).toMatchObject({ conclusion: "local", culprits: [{ outboxId: rows[0]!.outboxId, url: rows[0]!.url }] });
+    expect(fake.outbox.get(rows[0]!.outboxId)).toMatchObject({ status: "permanent_failed", lastErrorKind: "isolated_bad_url" });
   });
 });
 
