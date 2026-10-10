@@ -1,0 +1,47 @@
+[
+  {
+    "requestNumber": 3,
+    "url": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+    "atUTC": "2026-10-10T05:50:32.616830+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+    "redirectCount": 0,
+    "htmlLang": "en",
+    "canonical": [
+      "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv"
+    ],
+    "htmlSha256": "7211f2a749bc73bf1c58b6a705d5f9b2534cdfca03ecaa629f6797776774b177",
+    "canonicalMatchesProvidedURL": true
+  },
+  {
+    "requestNumber": 4,
+    "url": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+    "atUTC": "2026-10-10T05:50:36.040976+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+    "redirectCount": 0,
+    "htmlLang": "en",
+    "canonical": [
+      "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj"
+    ],
+    "htmlSha256": "13aec67343fcfa09593d445c311a9d8740173c24cf04d540e3199aca8a5db45f",
+    "canonicalMatchesProvidedURL": true
+  },
+  {
+    "requestNumber": 5,
+    "url": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+    "atUTC": "2026-10-10T05:50:38.214103+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+    "redirectCount": 0,
+    "htmlLang": "fr",
+    "canonical": [
+      "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4"
+    ],
+    "htmlSha256": "9fe7059da173cfd15ed437c7aad543c9ea9111343ab9d0e71884ab8d16a0e366",
+    "canonicalMatchesProvidedURL": true
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "image": "cps-novel:0.5.14-bf61b5e",
+  "containerId": "7a56f06feb4277ddafd12c3c41d66c29df1a1c1127575c6e2fd06d44f436c6c6",
+  "containerStartedAt": "2026-10-10T06:05:18.671721284Z",
+  "health": "healthy",
+  "role": "worker_app",
+  "previewInMainAllowlist": true,
+  "currentRelease": "/opt/cps-novel/releases/bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "fileHashes": {
+    "/opt/cps-novel/shared/env/preprod.env": "95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7",
+    "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e",
+    "/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe"
+  }
+}

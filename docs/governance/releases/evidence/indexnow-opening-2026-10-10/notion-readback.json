@@ -1,0 +1,16 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "pageURL": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "readbackAtUTC": "2026-10-10T05:13:04.885Z",
+  "status": "PASS",
+  "configuration": "OUTBOX_OPEN_DELIVERY_CLOSED",
+  "firstPublishObservation": "PENDING_OWNER",
+  "phase2": "NOT_EXECUTED",
+  "sourceGovernanceCommit": "b5f376b4bf515aa3ec283eddf04d6c55149aea8e",
+  "snapshotPresent": true,
+  "handbookEntryCount": 1,
+  "originalContentPreserved": true,
+  "originalCharacters": 230007,
+  "updatedCharacters": 232036,
+  "pageLastEditedAt": "2026-10-10T05:12:33.984Z"
+}

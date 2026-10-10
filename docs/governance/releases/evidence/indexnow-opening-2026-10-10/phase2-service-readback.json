@@ -1,0 +1,602 @@
+[
+  {
+    "atUTC": "2026-10-10T06:05:40.096887+00:00",
+    "deliveryEnabled": true,
+    "services": [
+      {
+        "service": "web",
+        "id": "f14916abca950fb385014e9d42a907116cefce51c61a20be628520e35b306169",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T05:08:55.439081111Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker",
+        "id": "7a56f06feb4277ddafd12c3c41d66c29df1a1c1127575c6e2fd06d44f436c6c6",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:18.671721284Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "article.generate.v1",
+          "batch.materialize.v1",
+          "catalog_scan",
+          "changdu.revenue_sync.v1",
+          "credential.supersede.v1",
+          "credential.validate.v1",
+          "moboreader.preview_refresh.v1",
+          "novel.materialize.v1",
+          "promo_link.claim.v1",
+          "tagging.auto_classify"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "effective": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "worker-light",
+        "id": "24152b7d6c6d47c9a98d0eb543ba2f1cb07ead48b13182d2ddeee251626fdd9e",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:26.712777863Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.publish.batch.v1",
+          "article.publish.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "indexnow_delivery",
+          "sitemap.daily_fallback.v1",
+          "sitemap_refresh"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "effective": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "scheduler",
+        "id": "1a616b807125d87e2a78587379c90376236036a11a1e5d4100e653f29835a402",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:33.703561364Z",
+        "state": "running",
+        "health": "healthy",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "postgres",
+        "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+        "image": "postgres:16.14",
+        "startedAt": "2026-09-27T15:28:01.610098036Z",
+        "state": "running",
+        "health": "healthy"
+      }
+    ]
+  },
+  {
+    "atUTC": "2026-10-10T06:06:44.317621+00:00",
+    "deliveryEnabled": true,
+    "services": [
+      {
+        "service": "web",
+        "id": "f14916abca950fb385014e9d42a907116cefce51c61a20be628520e35b306169",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T05:08:55.439081111Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker",
+        "id": "7a56f06feb4277ddafd12c3c41d66c29df1a1c1127575c6e2fd06d44f436c6c6",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:18.671721284Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "article.generate.v1",
+          "batch.materialize.v1",
+          "catalog_scan",
+          "changdu.revenue_sync.v1",
+          "credential.supersede.v1",
+          "credential.validate.v1",
+          "moboreader.preview_refresh.v1",
+          "novel.materialize.v1",
+          "promo_link.claim.v1",
+          "tagging.auto_classify"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "effective": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "worker-light",
+        "id": "24152b7d6c6d47c9a98d0eb543ba2f1cb07ead48b13182d2ddeee251626fdd9e",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:26.712777863Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.publish.batch.v1",
+          "article.publish.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "indexnow_delivery",
+          "sitemap.daily_fallback.v1",
+          "sitemap_refresh"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "effective": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "scheduler",
+        "id": "1a616b807125d87e2a78587379c90376236036a11a1e5d4100e653f29835a402",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:33.703561364Z",
+        "state": "running",
+        "health": "healthy",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "postgres",
+        "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+        "image": "postgres:16.14",
+        "startedAt": "2026-09-27T15:28:01.610098036Z",
+        "state": "running",
+        "health": "healthy"
+      }
+    ]
+  },
+  {
+    "atUTC": "2026-10-10T06:11:41.732407+00:00",
+    "deliveryEnabled": true,
+    "services": [
+      {
+        "service": "web",
+        "id": "f14916abca950fb385014e9d42a907116cefce51c61a20be628520e35b306169",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T05:08:55.439081111Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker",
+        "id": "7a56f06feb4277ddafd12c3c41d66c29df1a1c1127575c6e2fd06d44f436c6c6",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:18.671721284Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "article.generate.v1",
+          "batch.materialize.v1",
+          "catalog_scan",
+          "changdu.revenue_sync.v1",
+          "credential.supersede.v1",
+          "credential.validate.v1",
+          "moboreader.preview_refresh.v1",
+          "novel.materialize.v1",
+          "promo_link.claim.v1",
+          "tagging.auto_classify"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "effective": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "worker-light",
+        "id": "24152b7d6c6d47c9a98d0eb543ba2f1cb07ead48b13182d2ddeee251626fdd9e",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:26.712777863Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.publish.batch.v1",
+          "article.publish.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "indexnow_delivery",
+          "sitemap.daily_fallback.v1",
+          "sitemap_refresh"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "effective": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "scheduler",
+        "id": "1a616b807125d87e2a78587379c90376236036a11a1e5d4100e653f29835a402",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:33.703561364Z",
+        "state": "running",
+        "health": "healthy",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "postgres",
+        "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+        "image": "postgres:16.14",
+        "startedAt": "2026-09-27T15:28:01.610098036Z",
+        "state": "running",
+        "health": "healthy"
+      }
+    ]
+  },
+  {
+    "atUTC": "2026-10-10T06:17:43.358068+00:00",
+    "deliveryEnabled": true,
+    "services": [
+      {
+        "service": "web",
+        "id": "f14916abca950fb385014e9d42a907116cefce51c61a20be628520e35b306169",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T05:08:55.439081111Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker",
+        "id": "7a56f06feb4277ddafd12c3c41d66c29df1a1c1127575c6e2fd06d44f436c6c6",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:18.671721284Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.generate.batch.v1",
+          "article.generate.batch.v2",
+          "article.generate.v1",
+          "batch.materialize.v1",
+          "catalog_scan",
+          "changdu.revenue_sync.v1",
+          "credential.supersede.v1",
+          "credential.validate.v1",
+          "moboreader.preview_refresh.v1",
+          "novel.materialize.v1",
+          "promo_link.claim.v1",
+          "tagging.auto_classify"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "effective": [
+            "credential.validate.v1",
+            "credential.supersede.v1",
+            "catalog_scan",
+            "promo_link.claim.v1",
+            "batch.materialize.v1",
+            "novel.materialize.v1",
+            "article.generate.v1",
+            "article.generate.batch.v1",
+            "article.generate.batch.v2",
+            "moboreader.preview_refresh.v1",
+            "tagging.auto_classify",
+            "changdu.revenue_sync.v1"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "worker-light",
+        "id": "24152b7d6c6d47c9a98d0eb543ba2f1cb07ead48b13182d2ddeee251626fdd9e",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:26.712777863Z",
+        "state": "running",
+        "health": "healthy",
+        "outboxFeature": "true",
+        "outboxAllowWrite": "true",
+        "seoVisibility": "true",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "allowlist": [
+          "article.publish.batch.v1",
+          "article.publish.v1",
+          "home_carousel.compute.v1",
+          "indexnow.sweep.v1",
+          "indexnow_delivery",
+          "sitemap.daily_fallback.v1",
+          "sitemap_refresh"
+        ],
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "startupAllowlist": {
+          "schemaVersion": 1,
+          "event": "worker_task_allowlist",
+          "level": "info",
+          "requested": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "effective": [
+            "sitemap_refresh",
+            "sitemap.daily_fallback.v1",
+            "home_carousel.compute.v1",
+            "indexnow.sweep.v1",
+            "article.publish.batch.v1",
+            "article.publish.v1",
+            "indexnow_delivery"
+          ],
+          "invalid": []
+        }
+      },
+      {
+        "service": "scheduler",
+        "id": "1a616b807125d87e2a78587379c90376236036a11a1e5d4100e653f29835a402",
+        "image": "cps-novel:0.5.14-bf61b5e",
+        "startedAt": "2026-10-10T06:05:33.703561364Z",
+        "state": "running",
+        "health": "healthy",
+        "deliveryFeature": "true",
+        "deliveryAllowWrite": "true",
+        "errorLines": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "postgres",
+        "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+        "image": "postgres:16.14",
+        "startedAt": "2026-09-27T15:28:01.610098036Z",
+        "state": "running",
+        "health": "healthy"
+      }
+    ]
+  }
+]

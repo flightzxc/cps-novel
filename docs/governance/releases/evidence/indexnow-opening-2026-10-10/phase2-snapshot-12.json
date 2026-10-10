@@ -1,0 +1,248 @@
+{
+  "targetMinute": 12,
+  "elapsedSeconds": 723,
+  "atUTC": "2026-10-10T06:17:43.358189+00:00",
+  "rows": [
+    {
+      "kind": "counts",
+      "readAt": "2026-10-10T06:17:42.962411+00:00",
+      "outboxTotal": 3,
+      "attemptTotal": 3,
+      "sweepTotal": 13,
+      "pending": 0,
+      "configMissing": 0,
+      "forbiddenHttp": 0,
+      "attemptedOutboxes": 3,
+      "terminalFailed": 0,
+      "newPublishedArticles": 0
+    },
+    {
+      "kind": "outbox",
+      "id": "e77c13ce-67f8-452d-bd26-79a46bd78efe",
+      "articleId": "bc10e6c5-7c3f-4b65-92f2-4b6fb72e0d25",
+      "url": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+      "locale": "fr",
+      "revision": 1791610794039,
+      "status": "accepted",
+      "attemptCount": 1,
+      "lastHttpStatus": 202,
+      "lastErrorKind": null,
+      "lastRequestAt": "2026-10-10T06:05:28.761+00:00",
+      "lastResponseAt": "2026-10-10T06:05:29.347+00:00",
+      "payloadHost": "pulsenovels.com",
+      "createdAt": "2026-10-10T05:39:54.055+00:00",
+      "articleStatus": "published",
+      "articleLocale": "fr",
+      "articleType": "novel_article",
+      "seoVisibility": "public",
+      "slug": "les-epouses-du-manoir-vane",
+      "shortId": "48zq4bs4",
+      "deliveryTaskId": "8e3f376b-778e-4e66-962c-332583706619"
+    },
+    {
+      "kind": "outbox",
+      "id": "da453af1-e61e-44bc-a637-1c68680aff19",
+      "articleId": "9e45f0d5-f9c8-4d61-93a1-c0673460e4ee",
+      "url": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+      "locale": "en",
+      "revision": 1791610794099,
+      "status": "accepted",
+      "attemptCount": 1,
+      "lastHttpStatus": 200,
+      "lastErrorKind": null,
+      "lastRequestAt": "2026-10-10T06:05:29.384+00:00",
+      "lastResponseAt": "2026-10-10T06:05:29.735+00:00",
+      "payloadHost": "pulsenovels.com",
+      "createdAt": "2026-10-10T05:39:54.112+00:00",
+      "articleStatus": "published",
+      "articleLocale": "en",
+      "articleType": "novel_article",
+      "seoVisibility": "public",
+      "slug": "the-enforcers-sin-stolen-by-my-fathers-best-friend",
+      "shortId": "2j93jiyj",
+      "deliveryTaskId": "056f023a-5107-470a-86b2-2c8e5d687fe4"
+    },
+    {
+      "kind": "outbox",
+      "id": "a3d53dfd-fefd-47db-99d1-3209fb51c4ec",
+      "articleId": "2a20c872-a938-4188-be05-886fa9cca3d7",
+      "url": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+      "locale": "en",
+      "revision": 1791610794139,
+      "status": "accepted",
+      "attemptCount": 1,
+      "lastHttpStatus": 200,
+      "lastErrorKind": null,
+      "lastRequestAt": "2026-10-10T06:05:29.762+00:00",
+      "lastResponseAt": "2026-10-10T06:05:30.13+00:00",
+      "payloadHost": "pulsenovels.com",
+      "createdAt": "2026-10-10T05:39:54.152+00:00",
+      "articleStatus": "published",
+      "articleLocale": "en",
+      "articleType": "novel_article",
+      "seoVisibility": "public",
+      "slug": "his-luna-by-mistake-a-mother-by-fate",
+      "shortId": "n8w150zv",
+      "deliveryTaskId": "716b0bba-41c7-482e-af6f-9fce420d0e2d"
+    },
+    {
+      "kind": "attempt",
+      "id": 1,
+      "outboxId": "e77c13ce-67f8-452d-bd26-79a46bd78efe",
+      "attemptNo": 1,
+      "outcome": "accepted",
+      "attemptState": "completed",
+      "httpStatus": 202,
+      "errorKind": null,
+      "requestAt": "2026-10-10T06:05:28.761+00:00",
+      "responseAt": "2026-10-10T06:05:29.347+00:00",
+      "batchSize": 1,
+      "workerTaskId": "8e3f376b-778e-4e66-962c-332583706619"
+    },
+    {
+      "kind": "attempt",
+      "id": 2,
+      "outboxId": "da453af1-e61e-44bc-a637-1c68680aff19",
+      "attemptNo": 1,
+      "outcome": "accepted",
+      "attemptState": "completed",
+      "httpStatus": 200,
+      "errorKind": null,
+      "requestAt": "2026-10-10T06:05:29.384+00:00",
+      "responseAt": "2026-10-10T06:05:29.735+00:00",
+      "batchSize": 1,
+      "workerTaskId": "056f023a-5107-470a-86b2-2c8e5d687fe4"
+    },
+    {
+      "kind": "attempt",
+      "id": 3,
+      "outboxId": "a3d53dfd-fefd-47db-99d1-3209fb51c4ec",
+      "attemptNo": 1,
+      "outcome": "accepted",
+      "attemptState": "completed",
+      "httpStatus": 200,
+      "errorKind": null,
+      "requestAt": "2026-10-10T06:05:29.762+00:00",
+      "responseAt": "2026-10-10T06:05:30.13+00:00",
+      "batchSize": 1,
+      "workerTaskId": "716b0bba-41c7-482e-af6f-9fce420d0e2d"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:05:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:05:35.519012+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:06:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:06:03.885079+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:07:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:07:04.290385+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:08:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:08:03.739521+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:09:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:09:04.149576+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:10:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:10:04.085966+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:11:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:11:03.492212+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:12:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:12:04.041346+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:13:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:13:03.394666+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:14:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:14:03.645772+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:15:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:15:04.256536+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:16:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:16:03.778335+00:00"
+    },
+    {
+      "kind": "schedule",
+      "scheduledFor": "2026-10-10T06:17:00+00:00",
+      "status": "enqueued",
+      "skipReason": null,
+      "createdAt": "2026-10-10T06:17:04.279216+00:00"
+    },
+    {
+      "kind": "taskStatus",
+      "taskType": "indexnow.sweep.v1",
+      "status": "completed",
+      "count": 13
+    },
+    {
+      "kind": "taskStatus",
+      "taskType": "indexnow_delivery",
+      "status": "completed",
+      "count": 3
+    },
+    {
+      "kind": "itemStatus",
+      "taskType": "indexnow_delivery",
+      "status": "success",
+      "lockedBy": null,
+      "count": 3
+    },
+    {
+      "kind": "itemStatus",
+      "taskType": "indexnow.sweep.v1",
+      "status": "success",
+      "lockedBy": null,
+      "count": 13
+    }
+  ]
+}

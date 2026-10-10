@@ -1,0 +1,91 @@
+{
+  "status": "DELIVERY_ACCEPTED",
+  "startedAtUTC": "2026-10-10T06:04:58.665386+00:00",
+  "activatedAtUTC": "2026-10-10T06:05:40.097026+00:00",
+  "completedAtUTC": "2026-10-10T06:17:43.528067+00:00",
+  "beforeSha256": "6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58",
+  "afterSha256": "95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7",
+  "firstAcceptedURLs": [
+    "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+    "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+    "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv"
+  ],
+  "automaticHttpAttempts": 3,
+  "attemptedOutboxes": 3,
+  "terminalFailed": 0,
+  "terminalFailureRate": 0.0,
+  "snapshotMinutes": [
+    1,
+    6,
+    12
+  ],
+  "rollback": false,
+  "envChange": {
+    "atUTC": "2026-10-10T06:05:08.817230+00:00",
+    "backup": "/opt/cps-novel/shared/env/preprod.env.bak-indexnow-stage2-20261010T060508Z",
+    "beforeSha256": "6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58",
+    "afterSha256": "95c3020a42459af6850fe67a87b2fced886ac25be888f5d555f5cf910412bae7",
+    "otherBytesCmp": "PASS",
+    "changedKeys": [
+      "FEATURE_INDEXNOW_DELIVERY",
+      "INDEXNOW_DELIVERY_ALLOW_WRITE",
+      "PREPROD_APPROVED_OPEN_WRITE_GATES",
+      "WORKER_LIGHT_TASK_ALLOWLIST"
+    ]
+  },
+  "firstAccepted": [
+    {
+      "url": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+      "outboxId": "e77c13ce-67f8-452d-bd26-79a46bd78efe",
+      "locale": "fr",
+      "httpStatus": 202,
+      "lastResponseAt": "2026-10-10T06:05:29.347+00:00"
+    },
+    {
+      "url": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+      "outboxId": "da453af1-e61e-44bc-a637-1c68680aff19",
+      "locale": "en",
+      "httpStatus": 200,
+      "lastResponseAt": "2026-10-10T06:05:29.735+00:00"
+    },
+    {
+      "url": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+      "outboxId": "a3d53dfd-fefd-47db-99d1-3209fb51c4ec",
+      "locale": "en",
+      "httpStatus": 200,
+      "lastResponseAt": "2026-10-10T06:05:30.13+00:00"
+    }
+  ],
+  "httpCounts": {
+    "200": 2,
+    "202": 1,
+    "403": 0,
+    "422": 0
+  },
+  "sweepCount": 13,
+  "firstSweepMinute": "2026-10-10T06:05:00+00:00",
+  "lastSweepMinute": "2026-10-10T06:17:00+00:00",
+  "pendingSamples": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "externalSampleRequests": 7,
+  "runtimeFinal": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "runtimeVersion": "0.5.14",
+  "runtimeImage": "cps-novel:0.5.14-bf61b5e",
+  "sourceDocument422ToleranceOverriddenByOwner": "First 403 or 422 triggers full delivery rollback"
+}

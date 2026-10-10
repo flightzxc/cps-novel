@@ -1,0 +1,10 @@
+{
+  "atUTC": "2026-10-10T05:11:58.441846+00:00",
+  "governanceCommit": "b5f376b4bf515aa3ec283eddf04d6c55149aea8e",
+  "branchReadback": "PASS",
+  "annotatedTagFinalReadback": "PASS",
+  "refs": {
+    "refs/heads/release/v0.5.14-2026-10-09": "b5f376b4bf515aa3ec283eddf04d6c55149aea8e",
+    "refs/tags/v0.5.14^{}": "bf61b5ea276a0981870cdfa63578a822a65836f3"
+  }
+}

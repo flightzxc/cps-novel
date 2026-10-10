@@ -1,0 +1,31 @@
+READONLY_SQL=[{"kind": "counts", "readAt": "2026-10-10T06:00:21.420064+00:00", "outboxTotal": 3, "attemptTotal": 0, "sweepScheduleTotal": 0, "newPublishedArticles": 3, "hiddenOutbox": 0, "duplicateOutboxGroups": 0}, {"kind": "outbox", "outboxId": "e77c13ce-67f8-452d-bd26-79a46bd78efe", "articleId": "bc10e6c5-7c3f-4b65-92f2-4b6fb72e0d25", "url": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4", "locale": "fr", "revision": 1791610794039, "status": "pending", "createdAt": "2026-10-10T05:39:54.055+00:00", "attemptCount": 0, "articleStatus": "published", "articleLocale": "fr", "articleType": "novel_article", "seoVisibility": "public", "publishedAt": "2026-10-10T05:39:54.026+00:00", "articleUpdatedAt": "2026-10-10T05:39:54.039+00:00", "articleRevision": 1791610794039, "deliveryTaskId": "8e3f376b-778e-4e66-962c-332583706619", "taskStatus": "pending", "taskType": "indexnow_delivery", "items": [{"targetType": "indexnow_outbox", "targetId": "e77c13ce-67f8-452d-bd26-79a46bd78efe", "status": "pending"}], "articleOutboxCount": 1}, {"kind": "outbox", "outboxId": "da453af1-e61e-44bc-a637-1c68680aff19", "articleId": "9e45f0d5-f9c8-4d61-93a1-c0673460e4ee", "url": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj", "locale": "en", "revision": 1791610794099, "status": "pending", "createdAt": "2026-10-10T05:39:54.112+00:00", "attemptCount": 0, "articleStatus": "published", "articleLocale": "en", "articleType": "novel_article", "seoVisibility": "public", "publishedAt": "2026-10-10T05:39:54.089+00:00", "articleUpdatedAt": "2026-10-10T05:39:54.099+00:00", "articleRevision": 1791610794099, "deliveryTaskId": "056f023a-5107-470a-86b2-2c8e5d687fe4", "taskStatus": "pending", "taskType": "indexnow_delivery", "items": [{"targetType": "indexnow_outbox", "targetId": "da453af1-e61e-44bc-a637-1c68680aff19", "status": "pending"}], "articleOutboxCount": 1}, {"kind": "outbox", "outboxId": "a3d53dfd-fefd-47db-99d1-3209fb51c4ec", "articleId": "2a20c872-a938-4188-be05-886fa9cca3d7", "url": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv", "locale": "en", "revision": 1791610794139, "status": "pending", "createdAt": "2026-10-10T05:39:54.152+00:00", "attemptCount": 0, "articleStatus": "published", "articleLocale": "en", "articleType": "novel_article", "seoVisibility": "public", "publishedAt": "2026-10-10T05:39:54.129+00:00", "articleUpdatedAt": "2026-10-10T05:39:54.139+00:00", "articleRevision": 1791610794139, "deliveryTaskId": "716b0bba-41c7-482e-af6f-9fce420d0e2d", "taskStatus": "pending", "taskType": "indexnow_delivery", "items": [{"targetType": "indexnow_outbox", "targetId": "a3d53dfd-fefd-47db-99d1-3209fb51c4ec", "status": "pending"}], "articleOutboxCount": 1}, {"kind": "outboxStatus", "status": "pending", "count": 3}, {"kind": "taskStatus", "taskType": "indexnow_delivery", "status": "pending", "count": 3}]
+LOG_READBACK={"service": "web", "since": "2026-10-10T05:08:55.439081111Z", "readAtUTC": "2026-10-10T06:00:21.490742+00:00", "errorLines": 0, "permissionDenied": 0}
+LOG_READBACK={"service": "worker", "since": "2026-10-10T05:09:03.964325924Z", "readAtUTC": "2026-10-10T06:00:21.544218+00:00", "errorLines": 0, "permissionDenied": 0}
+LOG_READBACK={"service": "worker-light", "since": "2026-10-10T05:09:11.836080527Z", "readAtUTC": "2026-10-10T06:00:21.599235+00:00", "errorLines": 0, "permissionDenied": 0}
+ENV_SHA256=6ee8e8dbbe27b0512d4118ddcb2c8dd198b442a054302584e1b79119b4ca7d58
+PHASE1_OBSERVATION=SQL_PASS_CANONICAL_PENDING
+DELIVERY_READBACK={"service": "worker", "feature": "false", "allowWrite": "false", "state": "running", "health": "healthy"}
+DELIVERY_READBACK={"service": "worker-light", "feature": "false", "allowWrite": "false", "state": "running", "health": "healthy"}
+DELIVERY_READBACK={"service": "scheduler", "feature": "false", "allowWrite": "false", "state": "running", "health": "healthy"}
+FIRST_PUBLISH_SQL=PASS selected=3
+PHASE2_SITE_SETTING=[{"host": "pulsenovels.com", "keyLocation": "https://pulsenovels.com/indexnow-key.txt", "keyLength": 32, "keySha256": "e33f183b9663a625cdc0e23d469f0c0b5b44d43e48f91da3fa430d470a548e1c"}]
+REBUILD_WINDOW=[{"readAt": "2026-10-10T06:00:22.006242+00:00", "articleTasks": 0, "processingItems": 0, "runningBatches": 0}]
+PREPROD_SITE_MODE=public
+IMAGE=PASS anchor=descriptor
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=false
+PREPROD_PREFLIGHT=PASS
+RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+RUNTIME_IMAGE=PASS services=web worker worker-light scheduler
+HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3", "builtAt": "2026-10-09T12:26:09Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.14", "commit": "bf61b5ea276a0981870cdfa63578a822a65836f3"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+PHASE2_PREREQUISITES=PASS
+SSH_EXIT=0

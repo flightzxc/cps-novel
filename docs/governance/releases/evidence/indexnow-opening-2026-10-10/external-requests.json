@@ -1,0 +1,67 @@
+[
+  {
+    "atUTC": "2026-10-10T05:07:14.714527+00:00",
+    "url": "https://pulsenovels.com/indexnow-key.txt",
+    "requestNumber": 1,
+    "curlExit": 0,
+    "status": 200,
+    "cacheControl": [
+      "no-store"
+    ],
+    "bodyBytes": 32,
+    "bodySha256": "e33f183b9663a625cdc0e23d469f0c0b5b44d43e48f91da3fa430d470a548e1c",
+    "matchesDatabaseEffectiveKey": true
+  },
+  {
+    "requestNumber": 2,
+    "url": "https://pulsenovels.com/api/health",
+    "atUTC": "2026-10-10T05:09:59.298405+00:00",
+    "status": 200,
+    "curlExit": 0
+  },
+  {
+    "requestNumber": 3,
+    "url": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+    "atUTC": "2026-10-10T05:50:32.616830+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/novel/his-luna-by-mistake-a-mother-by-fate-pn8w150zv",
+    "redirectCount": 0
+  },
+  {
+    "requestNumber": 4,
+    "url": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+    "atUTC": "2026-10-10T05:50:36.040976+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/novel/the-enforcers-sin-stolen-by-my-fathers-best-friend-p2j93jiyj",
+    "redirectCount": 0
+  },
+  {
+    "requestNumber": 5,
+    "url": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+    "atUTC": "2026-10-10T05:50:38.214103+00:00",
+    "curlExit": 0,
+    "status": 200,
+    "effectiveURL": "https://pulsenovels.com/fr/novel/les-epouses-du-manoir-vane-p48zq4bs4",
+    "redirectCount": 0
+  },
+  {
+    "requestNumber": 6,
+    "url": "https://pulsenovels.com/indexnow-key.txt",
+    "atUTC": "2026-10-10T06:03:04.553954+00:00",
+    "status": 200,
+    "cacheControl": [
+      "no-store"
+    ],
+    "bodyBytes": 32,
+    "bodySha256": "e33f183b9663a625cdc0e23d469f0c0b5b44d43e48f91da3fa430d470a548e1c",
+    "matchesDatabaseEffectiveKey": true
+  },
+  {
+    "requestNumber": 7,
+    "url": "https://pulsenovels.com/api/health",
+    "atUTC": "2026-10-10T06:06:31.773769+00:00",
+    "status": 200
+  }
+]

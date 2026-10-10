@@ -1,0 +1,13 @@
+{
+  "atUTC": "2026-10-10T06:29:12.778761+00:00",
+  "commit": "c98f648091b6568cc3843e67f13d2ba946f435b8",
+  "branch": "release/v0.5.14-2026-10-09",
+  "remoteHead": "c98f648091b6568cc3843e67f13d2ba946f435b8",
+  "remoteTagObject": "a7c05661a7764ebe929bc90d1b932672ae63942b",
+  "remoteTagPeeled": "bf61b5ea276a0981870cdfa63578a822a65836f3",
+  "agent": "codex",
+  "model": "GPT-6",
+  "workingTreeAtReadback": "CLEAN",
+  "readback": "PASS",
+  "runtimeRedeploymentOfGovernanceCommit": false
+}
