@@ -163,3 +163,5 @@ Owner 本会话明确请求实施已核对的分阶段计划，先授权阶段 0
 - 首次发布补验已同步 Notion 当前快照与本次开闸手账，2026-10-10 14:52:29.107 JST（05:52:29.107Z）回读 PASS；四处定点修改逐项验证，撤销这四处修改后其余正文保持一致。新增收据：`phase1-first-publish-notion-readback.json`；原待补收据保留为历史。
 
 - 阶段 2 Notion 当前快照与独立验收手账已同步，2026-10-10 15:22:11.030 JST（06:22:11.030Z）回读 PASS；新增段仅有 Notion 的空括号转义和单个空行折叠，逐项验证内容后撤销两处定点修改，其余正文逐字一致。阶段 0～1 原手账改为历史标题保留。收据：`phase2-notion-readback.json`。
+
+- 阶段 2 治理提交 `c98f648091b6568cc3843e67f13d2ba946f435b8` 已推送并回读 PASS，release 分支远端一致，tag object 与 peeled Final 不变；没有重新部署治理提交。收据：`phase2-github-readback.json`。收尾只读核对于 2026-10-10T06:31:31.227694+00:00（UTC；JST 2026-10-10 15:31:31）PASS：当前 env SHA 未变、outbox/delivery 均开启，四应用 healthy、health/镜像/Final 一致，三篇仍 accepted。收据：`phase2-closure-readonly.log`。
