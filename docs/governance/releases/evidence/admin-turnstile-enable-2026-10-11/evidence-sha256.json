@@ -1,0 +1,47 @@
+[
+  {
+    "file": "container-identities.json",
+    "bytes": 6128,
+    "sha256": "93e3e9ca52ee6629ab2a96601c11eb509a798780f1d18fc94cf7e572456e4ff1"
+  },
+  {
+    "file": "env-safe.diff",
+    "bytes": 150,
+    "sha256": "b7156a6ec6f48502019a4550bb78494f4c81e9f21a9efb582c706af6ba656cfe"
+  },
+  {
+    "file": "external-requests.json",
+    "bytes": 1302,
+    "sha256": "503fb2612024fa4c2c2c3a2d72ad42a9240bea27f952301f0a59f4d4d10fe936"
+  },
+  {
+    "file": "preflight.log",
+    "bytes": 1110,
+    "sha256": "518e35c1d2e3c11783591d89728092122c1d3c4a4892a93a8635ac3a7ff8db2b"
+  },
+  {
+    "file": "remote-enable.log",
+    "bytes": 11940,
+    "sha256": "5b1803ad2727c30203ddd7ba475b09b705d1601ec7726d6eee5007afecf98116"
+  },
+  {
+    "file": "remote-enable.meta.json",
+    "bytes": 124,
+    "sha256": "8e9c84d491f9b2e261b31549c52d5189606c989d5be52536bc9e519f4a59a7ea"
+  },
+  {
+    "file": "remote-final-readonly.log",
+    "bytes": 2914,
+    "sha256": "e7476f9e87ebf00503c30e13fe0cb6305737e502f2da60b3882152204fda1553"
+  },
+  {
+    "file": "remote-final-readonly.meta.json",
+    "bytes": 124,
+    "sha256": "fa749992dd2b3efee26abff5eb4c70d207844d79f0ae8c4fc22c1d9a9f0b2427"
+  },
+  {
+    "file": "result.json",
+    "bytes": 6021,
+    "sha256": "bd191575911a475d7db5daec152e6addf29712b01b09588da6f12b49286e398c"
+  }
+]

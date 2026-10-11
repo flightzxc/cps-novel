@@ -1,0 +1,146 @@
+{
+  "before": {
+    "backup-timer": {
+      "health": "healthy",
+      "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-10-10T17:07:49.905880279Z",
+      "status": "running"
+    },
+    "postgres": {
+      "health": "healthy",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-09-27T15:28:01.610098036Z",
+      "status": "running"
+    },
+    "scheduler": {
+      "health": "healthy",
+      "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:11.780118207Z",
+      "status": "running"
+    },
+    "web": {
+      "health": "healthy",
+      "id": "4a2547abb17ae53f735ccae1aa9bdd58c081d22c37a7663964c5286306dbcc4f",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:06:52.472212851Z",
+      "status": "running"
+    },
+    "worker": {
+      "health": "healthy",
+      "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:04.899569634Z",
+      "status": "running"
+    },
+    "worker-light": {
+      "health": "healthy",
+      "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:05.054978878Z",
+      "status": "running"
+    }
+  },
+  "enabled": {
+    "backup-timer": {
+      "health": "healthy",
+      "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-10-10T17:07:49.905880279Z",
+      "status": "running"
+    },
+    "postgres": {
+      "health": "healthy",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-09-27T15:28:01.610098036Z",
+      "status": "running"
+    },
+    "scheduler": {
+      "health": "healthy",
+      "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:11.780118207Z",
+      "status": "running"
+    },
+    "web": {
+      "health": "healthy",
+      "id": "38a25d8ba8fa0a90a3a9f1798f1bc3ea8961b377de1a6918073b92689087f0b1",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-11T08:53:05.223356293Z",
+      "status": "running"
+    },
+    "worker": {
+      "health": "healthy",
+      "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:04.899569634Z",
+      "status": "running"
+    },
+    "worker-light": {
+      "health": "healthy",
+      "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:05.054978878Z",
+      "status": "running"
+    }
+  },
+  "rolledBack": {
+    "backup-timer": {
+      "health": "healthy",
+      "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-10-10T17:07:49.905880279Z"
+    },
+    "postgres": {
+      "health": "healthy",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "imageId": "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+      "imageRef": "postgres:16.14",
+      "startedAt": "2026-09-27T15:28:01.610098036Z"
+    },
+    "scheduler": {
+      "health": "healthy",
+      "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:11.780118207Z"
+    },
+    "web": {
+      "health": "healthy",
+      "id": "7c9eb03f514ac5b98886563e2d4a31e6a82410a29fe942a96e9427320f53d093",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-11T08:53:14.153586954Z"
+    },
+    "worker": {
+      "health": "healthy",
+      "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:04.899569634Z"
+    },
+    "worker-light": {
+      "health": "healthy",
+      "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716",
+      "imageId": "sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935",
+      "imageRef": "cps-novel:0.5.15-db62350",
+      "startedAt": "2026-10-10T17:07:05.054978878Z"
+    }
+  }
+}

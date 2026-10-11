@@ -21,6 +21,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.5.15 —— 已部署正式站（2026-10-11 02:07:56 JST）
 
+- B-39 Turnstile开闸尝试（2026-10-11 17:53 JST）已按异常条件回退，当前仍关闭：仅env追加两行/web重建，preflight/启动/挂载/health/镜像PASS；登录原始HTML无Cloudflare脚本（现有组件由浏览器useEffect动态插入），立即恢复备份并仅重建web。env SHA回到823adaf178fa543fd3b964038af043d97eb05af4ec2cfee0fe64a49f8773c603，其余五服务ID/StartedAt不变；回退web错误/permission denied/verification refused均0，外部3/4次，Owner Turnstile实际登录未执行。见 [运维记录](releases/admin-turnstile-enable-2026-10-11.md)。
+
 - Owner 明确授权，haiyue-vps 低流量窗口原 RELEASE=PASS / EXIT=0；维护 17:06:45.909804Z–17:07:55.279041Z，69.369237秒；新迁移16.301ms。A–E / F.1 全 PASS：26finished/0rollback/58表，导航123全true，投影0/0/0；health0.5.15/Final/metadata passed，五应用healthy、postgres CID不变；Next16.3.8/运行依赖门禁、写闸和白名单一致、六服务error/permissiondenied0、backup-timer RUNNING。首页100slug逐项零变化，外部2/10全代理。
 - IndexNow只推新发布：F.2已于2026-10-11 03:33 JST补核PASS，Owner正式发布英/法/葡语3篇，25.544/25.495/25.465秒accepted；`request_batch_id=3ef3e207-c94f-41d0-8b87-5b19a900c942` / batch_size=3 / HTTP200；本样本urls3/requests1/taskItems1，一条目一批次请求。累计accepted urls6/requests4/delivery success4，breaker关闭、无429等待/死信/积压、keyValidation verified，分钟sweep连续。**v0.5.15已上线，批量首发不超过100篇的限制可以解除**；存量回填未执行，业务开关、env SHA、nginx保持原样。
 - F.2补核治理来源 `2cc389539efd974746c60e8c622dd2bb952d7fee` 已推送并回读；Notion四处同步回读PASS（2026-10-10T18:36:45.094Z），历史规则模板逐字保留；证据见 releases/evidence/v0515-release/f2/。
