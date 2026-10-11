@@ -106,3 +106,84 @@ worker lanes、既有写闸登记、领推广及上游限速配置同样通过�
 原始脱敏执行输出、受限 diff、preflight、前后容器身份、取样账本及最终只读结果见 [证据目录](evidence/admin-turnstile-enable-2026-10-11/)。记录失败及回退，无 Secret Key、env全文、Basic Auth凭据或用户令牌。
 
 本运维记录、版本台账 v0.5.15 补记与生成器 CHANGELOG 组成一个文档提交，带 `Agent: codex` / `Model: GPT-6`。生成器使用 `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.abbrev GIT_CONFIG_VALUE_0=7`；治理提交不部署、不改变 Final 或 annotated tag，不追加发版级 development-log。推送、分支/tag回读及 Notion 独立失败/回退手账的同步回读在该文档提交后完成，收据保留 `.tmp/admin-turnstile-enable-20261011/`；不为自引用收据增加第二个文档提交。
+
+
+## 第二次尝试（2026-10-11 18:25 JST）
+
+### 当前结果与验收口径
+
+**Owner实际登录成功，日志复核PASS，保持开启。** Owner再次明确授权相同的env-only开闸，并纠正第一次原始HTML脚本判据：现有客户端useEffect动态插入脚本，原始HTML没有Cloudflare域名属正常；这次检查条件渲染的“人机验证”标签、页面数据中公开Site Key与X-Frame-Options DENY。以上第一次尝试的记录和原始证据逐字保留，本节记录第二次独立操作。
+
+### 前置结果与env变更
+
+- 开始核查：2026-10-11 18:24:45 JST（09:24:45Z），current与health均为0.5.15 / Final db623505539c3ca55f55b1270aab829b8db102d7；metadata与database passed。
+- env匹配第一次回退值，3862字节/64行、末尾换行，零条ADMIN_LOGIN_TURNSTILE_行；web后台来源正确、开关false；六服务healthy。
+- 密钥仅做受限元数据/计数复核：普通文件、1000:1000、640，额外ACL仅user:1001:r--；1行/36字节、CR=0、行尾空白=0；未读取或打印内容。既有Basic Auth curl配置仅核文件元数据并用于一次后台取样，不打印凭据。
+- 修改前旧SHA：`823adaf178fa543fd3b964038af043d97eb05af4ec2cfee0fe64a49f8773c603`。
+- 本次备份：`/opt/cps-novel/shared/env/preprod.env.bak-admin-turnstile-20261011T092446Z`；cp保留权限，600，备份真实cmp及SHA PASS。
+- 本次仅追加以下两行，不写Secret Key或_FILE：
+
+```diff
+--- preprod.env.backup
++++ preprod.env
+@@ -64,0 +65,2 @@
++ADMIN_LOGIN_TURNSTILE_ENABLED=true
++ADMIN_LOGIN_TURNSTILE_SITE_KEY=0x4AAAAAAFTqFgFn4w6AYhbb
+```
+
+- 修改后新SHA：`53d5c5c48b7c679677f3d30d49f6f9f0a53da84ab843b8806512f516b4d95a50`；3953字节/66行，原3862字节前缀真实cmp PASS，全量字节恰等于备份加上述两行，尾部匹配、行数仅增加2。其它env字节不变。
+
+### preflight与仅web重建
+
+在批准Final的发布目录source原lib.sh，读取原manifest `/opt/cps-novel/shared/artifacts/staging/v0515/db623505539c3ca55f55b1270aab829b8db102d7.json`，SHA仍为42df974741433fbf3e508fe1063edc33529855dbe90c95aacf05f73a4904faac；从manifest导出GIT_COMMIT/CPS_NOVEL_APP_IMAGE/PREPROD_RELEASE_MANIFEST，经preprod_load_env加载新配置，执行原preflight，退出0。
+
+```text
+IMAGE=PASS anchor=descriptor
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=true siteKey=set secret=file:admin_login_turnstile_secret_key
+PREPROD_PREFLIGHT=PASS
+```
+
+写闸登记、worker lanes和原有配置全部PASS，没有为通过preflight修改其它值。完整输出保留于第二次证据目录。preflight通过后仅`preprod_compose_app_up web`的--no-deps路径；18:24:54.217747 JST（09:24:54.217747Z）开始，显式`preprod_wait_for_service_health web`与`preprod_assert_container_image web`全部PASS。没有build/pull、发版、迁移或重建其它服务。
+
+- 原web：`7c9eb03f514ac5b98886563e2d4a31e6a82410a29fe942a96e9427320f53d093`，StartedAt `2026-10-11T08:53:14.153586954Z`。
+- 新web：`a5cd03eb3f8669064b4f54a304eddb1c6a05794013d881112330d7d638aee571`，StartedAt `2026-10-11T09:24:55.435116931Z`。
+- 镜像引用均cps-novel:0.5.15-db62350，实体均`sha256:b753a3b7c0a650d75db8167d925ffce3d835efc4e1c3d8b7cc7934345006e935`，descriptor/config/platform/revision核对不变。
+- 密钥容器内wc -c=36，web开关true、Site Key匹配、后台来源https://zbcwf.pulsenovels.com，health healthy/0.5.15/Final，database与metadata passed。
+
+原始启动标记：
+
+```text
+[auth] ADMIN_LOGIN_TURNSTILE_ENABLED=true — admin login requires Turnstile (hostname=zbcwf.pulsenovels.com, site key and secret present)
+```
+
+其它五服务的ID和StartedAt逐项不变：
+
+| 服务 | 完整容器ID | StartedAt（UTC） | 核对 |
+| --- | --- | --- | --- |
+| worker | `160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0` | `2026-10-10T17:07:04.899569634Z` | 不变 |
+| worker-light | `7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716` | `2026-10-10T17:07:05.054978878Z` | 不变 |
+| scheduler | `c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd` | `2026-10-10T17:07:11.780118207Z` | 不变 |
+| postgres | `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e` | `2026-09-27T15:28:01.610098036Z` | 不变 |
+| backup-timer | `43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da` | `2026-10-10T17:07:49.905880279Z` | 不变 |
+
+### 技术验证与Owner最终验收
+
+技术验证于2026-10-11 18:25:03 JST（09:25:03Z）完成，第1～6项全PASS。新web自启动error=0 / permission denied=0 / verification refused=0 / misconfigured=0；无misconfigured。
+
+| 外部取样（各一次） | HTTP | 原始HTML结果 | 响应头 | 判定 |
+| --- | --- | --- | --- | --- |
+| 公开首页 | 200 | 无challenges.cloudflare.com、无验证标签和本Site Key | DENY | PASS |
+| 后台/login，既有Basic Auth curl配置 | 200 | 有span标签文字“人机验证”，页面数据有0x4AAAAAAFTqFgFn4w6AYhbb；无Cloudflare域名属预期 | X-Frame-Options: DENY | PASS |
+
+自动外部取样2/4次，无重试或跟随跳转；Owner浏览器为人工验收，不计入、不统计其请求。只保存受限匹配结果、长度、页面哈希及DENY，不保存凭据、原始HTML或完整响应头。
+
+Owner于2026-10-11 18:31:10 JST报告实际登录成功：已完成：验证框 → 验证 → 密码 → 两步验证 → 进入后台，人机验证正常。随后只读复核2026-10-11 18:31:13 JST，verification refused=0、error=0、permission denied=0、misconfigured=0，health与镜像身份正常；保持开关打开。没有模拟登录或提交登录表单。
+
+### 回退方法与治理
+
+本次技术验证未触发回退。Owner报告失败时，先只读查看verification refused的reason并回报，再恢复本次备份（先核env无漂移）或只把本次开关设false；全新shell加载原manifest/env，仅重建web，不跑preflight、不删密钥。显式等待healthy、镜像核对、五服务身份检查，并用预算内一次后台取样确认验证标签/Site Key不再出现；浏览器不再动态加载Cloudflare脚本。等待Owner期间不因超时自行回退。
+
+第二次尝试的原始脱敏日志、SHA/diff/cmp、preflight、容器身份、外部取样和Owner结果见[第二次证据目录](evidence/admin-turnstile-enable-2026-10-11/attempt2/)。没有改代码/nginx/其它env/其它开关/白名单/数据库或操作其它服务。
+
+治理在Owner结果和日志复核后完成一个文档提交：追加本节、v0.5.15台账补一行、指定`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.abbrev GIT_CONFIG_VALUE_0=7`运行原CHANGELOG生成器，带Agent: codex / Model: GPT-6 trailer。仅推送release分支，回读分支SHA与固定annotated v0.5.15 Final；治理提交不部署，不追加发版日志。Notion另追加第二次尝试独立手账并回读保留原历史，收据留于`.tmp/admin-turnstile-enable-20261011-attempt2/`。

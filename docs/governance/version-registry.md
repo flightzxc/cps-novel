@@ -21,6 +21,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.5.15 —— 已部署正式站（2026-10-11 02:07:56 JST）
 
+- B-39 Turnstile第二次尝试已开启并验收PASS（2026-10-11 18:25 JST开闸，Owner18:31 JST确认验证框→验证→密码→两步验证→后台正常）：仅env追加两行/web重建，preflight/启动/密钥36字节/healthy/镜像PASS，后台HTML有“人机验证”与公开Site Key且DENY，公开首页无Cloudflare。env新SHA53d5c5c48b7c679677f3d30d49f6f9f0a53da84ab843b8806512f516b4d95a50，其余五服务ID/StartedAt不变；登录后refused/error/permission denied/misconfigured均0，外部2/4次。保持开启，第一次回退历史不改，见 [第二次尝试](releases/admin-turnstile-enable-2026-10-11.md#第二次尝试2026-10-11-1825-jst)。
+
 - B-39 Turnstile开闸尝试（2026-10-11 17:53 JST）已按异常条件回退，当前仍关闭：仅env追加两行/web重建，preflight/启动/挂载/health/镜像PASS；登录原始HTML无Cloudflare脚本（现有组件由浏览器useEffect动态插入），立即恢复备份并仅重建web。env SHA回到823adaf178fa543fd3b964038af043d97eb05af4ec2cfee0fe64a49f8773c603，其余五服务ID/StartedAt不变；回退web错误/permission denied/verification refused均0，外部3/4次，Owner Turnstile实际登录未执行。见 [运维记录](releases/admin-turnstile-enable-2026-10-11.md)。
 
 - Owner 明确授权，haiyue-vps 低流量窗口原 RELEASE=PASS / EXIT=0；维护 17:06:45.909804Z–17:07:55.279041Z，69.369237秒；新迁移16.301ms。A–E / F.1 全 PASS：26finished/0rollback/58表，导航123全true，投影0/0/0；health0.5.15/Final/metadata passed，五应用healthy、postgres CID不变；Next16.3.8/运行依赖门禁、写闸和白名单一致、六服务error/permissiondenied0、backup-timer RUNNING。首页100slug逐项零变化，外部2/10全代理。

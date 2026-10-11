@@ -1,0 +1,38 @@
+[
+  {
+    "at": "2026-10-11T09:25:02.762920+00:00",
+    "authenticated": false,
+    "bodyBytes": 268780,
+    "bodySha256": "3fd8e700cb3e115eddcc51563d18085ad7b70876d703bae92a60c5f395215328",
+    "cloudflareScript": false,
+    "containsCloudflare": false,
+    "http": 200,
+    "humanVerificationLabel": false,
+    "label": "public_home",
+    "publicSiteKeyInPageData": false,
+    "redirects": false,
+    "retry": 0,
+    "url": "https://pulsenovels.com/",
+    "xFrameOptions": [
+      "DENY"
+    ]
+  },
+  {
+    "at": "2026-10-11T09:25:02.920440+00:00",
+    "authenticated": true,
+    "bodyBytes": 12365,
+    "bodySha256": "2fd9fd1f665447b0e596a929014774f27673d6f37f51e1608477498c9e34e43c",
+    "cloudflareScript": false,
+    "containsCloudflare": false,
+    "http": 200,
+    "humanVerificationLabel": true,
+    "label": "admin_login",
+    "publicSiteKeyInPageData": true,
+    "redirects": false,
+    "retry": 0,
+    "url": "https://zbcwf.pulsenovels.com/login",
+    "xFrameOptions": [
+      "DENY"
+    ]
+  }
+]

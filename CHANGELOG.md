@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-11 · 共 1281 个 commit
+生成时间：2026-10-11 · 共 1282 个 commit
+- `983b4ae` 2026-10-11 docs: 记录海阅后台 Turnstile 开闸验收中止与回退  — _codex · GPT-6_
 - `7b255c6` 2026-10-11 docs: 记录海阅 IndexNow 存量回填第二次放行与全量验收  — _codex · GPT-6_
 - `ad58a78` 2026-10-11 docs: 记录海阅 IndexNow 存量回填首次500篇放行与验收  — _codex · GPT-6_
 - `48f8713` 2026-10-11 docs: 收官 v0.5.15 首次合批验收的同步回读收据  — _codex · GPT-6_
