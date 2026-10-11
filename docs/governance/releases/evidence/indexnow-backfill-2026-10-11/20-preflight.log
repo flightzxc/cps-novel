@@ -1,0 +1,80 @@
+deploy
+COMMAND_EXIT=0
+Sat Oct 10 23:45:16 UTC 2026
+COMMAND_EXIT=0
+ 08:45:16 up 21 days, 13:57,  1 user,  load average: 0.21, 0.23, 0.25
+COMMAND_EXIT=0
+cps-novel-backup-timer-1 Up 7 hours (healthy)
+cps-novel-scheduler-1 Up 7 hours (healthy)
+cps-novel-worker-light-1 Up 7 hours (healthy)
+cps-novel-worker-1 Up 7 hours (healthy)
+cps-novel-web-1 Up 7 hours (healthy)
+cps-novel-postgres-1 Up 13 days (healthy)
+COMMAND_EXIT=0
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":2720622,"ExitCode":0,"Error":"","StartedAt":"2026-10-10T17:06:52.472212851Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:44:29.643442936+09:00","End":"2026-10-11T08:44:29.69121155+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:39.69241001+09:00","End":"2026-10-11T08:44:39.740658187+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:49.741776996+09:00","End":"2026-10-11T08:44:49.787012384+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:59.788412963+09:00","End":"2026-10-11T08:44:59.83285102+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:45:09.834485461+09:00","End":"2026-10-11T08:45:09.881725064+09:00","ExitCode":0,"Output":""}]}}
+COMMAND_EXIT=0
+4a2547abb17ae53f735ccae1aa9bdd58c081d22c37a7663964c5286306dbcc4f
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "web", "id": "4a2547abb17ae53f735ccae1aa9bdd58c081d22c37a7663964c5286306dbcc4f", "status": "running", "health": "healthy"}
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":2722083,"ExitCode":0,"Error":"","StartedAt":"2026-10-10T17:07:04.899569634Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:44:11.465458492+09:00","End":"2026-10-11T08:44:11.540795549+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:26.542176444+09:00","End":"2026-10-11T08:44:26.618820195+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:41.620013438+09:00","End":"2026-10-11T08:44:41.694498253+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:56.695727326+09:00","End":"2026-10-11T08:44:56.77782501+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:45:11.778675942+09:00","End":"2026-10-11T08:45:11.861443218+09:00","ExitCode":0,"Output":""}]}}
+COMMAND_EXIT=0
+160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "worker", "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0", "status": "running", "health": "healthy"}
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":2722153,"ExitCode":0,"Error":"","StartedAt":"2026-10-10T17:07:05.054978878Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:44:11.434711031+09:00","End":"2026-10-11T08:44:11.511956285+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:26.513325559+09:00","End":"2026-10-11T08:44:26.594889832+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:41.596345166+09:00","End":"2026-10-11T08:44:41.671706023+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:56.673166687+09:00","End":"2026-10-11T08:44:56.755290191+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:45:11.756347523+09:00","End":"2026-10-11T08:45:11.840548954+09:00","ExitCode":0,"Output":""}]}}
+COMMAND_EXIT=0
+7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "worker-light", "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716", "status": "running", "health": "healthy"}
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":2722583,"ExitCode":0,"Error":"","StartedAt":"2026-10-10T17:07:11.780118207Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:44:14.111103886+09:00","End":"2026-10-11T08:44:14.193877233+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:29.194948481+09:00","End":"2026-10-11T08:44:29.273060305+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:44.273566847+09:00","End":"2026-10-11T08:44:44.353778767+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:44:59.354191147+09:00","End":"2026-10-11T08:44:59.433176234+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:45:14.433843543+09:00","End":"2026-10-11T08:45:14.513911433+09:00","ExitCode":0,"Output":""}]}}
+COMMAND_EXIT=0
+c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "scheduler", "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd", "status": "running", "health": "healthy"}
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":2723772,"ExitCode":0,"Error":"","StartedAt":"2026-10-10T17:07:49.905880279Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:22:58.361224639+09:00","End":"2026-10-11T08:22:58.399937709+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:27:58.400898733+09:00","End":"2026-10-11T08:27:58.439075433+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:32:58.440000138+09:00","End":"2026-10-11T08:32:58.479327702+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:37:58.480230365+09:00","End":"2026-10-11T08:37:58.521844343+09:00","ExitCode":0,"Output":""},{"Start":"2026-10-11T08:42:58.523563225+09:00","End":"2026-10-11T08:42:58.560773683+09:00","ExitCode":0,"Output":""}]}}
+COMMAND_EXIT=0
+43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "backup-timer", "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da", "status": "running", "health": "healthy"}
+{"Status":"running","Running":true,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":1382493,"ExitCode":0,"Error":"","StartedAt":"2026-09-27T15:28:01.610098036Z","FinishedAt":"0001-01-01T00:00:00Z","Health":{"Status":"healthy","FailingStreak":0,"Log":[{"Start":"2026-10-11T08:44:52.108296763+09:00","End":"2026-10-11T08:44:52.186861348+09:00","ExitCode":0,"Output":"/var/run/postgresql:5432 - accepting connections\n"},{"Start":"2026-10-11T08:44:57.188471716+09:00","End":"2026-10-11T08:44:57.259940993+09:00","ExitCode":0,"Output":"/var/run/postgresql:5432 - accepting connections\n"},{"Start":"2026-10-11T08:45:02.260746937+09:00","End":"2026-10-11T08:45:02.369640732+09:00","ExitCode":0,"Output":"/var/run/postgresql:5432 - accepting connections\n"},{"Start":"2026-10-11T08:45:07.372502465+09:00","End":"2026-10-11T08:45:07.443561361+09:00","ExitCode":0,"Output":"/var/run/postgresql:5432 - accepting connections\n"},{"Start":"2026-10-11T08:45:12.444584016+09:00","End":"2026-10-11T08:45:12.521139486+09:00","ExitCode":0,"Output":"/var/run/postgresql:5432 - accepting connections\n"}]}}
+COMMAND_EXIT=0
+691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e
+COMMAND_EXIT=0
+CONTAINER_BASELINE={"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "status": "running", "health": "healthy"}
+{"ok":true,"status":"healthy","build":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7","builtAt":"2026-10-10T12:00:28Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.5.15","commit":"db623505539c3ca55f55b1270aab829b8db102d7"}},"database":{"status":"passed","reason":null,"durationMs":1},"reasons":[]}COMMAND_EXIT=0
+db623505539c3ca55f55b1270aab829b8db102d7
+COMMAND_EXIT=0
+FLAG=FEATURE_INDEXNOW_OUTBOX
+true
+COMMAND_EXIT=0
+FLAG=INDEXNOW_OUTBOX_ALLOW_WRITE
+true
+COMMAND_EXIT=0
+FLAG=FEATURE_INDEXNOW_DELIVERY
+true
+COMMAND_EXIT=0
+FLAG=INDEXNOW_DELIVERY_ALLOW_WRITE
+true
+COMMAND_EXIT=0
+COMMAND_EXIT=1
+BACKFILL_ENV=ABSENT
+[{"current_user":"worker_app"}]
+COMMAND_EXIT=0
+54d8c26f61a4f4ea5ae8881bcd88d3b6e67c7a706bf3acea857770d6c3585a5b  /tmp/indexnow-backfill-20261011.json
+COMMAND_EXIT=0
+PID   COMMAND
+    1 node /usr/local/bin/tsx worker/index.ts
+   18 /usr/local/bin/node --require /usr/local/lib/node_modules/tsx/dist/preflight.cjs --import file:///usr/local/lib/node_modules/tsx/dist/loader.mjs worker/index.ts
+   31 /usr/local/lib/node_modules/tsx/node_modules/@esbuild/linux-x64/bin/esbuild --service=0.27.7 --ping
+   38 /usr/local/lib/node_modules/tsx/node_modules/@esbuild/linux-x64/bin/esbuild --service=0.27.7 --ping
+  202 [esbuild]
+  209 [esbuild]
+ 5411 [esbuild]
+ 5418 [esbuild]
+ 5466 [esbuild]
+ 5474 [esbuild]
+20265 ps -eo pid,args
+COMMAND_EXIT=0
+SECOND_RELEASE_PREFLIGHT=PASS
+
+EXIT=0

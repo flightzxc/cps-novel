@@ -1,0 +1,104 @@
+{"chunkIndex":0,"urls":500,"eligibleUrls":320,"driftedUrls":0,"alreadyHasDeliveryUrls":180,"enqueuedUrls":320,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":320,"accepted200Urls":320,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":21937}
+{
+  "generatedAt": "2026-10-10T23:47:36.721Z",
+  "control": {
+    "dbNow": "2026-10-10T23:47:36.719Z",
+    "breaker": {
+      "open": false
+    },
+    "rateLimit": {
+      "waiting": false
+    },
+    "lastResume": null,
+    "lastBisect": null
+  },
+  "keyValidation": {
+    "state": "verified",
+    "lastAccepted": {
+      "httpStatus": 200,
+      "at": "2026-10-10T23:47:05.257Z",
+      "requestBatchId": "ced25e88-953b-49be-b393-dc01f7915cb0"
+    },
+    "accepted": {
+      "all": {
+        "status200": {
+          "urls": 825,
+          "httpRequests": 5
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      },
+      "last24h": {
+        "status200": {
+          "urls": 825,
+          "httpRequests": 5
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      }
+    }
+  },
+  "outbox": {
+    "urlsByStatusAndSource": [
+      {
+        "status": "accepted",
+        "source": "admin.article.publish",
+        "urls": 6
+      },
+      {
+        "status": "accepted",
+        "source": "backfill",
+        "urls": 820
+      },
+      {
+        "status": "pending",
+        "source": "backfill",
+        "urls": 436
+      }
+    ],
+    "dueUrls": 436,
+    "cancelledUrlsByErrorKind": [],
+    "invalidUrls": [],
+    "deadLetters": []
+  },
+  "attempts": {
+    "all": [
+      {
+        "httpStatus": "200",
+        "urls": 825,
+        "httpRequests": 5
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ],
+    "last24h": [
+      {
+        "httpStatus": "200",
+        "urls": 825,
+        "httpRequests": 5
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ]
+  },
+  "tasks": {
+    "deliveryTaskItemsByStatus": {
+      "success": 6
+    },
+    "scanTaskItemsByStatus": {
+      "success": 1063
+    },
+    "inFlightBatchTasks": []
+  }
+}
+EXIT=0

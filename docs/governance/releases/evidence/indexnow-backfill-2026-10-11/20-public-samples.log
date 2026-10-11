@@ -1,0 +1,14 @@
+CURL_STDOUT=200
+CURL_STDERR=
+CURL_EXIT=0
+{"id": "e47fa1d4-4d63-4711-b44d-f79fe0a10949", "url": "https://pulsenovels.com/es/novel/examen-m%C3%A9dico-pb2le0suz", "locale": "es", "httpStatus": 200, "canonical": ["https://pulsenovels.com/es/novel/examen-m%C3%A9dico-pb2le0suz"], "requests": 1, "proxy": "http://127.0.0.1:7899", "checkedAtUtc": "2026-10-11T00:49:43.605012+00:00"}
+CURL_STDOUT=200
+CURL_STDERR=
+CURL_EXIT=0
+{"id": "8f6d2197-a2d1-4bb7-9f04-53a1410a17b2", "url": "https://pulsenovels.com/ko/novel/%EA%B7%B8%EC%9D%98-%EB%B0%B0%EC%8B%A0-%EB%82%98%EC%9D%98-%EB%A7%88%ED%94%BC%EC%95%84%EC%8B%9D-%EB%B3%B5%EC%88%98-pbey5peob", "locale": "ko", "httpStatus": 200, "canonical": ["https://pulsenovels.com/ko/novel/%EA%B7%B8%EC%9D%98-%EB%B0%B0%EC%8B%A0-%EB%82%98%EC%9D%98-%EB%A7%88%ED%94%BC%EC%95%84%EC%8B%9D-%EB%B3%B5%EC%88%98-pbey5peob"], "requests": 1, "proxy": "http://127.0.0.1:7899", "checkedAtUtc": "2026-10-11T00:49:45.086692+00:00"}
+CURL_STDOUT=200
+CURL_STDERR=
+CURL_EXIT=0
+{"id": "eb5bc09c-d429-49cf-80f7-1926b5e8d9da", "url": "https://pulsenovels.com/th/novel/%E0%B8%A7%E0%B8%B4%E0%B8%A7%E0%B8%B2%E0%B8%AB%E0%B9%8C%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%A2%E0%B8%97%E0%B8%B2%E0%B8%A2%E0%B8%B2%E0%B8%97%E0%B8%A1%E0%B8%B2%E0%B9%80%E0%B8%9F%E0%B8%B5%E0%B8%A2-pwgfa8215", "locale": "th", "httpStatus": 200, "canonical": ["https://pulsenovels.com/th/novel/%E0%B8%A7%E0%B8%B4%E0%B8%A7%E0%B8%B2%E0%B8%AB%E0%B9%8C%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%A2%E0%B8%97%E0%B8%B2%E0%B8%A2%E0%B8%B2%E0%B8%97%E0%B8%A1%E0%B8%B2%E0%B9%80%E0%B8%9F%E0%B8%B5%E0%B8%A2-pwgfa8215"], "requests": 1, "proxy": "http://127.0.0.1:7899", "checkedAtUtc": "2026-10-11T00:49:46.728815+00:00"}
+SECOND_RELEASE_PUBLIC_SAMPLES=PASS; EXTERNAL_REQUESTS=3
+EXIT=0

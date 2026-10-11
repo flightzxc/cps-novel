@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-10-11T00:48:35.431Z",
+  "control": {
+    "dbNow": "2026-10-11T00:48:35.429Z",
+    "breaker": {
+      "open": false
+    },
+    "rateLimit": {
+      "waiting": false
+    },
+    "lastResume": null,
+    "lastBisect": null
+  },
+  "keyValidation": {
+    "state": "verified",
+    "lastAccepted": {
+      "httpStatus": 200,
+      "at": "2026-10-11T00:48:05.364Z",
+      "requestBatchId": "af115dba-fb1f-4127-a34e-3db4accb18c7"
+    },
+    "accepted": {
+      "all": {
+        "status200": {
+          "urls": 30806,
+          "httpRequests": 66
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      },
+      "last24h": {
+        "status200": {
+          "urls": 30806,
+          "httpRequests": 66
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      }
+    }
+  },
+  "outbox": {
+    "urlsByStatusAndSource": [
+      {
+        "status": "accepted",
+        "source": "admin.article.publish",
+        "urls": 6
+      },
+      {
+        "status": "accepted",
+        "source": "backfill",
+        "urls": 30801
+      }
+    ],
+    "dueUrls": 0,
+    "cancelledUrlsByErrorKind": [],
+    "invalidUrls": [],
+    "deadLetters": []
+  },
+  "attempts": {
+    "all": [
+      {
+        "httpStatus": "200",
+        "urls": 30806,
+        "httpRequests": 66
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ],
+    "last24h": [
+      {
+        "httpStatus": "200",
+        "urls": 30806,
+        "httpRequests": 66
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ]
+  },
+  "tasks": {
+    "deliveryTaskItemsByStatus": {
+      "success": 67
+    },
+    "scanTaskItemsByStatus": {
+      "success": 1124
+    },
+    "inFlightBatchTasks": []
+  }
+}
+
+EXIT=0

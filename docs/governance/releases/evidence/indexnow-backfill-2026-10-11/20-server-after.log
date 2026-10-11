@@ -1,0 +1,19 @@
+UPTIME_AFTER=09:49:12 up 21 days, 15:01,  1 user,  load average: 0.29, 0.26, 0.29
+CONTAINER_AFTER={"service": "web", "id": "4a2547abb17ae53f735ccae1aa9bdd58c081d22c37a7663964c5286306dbcc4f", "status": "running", "health": "healthy"}
+CONTAINER_AFTER={"service": "worker", "id": "160a9ec0a8cff439074e5293d0abb1de2b02a4cfdffb14b16036a7d5a65141c0", "status": "running", "health": "healthy"}
+CONTAINER_AFTER={"service": "worker-light", "id": "7709fc2894f2702f3a2b9d06d94905b1c11526dc21e0140209edbde2fff24716", "status": "running", "health": "healthy"}
+CONTAINER_AFTER={"service": "scheduler", "id": "c5779d521b4eec5b646a8642df524f1e6d84f5b7a39ed71ba24bc9d2f82d1cfd", "status": "running", "health": "healthy"}
+CONTAINER_AFTER={"service": "backup-timer", "id": "43bb77638c4a230eb856dc64aece6eeded02eb8ce92305fa4120c3e80da325da", "status": "running", "health": "healthy"}
+CONTAINER_AFTER={"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "status": "running", "health": "healthy"}
+WEB_LOG_CHECK={"since": "2026-10-10T23:46:49.889795+00:00", "lines": 0, "errorLines": 0, "permissionDenied": 0}
+HEALTH_AFTER={"ok": true, "status": "healthy", "build": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7", "builtAt": "2026-10-10T12:00:28Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.5.15", "commit": "db623505539c3ca55f55b1270aab829b8db102d7"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+FEATURE_INDEXNOW_OUTBOX=true
+INDEXNOW_OUTBOX_ALLOW_WRITE=true
+FEATURE_INDEXNOW_DELIVERY=true
+INDEXNOW_DELIVERY_ALLOW_WRITE=true
+BACKFILL_ENV=ABSENT
+HOST_MANIFEST_SHA_UNCHANGED=PASS
+MAIN_ENDED_UTC=2026-10-11T00:48:10Z
+SERVER_CLOSURE=PASS
+
+EXIT=0

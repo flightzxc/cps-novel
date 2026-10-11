@@ -1,0 +1,108 @@
+{"chunkIndex":28,"urls":500,"eligibleUrls":498,"driftedUrls":0,"alreadyHasDeliveryUrls":2,"enqueuedUrls":498,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":498,"accepted200Urls":498,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":52717}
+{"chunkIndex":29,"urls":500,"eligibleUrls":496,"driftedUrls":0,"alreadyHasDeliveryUrls":4,"enqueuedUrls":496,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":496,"accepted200Urls":496,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":62216}
+{"chunkIndex":30,"urls":500,"eligibleUrls":500,"driftedUrls":0,"alreadyHasDeliveryUrls":0,"enqueuedUrls":500,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":500,"accepted200Urls":500,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":62575}
+{"chunkIndex":31,"urls":500,"eligibleUrls":495,"driftedUrls":0,"alreadyHasDeliveryUrls":5,"enqueuedUrls":495,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":495,"accepted200Urls":495,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":62414}
+{"chunkIndex":32,"urls":500,"eligibleUrls":496,"driftedUrls":0,"alreadyHasDeliveryUrls":4,"enqueuedUrls":496,"duplicateUrls":0,"ineligibleUrls":0,"disabledUrls":0,"acceptedUrls":496,"accepted200Urls":496,"accepted202Urls":0,"cancelledUrls":0,"notAcceptedUrls":0,"httpRequests":1,"elapsedMs":52295}
+{
+  "generatedAt": "2026-10-11T00:19:55.160Z",
+  "control": {
+    "dbNow": "2026-10-11T00:19:55.158Z",
+    "breaker": {
+      "open": false
+    },
+    "rateLimit": {
+      "waiting": false
+    },
+    "lastResume": null,
+    "lastBisect": null
+  },
+  "keyValidation": {
+    "state": "verified",
+    "lastAccepted": {
+      "httpStatus": 200,
+      "at": "2026-10-11T00:19:06.594Z",
+      "requestBatchId": "999eb8f0-ad65-4e6b-ab87-fa61283e3097"
+    },
+    "accepted": {
+      "all": {
+        "status200": {
+          "urls": 16591,
+          "httpRequests": 37
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      },
+      "last24h": {
+        "status200": {
+          "urls": 16591,
+          "httpRequests": 37
+        },
+        "status202": {
+          "urls": 1,
+          "httpRequests": 1
+        }
+      }
+    }
+  },
+  "outbox": {
+    "urlsByStatusAndSource": [
+      {
+        "status": "accepted",
+        "source": "admin.article.publish",
+        "urls": 6
+      },
+      {
+        "status": "accepted",
+        "source": "backfill",
+        "urls": 16586
+      },
+      {
+        "status": "pending",
+        "source": "backfill",
+        "urls": 495
+      }
+    ],
+    "dueUrls": 495,
+    "cancelledUrlsByErrorKind": [],
+    "invalidUrls": [],
+    "deadLetters": []
+  },
+  "attempts": {
+    "all": [
+      {
+        "httpStatus": "200",
+        "urls": 16591,
+        "httpRequests": 37
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ],
+    "last24h": [
+      {
+        "httpStatus": "200",
+        "urls": 16591,
+        "httpRequests": 37
+      },
+      {
+        "httpStatus": "202",
+        "urls": 1,
+        "httpRequests": 1
+      }
+    ]
+  },
+  "tasks": {
+    "deliveryTaskItemsByStatus": {
+      "success": 38
+    },
+    "scanTaskItemsByStatus": {
+      "success": 1095
+    },
+    "inFlightBatchTasks": []
+  }
+}
+EXIT=0

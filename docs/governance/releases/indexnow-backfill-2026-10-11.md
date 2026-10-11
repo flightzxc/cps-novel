@@ -98,3 +98,117 @@ EXIT=0；chunks=1、selectedUrls=eligibleUrls=enqueuedUrls=acceptedUrls=accepted
 异常及恢复：**无真实门禁失败，无重跑，无熔断恢复，无包装器恢复。** 预期未设置环境变量的 printenv EXIT=1 已明确处理为 ABSENT。两个 CPS 参考仓 HEAD / git status --porcelain=v1 与任务开始前逐字一致；没有本机重型任务或重型锁。
 
 在 release/v0.5.15-2026-10-10 追加一个文档提交（Agent: codex / Model: GPT-6），CHANGELOG 仅由指定七位 SHA 环境参数运行生成器更新；提交后推送并回读，再向海阅 Notion 手账追加一条本次运维记录并回读。Git/Notion 回读收据留在主机同目录和 .tmp，最终回报给出实际提交及同步结果；本文与 result.json 记录技术验收已完成。
+
+## 第二次放行（2026-10-11 JST）
+
+状态：**第二次放行验收 PASS，同一份清单剩余部分全部推送完成。** Owner 本次明确授权：预演通过且无大批量发布/生成任务即可开始，按此执行，不另等夜间窗口。第一次记录及证据原样保留，以下为第二次执行结果。
+
+### 前置与预演
+
+health / worker-light 仍为 `0.5.15` / Final `db623505539c3ca55f55b1270aab829b8db102d7`；health database / metadataConsistency passed。主机与容器清单都在，文件 SHA256 均为 `54d8c26f61a4f4ea5ae8881bcd88d3b6e67c7a706bf3acea857770d6c3585a5b`，未重新生成或复制替换。实际 worker-light 容器仍为 cps-novel-worker-light-1，数据库角色 worker_app。四个开关均 true，容器未设置回填写闸；无 article.publish.* / article.generate.* pending 或 processing，无同类 apply 进程或主推日志。
+
+前置 accepted=506、distinct HTTP requests=5、breaker closed、无429等待/死信/到期积压，keyValidation verified。只读 SQL transaction_read_only=on、backfillRows=500。五应用及 postgres healthy；uptime：` 08:45:16 up 21 days, 13:57,  1 user,  load average: 0.21, 0.23, 0.25`。
+
+全清单预演使用 `--manifest /tmp/indexnow-backfill-20261011.json --offset 0`，没有 --confirm、--limit 或回填写闸，EXIT=0。
+
+```json
+{
+  "mode": "dry-run",
+  "selectedUrls": 30801,
+  "chunks": 62,
+  "eligibleUrls": 30301,
+  "driftedUrls": 0,
+  "alreadyHasDeliveryUrls": 500,
+  "enqueuedUrls": 0,
+  "duplicateUrls": 0,
+  "ineligibleUrls": 0,
+  "disabledUrls": 0,
+  "acceptedUrls": 0,
+  "accepted200Urls": 0,
+  "accepted202Urls": 0,
+  "notAcceptedUrls": 0,
+  "cancelledUrls": 0,
+  "httpRequests": 0
+}
+```
+
+预计62次请求：原清单30801先按500分成62块，再在每块内跳过已推记录，62块均有可推文章；不能按剩余30301直接除500推算61次。
+
+### 后台启动、监控与时间
+
+deploy 身份、指定 KexAlgorithms 的 SSH；docker exec 不加 -i，stdin 接 /dev/null。唯一写库步骤由主机 setsid + nohup + sh -c 启动，脱离 SSH，不依赖长连接；PID `3033590`。只对该 docker exec 进程临时设置回填写闸，容器配置未变。
+
+```bash
+docker exec -e INDEXNOW_BACKFILL_ALLOW_WRITE=true cps-novel-worker-light-1 tsx scripts/indexnow-backfill-apply.ts --manifest /tmp/indexnow-backfill-20261011.json --offset 0 --confirm </dev/null
+```
+
+主推输出 `/opt/cps-novel/shared/indexnow-backfill/20261011/21-main.log`，末行 EXIT=0。后台运行记录在主机20-launch.json；辅助新日志20-前缀，未覆盖第一次日志。每约10分钟保存tail及完整status；另外只读记录日志进度。没有改offset、分段推送或恢复熔断。
+
+- 开始 UTC `2026-10-10T23:46:49.889795+00:00` / JST `2026-10-11T08:46:49.889795+09:00`。
+- 结束 UTC `2026-10-11T00:48:10+00:00` / JST `2026-10-11T09:48:10+09:00`（主机包装器完成时刻，单批精确响应时间见只读 SQL）。
+- 总时长 3680.110 秒（61.34 分钟）；62个完成块平均 elapsedMs=59355.435，最小=21937、最大=63118；均未超过10分钟。
+- 停机0次、重跑0次。全程未出现400/403/422熔断、429等待、网络重试、死信、格式/域名错误取消、投递任务失败或delivery_stalled。
+
+### 实际推送与收尾验收
+
+```json
+{
+  "mode": "apply",
+  "selectedUrls": 30801,
+  "chunks": 62,
+  "eligibleUrls": 30301,
+  "driftedUrls": 0,
+  "alreadyHasDeliveryUrls": 500,
+  "enqueuedUrls": 30301,
+  "duplicateUrls": 0,
+  "ineligibleUrls": 0,
+  "disabledUrls": 0,
+  "acceptedUrls": 30301,
+  "accepted200Urls": 30301,
+  "accepted202Urls": 0,
+  "notAcceptedUrls": 0,
+  "cancelledUrls": 0,
+  "httpRequests": 62
+}
+```
+
+本次新增 backfill **30301** 篇，**62** 个distinct request_batch_id、62个成功indexnow_batch条目；HTTP200/202网址数分别30301/0，请求状态分布见SQL原始输出。所有投递任务completed、每任务total=success=1 / failed=0。
+
+累计accepted **506→30807**，累计HTTP requests **5→67**；并发非backfill首发记录新增0。breaker closed、无429等待/死信/到期积压；keyValidation=verified。完整脱敏status保留于20-status-after.log。
+
+source=backfill累计状态：`[{"urls": 30801, "status": "accepted"}]`；本次状态：`[{"urls": 30301, "status": "accepted"}]`。取消原因分组`[]`。backfill范围同篇多记录=0，全outbox同篇多记录=0，非https://pulsenovels.com/前缀=0。SQL使用REPEATABLE READ / READ ONLY，未写库。
+
+| 语种 | 本次新增 | backfill累计 |
+|---|---:|---:|
+| ar | 0 | 39 |
+| de | 852 | 852 |
+| en | 13962 | 14073 |
+| es | 2795 | 2795 |
+| fr | 2620 | 2620 |
+| id | 1614 | 1614 |
+| ja | 537 | 648 |
+| ko | 782 | 782 |
+| pl | 16 | 126 |
+| pt-BR | 2434 | 2434 |
+| ru | 2875 | 2986 |
+| th | 986 | 986 |
+| vi | 828 | 828 |
+| zh-Hant | 0 | 18 |
+
+### 三条本次新增网址抽样
+
+只读SQL分别随机抽取本次新增es、ko、th各一条；每条只请求一次，curl显式走 `--proxy http://127.0.0.1:7899`，不重试、不跟随跳转，外部抽样总请求3次。HTML只存.tmp，不进Git。
+
+- es / `e47fa1d4-4d63-4711-b44d-f79fe0a10949`：[原网址](https://pulsenovels.com/es/novel/examen-m%C3%A9dico-pb2le0suz)；HTTP 200，canonical 逐字等于原网址，只请求一次。
+- ko / `8f6d2197-a2d1-4bb7-9f04-53a1410a17b2`：[原网址](https://pulsenovels.com/ko/novel/%EA%B7%B8%EC%9D%98-%EB%B0%B0%EC%8B%A0-%EB%82%98%EC%9D%98-%EB%A7%88%ED%94%BC%EC%95%84%EC%8B%9D-%EB%B3%B5%EC%88%98-pbey5peob)；HTTP 200，canonical 逐字等于原网址，只请求一次。
+- th / `eb5bc09c-d429-49cf-80f7-1926b5e8d9da`：[原网址](https://pulsenovels.com/th/novel/%E0%B8%A7%E0%B8%B4%E0%B8%A7%E0%B8%B2%E0%B8%AB%E0%B9%8C%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%A2%E0%B8%97%E0%B8%B2%E0%B8%A2%E0%B8%B2%E0%B8%97%E0%B8%A1%E0%B8%B2%E0%B9%80%E0%B8%9F%E0%B8%B5%E0%B8%A2-pwgfa8215)；HTTP 200，canonical 逐字等于原网址，只请求一次。
+
+### 服务器前后与治理
+
+推完uptime：`09:49:12 up 21 days, 15:01,  1 user,  load average: 0.29, 0.26, 0.29`。五应用web/worker/worker-light/scheduler/backup-timer均running/healthy，postgres healthy、完整容器ID与基线同为 `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。web自首次启动推送起 error=0、permission denied=0，沿用v0.5.15发布验收的JSON级别及纯文本错误识别规则。完整容器前后状态见20-preflight.log/20-server-after.log及20-result.json。
+
+收尾Final不变、四个开关仍true、容器回填写闸仍不存在、主机清单摘要不变。没有改代码、API、数据库结构、env、开关、白名单、nginx、公开网址，没有重启或重建服务，没有手工SQL写入、删除或重置任何记录。两个CPS参考仓HEAD/status逐字保持任务前原样，没有本机重型任务。
+
+原始主推/监控/收尾日志、只读SQL和结果追加到原证据目录；第一次证据保留，清单全文未入Git。CHANGELOG用指定core.abbrev=7环境参数运行生成器；一个中文文档提交附Agent: codex / Model: GPT-6，推送release分支并回读，Notion手账另追加一条第二次放行记录并回读。Git/Notion同步收据归档主机同目录和.tmp，最终回报给出实际提交与回读结果。
+
+异常或预期差异：没有停机、重跑或未解释的差异；实际请求数按脚本分块为62，与执行前预演确认一致。清单已按篇判重完成全部剩余候选，无待推回填积压。

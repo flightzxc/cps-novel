@@ -1,0 +1,4 @@
+{"startedUtc": "2026-10-10T23:46:49.889795+00:00", "startedJst": "2026-10-11T08:46:49.889795+09:00", "workerLight": "cps-novel-worker-light-1", "postgresId": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "command": "docker exec -e INDEXNOW_BACKFILL_ALLOW_WRITE=true cps-novel-worker-light-1 tsx scripts/indexnow-backfill-apply.ts --manifest /tmp/indexnow-backfill-20261011.json --offset 0 --confirm </dev/null", "log": "/opt/cps-novel/shared/indexnow-backfill/20261011/21-main.log", "retries": 0, "pid": 3033590}
+DETACHED_MAIN_LAUNCH=PASS
+
+EXIT=0
