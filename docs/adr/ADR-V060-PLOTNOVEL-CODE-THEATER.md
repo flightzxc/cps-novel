@@ -44,7 +44,7 @@
 | link（MoboReader） | `status = fetched` 且 `web_url` / `app_url` 去空白后至少一个非空——**逐字不变** |
 | code（PlotNovel） | `status = fetched` 且 `upstream_code` 去空白后非空 且 `novel.locale` ∈ `config.codeModeLocales`（元素按原样比较，不裁剪、不改大小写） |
 
-- 唯一权威是 `src/server/publication/visibility.ts` 的 `isPromoReady`；SQL 对应物 `promoReadySql` 与它**逐字符等价**（JS `trim` 的 25 个空白字符经 `btrim` 绑定参数传入；配置缺 `codeModeLocales` 时用 `coalesce(jsonb_typeof(…),'')` 守住 NULL——等价性测试正是在这里抓到过一个真缺陷）。真实库用例逐字符证明。
+- 唯一权威是 `src/server/publication/visibility.ts` 的 `isPromoReady`；SQL 对应物 `promoReadySql` 与它**逐字符等价**（JS `trim` 的 25 个空白字符经 `btrim` 绑定参数传入；配置缺 `codeModeLocales` 时用 `coalesce(jsonb_typeof(…),'')` 守住 NULL；书的语种为空串时 JS 一律不就绪，SQL 用 `coalesce(locale,'') <> ''` 对齐——等价性测试在这两处抓到过真缺陷）。真实库用例逐字符证明。
 - 调用点的 `select` 必须带共享片段 `PROMO_READINESS_SELECT`；**没带剧场信息的调用点按 link 判定**——口令码模式的推广对它不可见，失败方向是安全的（绝不会因漏改一处而把没有网址的推广放出去）。
 - **防误伤**：MoboReader 剧场下"有口令码、没有网址"的推广仍然**不就绪**、不公开可见。JS、SQL、`/go`、公开列表、站点地图各有一份用例钉住。
 - 数据库约束 `article_published_promo_link_check` 只要求"发布的文章挂了推广链接"（`promo_link_id IS NOT NULL`），不看网址，**无需改**（已核实）。
@@ -65,7 +65,12 @@
 1. `promo_link.idempotency_key = sha256("promo_link\n<剧场>\n<书目>\n<账号>\n<offer>")`，必须按新剧场**重算**；否则领取 handler 用新剧场算出的键找不到已有那一行，会再 upsert 一条并对已领的书发第二次真实 `getcode`（上游接口不幂等）。
 2. `side_effect_intent.target_id` 存的正是上面那个键（防重复领取的最后一道闸），意图行的 `channel_app_id` 同步改挂，状态不变。
 3. `source_label` / `source_label_mapping` 按剧场分账，标签投影要求同一剧场：为这批书用到的标签在 PlotNovel 下建一份（已有复用）并改指标签关联，把语种范围内的映射边**复制**（不是移动）过去。
-4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，所以执行前这批书不能有任何 `pending` / `processing` 的任务条目、不能有进行中的目录扫描。
+4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，改挂后旧任务条目会全部失败；其它任务也是在书目、小说、文章上排队，改挂中途它们的前提会变。所以执行前不能有任何在途（`pending` / `processing`）的任务条目，也不能有进行中的目录扫描。"这批书的任务条目"按三种目标一起查，按 `target_id` 文本匹配（都是 uuid），不依赖 `targetType` 的拼写：
+   - **书目编号**：领推广、物化、建小说（`targetType = novel_source_item`），以及试读补采的同步任务条目（`channel_sync_task_item.novel_source_item_id`）；
+   - **书目所属的小说编号**：文章生成叶子（`targetType = novel`）、自动打标（`targetType = Novel`）；
+   - **挂在这批推广链接上的文章编号**：文章发布（`targetType = article`）。
+
+   闸门只看条目状态，所以对含这批书的领取批次必须「中止」，「暂停」不改条目状态、过不了闸门（手册步骤 2）。
 5. 分类归属投影 `novel_effective_tag` 只认 **active** 剧场名下的标签与映射。改挂时 PlotNovel 还是 `registered_disabled`，这批书暂时没有归属；所以运维顺序是"改挂 → 置 active → 对账"，对账后归属与改挂前逐行相同（真实库用例钉着）。改挂与登记两个脚本的相关写入点已登记进 B-38 写入点登记表，分类为"运维脚本，跑完必须对账"。
 
 闸门与执行方式：默认只读预演并打印各类计数；`--apply` 必须同时给 `--confirm REHOME_PLOTNOVEL_SOURCE_ITEMS`、`--expected-source-items N`、`--expected-promo-links M`，数量不符立即拒绝；前置闸门（未完成任务条目 / 进行中的扫描 / 唯一键冲突 / 数据异常 / **已发布文章**）任一不为 0 则拒绝并列出明细；单事务、持咨询锁、一条 `operation_audit`；可重复执行（第二次候选 0，改挂 0 行、不写审计）。
@@ -76,7 +81,13 @@
 
 ### D5 同名去重
 
-口令码模式剧场的书，如果存在**同语种、同规范化书名**且属于**非口令码剧场**的书（即 MoboReader），就不可生成（后台中文原因："MoboReader 已有同名书"）。规范化沿用换小说功能的 `normalizeNovelTitle`（CPS `normalizeName` 逐字移植）。只影响生成候选（候选行、入队准入、批量生成枚举），**不改任何已存在的数据**。判定写成"对侧在非口令码剧场下存在"，不写死 `moboreader` 这个名字（K2 纪律：闸只认数据库）。对侧 `title_normalized` 为 NULL 的老行退一步按"书名忽略大小写相等"取回候选再现算比对——所以运维手册要求改挂前先跑 `backfill-novel-title-normalized.ts` 把 NULL 清零。
+口令码模式剧场的书，如果存在**同语种、同规范化书名**、属于**非口令码剧场**（即 MoboReader），**并且那本书有就绪的推广**，就不可生成（后台中文原因："MoboReader 已有同名书"）。
+
+- 为什么对侧要"可用"：拍板的依据是"MoboReader 能直接跳转、转化更好"。对侧如果没有就绪推广（还没领到码、领取失败、没有网址），它自己都发不出去，这时再把 PlotNovel 那本排除，就是两本都不发。对侧没有就绪推广时，PlotNovel 这本照常可生成。（主控复核裁决，v0.6.0 复核后收紧。）
+- "就绪"不另写一套口径：数据库里用 `readyPromoLinkWhere()` 做预筛（超集）并限定在非口令码剧场，逐行再用唯一权威 `isPromoReady` 复核。
+- 规范化沿用换小说功能的 `normalizeNovelTitle`（CPS `normalizeName` 逐字移植）。只影响生成候选（候选行、入队准入、批量生成枚举），**不改任何已存在的数据**。
+- 判定写成"对侧在非口令码剧场下存在"，不写死 `moboreader` 这个名字（K2 纪律：闸只认数据库）。
+- 对侧 `title_normalized` 为 NULL 的老行退一步按"书名忽略大小写相等"取回候选再现算比对——所以运维手册要求改挂前先跑 `backfill-novel-title-normalized.ts` 把 NULL 清零。
 
 ### D6 首页轮播排除口令码模式
 
@@ -142,6 +153,7 @@
 | L9 | 站点地图 / 活跃语种的口令码分支是**粗**预筛，口令码为空或语种不在白名单的推广也会被放过，由逐行 `isPromoReady` 复核剔除（与 link 模式"`not: ''` 放过纯空白网址"同一个已接受的缺口） | 站点地图出现空分片或明显多余的语种时 |
 | L10 | 目录扫描里"同一个机构号被两个 active 剧场同时声明"会退回任务剧场并计数，不报错 | 告警计数 `ambiguousBooks` 非 0 |
 | L11 | 点击 / 复制不埋点（拍板第 6 项），无法统计"口令码到达率" | 运营需要口令码页转化数据时 |
+| L12 | **标签映射两套账会漂移**：改挂只在改挂那一刻把 MoboReader 名下的映射边**复制**一次到 PlotNovel 名下，之后两个剧场各自维护映射（`source_label_mapping` 按剧场分账，分类归属投影只认同一剧场内的标签与映射）。MoboReader 以后新增 / 修改的映射不会自动出现在 PlotNovel 名下，反之亦然 | 分类对账 `effective-tag-projection.ts check` 在置 active 并对账之后仍出现 PlotNovel 名下的 `missing`（归属缺失）；或映射审批页出现 PlotNovel 的待映射标签。处理：先看缺的是哪些标签 / 语种范围；若只是 MoboReader 后来新增的边，写一个"把 MoboReader 名下新增的映射边增量复制到 PlotNovel"的同步脚本（照改挂脚本第 5 步的 `INSERT … NOT EXISTS`，幂等）；若两边口径本来就该一致，则合并口径（让投影对同渠道各剧场共用一份映射），那是迁移级改动，另开单评估 |
 
 ## 与开发单的偏离和补充
 

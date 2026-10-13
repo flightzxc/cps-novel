@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | 0 | 发版后只读核对 | L1 | 只读 |
 | 1 | 登记 PlotNovel 剧场（默认停用） | L2 | 行是惰性的，不需回关 |
-| 2 | 暂停领取，确认没有进行中的任务 | L2 | 批次级恢复 |
+| 2 | **中止**含 1351 书目的在途任务，暂停其余领取 | L2 | 暂停可批次级恢复；中止不可恢复 |
 | 3 | 存量改挂（备份 → 预演 → 带数量 apply） | **L3 / P3，Owner Gate** | 以备份为准，不建议数据回滚 |
 | 4 | 剧场置 active，**对账分类归属**，打开 `claimPromo` | L2 | 见步骤 8 的警告 |
 | 5 | 恢复领取（先金丝雀，再放量） | L2 | 批次级暂停 / 中止 |
@@ -82,18 +82,26 @@ ORDER BY sa.code, cc.capability_key;  -- plotnovel 的 4 条全部 registered_di
 
 **回关**：不需要。登记出来的行是惰性的（外键 `RESTRICT`，也不应删除）。
 
-## 步骤 2：暂停领取，确认没有进行中的任务（L2）
+## 步骤 2：中止含 1351 书目的在途任务，暂停其余领取（L2）
 
-改挂的前置闸门要求：这批书目上没有 `pending` / `processing` 的任务条目，也没有进行中的目录扫描。
+改挂的前置闸门只看**条目状态**：这批书（及其小说、挂在其推广链接上的文章）上不能有 `pending` / `processing` 的任务条目，也不能有进行中的目录扫描。**暂停不改条目状态**——被暂停的批次里条目仍是 `pending`，闸门照样拦。所以：
 
-1. 后台任务页对进行中的 MoboReader **领推广批次做批次级"暂停"**（需 `task:manage` + 2FA）。暂停只阻止放行**新**分片；已放行的分片要等它跑完（放行后 90 分钟窗口）。
-2. 含机构 1351 的书、且还没放行的分片：改挂后它们会因"书目所属剧场 ≠ 任务剧场"全部失败，所以建议对这类批次做批次级**中止**（条目转为终态），改挂后重新提交（步骤 5）。注意：生命周期分片的单任务暂停 / 恢复一律 409，只能批次级。
-3. 目录扫描只有运营在后台 `/catalog-sync` 手动发起（没有定时扫描）：窗口期不要发起，进行中的等它结束。
-4. 其它引用这批书的在途任务（物化、试读补采）等其完成或在任务页处理。
+> **凡是含机构 1351 书目、且条目尚未完成的领取批次，必须"中止"（cancel），不能只"暂停"。** 暂停只对不含 1351 书目的纯 MoboReader 批次有意义。
 
-**必过证据**：步骤 3 的预演里 `blockers` 全是 0（见下）。这一步没有单独的读回，闸门就是预演本身。
+1. **先跑一次预演**（步骤 3.3 的只读命令，随时可以重复跑）。看报告里的 `blockers.pendingGenericTaskItems.sample`：每条给出 `task_id`、`task_type`、`task_status`、`item_status`；`pendingSyncTaskItems` 是试读补采，`activeCatalogScans` 是进行中的目录扫描。这些就是要处理的任务。
+2. **含 1351 书目的领取批次 → 中止。** 后台任务页（需 `task:manage` + 2FA）二选一：
+   - 批次详情页「中止批次」：批次下所有未完成的分片（含仍在排队、从未放行过的 `disabled` 分片）一起终止；
+   - 分片详情页「中止」：只终止这一个分片（分片的暂停 / 恢复要去批次页，中止可以在分片页直接做）。
 
-**回关**：对被暂停（未中止）的批次做批次级"恢复"。
+   中止的效果：该任务下 `pending` 条目立刻变为 `skipped`，**正在处理（`processing`）的条目会正常跑完**，不会触发新的领取调用；已成功 / 已失败的历史不改写。中止**不可恢复**，所以只中止含 1351 书目的，被中止批次里还没领的书在步骤 5 重新提交。
+3. **不含 1351 书目的纯 MoboReader 领取批次 → 批次级「暂停」即可**（预演的 sample 里不会出现它们）。暂停只阻止放行新分片，已放行的分片会跑完（放行后 90 分钟窗口）；步骤 5 再「恢复」。
+4. **其它在途任务**：文章生成叶子、自动打标、文章发布、物化、试读补采，等它们跑完，或在任务页对单个任务「中止任务」（同样是 `pending` → `skipped`，`processing` 跑完）。
+5. **目录扫描**只有运营在后台 `/catalog-sync` 手动发起（没有定时扫描）：窗口期不要发起新的，进行中的等它结束或中止。
+6. 每处理一轮就重跑预演，直到下面的"必过证据"成立。`processing` 的条目需要几分钟才会收尾，预演里它们消失之前不要急着 apply。
+
+**必过证据**：预演报告里 `blockers.pendingGenericTaskItems.total`、`pendingSyncTaskItems.total`、`activeCatalogScans.total` 全为 0，`blocked: false`，进程退出码 0（有拦截项时是 2）。这一步没有单独的读回，闸门就是预演本身。
+
+**回关**：只能回关「暂停」——对被暂停的批次做批次级「恢复」。「中止」不可恢复。
 
 ## 步骤 3：改挂（L3 / P3，需 Owner Gate）
 
@@ -124,7 +132,7 @@ docker exec -e PLOTNOVEL_REHOME_OPERATOR=<operator> cps-novel-worker-1 \
 
 | 拦截项 | 含义 | 处理 |
 | --- | --- | --- |
-| `pendingGenericTaskItems` / `pendingSyncTaskItems` / `activeCatalogScans` | 还有未完成的任务条目 / 进行中的扫描 | 回步骤 2 |
+| `pendingGenericTaskItems` / `pendingSyncTaskItems` / `activeCatalogScans` | 还有未完成的任务条目（目标是这批书目、它们所属的小说、或挂在这批推广链接上的文章：领推广、物化、文章生成、自动打标、文章发布……）/ 试读补采条目 / 进行中的扫描 | 回步骤 2，**中止**（不是暂停）后重跑预演 |
 | `uniqueKeyConflicts` / `promoKeyConflicts` | 目标剧场下已有同 (外部书号, 语种码) 的书目 / 推广链接新键撞车 | 查为什么 PlotNovel 下已有数据（通常是窗口期被置 active 过），人工处理后再来 |
 | `publishedArticles` | **已有"已发布"文章挂在这批推广链接上**，改挂可能改变已公开页面的可见性（公开网址冻结） | 不得继续，交 Owner 单独决定；预期为 0 |
 | `itemsUnderOtherApps` / `promoLinksNotAtSourceApp` | 历史数据不一致 | 人工核对后再来 |
@@ -218,7 +226,7 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 
 ## 步骤 7：批量生成与发布（L2，单批 ≤ 500 篇）
 
-1. 在后台"生成"页确认：PlotNovel 的英语书出现在候选里；与 MoboReader 同语种同名的（约 20 本）显示不可生成原因"MoboReader 已有同名书"；非英语书不在候选里（就绪规则挡住）。
+1. 在后台"生成"页确认：PlotNovel 的英语书出现在候选里；与 MoboReader 同语种同名、且 MoboReader 那本有就绪推广的（约 20 本）显示不可生成原因"MoboReader 已有同名书"（MoboReader 那本没有就绪推广——还没领到码、没有网址——的，PlotNovel 这本照常可生成）；非英语书不在候选里（就绪规则挡住）。
 2. **金丝雀**：先生成并发布 20～50 篇，抽 5 篇做下面的只读核对，全部通过再按每批 **≤ 500 篇** 放量（IndexNow 已开，发布即推送，批量也别一次性太大）。
 
 每篇抽查（`curl`，无副作用；站内码取文章正文里的 `/go/<码>`，**不要**取库里的口令码）：
@@ -228,7 +236,7 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 | 书页 / 章节页 / 文章页 | 200；按钮写 `Read on PlotNovel App`，下一行小字 `Free app · your book code is on the next page` |
 | 页面 HTML 与 `sitemap` | **不含上游口令码**（把口令码从库里读出来在本机 `grep -c`，只看计数，不贴出来；期望 0） |
 | `curl -sI /go/<站内码>` | 302，`Location` 是 `/go/<站内码>/app`（相对路径）|
-| `curl -sI /go/<站内码>/app` | 200，`Cache-Control` 含 `no-store`；HTML 里 `meta robots` 为 `noindex, nofollow` |
+| `curl -sI /go/<站内码>/app` | 200，`Cache-Control` 含 `no-store`；HTML 里 `meta robots` 为 `noindex, nofollow, nocache` |
 | MoboReader 的某个 `/go/<站内码>` | 仍 302 到原网址（link 模式不变） |
 | 中间页 | 大号口令码 + 复制按钮 + 三步说明 + 商店按钮（链接没配则显示 `Search "PlotNovel" in your app store`）+ 免责小字；首页轮播里**没有** PlotNovel 的书 |
 
@@ -239,7 +247,7 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 | 走到哪 | 怎么回 |
 | --- | --- |
 | 只做了步骤 1（登记） | 不用回。惰性行不影响任何行为 |
-| 步骤 2（暂停了领取） | 批次级恢复被暂停的批次；被中止的批次重新提交 |
+| 步骤 2（暂停 / 中止了领取） | 批次级恢复被暂停的批次；被中止的批次不可恢复，把还没领的书重新提交 |
 | 步骤 3（已改挂）、还没开能力 | **不建议回滚数据**，向前修。必须回滚时 = 以 3.1 的备份恢复（L3 / Owner Gate），且要先确认改挂之后没有新的领取 / 发文；恢复后同样要 `effective-tag-projection.ts check`，不为 0 就 `reconcile` |
 | 步骤 4～5（已 active、已开 `claimPromo`） | 能力回关：`set-channel-capability-status.ts --capability claimPromo --to registered_disabled --reason … --apply`；领取批次批次级暂停 / 中止。**⚠ 不要把 PlotNovel 置回 `registered_disabled`，除非同时保证目录扫描一直暂停**——改挂之后书目已在 PlotNovel 名下，目录分流一旦退回任务剧场，下一次扫描会在 MoboReader 名下重建同一批书（唯一键按剧场分开），造成重复档和重复领取 |
 | 步骤 6（加了试读白名单） | 环境变量去掉 `plotnovel`，两条能力回 `registered_disabled`，重建容器 |
