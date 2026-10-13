@@ -34,7 +34,7 @@
 +++ preprod.env
 @@ -64,0 +65,2 @@
 +ADMIN_LOGIN_TURNSTILE_ENABLED=true
-+ADMIN_LOGIN_TURNSTILE_SITE_KEY=0x4AAAAAAFTqFgFn4w6AYhbb
++ADMIN_LOGIN_TURNSTILE_SITE_KEY=<Turnstile 公开站点密钥，已打码>
 ```
 
 - 修改前 SHA256：`823adaf178fa543fd3b964038af043d97eb05af4ec2cfee0fe64a49f8773c603`。
@@ -128,7 +128,7 @@ worker lanes、既有写闸登记、领推广及上游限速配置同样通过�
 +++ preprod.env
 @@ -64,0 +65,2 @@
 +ADMIN_LOGIN_TURNSTILE_ENABLED=true
-+ADMIN_LOGIN_TURNSTILE_SITE_KEY=0x4AAAAAAFTqFgFn4w6AYhbb
++ADMIN_LOGIN_TURNSTILE_SITE_KEY=<Turnstile 公开站点密钥，已打码>
 ```
 
 - 修改后新SHA：`53d5c5c48b7c679677f3d30d49f6f9f0a53da84ab843b8806512f516b4d95a50`；3953字节/66行，原3862字节前缀真实cmp PASS，全量字节恰等于备份加上述两行，尾部匹配、行数仅增加2。其它env字节不变。
@@ -174,7 +174,7 @@ PREPROD_PREFLIGHT=PASS
 | 外部取样（各一次） | HTTP | 原始HTML结果 | 响应头 | 判定 |
 | --- | --- | --- | --- | --- |
 | 公开首页 | 200 | 无challenges.cloudflare.com、无验证标签和本Site Key | DENY | PASS |
-| 后台/login，既有Basic Auth curl配置 | 200 | 有span标签文字“人机验证”，页面数据有0x4AAAAAAFTqFgFn4w6AYhbb；无Cloudflare域名属预期 | X-Frame-Options: DENY | PASS |
+| 后台/login，既有Basic Auth curl配置 | 200 | 有span标签文字“人机验证”，页面数据有<Turnstile 公开站点密钥，已打码>；无Cloudflare域名属预期 | X-Frame-Options: DENY | PASS |
 
 自动外部取样2/4次，无重试或跟随跳转；Owner浏览器为人工验收，不计入、不统计其请求。只保存受限匹配结果、长度、页面哈希及DENY，不保存凭据、原始HTML或完整响应头。
 
@@ -187,3 +187,10 @@ Owner于2026-10-11 18:31:10 JST报告实际登录成功：已完成：验证框 
 第二次尝试的原始脱敏日志、SHA/diff/cmp、preflight、容器身份、外部取样和Owner结果见[第二次证据目录](evidence/admin-turnstile-enable-2026-10-11/attempt2/)。没有改代码/nginx/其它env/其它开关/白名单/数据库或操作其它服务。
 
 治理在Owner结果和日志复核后完成一个文档提交：追加本节、v0.5.15台账补一行、指定`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.abbrev GIT_CONFIG_VALUE_0=7`运行原CHANGELOG生成器，带Agent: codex / Model: GPT-6 trailer。仅推送release分支，回读分支SHA与固定annotated v0.5.15 Final；治理提交不部署，不追加发版日志。Notion另追加第二次尝试独立手账并回读保留原历史，收据留于`.tmp/admin-turnstile-enable-20261011-attempt2/`。
+
+## 事后打码说明（2026-10-14，主控）
+
+- **原因**：本记录和两个证据目录里的 `env-safe.diff`、`remote-enable.log` 原样写入了 Turnstile 站点密钥（`0x4…` 形态）。站点密钥本身是公开值，会出现在登录页源码里，但仓库测试 `tests/backend/runtime/admin-login-turnstile-config-contract.test.ts`"no committed file carries a real-looking Turnstile key" 不区分公开密钥和保密密钥。这条测试因此从 3ee7a9ff 起失败，会卡住下一次发版门禁。
+- **处理**：在 v0.6.0 集成线上把这 7 处密钥统一替换为 `<Turnstile 公开站点密钥，已打码>`，并重算两个 `evidence-sha256.json` 中对应 4 个文件的字节数和 sha256。重算后清单与文件逐条一致。
+- **未改动**：其余字节不变；env 的 SHA 链、执行时间、结论都没有改动；打码前的原文保留在 git 历史 3ee7a9ff 中。
+- **今后**：运维记录和证据里出现 Turnstile 站点密钥时一律打码，只记长度和格式校验结果。

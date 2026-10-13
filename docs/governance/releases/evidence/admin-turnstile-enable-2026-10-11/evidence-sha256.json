@@ -6,8 +6,8 @@
   },
   {
     "file": "env-safe.diff",
-    "bytes": 150,
-    "sha256": "b7156a6ec6f48502019a4550bb78494f4c81e9f21a9efb582c706af6ba656cfe"
+    "bytes": 168,
+    "sha256": "33b1224ff30260fcd058fd21ba0798f52f8ba919946a3d7f812d5cff058b0f42"
   },
   {
     "file": "external-requests.json",
@@ -21,8 +21,8 @@
   },
   {
     "file": "remote-enable.log",
-    "bytes": 11940,
-    "sha256": "5b1803ad2727c30203ddd7ba475b09b705d1601ec7726d6eee5007afecf98116"
+    "bytes": 11958,
+    "sha256": "e43d7dc07fba6006e61ed196a0d0d0a6cc10378eac6fa050def49d2866fcfba9"
   },
   {
     "file": "remote-enable.meta.json",
