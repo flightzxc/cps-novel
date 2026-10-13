@@ -65,6 +65,8 @@ export async function GET(request: NextRequest, { params }: GoRouteProps): Promi
   });
   if (!promoLink || promoLink.deletedAt != null) return notFound();
   // v0.6.0：口令码模式剧场 → 中间页；其余（link 模式，缺省）走下面原来的逻辑，一字未改。
+  // 这里只判"口令码模式 + 状态 fetched"，因为路由从不读口令码：口令码为空白、语种不在白名单的推广也会 302 到中间页，
+  // 由中间页用 `isPromoReady` 细判并 404（预期行为，不是漏判）。
   if (isCodeModeTheater(promoLink.channelApp?.config)) {
     return promoLink.status === "fetched" ? codeModeRedirect(code) : notFound();
   }

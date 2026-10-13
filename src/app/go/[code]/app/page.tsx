@@ -17,7 +17,10 @@ import { getSiteSetting } from "@/server/site-settings/service";
  *   - 在 `/go/` 之下（`robots.txt` 已 Disallow `/go`）；
  *   - `noindex, nofollow`：元数据显式写，不依赖根布局的默认；
  *   - 不缓存：动态渲染（`force-dynamic`），Next 对动态页统一发 `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`；
- *   - 站内码找不到 / 已删除 / 不是口令码模式 / 不就绪 → 404（与 `/go` 同一个判定 `isPromoReady`）；
+ *   - 站内码找不到 / 已删除 / 不是口令码模式 / 不就绪 → 404。"不就绪"由本页用唯一权威 `isPromoReady` 判定
+ *     （状态是 fetched、口令码去空白后非空、书的语种在剧场白名单里）。路由 `/go/<站内码>` 不读口令码，所以只能放行
+ *     "口令码模式 + 状态 fetched"：口令码为空白或语种不在白名单的推广，路由照样 302 到这里，由本页 404——这是预期行为，
+ *     不是漏判（用例：`tests/backend/public/go-redirect.test.ts` 钉路由只看状态，`code-mode-page.test.ts` 钉本页的细判定）；
  *   - 不记录点击（Owner 拍板第 6 项：点击记录不做）。
  *
  * `<title>` 刻意写成通用的一句，不含书名、更不含口令码。

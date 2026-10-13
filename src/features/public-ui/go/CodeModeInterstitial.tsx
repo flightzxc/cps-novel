@@ -10,8 +10,11 @@ import { CopyCodeButton } from "./CopyCodeButton";
  * `NovelDetailScreen`）。读者从书页 / 文章 / 章节页的"Read on PlotNovel App"按钮点进来：
  * 书名 + 封面、**大号口令码 + 复制按钮**、三步说明（手机）或一句话说明（电脑）、App Store / Google Play 按钮、底部免责小字。
  *
- * 🔴 这是整个站点里**唯一**会出现渠道真实口令码的地方：书页 / 文章页 / 章节页的 HTML、站点地图、日志里都没有它
- * （`tests/ui/code-mode-no-leak.test.tsx` 与 `tests/backend/public/code-mode-leak.test.ts` 钉着）。页面位于 `/go/` 之下
+ * 🔴 这是整个站点里**唯一**会出现渠道真实口令码的地方：书页 / 文章页 / 章节页的 HTML、站点地图、日志里都没有它。
+ * 钉着它的用例：`tests/backend/public/code-mode-leak.test.ts`（详情 / 卡片视图模型里没有口令码字段）、
+ * `tests/ui/code-mode-entry-buttons.test.tsx` 的"渠道真实口令码不进书页 / 章节页的 HTML"（整页渲染结果）、
+ * `tests/backend/public/go-redirect.test.ts`（`/go/<站内码>` 路由从不读、也不输出口令码）；站点地图与调度器
+ * 靠列级授权兜底（`scheduler_app` 读不到 `upstream_code`，见 `infra/postgres/grants.sql`）。页面位于 `/go/` 之下
  * （robots 已禁止抓取）、`noindex, nofollow`、不缓存（动态渲染，Next 对动态页统一发 `no-store`）。
  *
  * 商店链接按剧场配置，所有书共用（Owner 拍板第 2 项）：两个都没配 → 不渲染按钮，改显示一句

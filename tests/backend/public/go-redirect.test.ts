@@ -312,6 +312,14 @@ describe("GET /go/[code]", () => {
       expect(create).not.toHaveBeenCalled();
     });
 
+    it("口令码模式：路由只判'口令码模式 + 状态 fetched'（不读口令码）——语种不在白名单也 302 到中间页，由中间页 404", async () => {
+      // 路由不读 upstreamCode、不查语种：细判定在中间页（loadCodeModePageData 的用例钉着 → null）。
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: { config: { promoMode: "code", agencyIds: ["1351"], codeModeLocales: [] } } }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(`/go/${PUBLIC_CODE}/app`);
+    });
+
     it("路由从不读也从不输出渠道口令码：查库的 select、重定向的响应面里都没有它", async () => {
       findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: CODE_THEATER }));
       const response = await invoke(PUBLIC_CODE);
