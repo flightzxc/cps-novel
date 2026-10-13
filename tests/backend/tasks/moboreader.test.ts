@@ -1029,6 +1029,12 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
         events.push("queryRaw");
         return queryRawResponses[queryRawCall++];
       },
+      // v0.6.0（按机构分流）：persistCatalogPage 先读一次剧场分流表。这些用例的书都没有机构编号，
+      // 一律退回任务剧场（改动前的行为），所以这里只需要提供任务剧场自己。
+      channelApp: {
+        findUnique: async () => ({ id: APP_ID, channelId: "channel-1", projectType: 1, config: {}, sourceApp: { code: "moboreader" } }),
+        findMany: async () => [{ id: APP_ID, channelId: "channel-1", projectType: 1, config: {}, sourceApp: { code: "moboreader" } }],
+      },
       novelSourceItem: {
         upsert: async (args: { create: Record<string, unknown> }) => {
           upsertCreateCalls.push(args.create);

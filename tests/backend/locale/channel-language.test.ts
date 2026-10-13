@@ -5,6 +5,7 @@ import {
   MAPPING_VERSION,
   MOBOREADER_LANGUAGE_CODE_TO_LOCALE,
   MOBOREADER_SOURCE_APP_CODE,
+  PLOTNOVEL_SOURCE_APP_CODE,
   UNKNOWN_SOURCE_LOCALE_FILTER,
   evaluateLanguageMappingSuspensions,
   resolveChannelLanguage,
@@ -286,5 +287,29 @@ describe("channel-language · evaluateLanguageMappingSuspensions 熔断 10/3/20%
 
   it("空批次不熔断任何码", () => {
     expect(evaluateLanguageMappingSuspensions([]).size).toBe(0);
+  });
+});
+
+describe("v0.6.0：plotnovel 剧场复用同一套语种映射（同一个上游目录接口，语种编号含义相同）", () => {
+  it("sourceAppCode 钉死为 plotnovel", () => {
+    expect(PLOTNOVEL_SOURCE_APP_CODE).toBe("plotnovel");
+  });
+
+  it.each(
+    Object.entries(MOBOREADER_LANGUAGE_CODE_TO_LOCALE) as Array<[string, string]>,
+  )("plotnovel：code %s → %s，与 moboreader 逐码相同", (code, locale) => {
+    const plot = resolveChannelLanguage({ sourceAppCode: PLOTNOVEL_SOURCE_APP_CODE, sourceLanguageCode: code });
+    const mobo = resolveChannelLanguage({ sourceAppCode: MOBOREADER_SOURCE_APP_CODE, sourceLanguageCode: code });
+    expect(plot.locale).toBe(locale);
+    expect(plot.confidence).toBe("code");
+    expect(plot.evidence).toBe("confirmed_code_mapping");
+    expect(plot.sourceAppCode).toBe("plotnovel");
+    expect({ ...plot, sourceAppCode: "x" }).toEqual({ ...mobo, sourceAppCode: "x" });
+  });
+
+  it("没登记的 sourceAppCode 仍然查不到码表（映射不到就是 unknown，不猜）", () => {
+    const resolution = resolveChannelLanguage({ sourceAppCode: "someotherapp", sourceLanguageCode: "3" });
+    expect(resolution.locale).toBeNull();
+    expect(resolution.confidence).toBe("unknown");
   });
 });
