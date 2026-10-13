@@ -30,6 +30,7 @@ import {
   type ArticleSeoVisibilityState,
   type NovelPublicationState,
   type PromoLinkReadinessState,
+  PROMO_READINESS_SELECT,
 } from "@/server/publication/visibility";
 
 import { toAbsoluteUrl } from "@/lib/seo/site-url";
@@ -94,7 +95,7 @@ const ARTICLE_ELIGIBILITY_SELECT = {
   publishedAt: true,
   articleType: true,
   novel: { select: { status: true } },
-  promoLink: { select: { status: true, webUrl: true, appUrl: true } },
+  promoLink: { select: PROMO_READINESS_SELECT },
 } satisfies Prisma.ArticleSelect;
 
 type EligibilitySelectRow = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_ELIGIBILITY_SELECT }>;

@@ -206,6 +206,15 @@ describe("MoboReader foundation profile", () => {
     snapshot.channelApp!.projectType = 2;
     expect(() => inspectFoundationSnapshot(snapshot)).toThrowError(MoboreaderFoundationError);
   });
+
+  it("v0.6.0：config 里补了剧场模式键（promoMode / agencyIds）不算漂移；其它多出来的键仍然是漂移", () => {
+    const snapshot = completeSnapshot();
+    snapshot.channelApp!.config = { promoMode: "link", agencyIds: ["3366"] };
+    expect(inspectFoundationSnapshot(snapshot).missing).toEqual([]);
+
+    snapshot.channelApp!.config = { promoMode: "link", agencyIds: ["3366"], somethingElse: true };
+    expect(() => inspectFoundationSnapshot(snapshot)).toThrowError(MoboreaderFoundationError);
+  });
 });
 
 describe("registerMoboreaderFoundation", () => {

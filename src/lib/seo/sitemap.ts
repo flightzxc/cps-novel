@@ -14,8 +14,10 @@ import {
   buildPublicArticleWhere,
   buildPublicBlogArticleWhere,
   isHiddenFromPublicView,
+  codeModeCoarsePromoBranch,
   isPromoReady,
   isPublicationStatePublic,
+  PROMO_READINESS_SELECT,
 } from "@/server/publication/visibility";
 import { getSiteSetting } from "@/server/site-settings/service";
 import {
@@ -124,9 +126,7 @@ const ARTICLE_SITEMAP_SELECT = {
   },
   promoLink: {
     select: {
-      status: true,
-      webUrl: true,
-      appUrl: true,
+      ...PROMO_READINESS_SELECT,
       deletedAt: true,
     },
   },
@@ -179,7 +179,9 @@ export function activePublicArticleWhere(
         deletedAt: null,
         // Index-friendly SUPERSET only. isPromoReady below remains authoritative
         // and excludes whitespace-only URLs after trimming.
-        OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }],
+        // v0.6.0：第三个分支是口令码模式剧场的粗预筛（只看剧场 `promoMode`，不碰 `upstream_code`——
+        // 调度器共用这个 where，没有那一列的读权限）；口令码是否非空、语种是否在白名单由逐行 isPromoReady 复核。
+        OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }, ...codeModeCoarsePromoBranch()],
       },
     },
   }, env);

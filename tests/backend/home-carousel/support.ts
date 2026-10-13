@@ -31,6 +31,8 @@ export type FakeArticle = {
   updatedAt: Date;
   /** C-25. Optional — defaults to `"public"` so every pre-existing fixture in this suite is unaffected. */
   seoVisibility?: "public" | "seo_only" | "hidden";
+  /** v0.6.0：这篇文章的推广链接所属剧场。缺省 = 没有（所有既有夹具不受影响）。 */
+  promoChannelAppId?: string;
   novel: { title: string; status: string; deletedAt: Date | null; coverUrl: string | null };
 };
 
@@ -176,8 +178,17 @@ export class FakeHomeCarouselDb {
     }
   }
 
+  /** v0.6.0：剧场（`channel_app`）夹具——首页轮播要读哪些剧场是口令码模式。默认没有，查询与改动前逐字相同。 */
+  channelApps: Array<{ id: string; config: unknown }> = [];
+
   private client() {
     return {
+      channelApp: {
+        findMany: async () => {
+          this.calls.push("channelApp.findMany");
+          return this.channelApps;
+        },
+      },
       siteSetting: {
         findUnique: async () => {
           this.calls.push("siteSetting.findUnique");
@@ -206,8 +217,10 @@ export class FakeHomeCarouselDb {
         },
       },
       article: {
-        findMany: async (args: { where?: { AND?: Array<Record<string, unknown>> }; take: number }) => {
+        findMany: async (args: { where?: { AND?: Array<Record<string, unknown>>; promoLink?: { is?: { channelAppId?: { notIn?: string[] } } } }; take: number }) => {
           this.calls.push("article.findMany");
+          // v0.6.0：与生产查询同形——口令码模式剧场的文章按"推广链接所属剧场编号 notIn"排除。
+          const excludedApps = args.where?.promoLink?.is?.channelAppId?.notIn ?? [];
           // C-25 review fix: `computeHomeCarouselInTx` now spreads
           // `buildPublicListArticleWhere(...)` into this call's `where` —
           // that helper only adds a `seoVisibility: "public"` clause to its
@@ -222,6 +235,7 @@ export class FakeHomeCarouselDb {
           const rows = [...this.articles.values()]
             .filter((row) => row.status === "published" && row.deletedAt === null && row.novel.status === "published" && row.novel.deletedAt === null && !!row.novel.coverUrl)
             .filter((row) => !seoVisibilityGated || (row.seoVisibility ?? "public") === "public")
+            .filter((row) => !(row.promoChannelAppId && excludedApps.includes(row.promoChannelAppId)))
             .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0) || a.id.localeCompare(b.id));
           return rows.slice(0, args.take).map((row) => ({ id: row.id, novelId: row.novelId, publishedAt: row.publishedAt, updatedAt: row.updatedAt, novel: { coverUrl: row.novel.coverUrl } }));
         },
@@ -230,7 +244,7 @@ export class FakeHomeCarouselDb {
           const row = this.articles.get(args.where.id);
           if (!row || row.locale !== args.where.locale || row.status !== "published" || row.deletedAt !== null) return null;
           if (row.novel.status !== "published" || row.novel.deletedAt !== null || !row.novel.coverUrl) return null;
-          return { id: row.id, novelId: row.novelId };
+          return { id: row.id, novelId: row.novelId, promoLink: row.promoChannelAppId ? { channelAppId: row.promoChannelAppId } : null };
         },
         /**
          * L10N P5 (矩阵 #13): `queryActiveLocales` (`@/lib/locale/active-locales`)

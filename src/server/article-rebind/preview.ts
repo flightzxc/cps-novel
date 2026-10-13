@@ -62,6 +62,8 @@ import { isArticleNovelRebindEnabled } from "@/lib/flags";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { SITE_LOCALE_LABELS } from "@/lib/locale/locale-canonical";
 
+import { PROMO_READINESS_SELECT } from "@/server/publication/visibility";
+
 import { REBIND_BATCH_LIMITS, type RebindPreviewCategory } from "./batch-constants";
 import { rebindBatchDomainError } from "./errors";
 import {
@@ -326,7 +328,7 @@ async function buildCandidateFindings(
   for (const chunk of chunked(targetNovelIds)) {
     const rows = await db.promoLink.findMany({
       where: { novelId: { in: chunk }, status: "fetched", deletedAt: null },
-      select: { id: true, novelId: true, status: true, webUrl: true, appUrl: true, fetchedAt: true },
+      select: { id: true, novelId: true, ...PROMO_READINESS_SELECT, fetchedAt: true },
       orderBy: [{ fetchedAt: "desc" }, { id: "asc" }],
     });
     promoRows.push(...(rows as Array<PromoLinkCandidate & { novelId: string }>));

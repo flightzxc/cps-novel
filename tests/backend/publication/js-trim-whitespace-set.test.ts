@@ -87,3 +87,33 @@ describe("promoReadySql 的形状", () => {
     expect(sql.values).toHaveLength(3);
   });
 });
+
+describe("promoReadySql（带剧场别名）的形状（v0.6.0）", () => {
+  const theater = { channelAppAlias: "pca", novelAlias: "n" } as const;
+
+  it("口令码模式 / link 模式二选一；字符集作为绑定参数传入三份（口令码、web、app），文本里没有原始字符", () => {
+    const fragment = promoReadySql("p", theater);
+    expect(fragment.values).toEqual([JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
+    const exotic = [...JS_TRIM_WHITESPACE_CHARACTERS].filter((char) => !" \n\t".includes(char));
+    expect(exotic.filter((char) => fragment.sql.includes(char))).toEqual([]);
+    expect(fragment.text.replace(/\s+/g, " ")).toBe(
+      "p.status = 'fetched' AND (CASE WHEN pca.config->>'promoMode' = 'code' THEN "
+      + "(coalesce(btrim(p.upstream_code, $1), '') <> '' AND coalesce(n.locale, '') <> '' AND coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array' "
+      + "AND jsonb_exists(pca.config->'codeModeLocales', n.locale)) "
+      + "ELSE (coalesce(btrim(p.web_url, $2), '') <> '' OR coalesce(btrim(p.app_url, $3), '') <> '') END)",
+    );
+  });
+
+  it("不带剧场别名时是 v0.5.15 的老文本：只认 link 规则（没带剧场信息的调用点看不到口令码模式的书）", () => {
+    expect(promoReadySql("p").text.replace(/\s+/g, " ")).toBe(
+      "p.status = 'fetched' AND (coalesce(btrim(p.web_url, $1), '') <> '' OR coalesce(btrim(p.app_url, $2), '') <> '')",
+    );
+    expect(promoReadySql("p").text).not.toContain("upstream_code");
+  });
+
+  it("剧场别名同样只收标识符", () => {
+    expect(() => promoReadySql("p", { channelAppAlias: "pca; DROP", novelAlias: "n" })).toThrow();
+    expect(() => promoReadySql("p", { channelAppAlias: "pca", novelAlias: "N" })).toThrow();
+    expect(() => promoReadySql("p", { channelAppAlias: "", novelAlias: "n" })).toThrow();
+  });
+});

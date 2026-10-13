@@ -47,7 +47,10 @@ function describeGenerate(outcome: Extract<ArticleGenerateActionResult, { ok: tr
     case "promo_link_missing":
       return { title: "还没有推广链接", body: "请先领取推广链接，再创建文章。" };
     case "promo_link_not_ready":
-      return { title: "推广链接未就绪", body: "需要 fetched 且至少有一个可用地址。" };
+      return {
+        title: "推广链接未就绪",
+        body: "链接模式（MoboReader）需要 fetched 且至少有一个可用地址；口令码模式（PlotNovel）需要 fetched、口令码非空，且书的语种在该剧场开放的语种里。",
+      };
     case "promo_link_deleted":
       return { title: "推广链接已删除", body: "请重新领取推广链接后再创建文章。" };
     case "template_locale_mismatch":

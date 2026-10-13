@@ -83,11 +83,16 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * 加它是为了命中部分索引 `article_public_list_order_idx`（谓词里有 article_type）。
  * 与 `buildPublicListArticleWhere` + `isPromoReady` 的等价由真实库用例证明
  * （`tests/integration/site/list-equivalence-postgres.test.ts` / `promo-ready-sql-equivalence-postgres.test.ts`）。
+ *
+ * v0.6.0：就绪规则按推广所属**剧场**的模式二选一（link 模式要网址，口令码模式要口令码 + 语种白名单），所以多连一张
+ * `channel_app`（别名 `pca`，按主键连、2 行的小表；`promo_link.channel_app_id` 是 NOT NULL 外键，不会丢行）。
+ * 口令码模式的判定在 `promoReadySql("p", { channelAppAlias: "pca", novelAlias: "n" })` 里，与 `isPromoReady` 逐字符等价。
  */
 export const PUBLIC_LIST_FROM_SQL = Prisma.sql`
   FROM article a
   JOIN novel n ON n.id = a.novel_id
   JOIN promo_link p ON p.id = a.promo_link_id
+  JOIN channel_app pca ON pca.id = p.channel_app_id
 `;
 
 /**
@@ -107,7 +112,7 @@ export function publicListWhereSql(localePredicate: Prisma.Sql, env: NodeJS.Proc
       ${seoVisibility}
       AND n.status = 'published'
       AND n.deleted_at IS NULL
-      AND ${promoReadySql("p")}
+      AND ${promoReadySql("p", { channelAppAlias: "pca", novelAlias: "n" })}
   `;
 }
 

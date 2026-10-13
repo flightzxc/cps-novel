@@ -6,6 +6,8 @@
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { PROMO_READINESS_SELECT } from "@/server/publication/visibility";
+
 import type { PublishGateFacts } from "./evaluator";
 
 type FactsDb = PrismaClient | Prisma.TransactionClient;
@@ -70,7 +72,8 @@ export async function loadPublishGateFacts(
       publishedAt: true,
       articleType: true,
       novel: { select: { status: true, deletedAt: true } },
-      promoLink: { select: { status: true, webUrl: true, appUrl: true } },
+      // v0.6.0：口令码模式的就绪判定要看剧场与书的语种，片段统一来自 visibility.ts（见 PROMO_READINESS_SELECT）。
+      promoLink: { select: PROMO_READINESS_SELECT },
     },
   });
   if (!article) return null;

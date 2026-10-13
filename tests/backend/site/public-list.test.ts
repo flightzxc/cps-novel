@@ -57,6 +57,8 @@ describe("列表可见性 SQL 片段（publicListFromWhereSql）", () => {
     expect(text).toContain("FROM article a");
     expect(text).toContain("JOIN novel n ON n.id = a.novel_id");
     expect(text).toContain("JOIN promo_link p ON p.id = a.promo_link_id");
+    // v0.6.0：就绪规则按剧场模式二选一，所以多连一张按主键连的 channel_app（别名 pca）。
+    expect(text).toContain("JOIN channel_app pca ON pca.id = p.channel_app_id");
     for (const condition of [
       "a.locale = $1",
       "a.article_type = 'novel_article'",
@@ -65,8 +67,13 @@ describe("列表可见性 SQL 片段（publicListFromWhereSql）", () => {
       "n.status = 'published'",
       "n.deleted_at IS NULL",
       "p.status = 'fetched'",
-      "coalesce(btrim(p.web_url, $2), '') <> ''",
-      "coalesce(btrim(p.app_url, $3), '') <> ''",
+      // link 模式（缺省）：规则逐字不变，要网址
+      "ELSE (coalesce(btrim(p.web_url, $3), '') <> '' OR coalesce(btrim(p.app_url, $4), '') <> '') END",
+      // 口令码模式：口令码非空 + 书的语种在剧场白名单里
+      "CASE WHEN pca.config->>'promoMode' = 'code' THEN",
+      "coalesce(btrim(p.upstream_code, $2), '') <> ''",
+      "coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array'",
+      "jsonb_exists(pca.config->'codeModeLocales', n.locale)",
     ]) expect(text, condition).toContain(condition);
   });
 
@@ -78,8 +85,8 @@ describe("列表可见性 SQL 片段（publicListFromWhereSql）", () => {
     expect(source.match(/JOIN promo_link p ON [^\n]*/g)).toEqual(["JOIN promo_link p ON p.id = a.promo_link_id"]);
   });
 
-  it("空白字符集作为绑定参数传入（web / app 各一份），SQL 文本里没有原始空白字符", () => {
-    expect(fragment.values).toEqual(["en", JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
+  it("空白字符集作为绑定参数传入（口令码 / web / app 各一份），SQL 文本里没有原始空白字符", () => {
+    expect(fragment.values).toEqual(["en", JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
     const exotic = [...JS_TRIM_WHITESPACE_CHARACTERS].filter((char) => !" \n\t".includes(char));
     expect(exotic.filter((char) => fragment.text.includes(char))).toEqual([]);
   });
@@ -121,7 +128,7 @@ describe("分页查询的 SQL（编号 + 总数）", () => {
     await queryPublicListIds(db, { locale: "en", limit: 20, offset: 40, env: envOff });
     const text = squash(calls[0]!.text);
     expect(text).toContain("SELECT a.id AS id FROM article a");
-    expect(text).toContain("ORDER BY a.published_at DESC, a.id ASC LIMIT $4::int OFFSET $5::bigint");
+    expect(text).toContain("ORDER BY a.published_at DESC, a.id ASC LIMIT $5::int OFFSET $6::bigint");
     expect(text).not.toMatch(/NULLS (FIRST|LAST)/i);
     expect(calls[0]!.values.slice(-2)).toEqual([20, 40]);
     const source = readFileSync(path.resolve(process.cwd(), "src/lib/site/public-list.ts"), "utf8");

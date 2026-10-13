@@ -8,6 +8,7 @@ import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import { StickyCTA } from "@/features/public-ui/layout/StickyCTA";
 import { PreviewChapterList } from "@/features/public-ui/novel/PreviewChapterList";
+import { codeModeReadOnCta } from "@/features/public-ui/novel/read-on-upstream";
 import type { ChapterView, NovelCardView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
@@ -100,6 +101,8 @@ function ChapterScreenBody({
   newReleases?: NovelCardView[];
 }) {
   const t = useT();
+  // v0.6.0：口令码模式（PlotNovel）的入口文案；link 模式为 null，章末按钮与浮条一切照旧。
+  const codeCta = codeModeReadOnCta(chapter.readOnUpstreamMode, chapter.readOnUpstreamAppName);
   const readerSettingsContext = useReaderSettingsContext();
   const [localSettings, setLocalSettings] = useState<ReaderSettings>(() =>
     normalizeReaderSettings(initialSettings),
@@ -246,8 +249,9 @@ function ChapterScreenBody({
                 rel="nofollow sponsored"
                 className="mt-6"
               >
-                {t("chapter.readOnUpstream")}
+                {codeCta ? codeCta.label : t("chapter.readOnUpstream")}
               </ButtonLink>
+              {codeCta ? <p className="mt-2 text-xs text-novel-fg-subtle">{codeCta.hint}</p> : null}
             </div>
           ) : null}
         </div>
@@ -278,7 +282,12 @@ function ChapterScreenBody({
       </Container>
 
       {/* --- 固定底部浮窗（B1，章节页必做）：没有公开跳转码时不渲染 --- */}
-      <StickyCTA locale={locale} href={chapter.readOnUpstreamHref} />
+      <StickyCTA
+        locale={locale}
+        href={chapter.readOnUpstreamHref}
+        mode={chapter.readOnUpstreamMode}
+        appName={chapter.readOnUpstreamAppName}
+      />
     </>
   );
 }

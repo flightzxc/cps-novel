@@ -93,6 +93,14 @@ export interface NovelDetailView {
   previewChapters: PreviewChapterRef[];
   /** 经我方公开跳转码构造的正式阅读地址。缺失时该按钮不渲染。 */
   readOnUpstreamHref?: string;
+  /**
+   * v0.6.0：这个正式阅读入口属于口令码模式的剧场（PlotNovel）。`"code"` 时入口按钮文案改为
+   * "Read on {App} App" 并带一行小字，点击后到中间页（`/go/<码>` → `/go/<码>/app`）看口令码；
+   * 缺省 = link 模式，一切照旧。🔴 渠道真实口令码本身绝不进视图模型（只在中间页出现）。
+   */
+  readOnUpstreamMode?: "code";
+  /** 口令码模式下按钮上写的 App 名（剧场配置 `appDisplayName`，缺省 "PlotNovel"）。 */
+  readOnUpstreamAppName?: string;
 }
 
 /** 当前试读范围，形如「试读 1 / 3」。分母是实际可试读章数，不是总章数。 */
@@ -134,6 +142,14 @@ export interface ChapterView {
   nextHref?: string;
   /** 章末的正式阅读入口，同样来自公开跳转码。 */
   readOnUpstreamHref?: string;
+  /**
+   * v0.6.0：这个正式阅读入口属于口令码模式的剧场（PlotNovel）。`"code"` 时入口按钮文案改为
+   * "Read on {App} App" 并带一行小字，点击后到中间页（`/go/<码>` → `/go/<码>/app`）看口令码；
+   * 缺省 = link 模式，一切照旧。🔴 渠道真实口令码本身绝不进视图模型（只在中间页出现）。
+   */
+  readOnUpstreamMode?: "code";
+  /** 口令码模式下按钮上写的 App 名（剧场配置 `appDisplayName`，缺省 "PlotNovel"）。 */
+  readOnUpstreamAppName?: string;
   /** 总章数。客观标量，供 B2 嵌入的章节列表组件派生锁定条目数；🔴 绝不据此生成任何章节行。 */
   totalChapterCount: number;
   /** 所属小说的实际可试读章节（B2）：章节页嵌入与小说页同一个章节列表组件，需要同一份数据。 */

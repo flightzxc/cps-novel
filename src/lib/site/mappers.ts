@@ -58,7 +58,16 @@ export type PublicArticleRecord = {
  * 刻意不携带这个字段——`tests/backend/public/mappers.test.ts:41` 断言卡片 JSON
  * 不含 `webUrl|upstreamCode|author|readOnUpstreamHref`，这是防泄漏边界。
  */
-export type PublicArticlePromoLink = { publicRedirectCode: string } | null;
+export type PublicArticlePromoLink = {
+  publicRedirectCode: string;
+  /**
+   * v0.6.0：推广所属剧场的模式。缺省 = link（旧形状 `{ publicRedirectCode }` 原样可用）。
+   * `"code"` 时视图模型带上 `readOnUpstreamMode` / `readOnUpstreamAppName`——**只是一个模式标记和 App 名**，
+   * 口令码本身从不进入这个投影。
+   */
+  promoMode?: "link" | "code";
+  appName?: string;
+} | null;
 
 /**
  * detail / chapter 专用输入形状：在基础字段之上多带一个 `promoLink`。
@@ -112,6 +121,17 @@ function buildReadOnUpstreamHref(
   const code = promoLink?.publicRedirectCode;
   if (!code || !isPublicRedirectCodeFormatValid(code)) return undefined;
   return `/go/${code}`;
+}
+
+/** 口令码模式的入口标记（仅在 promoLink 声明了 `promoMode: "code"` 时存在）。 */
+function readOnUpstreamModeFields(
+  promoLink: PublicArticlePromoLink | undefined,
+): { readOnUpstreamMode?: "code"; readOnUpstreamAppName?: string } {
+  if (!promoLink || promoLink.promoMode !== "code") return {};
+  return {
+    readOnUpstreamMode: "code",
+    ...(promoLink.appName ? { readOnUpstreamAppName: promoLink.appName } : {}),
+  };
 }
 
 export function toNovelCardView(article: PublicArticleRecord): NovelCardView | null {
@@ -172,6 +192,7 @@ export function toNovelDetailView(
     tags: [...(article.tags ?? [])],
     previewChapters: toPreviewChapterRefs(article, previewChapters),
     readOnUpstreamHref: buildReadOnUpstreamHref(article.promoLink),
+    ...readOnUpstreamModeFields(article.promoLink),
   };
 }
 
@@ -230,5 +251,6 @@ export function toChapterView(
         })
       : undefined,
     readOnUpstreamHref: buildReadOnUpstreamHref(article.promoLink),
+    ...readOnUpstreamModeFields(article.promoLink),
   };
 }

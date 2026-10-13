@@ -127,9 +127,20 @@ GRANT SELECT (
   detail, created_at
 ) ON credential_change_log TO web_app, analyst_ro;
 
--- Raw upstream payloads and promo codes remain Worker-only. Web receives the
--- two resolved destination columns because both the publish gate and the
--- public /go route must test/resolve them. Analyst never receives them.
+-- Raw upstream payloads remain Worker-only. Web receives the two resolved
+-- destination columns because both the publish gate and the public /go route
+-- must test/resolve them. Analyst never receives them.
+--
+-- v0.6.0 (PlotNovel code-mode theater, docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md):
+-- the promo CODE (`upstream_code`) is added to the Web column list for exactly
+-- two reasons, both unavoidable for a theater whose upstream gives only a
+-- code and no URL: (1) the publish gate (`loadPublishGateFacts`) and the
+-- public access checks must test "is the code non-blank" to decide readiness;
+-- (2) the `/go/<code>/app` interstitial must show the code to the reader
+-- -- that page is the one and only place the code ever appears. Nothing else
+-- about the boundary moves: the code never enters a list/card/detail DTO,
+-- a sitemap, a log or an audit snapshot (tests pin each), Analyst/Scheduler
+-- still cannot read it, and the raw upstream payload columns stay Worker-only.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
   source_language_name, source_locale, raw_language_scope, title, description, cover_url,
@@ -153,7 +164,7 @@ GRANT SELECT (
   error_kind, error_message, fetched_at, last_attempted_at, deleted_at,
   created_at, updated_at
 ) ON promo_link TO web_app, analyst_ro;
-GRANT SELECT (web_url, app_url) ON promo_link TO web_app;
+GRANT SELECT (web_url, app_url, upstream_code) ON promo_link TO web_app;
 GRANT SELECT (
   id, effect_key, operation_type, idempotency_key, target_type, target_id,
   task_item_type, task_item_id, channel_account_id, channel_app_id, promo_link_id,
@@ -496,10 +507,17 @@ GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, gene
 -- a live `DEBUG=prisma:query` capture of this exact call, not derived from
 -- reading the Prisma schema alone) -- never `article.body`/`novel.title`/
 -- `promo_link.upstream_code` or any other content/business column, and never
--- a write.
+-- a write. (v0.6.0 adds `promo_link.channel_app_id` and `channel_app(id, config)` for the
+-- code-mode branch below.)
 GRANT SELECT (locale, deleted_at, status, novel_id, promo_link_id) ON article TO scheduler_app;
 GRANT SELECT (id, deleted_at, status) ON novel TO scheduler_app;
-GRANT SELECT (id, novel_id, status, deleted_at, web_url, app_url) ON promo_link TO scheduler_app;
+GRANT SELECT (id, novel_id, status, deleted_at, web_url, app_url, channel_app_id) ON promo_link TO scheduler_app;
+-- v0.6.0: `activePublicArticleWhere` gained a third, coarse OR branch for code-mode theaters
+-- ("this promo link's channel_app has config.promoMode = 'code'"), which relation-filters through
+-- `channel_app` -- the join key and the JSON column only. NOT `upstream_code` (the scheduler must
+-- never read promo codes: the branch is deliberately coarse and the sitemap/IndexNow rechecks
+-- decide per row), NOT any other channel_app column.
+GRANT SELECT (id, config) ON channel_app TO scheduler_app;
 
 -- 阶段2 第3步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`，设计 §5.4/§7,
 -- D7）: scheduler 每轮对每个渠道账号判定"放行 / 暂停"一个领推广链接生命周期

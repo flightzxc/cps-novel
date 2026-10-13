@@ -8,7 +8,7 @@
  */
 import type { Prisma } from "@prisma/client";
 
-import { isPromoReady } from "@/server/publication/visibility";
+import { isPromoReady, PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 
 import type { PublicArticleRecord } from "./mappers";
 import type { PublicTaxonomyTag } from "./public-taxonomy";
@@ -32,8 +32,9 @@ export const ARTICLE_CARD_SELECT = {
       totalChapterCount: true,
     },
   },
+  // v0.6.0：片段含剧场与书的语种（口令码模式的就绪判定用）；口令码本身只在内存里判空，卡片视图从不携带它。
   promoLink: {
-    select: { status: true, webUrl: true, appUrl: true },
+    select: PROMO_READINESS_SELECT,
   },
 } as const;
 

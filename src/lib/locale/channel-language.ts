@@ -64,8 +64,15 @@ export type ChannelLanguageResolution = {
 /** Aligns with CPS `changdu-dry-run.ts`'s catalog-sync filter sentinel. */
 export const UNKNOWN_SOURCE_LOCALE_FILTER = "__unknown";
 
-/** The single upstream source app this repo ingests from. */
+/** The default upstream source app (the one `resolveChannelLanguage` assumes when no code is given). */
 export const MOBOREADER_SOURCE_APP_CODE = "moboreader";
+
+/**
+ * v0.6.0：畅读 PlotNovel 剧场。它和 MoboReader 是**同一个上游目录接口**（`getlistpc`）里按机构分开的
+ * 两个平台，语种编号的含义完全相同，所以复用同一张语种表（见 `LANGUAGE_REGISTRY_BY_SOURCE_APP`），
+ * 而不是另抄一份。
+ */
+export const PLOTNOVEL_SOURCE_APP_CODE = "plotnovel";
 
 type CodeMapping = {
   locale: string;
@@ -122,8 +129,10 @@ const MOBOREADER_LANGUAGE_REGISTRY: Readonly<Record<string, CodeMapping>> = Obje
 );
 
 /**
- * Registry keyed by upstream source app. Only one key exists today
- * (`moboreader`) — kept as a by-source-app map (rather than a flat
+ * Registry keyed by upstream source app. Two keys today (`moboreader`, and
+ * since v0.6.0 `plotnovel` — the same upstream catalog interface, same
+ * language-code meaning, so it points at the very same table) — kept as a
+ * by-source-app map (rather than a flat
  * code→locale table) for the same reason CPS keeps
  * `CHANGDU_LANGUAGE_REGISTRY_BY_SOURCE_APP` shaped this way: a second
  * source app, if one is ever onboarded, gets its own registry key instead
@@ -133,6 +142,8 @@ const MOBOREADER_LANGUAGE_REGISTRY: Readonly<Record<string, CodeMapping>> = Obje
 const LANGUAGE_REGISTRY_BY_SOURCE_APP: Readonly<Record<string, Readonly<Record<string, CodeMapping>>>> =
   Object.freeze({
     [MOBOREADER_SOURCE_APP_CODE]: MOBOREADER_LANGUAGE_REGISTRY,
+    // v0.6.0：同一个上游接口、同一套语种编号——引用同一个对象，不复制。
+    [PLOTNOVEL_SOURCE_APP_CODE]: MOBOREADER_LANGUAGE_REGISTRY,
   });
 
 /**

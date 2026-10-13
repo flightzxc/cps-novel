@@ -55,6 +55,7 @@ import {
   buildPublicArticleWhere,
   isPromoReady,
   isPublicationStatePublic,
+  PROMO_READINESS_SELECT,
 } from "@/server/publication/visibility";
 import { toAbsoluteUrl } from "@/lib/seo/site-url";
 
@@ -71,7 +72,7 @@ const NOVEL_HREFLANG_SELECT = {
   status: true,
   deletedAt: true,
   novel: { select: { status: true, deletedAt: true } },
-  promoLink: { select: { status: true, webUrl: true, appUrl: true, deletedAt: true } },
+  promoLink: { select: { ...PROMO_READINESS_SELECT, deletedAt: true } },
 } as const satisfies Prisma.ArticleSelect;
 
 type NovelHreflangCandidate = Prisma.ArticleGetPayload<{ select: typeof NOVEL_HREFLANG_SELECT }>;

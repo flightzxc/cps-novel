@@ -55,6 +55,8 @@ import { Prisma } from "@prisma/client";
 import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
 import { isArticleSeoVisibilityEnabled } from "@/lib/flags";
 
+import { THEATER_CONFIG_KEYS, isCodeModeTheater } from "./theater-promo-mode";
+
 // ---------------------------------------------------------------------------
 // Narrow input shapes. Callers pass whatever Prisma `select` projection they
 // already have; these types intentionally accept a structural subset rather
@@ -82,11 +84,39 @@ export type ArticleSeoVisibilityState = {
   readonly seoVisibility?: string;
 };
 
+/**
+ * v0.6.0（口令码剧场）：就绪判定按**剧场模式**二选一，所以状态里多了三个**可选**字段。
+ *
+ *   - `upstreamCode`  口令码模式用（`promo_link.upstream_code`）；
+ *   - `channelApp`    推广所属剧场的 `config`（决定模式与口令码模式的语种白名单）；
+ *   - `novel`         书的语种（`Novel.locale`），口令码模式要求它在 `codeModeLocales` 里。
+ *
+ * 三个字段缺省 = 老形状 `{ status, webUrl, appUrl }`，按 link 模式判定——**没带剧场信息的调用方永远
+ * 不会把口令码模式的推广误判为就绪**（失败方向是"看不见"，不是"漏出去"）。要让口令码模式的推广
+ * 被认可，调用方的 `select` 必须带上 {@link PROMO_READINESS_SELECT}。
+ */
 export type PromoLinkReadinessState = {
   readonly status: string;
   readonly webUrl: string | null;
   readonly appUrl: string | null;
+  readonly upstreamCode?: string | null;
+  readonly channelApp?: { readonly config: unknown } | null;
+  readonly novel?: { readonly locale: string } | null;
 } | null;
+
+/**
+ * 需要调用 {@link isPromoReady} 的 `promoLink` 查询必须带的 `select` 片段（口令码模式需要的全部字段）。
+ * 各调用点 `...PROMO_READINESS_SELECT` 展开，而不是各自手写字段清单——漏写一个字段，口令码模式的
+ * 推广就会在那个调用点悄悄变成"不就绪"。
+ */
+export const PROMO_READINESS_SELECT = {
+  status: true,
+  webUrl: true,
+  appUrl: true,
+  upstreamCode: true,
+  channelApp: { select: { config: true } },
+  novel: { select: { locale: true } },
+} as const satisfies Prisma.PromoLinkSelect;
 
 function isNonBlank(value: string | null | undefined): boolean {
   return value != null && value.trim().length > 0;
@@ -120,6 +150,18 @@ function isNonBlank(value: string | null | undefined): boolean {
  * STILL the authority: rows the database lets through are re-checked with it
  * before rendering, and a disagreement is logged as an invariant violation.
  *
+ * v0.6.0（口令码剧场，`docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md`）：就绪规则按推广所属**剧场**的
+ * `config.promoMode` 二选一，两种模式互不相交——
+ *
+ *   - `link`（缺省；MoboReader）：上面那条规则**逐字不变**，仍然要求网址。MoboReader 下"有口令码、没有网址"
+ *     的推广**不就绪**（防误伤用例钉着：JS、SQL、`/go`、列表、站点地图各一份）；
+ *   - `code`（PlotNovel）：`status = fetched` ∧ `upstream_code` 非空（同一套 trim 口径）∧ 书的语种在剧场配置的
+ *     `codeModeLocales` 里。不看网址。
+ *
+ * 剧场信息不在 `PromoLinkReadinessState` 的老三个字段里，所以调用点的 `select` 必须带
+ * {@link PROMO_READINESS_SELECT}；没带的调用点按 link 模式判定（口令码模式的推广对它不可见——失败方向是安全的）。
+ * SQL 对应物 {@link promoReadySql} 在传入剧场别名时同样两条规则二选一，等价性由真实库用例逐字符证明。
+ *
  * {@link readyPromoLinkWhere} below is a different, older fragment: a Prisma
  * `where` for listing/counting a Novel's PromoLink rows without loading them
  * into JS. It is a narrower-but-not-identical SUPERSET (see its own doc
@@ -128,7 +170,19 @@ function isNonBlank(value: string | null | undefined): boolean {
 export function isPromoReady(promoLink: PromoLinkReadinessState): boolean {
   if (!promoLink) return false;
   if (promoLink.status !== "fetched") return false;
+  const theaterConfig = promoLink.channelApp?.config;
+  if (theaterConfig !== undefined && isCodeModeTheater(theaterConfig)) {
+    // 口令码模式：不看网址（上游本来就不给），看口令码非空 + 书的语种在剧场白名单里。
+    // 白名单按**原样**逐项比对（不做 trim/归一），与 SQL 的 `jsonb_exists` 逐字等价。
+    return isNonBlank(promoLink.upstreamCode) && localeInCodeModeWhitelist(theaterConfig, promoLink.novel?.locale);
+  }
   return isNonBlank(promoLink.webUrl) || isNonBlank(promoLink.appUrl);
+}
+
+function localeInCodeModeWhitelist(config: unknown, locale: string | null | undefined): boolean {
+  if (locale == null || locale.length === 0) return false;
+  const list = (config as Record<string, unknown>)[THEATER_CONFIG_KEYS.codeModeLocales];
+  return Array.isArray(list) && list.some((entry) => entry === locale);
 }
 
 /**
@@ -176,10 +230,30 @@ const SQL_ALIAS_PATTERN = /^[a-z_][a-z0-9_]*$/;
  * Soft-delete (`deleted_at`) is deliberately not part of it, same as
  * `isPromoReady` (which only sees status and URLs).
  */
-export function promoReadySql(alias: string): Prisma.Sql {
+export function promoReadySql(
+  alias: string,
+  theater?: { readonly channelAppAlias: string; readonly novelAlias: string },
+): Prisma.Sql {
   if (!SQL_ALIAS_PATTERN.test(alias)) throw new Error("promoReadySql: alias must be a plain lowercase identifier");
   const column = (name: string) => Prisma.raw(`${alias}.${name}`);
-  return Prisma.sql`${column("status")} = 'fetched' AND (coalesce(btrim(${column("web_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' OR coalesce(btrim(${column("app_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '')`;
+  const linkRule = Prisma.sql`(coalesce(btrim(${column("web_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' OR coalesce(btrim(${column("app_url")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '')`;
+  if (!theater) {
+    // 老签名：纯 link 规则，文本与 v0.5.15 逐字相同。没有剧场信息的调用方永远看不到口令码模式的书。
+    return Prisma.sql`${column("status")} = 'fetched' AND ${linkRule}`;
+  }
+  if (!SQL_ALIAS_PATTERN.test(theater.channelAppAlias) || !SQL_ALIAS_PATTERN.test(theater.novelAlias)) {
+    throw new Error("promoReadySql: theater aliases must be plain lowercase identifiers");
+  }
+  const channelApp = (name: string) => Prisma.raw(`${theater.channelAppAlias}.${name}`);
+  const novelLocale = Prisma.raw(`${theater.novelAlias}.locale`);
+  const localeList = Prisma.sql`${channelApp("config")}->'codeModeLocales'`;
+  // 两种模式互不相交：剧场配置 `promoMode = 'code'` 才走口令码规则，其余（含缺省、拼错）一律走 link 规则。
+  // `coalesce(jsonb_typeof(...), '')`：配置里没有 `codeModeLocales` 键时 `jsonb_typeof` 是 NULL，整条规则会变成
+  // NULL 而不是 false——WHERE 里碰巧等价，但一旦被 NOT 包起来（"不可生成"分桶）就会漏行。这里必须是确定的 false。
+  // `coalesce(locale, '') <> ''`：语种为空（或缺失）一律不就绪，对应 JS 侧 `localeInCodeModeWhitelist` 开头那句
+  // `locale == null || locale.length === 0 → false`。没有这一句，配置里的 `codeModeLocales` 含 `""` 且书的语种也是 `""`
+  // 时 `jsonb_exists` 会返回 true，而 JS 返回 false——两边在空语种边界上不等价（复核 NIT-8 抓到）。
+  return Prisma.sql`${column("status")} = 'fetched' AND (CASE WHEN ${channelApp("config")}->>'promoMode' = 'code' THEN (coalesce(btrim(${column("upstream_code")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' AND coalesce(${novelLocale}, '') <> '' AND coalesce(jsonb_typeof(${localeList}), '') = 'array' AND jsonb_exists(${localeList}, ${novelLocale})) ELSE ${linkRule} END)`;
 }
 
 /**
@@ -399,8 +473,25 @@ export function readyPromoLinkWhere(): Prisma.PromoLinkWhereInput {
   return {
     deletedAt: null,
     status: "fetched",
-    OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }],
+    OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }, ...CODE_MODE_COARSE_BRANCH],
   };
+}
+
+/**
+ * v0.6.0：口令码模式的**粗**预筛分支（只是超集，权威仍是 {@link isPromoReady}）。
+ *
+ * 只认"推广所属剧场的 `promoMode` 是 `code`"，不碰 `upstream_code`（调度器没有这一列的读权限，
+ * 见 `infra/postgres/grants.sql`），也不碰语种白名单（Prisma 的 JSON 过滤表达不了"书的语种 ∈ 剧场配置里的
+ * 数组"）。后果：口令码模式的剧场里，口令码为空或语种不在白名单的推广也会被预筛放过，由逐行的
+ * `isPromoReady` 复核剔除——与 link 模式"`not: ''` 放过纯空白网址"同一个已接受的、可测的缺口。
+ */
+const CODE_MODE_COARSE_BRANCH: Prisma.PromoLinkWhereInput[] = [
+  { channelApp: { is: { config: { path: [THEATER_CONFIG_KEYS.promoMode], equals: "code" } } } },
+];
+
+/** 供 `sitemap.ts` 的 `activePublicArticleWhere` 复用同一个粗分支，避免第二份"口令码模式长什么样"。 */
+export function codeModeCoarsePromoBranch(): Prisma.PromoLinkWhereInput[] {
+  return CODE_MODE_COARSE_BRANCH.map((branch) => ({ ...branch }));
 }
 
 /**

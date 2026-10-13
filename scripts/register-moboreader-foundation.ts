@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 
 import { Prisma, PrismaClient } from "@prisma/client";
 
+import { THEATER_CONFIG_KEYS } from "../src/server/publication/theater-promo-mode";
+
 export class MoboreaderFoundationError extends Error {
   constructor(
     readonly code:
@@ -207,7 +209,7 @@ export function inspectFoundationSnapshot(snapshot: FoundationSnapshot): Foundat
     expectField("channel_app", "externalAppId", MOBOREADER_FOUNDATION.channelApp.externalAppId, snapshot.channelApp.externalAppId);
     expectField("channel_app", "projectType", MOBOREADER_FOUNDATION.channelApp.projectType, snapshot.channelApp.projectType);
     expectField("channel_app", "status", MOBOREADER_FOUNDATION.channelApp.status, snapshot.channelApp.status);
-    expectField("channel_app", "config", MOBOREADER_FOUNDATION.channelApp.config, snapshot.channelApp.config);
+    expectField("channel_app", "config", MOBOREADER_FOUNDATION.channelApp.config, foundationOwnedConfig(snapshot.channelApp.config));
   }
 
   const capabilityStatuses: Record<string, string | null> = {};
@@ -236,6 +238,19 @@ export function inspectFoundationSnapshot(snapshot: FoundationSnapshot): Foundat
     expectField(`channel_capability:${expected.capabilityKey}`, "config", expected.config, actual.config);
   }
   return { missing, capabilityStatuses };
+}
+
+/**
+ * v0.6.0：`channel_app.config` 里的剧场模式键（`promoMode` / `agencyIds` / ……，见
+ * `src/server/publication/theater-promo-mode.ts`）由 `scripts/register-plotnovel-theater.ts` 登记与维护，
+ * 不属于本脚本冻结的"地基"内容。比对时把这些键剔除再与冻结的 `{}` 比较——旧库里 `config = {}` 照常通过，
+ * 补过剧场模式键的库也不会被误报为漂移；其它任何键仍然是漂移。
+ */
+const THEATER_MODE_CONFIG_KEYS: ReadonlySet<string> = new Set(Object.values(THEATER_CONFIG_KEYS));
+
+function foundationOwnedConfig(config: unknown): unknown {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return config;
+  return Object.fromEntries(Object.entries(config as Record<string, unknown>).filter(([key]) => !THEATER_MODE_CONFIG_KEYS.has(key)));
 }
 
 type FoundationReadClient = {

@@ -43,9 +43,15 @@ import {
 import {
   evaluateLanguageMappingSuspensions,
   resolveChannelLanguage,
-  MOBOREADER_SOURCE_APP_CODE,
   type ChannelLanguageResolution,
 } from "../../src/lib/locale/channel-language";
+import {
+  emptyCatalogRoutingTally,
+  loadCatalogRouting,
+  recordCatalogRouting,
+  type CatalogRoutingTally,
+} from "../../src/lib/tasks/catalog-agency-routing";
+import type { TheaterPromoMode } from "../../src/server/publication/theater-promo-mode";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 import { holdChannelAccountForPreview, isAccountLevelPreviewFailure } from "./preview-account-hold";
@@ -506,12 +512,22 @@ async function persistExistingCatalogPromo(
     book: MoboreaderBook;
     channelAppId: string;
     channelAccountId: string;
+    /**
+     * v0.6.0：这本书所属剧场的推广模式。`link`（默认）= 码和网址缺一不可（改动前的行为，逐字不变）；
+     * `code` = 口令码模式的剧场（PlotNovel）上游只给口令码、不给网址，**有码就够**，只写码。
+     * 口令码模式下"有网址、没有码"仍然不完整——没有码，读者无从在 App 里找到这本书。
+     */
+    promoMode?: TheaterPromoMode;
     now: Date;
   },
 ): Promise<"absent" | "incomplete" | "deferred" | { articlesBound: number; articlesConflicted: number }> {
   const { upstreamCode, webUrl } = input.book.existingPromo;
   if (!upstreamCode && !webUrl) return "absent";
-  if (!upstreamCode || !webUrl) return "incomplete";
+  if (input.promoMode === "code") {
+    if (!upstreamCode) return "incomplete";
+  } else if (!upstreamCode || !webUrl) {
+    return "incomplete";
+  }
   // PromoLink's schema requires a Novel FK. Secrets must not be staged in
   // rawPayload while a source is still unlinked, so the safe outcome is to
   // defer until a post-link catalog refresh can write the real destination.
@@ -534,7 +550,7 @@ async function persistExistingCatalogPromo(
       origin: "upstream_existing",
       upstreamCode,
       publicRedirectCode: createPublicRedirectCode(),
-      webUrl,
+      webUrl: webUrl ?? null,
       idempotencyKey,
       status: "fetched",
       fetchedAt: input.now,
@@ -543,7 +559,8 @@ async function persistExistingCatalogPromo(
     // remains claimed, and C2 did not prove `onlineUrl` is an app URL.
     update: {
       upstreamCode,
-      webUrl,
+      // 口令码模式没有网址：`undefined` = 不动该列（不会把已有值冲成 NULL）；link 模式这里恒为非空，行为不变。
+      webUrl: webUrl ?? undefined,
       status: "fetched",
       errorKind: null,
       errorMessage: null,
@@ -623,9 +640,16 @@ async function persistCatalogPage(
   // conflict. Suspension is evaluated per `catalog_page` task item (one
   // upstream page fetch), the same granularity CPS's `resolveChannelLanguage`
   // call site uses.
-  const pageLanguageResolutions: readonly ChannelLanguageResolution[] = input.response.items.map((book) =>
+  //
+  // v0.6.0（按机构分流）：每本书先按机构编号找到自己所属的剧场（`routing.resolve`），语种映射用**那个
+  // 剧场**的 `sourceApp.code`（MoboReader 与 PlotNovel 共用同一套码表，见 `channel-language.ts`），
+  // 书目、标签、推广都落到那个剧场名下。找不到对应剧场的机构退回任务剧场，保持改动前的行为。
+  const routing = await loadCatalogRouting(tx, input.channelAppId);
+  const routingTally: CatalogRoutingTally = emptyCatalogRoutingTally();
+  const bookDecisions = input.response.items.map((book) => routing.resolve(book.agencyId));
+  const pageLanguageResolutions: readonly ChannelLanguageResolution[] = input.response.items.map((book, index) =>
     resolveChannelLanguage({
-      sourceAppCode: MOBOREADER_SOURCE_APP_CODE,
+      sourceAppCode: bookDecisions[index]!.route.sourceAppCode,
       sourceLanguageCode: book.language,
       sourceLanguageName: book.languageName,
     }),
@@ -650,12 +674,15 @@ async function persistCatalogPage(
     scanTaskId: input.taskId,
   }) as unknown as Prisma.InputJsonObject;
   for (const [bookIndex, book] of input.response.items.entries()) {
+    const decision = bookDecisions[bookIndex]!;
+    const route = decision.route;
+    recordCatalogRouting(routingTally, decision, book.agencyId);
     const languageResolution = pageLanguageResolutions[bookIndex];
     const sourceLocale = pickBookSourceLocale(languageResolution, suspendedLanguageCodes);
     const rawLanguageScope = rawLanguageScopeFromPayload(book.rawEvidence);
     if (rawLanguageScope === null) throw new Error("MoboReader raw language scope is not reliably derivable");
     const createData = {
-      channelAppId: input.channelAppId,
+      channelAppId: route.channelAppId,
       externalBookId: book.externalBookId,
       sourceLanguageCode: book.language,
       sourceLanguageName: book.languageName,
@@ -681,7 +708,7 @@ async function persistCatalogPage(
       source = await tx.novelSourceItem.findUniqueOrThrow({
         where: {
           channelAppId_externalBookId_sourceLanguageCode: {
-            channelAppId: input.channelAppId,
+            channelAppId: route.channelAppId,
             externalBookId: book.externalBookId,
             sourceLanguageCode: book.language,
           },
@@ -692,7 +719,7 @@ async function persistCatalogPage(
       source = await tx.novelSourceItem.upsert({
         where: {
           channelAppId_externalBookId_sourceLanguageCode: {
-            channelAppId: input.channelAppId,
+            channelAppId: route.channelAppId,
             externalBookId: book.externalBookId,
             sourceLanguageCode: book.language,
           },
@@ -731,8 +758,9 @@ async function persistCatalogPage(
     const promoResult = await persistExistingCatalogPromo(tx, {
       source,
       book,
-      channelAppId: input.channelAppId,
+      channelAppId: route.channelAppId,
       channelAccountId: input.channelAccountId,
+      promoMode: route.promoMode,
       now,
     });
     if (promoResult === "incomplete") promoSummary.incomplete += 1;
@@ -742,7 +770,7 @@ async function persistCatalogPage(
       promoSummary.articlesBound += promoResult.articlesBound;
       promoSummary.articlesConflicted += promoResult.articlesConflicted;
     }
-    const labelResult = await persistLabels(tx, input.channelAppId, source.id, book, now);
+    const labelResult = await persistLabels(tx, route.channelAppId, source.id, book, now);
     droppedLabels.push(labelResult.droppedLabels);
     if (labelResult.incompleteLabelSnapshot) pageIncompleteLabelSnapshots += 1;
   }
@@ -797,8 +825,11 @@ async function persistCatalogPage(
     // up into the task-level `result` at `terminal` below.
     unknownLocaleCount: pageUnknownLocaleCount,
     suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
+    // v0.6.0：本页每本书落到哪个剧场、有多少本退回了任务剧场（含新机构编号的计数）。同样是只增不改的字段。
+    // 这是"发现新机构、该登记新剧场了"的唯一信号：本文件按 P2-05 合同不得有任何日志调用，所以只记进任务结果
+    // （任务级汇总见 sumAgencyRouting），不打日志。
+    agencyRouting: routingTally as unknown as Prisma.InputJsonObject,
   } satisfies Prisma.InputJsonObject;
-
   // This provisional write makes the current page visible to the task-level
   // aggregation below. persistCatalogPage returns the exact same value as a
   // ProtectedWriteResult so guardedFinalize remains the sole terminal write
@@ -889,6 +920,7 @@ async function persistCatalogPage(
         // L10N P1: additive-only task-level fields, see `enrichedResult` above.
         unknownLocaleCount: pageUnknownLocaleCount,
         suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
+        agencyRouting: routingTally as unknown as Prisma.InputJsonObject,
         previewEnqueue: null,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
         incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
@@ -1048,6 +1080,30 @@ function plainJson(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/**
+ * v0.6.0：把各页的 `agencyRouting`（`CatalogRoutingTally` 形状）累加成任务级汇总。读到的是库里已有的 JSON，
+ * 所以逐项按类型收窄、丢弃不认识的形状；不信任历史页（旧页没有这个字段）。
+ */
+export function sumAgencyRouting(pages: readonly unknown[]): CatalogRoutingTally {
+  const total = emptyCatalogRoutingTally();
+  const count = (value: unknown): number => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0);
+  for (const page of pages) {
+    const object = plainJson(page);
+    const byApp = plainJson(object.routedByChannelApp);
+    for (const [appId, value] of Object.entries(byApp)) {
+      const n = count(value);
+      if (n > 0) total.routedByChannelApp[appId] = (total.routedByChannelApp[appId] ?? 0) + n;
+    }
+    total.unmappedBooks += count(object.unmappedBooks);
+    total.ambiguousBooks += count(object.ambiguousBooks);
+    for (const [agencyId, value] of Object.entries(plainJson(object.unmappedAgencies))) {
+      const n = count(value);
+      if (n > 0) total.unmappedAgencies[agencyId] = (total.unmappedAgencies[agencyId] ?? 0) + n;
+    }
+  }
+  return total;
+}
+
 async function runCatalogFinalize(
   db: PrismaClient,
   lease: TaskLease,
@@ -1111,6 +1167,7 @@ async function runCatalogFinalize(
       ? object.unknownLocaleCount
       : 0);
   }, 0);
+  const agencyRouting = sumAgencyRouting(itemResults.map(({ result }) => plainJson(result).agencyRouting));
   const labelSummary = await loadTaskLabelSummary(db, lease.taskId);
   const failedPages = await db.genericTaskItem.count({
     where: {
@@ -1149,6 +1206,7 @@ async function runCatalogFinalize(
           },
           unknownLocaleCount,
           suspendedLanguageCodes: Array.from(suspendedCodes),
+          agencyRouting: agencyRouting as unknown as Prisma.InputJsonObject,
           previewEnqueue,
           droppedLabels: droppedLabelsJson(labelSummary.droppedLabels),
           incompleteLabelSnapshots: labelSummary.incompleteLabelSnapshots,
@@ -1511,9 +1569,11 @@ export function createMoboreaderCatalogHandler(
       };
     }
     if (recoveryPayload) {
+      // v0.6.0：书可能已经按机构分流落在同渠道的另一个剧场名下，"是否已存在"要在所有可分流的剧场里看。
+      const recoveryRouting = await loadCatalogRouting(db, scope.channelAppId);
       const existing = await db.novelSourceItem.findMany({
         where: {
-          channelAppId: scope.channelAppId,
+          channelAppId: { in: [...recoveryRouting.routableChannelAppIds] },
           OR: recoveryPayload.missingIdentities.map((identity) => ({
             externalBookId: identity.externalBookId,
             sourceLanguageCode: identity.sourceLanguageCode,

@@ -20,6 +20,7 @@ const SAFE_ERROR_LABELS: Readonly<Record<string, string>> = Object.freeze({
   novel_deleted: "书目已删除",
   already_exists: "目标记录已存在",
   article_soft_deleted: "已有已删除的 Article",
+  duplicate_title_in_link_theater: "MoboReader 已有同名书",
   missing_locale: "来源语言缺失",
   unsupported_locale: "来源语言暂不受产品支持",
   locale_conflict: "来源语言与现有书目不一致",

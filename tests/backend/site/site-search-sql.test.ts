@@ -80,7 +80,9 @@ describe("可见性只复用 B-38 列表的唯一定义", () => {
     expect(built.sql).toContain("a.locale = ?");
     expect(built.values).toContain("es");
     expect(built.sql).toContain("coalesce(btrim(p.web_url, ?), '') <> ''");
-    expect(built.values.filter((value) => value === JS_TRIM_WHITESPACE_CHARACTERS)).toHaveLength(2);
+    // v0.6.0：口令码模式的口令码 / link 模式的 web 与 app，各带一份去空白字符集。
+    expect(built.sql).toContain("coalesce(btrim(p.upstream_code, ?), '') <> ''");
+    expect(built.values.filter((value) => value === JS_TRIM_WHITESPACE_CHARACTERS)).toHaveLength(3);
   });
 
   it("本文件之外的搜索模块没有自己写任何一条可见性条件", () => {

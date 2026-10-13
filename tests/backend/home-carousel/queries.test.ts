@@ -48,6 +48,7 @@ function row(overrides: Partial<Row> & { id: string; novelId: string }): Row {
 }
 
 class FakePublicCarouselDb {
+  channelApps: Array<{ id: string; config: unknown }> = [];
   servingRows: Row[] = [];
   articleRows: Row[] = [];
   lastArticleFindManyTake: number | null = null;
@@ -74,6 +75,10 @@ class FakePublicCarouselDb {
       },
       novelChapter: {
         findMany: async () => [],
+      },
+      // v0.6.0：读口令码模式剧场的编号（首页轮播显式排除）。默认没有口令码剧场 = 查询与改动前逐字相同。
+      channelApp: {
+        findMany: async () => this.channelApps,
       },
     };
   }
