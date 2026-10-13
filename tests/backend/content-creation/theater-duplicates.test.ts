@@ -12,7 +12,11 @@ import { findDuplicatesInLinkTheaters } from "@/server/content-creation/theater-
 const CODE_APP = "app-plotnovel";
 const CODE_CONFIG = { promoMode: "code", agencyIds: ["1351"], codeModeLocales: ["en"] };
 
-type OtherNovel = { locale: string; title: string; titleNormalized: string | null };
+type OtherPromo = { status: string; webUrl: string | null; appUrl: string | null; upstreamCode?: string | null; channelApp?: { config: unknown } | null; novel?: { locale: string } | null };
+type OtherNovel = { locale: string; title: string; titleNormalized: string | null; promoLinks?: OtherPromo[] };
+
+/** MoboReader（link 模式）下一条就绪的推广：有网址。 */
+const READY_LINK_PROMO: OtherPromo = { status: "fetched", webUrl: "https://example.test/read", appUrl: null, upstreamCode: "M1", channelApp: { config: {} }, novel: { locale: "en" } };
 
 function fakeDb(others: OtherNovel[], seen: { where?: unknown; calls: number } = { calls: 0 }) {
   return {
@@ -24,7 +28,8 @@ function fakeDb(others: OtherNovel[], seen: { where?: unknown; calls: number } =
           seen.calls += 1;
           seen.where = args.where;
           // 假库不重做数据库的筛选，把全部"其它剧场的书"原样给出：判定必须由被测代码自己比对，而不是依赖数据库预筛。
-          return others;
+          // 没写明推广的对侧书默认带一条就绪的 link 推广（有网址）。
+          return others.map((other) => ({ ...other, promoLinks: other.promoLinks ?? [READY_LINK_PROMO] }));
         },
       },
     } as never,
@@ -58,11 +63,30 @@ describe("findDuplicatesInLinkTheaters", () => {
       deletedAt: null,
       id: { notIn: ["a"] },
       sourceItems: { some: { deletedAt: null, channelAppId: { notIn: [CODE_APP] } } },
+      // 对侧还要有一条预筛意义上就绪的推广，且在非口令码剧场下
+      promoLinks: { some: { AND: [{ deletedAt: null, status: "fetched" }, { channelAppId: { notIn: [CODE_APP] } }] } },
       OR: [
         { locale: "en", titleNormalized: { in: ["same title"] } },
         { locale: "en", titleNormalized: null, title: { in: ["Same Title"], mode: "insensitive" } },
       ],
     });
+  });
+
+  it("对侧必须有就绪的 link 推广：有 → 排除；没有 / 未领取 / 没网址 / 失败 → 不排除（对侧自己都发不出去，不能两本都不发）", async () => {
+    const title = "Same Title";
+    const other = (promoLinks: OtherPromo[]) => ({ locale: "en", title, titleNormalized: "same title", promoLinks });
+    const probe = [{ id: "a", locale: "en", title }];
+    const dupOf = async (promoLinks: OtherPromo[]) => [...(await findDuplicatesInLinkTheaters(fakeDb([other(promoLinks)]).db, probe))];
+
+    expect(await dupOf([READY_LINK_PROMO])).toEqual(["a"]);
+    expect(await dupOf([{ ...READY_LINK_PROMO, webUrl: null, appUrl: "https://example.test/app" }])).toEqual(["a"]);
+    expect(await dupOf([])).toEqual([]); // 对侧没有任何推广
+    expect(await dupOf([{ ...READY_LINK_PROMO, status: "pending" }])).toEqual([]); // 还没领到
+    expect(await dupOf([{ ...READY_LINK_PROMO, status: "failed" }])).toEqual([]);
+    expect(await dupOf([{ ...READY_LINK_PROMO, webUrl: null, appUrl: null }])).toEqual([]); // 有码没网址：link 模式下不就绪（防误伤口径）
+    expect(await dupOf([{ ...READY_LINK_PROMO, webUrl: "  \t " }])).toEqual([]); // 纯空白网址
+    // 同一本书有一条坏的、一条好的：有一条就绪就算可用
+    expect(await dupOf([{ ...READY_LINK_PROMO, status: "failed" }, READY_LINK_PROMO])).toEqual(["a"]);
   });
 
   it("空书名 / 规范化后为空的书不参与（不会和任何东西撞）；没有候选时不发查询", async () => {

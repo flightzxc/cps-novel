@@ -29,10 +29,14 @@ async function plotBook(externalBookId: string, title: string, locale = "en") {
   });
 }
 
-async function moboBook(externalBookId: string, title: string, options: { locale?: string; titleNormalized?: string | null } = {}) {
+async function moboBook(
+  externalBookId: string,
+  title: string,
+  options: { locale?: string; titleNormalized?: string | null; promo?: Parameters<typeof seedPublished>[0]["promo"] } = {},
+) {
   const book = await seedPublished({
     appId: ids.moboApp, externalBookId, title, locale: options.locale ?? "en", agencyId: MOBO_AGENCY,
-    promo: { upstreamCode: "M", webUrl: "https://example.test/read" }, withoutArticle: true,
+    promo: options.promo ?? { upstreamCode: "M", webUrl: "https://example.test/read" }, withoutArticle: true,
   });
   await owner.novel.update({
     where: { id: book.novel.id },
@@ -80,6 +84,29 @@ describe.skipIf(!enabled).sequential("v0.6.0 E：同名去重（真实库）", (
     const admissions = await admissionsFor([plotFr.novel.id, plotDeleted.novel.id, plotStale.novel.id, plotA.novel.id, plotB.novel.id]);
     for (const id of [plotFr.novel.id, plotDeleted.novel.id, plotStale.novel.id, plotA.novel.id, plotB.novel.id]) {
       expect(admissions.get(id), id).toMatchObject({ canGenerate: true });
+    }
+  });
+
+  it("对侧必须有就绪的 link 推广：有 → 排除；有码没网址 / 还没领到 / 领取失败 / 纯空白网址 → 不排除（不能两本都不发）", async () => {
+    const cases: Array<[string, Parameters<typeof seedPublished>[0]["promo"], boolean]> = [
+      ["Ready Twin", { upstreamCode: "M", webUrl: "https://example.test/read" }, true],
+      ["App Only Twin", { upstreamCode: "M", appUrl: "https://example.test/app" }, true],
+      ["Code No Url Twin", { upstreamCode: "M", webUrl: null }, false], // MoboReader 下有码没网址：link 模式不就绪
+      ["Pending Twin", { status: "pending", upstreamCode: null, webUrl: null }, false],
+      ["Failed Twin", { status: "failed", upstreamCode: null, webUrl: "https://example.test/read" }, false],
+      ["Blank Url Twin", { upstreamCode: "M", webUrl: "  \t " }, false],
+    ];
+    const probes: Array<{ novelId: string; blocked: boolean; title: string }> = [];
+    for (const [index, [title, promo, blocked]] of cases.entries()) {
+      const plot = await plotBook(`p-ready-${index}`, title);
+      await moboBook(`m-ready-${index}`, title, { promo });
+      probes.push({ novelId: plot.novel.id, blocked, title });
+    }
+    const admissions = await admissionsFor(probes.map((probe) => probe.novelId));
+    for (const probe of probes) {
+      expect(admissions.get(probe.novelId), probe.title).toMatchObject(
+        probe.blocked ? { canGenerate: false, blockedReason: "duplicate_title_in_link_theater" } : { canGenerate: true },
+      );
     }
   });
 

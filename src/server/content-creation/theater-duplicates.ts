@@ -15,11 +15,17 @@
  *
  * 规则的是"对侧在其它（非口令码）剧场下存在"，而不是写死 `moboreader` 这个名字——和 K2 的"领取闸只认数据库、
  * 不留写死名单"同一个纪律；后台文案按拍板措辞写作"MoboReader 已有同名书"。
+ *
+ * 🔴 对侧还必须"可用"：它在非口令码剧场下至少有一条**就绪**的推广（`isPromoReady`，唯一权威）。Owner 拍板的依据是
+ * "MoboReader 能直接跳转、转化更好"——对侧如果没有就绪推广（还没领码、领取失败、没有网址），它自己都发不出去，
+ * 这时再把 PlotNovel 那本排除，就是两本都不发。所以对侧没有就绪推广时，PlotNovel 这本照常可生成。
+ * 数据库里只用 `readyPromoLinkWhere()` 做预筛（超集），逐行再用 `isPromoReady` 复核，不另写一套就绪口径。
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { normalizeNovelTitle } from "@/lib/novel/novel-identity";
 import { loadCodeModeChannelAppIds } from "@/server/publication/code-mode-theaters";
+import { isPromoReady, PROMO_READINESS_SELECT, readyPromoLinkWhere } from "@/server/publication/visibility";
 
 type Db = Pick<PrismaClient, "channelApp" | "novel"> | Pick<Prisma.TransactionClient, "channelApp" | "novel">;
 
@@ -48,17 +54,35 @@ export async function findDuplicatesInLinkTheaters(
 
     const grouped = new Map<string, typeof chunk>();
     for (const candidate of chunk) grouped.set(candidate.locale, [...(grouped.get(candidate.locale) ?? []), candidate]);
+    // 对侧的推广：未删除、在非口令码剧场下、预筛意义上已就绪（超集；权威复核在下面逐行做）。
+    const linkTheaterReadyPromo: Prisma.PromoLinkWhereInput = {
+      AND: [readyPromoLinkWhere(), { channelAppId: { notIn: codeModeIds } }],
+    };
     const where: Prisma.NovelWhereInput = {
       deletedAt: null,
       id: { notIn: chunk.map((candidate) => candidate.id) },
       sourceItems: { some: { deletedAt: null, channelAppId: { notIn: codeModeIds } } },
+      promoLinks: { some: linkTheaterReadyPromo },
       OR: [...grouped].flatMap(([locale, group]) => [
         { locale, titleNormalized: { in: group.map((candidate) => candidate.normalized) } },
         { locale, titleNormalized: null, title: { in: group.map((candidate) => candidate.title), mode: "insensitive" as const } },
       ]),
     };
-    const rows = await db.novel.findMany({ where, select: { locale: true, title: true, titleNormalized: true } });
-    const existing = new Set(rows.map((row) => key(row.locale, row.titleNormalized ?? normalizeNovelTitle(row.title))));
+    const rows = await db.novel.findMany({
+      where,
+      select: {
+        locale: true,
+        title: true,
+        titleNormalized: true,
+        promoLinks: { where: linkTheaterReadyPromo, select: PROMO_READINESS_SELECT },
+      },
+    });
+    // 逐行复核：同名的对侧书必须真有一条 isPromoReady 的推广，才算"对侧可用"。
+    const existing = new Set(
+      rows
+        .filter((row) => row.promoLinks.some((promoLink) => isPromoReady(promoLink)))
+        .map((row) => key(row.locale, row.titleNormalized ?? normalizeNovelTitle(row.title))),
+    );
     for (const candidate of chunk) {
       if (existing.has(key(candidate.locale, candidate.normalized))) duplicates.add(candidate.id);
     }
