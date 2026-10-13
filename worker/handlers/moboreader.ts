@@ -826,22 +826,10 @@ async function persistCatalogPage(
     unknownLocaleCount: pageUnknownLocaleCount,
     suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
     // v0.6.0：本页每本书落到哪个剧场、有多少本退回了任务剧场（含新机构编号的计数）。同样是只增不改的字段。
+    // 这是"发现新机构、该登记新剧场了"的唯一信号：本文件按 P2-05 合同不得有任何日志调用，所以只记进任务结果
+    // （任务级汇总见 sumAgencyRouting），不打日志。
     agencyRouting: routingTally as unknown as Prisma.InputJsonObject,
   } satisfies Prisma.InputJsonObject;
-  if (Object.keys(routingTally.unmappedAgencies).length > 0) {
-    // 新机构提示：上游目录里出现了任何已登记剧场都不认领的机构编号。书照旧落在任务剧场下（不丢数据），
-    // 这行日志 + 任务结果里的计数是让人发现"该登记新剧场了"的信号。不含任何书名 / 码 / 凭据。
-    console.warn(JSON.stringify({
-      schemaVersion: 1,
-      event: "catalog_unmapped_agency",
-      level: "warn",
-      taskId: input.taskId,
-      pageIndex: input.payload.pageIndex,
-      taskChannelAppId: input.channelAppId,
-      unmappedAgencies: routingTally.unmappedAgencies,
-    }));
-  }
-
   // This provisional write makes the current page visible to the task-level
   // aggregation below. persistCatalogPage returns the exact same value as a
   // ProtectedWriteResult so guardedFinalize remains the sole terminal write

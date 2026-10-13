@@ -140,7 +140,7 @@ GRANT SELECT (
 -- -- that page is the one and only place the code ever appears. Nothing else
 -- about the boundary moves: the code never enters a list/card/detail DTO,
 -- a sitemap, a log or an audit snapshot (tests pin each), Analyst/Scheduler
--- still cannot read it, and `raw_links` / `raw_payload` stay Worker-only.
+-- still cannot read it, and the raw upstream payload columns stay Worker-only.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
   source_language_name, source_locale, raw_language_scope, title, description, cover_url,

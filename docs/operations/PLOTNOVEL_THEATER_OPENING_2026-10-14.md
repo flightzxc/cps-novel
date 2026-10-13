@@ -14,7 +14,7 @@
 | 1 | 登记 PlotNovel 剧场（默认停用） | L2 | 行是惰性的，不需回关 |
 | 2 | 暂停领取，确认没有进行中的任务 | L2 | 批次级恢复 |
 | 3 | 存量改挂（备份 → 预演 → 带数量 apply） | **L3 / P3，Owner Gate** | 以备份为准，不建议数据回滚 |
-| 4 | 剧场置 active，打开 `claimPromo` | L2 | 见步骤 8 的警告 |
+| 4 | 剧场置 active，**对账分类归属**，打开 `claimPromo` | L2 | 见步骤 8 的警告 |
 | 5 | 恢复领取（先金丝雀，再放量） | L2 | 批次级暂停 / 中止 |
 | 6 | 试读白名单是否加 `plotnovel` | L2～L3（改环境变量要重建容器） | 回改环境变量 |
 | 7 | 批量生成与发布（单批 ≤ 500） | L2 | 撤回受"公开网址冻结"约束 |
@@ -174,7 +174,16 @@ docker exec -e CHANNEL_CAPABILITY_OPERATOR=<operator> cps-novel-worker-1 \
 - 试读两项（`getbydataid`、`getchapterinfo`）留到步骤 6 决定。
 - 领取的全局环境闸（`FEATURE_PROMO_LINK_CLAIM`、`PROMO_LINK_CLAIM_ALLOW_WRITE`）是两个剧场共用的，不按剧场区分：MoboReader 的领取一直在跑就说明它们已经是开的，**不需要改**；读回确认即可，不要为此动环境变量。
 
-**必过读回**：步骤 1 的两条读回 SQL——`plotnovel` 为 `active`，`claimPromo` 为 `enabled`，其余三条仍 `registered_disabled`。
+```bash
+# 4c 对账分类归属（置 active 之后立刻做；L2）
+docker exec cps-novel-worker-1 tsx scripts/ops/effective-tag-projection.ts check </dev/null      # 此刻 missing 非 0 是预期：这批书的归属还没按 PlotNovel 重算
+docker exec cps-novel-worker-1 tsx scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS </dev/null
+docker exec cps-novel-worker-1 tsx scripts/ops/effective-tag-projection.ts check </dev/null      # 必须 missing=0 extra=0 changed=0
+```
+
+**为什么要对账**：分类归属（`novel_effective_tag`）只认 `active` 的剧场名下的标签与映射。改挂时 PlotNovel 还是 `registered_disabled`，这批书暂时没有归属；置 active 之后必须对账一次，归属才回到改挂前的样子（真实库用例钉着：对账后与改挂前逐行相同）。步骤 3 与步骤 4 之间不要停太久——这段窗口里站点地图每次刷新前的兜底对账会把这批书的归属清掉，置 active 后再对账补回来；这批书此时尚未公开，没有可见影响，但不要在窗口里做分类 / 映射的编辑。
+
+**必过读回**：步骤 1 的两条读回 SQL——`plotnovel` 为 `active`，`claimPromo` 为 `enabled`，其余三条仍 `registered_disabled`；上面最后一次 `check` 为 `missing=0 extra=0 changed=0`。
 
 此时目录扫描开始按机构分流：新扫到的机构 1351 的书落到 PlotNovel，机构 3366 的落到 MoboReader；扫描结果里 `agencyRouting` 记录每个剧场分到多少本、`unmappedBooks` / `unmappedAgencies` 记录退回任务剧场的（新机构）。
 
@@ -231,7 +240,7 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 | --- | --- |
 | 只做了步骤 1（登记） | 不用回。惰性行不影响任何行为 |
 | 步骤 2（暂停了领取） | 批次级恢复被暂停的批次；被中止的批次重新提交 |
-| 步骤 3（已改挂）、还没开能力 | **不建议回滚数据**，向前修。必须回滚时 = 以 3.1 的备份恢复（L3 / Owner Gate），且要先确认改挂之后没有新的领取 / 发文 |
+| 步骤 3（已改挂）、还没开能力 | **不建议回滚数据**，向前修。必须回滚时 = 以 3.1 的备份恢复（L3 / Owner Gate），且要先确认改挂之后没有新的领取 / 发文；恢复后同样要 `effective-tag-projection.ts check`，不为 0 就 `reconcile` |
 | 步骤 4～5（已 active、已开 `claimPromo`） | 能力回关：`set-channel-capability-status.ts --capability claimPromo --to registered_disabled --reason … --apply`；领取批次批次级暂停 / 中止。**⚠ 不要把 PlotNovel 置回 `registered_disabled`，除非同时保证目录扫描一直暂停**——改挂之后书目已在 PlotNovel 名下，目录分流一旦退回任务剧场，下一次扫描会在 MoboReader 名下重建同一批书（唯一键按剧场分开），造成重复档和重复领取 |
 | 步骤 6（加了试读白名单） | 环境变量去掉 `plotnovel`，两条能力回 `registered_disabled`，重建容器 |
 | 步骤 7（已发布） | 停止后续批次。**已发布页面的撤回 / 下线受"公开网址冻结"约束，必须 Owner 单独批准**；批准后用现有"批量撤回"工具。不要用改配置的方式偷偷让页面 404 |

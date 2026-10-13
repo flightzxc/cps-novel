@@ -186,6 +186,45 @@ const REGISTRY: readonly Entry[] = [
       { category: "not_membership_relevant", contains: "channelApp = await tx.channelApp.create", reason: "新建渠道应用（status 初值 active）：此时它名下没有任何书目，不存在归属；之后随书目进来的归属由目录同步每页重算覆盖" },
     ],
   },
+  // ───────────────────────── v0.6.0 PlotNovel 剧场：登记脚本与存量改挂脚本 ─────────────────────────
+  {
+    file: "scripts/register-plotnovel-theater.ts", table: "channel_app", op: "update",
+    sites: [
+      { category: "not_membership_relevant", contains: "nextConfig(current, plan.moboreaderConfigPatch)", reason: "只给 MoboReader 剧场的 config 补 promoMode / agencyIds 两个键；归属规则只读 channel_app.status，不读 config" },
+      { category: "not_membership_relevant", contains: "nextConfig(current, plan.storeLinkChanges)", reason: "只改 PlotNovel 剧场 config 里的商店链接；归属规则只读 channel_app.status，不读 config" },
+      { category: "ops_script_requires_reconcile", contains: "status: plan.appStatusChange.to", reason: "剧场置 active / 停用会改变它名下全部书目的归属（投影只认 active 的剧场）。置 active 之后必须执行 scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS（手册步骤 4a 之后）" },
+    ],
+  },
+  {
+    file: "scripts/register-plotnovel-theater.ts", table: "channel_app", op: "create",
+    sites: [
+      { category: "not_membership_relevant", contains: "tx.channelApp.create", reason: "新建 PlotNovel 剧场，初始状态 registered_disabled，名下没有任何书目，不存在归属；置 active 另走 --set-app-status（上一条 update 的第三处，要求对账）" },
+    ],
+  },
+  {
+    file: "scripts/rehome-plotnovel-source-items.ts", table: "novel_source_item", op: "UPDATE",
+    sites: [
+      { category: "ops_script_requires_reconcile", contains: "UPDATE novel_source_item SET channel_app_id", reason: "把机构 1351 的书目从 MoboReader 挪到 PlotNovel 剧场：归属要等 PlotNovel 置 active 之后才成立（投影只认 active 的剧场），所以改挂完成并置 active 后必须执行 scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS（手册步骤 4a 之后）" },
+    ],
+  },
+  {
+    file: "scripts/rehome-plotnovel-source-items.ts", table: "source_label", op: "INSERT",
+    sites: [
+      { category: "ops_script_requires_reconcile", contains: "INSERT INTO source_label (id, channel_app_id", reason: "改挂的一部分：在 PlotNovel 下补齐这批书用到的标签字典。归属随整个改挂在置 active 之后对账，必须执行 scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS" },
+    ],
+  },
+  {
+    file: "scripts/rehome-plotnovel-source-items.ts", table: "novel_source_item_label", op: "UPDATE",
+    sites: [
+      { category: "ops_script_requires_reconcile", contains: "UPDATE novel_source_item_label nsil SET source_label_id", reason: "改挂的一部分：把这批书目的标签关联改指到 PlotNovel 下的标签。归属随整个改挂在置 active 之后对账，必须执行 scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS" },
+    ],
+  },
+  {
+    file: "scripts/rehome-plotnovel-source-items.ts", table: "source_label_mapping", op: "INSERT",
+    sites: [
+      { category: "ops_script_requires_reconcile", contains: "INSERT INTO source_label_mapping", reason: "改挂的一部分：把这批书语种范围内的映射边复制到 PlotNovel 下（复制不是移动，MoboReader 自己的边不动）。必须执行 scripts/ops/effective-tag-projection.ts reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS" },
+    ],
+  },
   {
     file: "scripts/one-book-promo-claim-smoke.ts", table: "novel_source_item", op: "upsert",
     sites: [

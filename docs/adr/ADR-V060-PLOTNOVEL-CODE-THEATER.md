@@ -53,7 +53,7 @@
 ### D3 目录扫描按机构分流
 
 - 每本书按自己的 `agencyId` 落到**同渠道、同 `projectType`、`status = active`** 的剧场里 `config.agencyIds` 包含它的那一个（`src/lib/tasks/catalog-agency-routing.ts`）。
-- 找不到（新机构、没有机构编号、同一个机构号被两个 active 剧场同时声明）→ 仍落在本次扫描任务的剧场下，**保持现状、不丢数据**，同时在每页结果与任务汇总里计数（`unmappedBooks` / `unmappedAgencies` / `ambiguousBooks`，最多记 20 个不同机构号）并打一条 warn 日志，便于以后发现新机构。
+- 找不到（新机构、没有机构编号、同一个机构号被两个 active 剧场同时声明）→ 仍落在本次扫描任务的剧场下，**保持现状、不丢数据**，同时在每页结果与任务汇总里计数（`agencyRouting`：各剧场分到的书数，以及退回任务剧场的 `unmappedBooks` / `unmappedAgencies` / `ambiguousBooks`，最多记 20 个不同机构号），便于以后发现新机构。只记进任务结果、不打日志——`worker/handlers/moboreader.ts` 受 P2-05 合同约束，不得出现任何日志调用。
 - **只有 active 的剧场参与分流。** 新登记的 PlotNovel 剧场默认 `registered_disabled`（CPS 同款"新建默认停用"），在运维手册规定的"改挂完成"那一步之前，目录扫描的落点与改动前完全一致，不会出现"存量还挂在 MoboReader、新书却落进 PlotNovel"的重复建档。
 - 语种映射：`plotnovel` 与 `moboreader` 指向同一份畅读语种注册表（两者的上游是同一个接口，语种码含义相同）。
 - "不完整"分支：口令码模式的剧场，有码没网址也写库；link 模式仍要求网址。
@@ -66,6 +66,7 @@
 2. `side_effect_intent.target_id` 存的正是上面那个键（防重复领取的最后一道闸），意图行的 `channel_app_id` 同步改挂，状态不变。
 3. `source_label` / `source_label_mapping` 按剧场分账，标签投影要求同一剧场：为这批书用到的标签在 PlotNovel 下建一份（已有复用）并改指标签关联，把语种范围内的映射边**复制**（不是移动）过去。
 4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，所以执行前这批书不能有任何 `pending` / `processing` 的任务条目、不能有进行中的目录扫描。
+5. 分类归属投影 `novel_effective_tag` 只认 **active** 剧场名下的标签与映射。改挂时 PlotNovel 还是 `registered_disabled`，这批书暂时没有归属；所以运维顺序是"改挂 → 置 active → 对账"，对账后归属与改挂前逐行相同（真实库用例钉着）。改挂与登记两个脚本的相关写入点已登记进 B-38 写入点登记表，分类为"运维脚本，跑完必须对账"。
 
 闸门与执行方式：默认只读预演并打印各类计数；`--apply` 必须同时给 `--confirm REHOME_PLOTNOVEL_SOURCE_ITEMS`、`--expected-source-items N`、`--expected-promo-links M`，数量不符立即拒绝；前置闸门（未完成任务条目 / 进行中的扫描 / 唯一键冲突 / 数据异常 / **已发布文章**）任一不为 0 则拒绝并列出明细；单事务、持咨询锁、一条 `operation_audit`；可重复执行（第二次候选 0，改挂 0 行、不写审计）。
 
