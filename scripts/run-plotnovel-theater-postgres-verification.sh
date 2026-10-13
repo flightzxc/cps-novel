@@ -5,7 +5,7 @@
 # infra/postgres/grants.sql，五个真实角色（migration_owner / web_app / worker_app / scheduler_app /
 # analyst_ro）各自的连接串传给用例。tests/integration/plotnovel/*.test.ts 必须全部通过且 skipped=0：
 #   1) catalog-routing：目录扫描按机构分流（真实 persistCatalogPage 事务）+ 口令码模式只写码；
-#   2) rehome：存量改挂脚本（成功 / 数量不符拒绝 / 有未完成任务拒绝 / 重复执行改挂 0 行 / 唯一键冲突）；
+#   2) rehome：存量改挂脚本（成功 / 数量不符拒绝 / 有未完成任务拒绝 / 有已发布文章拒绝 / 重复执行改挂 0 行 / 唯一键冲突）；
 #   3) readiness：口令码模式就绪规则 JS 与 SQL 逐字符等价、MoboReader 防误伤、公开列表 / 站点地图预筛、
 #      web_app 读 upstream_code 的列级授权、scheduler_app 的 queryActiveLocales 不被拒、
 #      领取批次能挑到 PlotNovel 剧场的书；
@@ -125,7 +125,7 @@ npm exec vitest run -- --project node \
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/integration-result.json" \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts=8 \
-  tests/integration/plotnovel/rehome-postgres.test.ts=13 \
+  tests/integration/plotnovel/rehome-postgres.test.ts=14 \
   tests/integration/plotnovel/readiness-postgres.test.ts=13 \
   tests/integration/plotnovel/dedupe-postgres.test.ts=5; then
   exit 1

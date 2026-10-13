@@ -336,6 +336,37 @@ describe.skipIf(!enabled).sequential("v0.6.0 C：存量改挂（真实库）", (
     await expect(rehomePlotnovelSourceItems(worker, APPLY())).resolves.toMatchObject({ noop: false });
   });
 
+  it("拒绝：已发布的文章正挂在这批推广链接上（公开网址冻结）→ 列出明细，一行不写；草稿 / 下架的不挡路", async () => {
+    const world = await seedWorld();
+    const novel = world.plotBooks[1]!.novel!;
+    const promo = world.promos[1]!;
+    const article = await owner.article.create({
+      data: {
+        novelId: novel.id, promoLinkId: promo.id, locale: "en", slug: "already-public-slug", publicPageShortId: "palreadypub1",
+        title: "Already public", summary: "s", body: `Read it at /go/${promo.publicRedirectCode}`,
+        status: "published", articleType: "novel_article", publishedAt: new Date(),
+      },
+    });
+    const before = await snapshot();
+    const error = await rehomePlotnovelSourceItems(worker, APPLY()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RehomeRefusedError);
+    expect((error as RehomeRefusedError).code).toBe("gate_published_pages");
+    const detail = (error as RehomeRefusedError).detail as { publishedArticles: { total: number; sample: Array<Record<string, unknown>> } };
+    expect(detail.publishedArticles.total).toBe(1);
+    expect(detail.publishedArticles.sample[0]).toMatchObject({ article_id: article.id, locale: "en", promo_link_id: promo.id });
+    expect(await snapshot()).toBe(before);
+
+    const dry = await rehomePlotnovelSourceItems(worker, DRY());
+    expect(dry.blocked).toBe(true);
+    expect(dry.blockers.publishedArticles.total).toBe(1);
+
+    // 不是"已发布"的文章（草稿 / 已下架）不挡路——挡的是会让已公开页面可见性变化的情形
+    await owner.article.update({ where: { id: article.id }, data: { status: "draft", publishedAt: null } });
+    expect((await rehomePlotnovelSourceItems(worker, DRY())).blocked).toBe(false);
+    await owner.article.update({ where: { id: article.id }, data: { status: "takedown" } });
+    await expect(rehomePlotnovelSourceItems(worker, APPLY())).resolves.toMatchObject({ noop: false });
+  });
+
   it("拒绝：目标剧场下已有同 (外部书号, 语种码) 的书目 → 唯一键冲突，一行不写", async () => {
     await seedWorld();
     await seedBook({ appId: ids.plotApp, externalBookId: "plot-1", title: "Duplicate of plot-1", agencyId: PLOT_AGENCY });

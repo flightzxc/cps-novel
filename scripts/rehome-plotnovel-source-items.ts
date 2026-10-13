@@ -22,6 +22,9 @@
  *      下一次对账时消失。
  *   4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，改挂后旧任务条目会全部失败，所以执行前这批书不能
  *      有任何 `pending` / `processing` 的任务条目（领推广、试读、物化……），也不能有进行中的目录扫描。
+ *   5. 公开网址冻结：如果已有"已发布"的文章挂在这批推广链接上，改挂会把那些页面的可见性规则从"有网址"换成
+ *      "有口令码且语种在白名单"，可能让已被搜索引擎收录的页面变成 404（`docs/governance/AI_WORKFLOW.md`）。
+ *      所以这种情况直接拒绝执行（`gate_published_pages`），由 Owner 单独决定；草稿 / 已下架的文章不挡路。
  *
  * 明确**不处理**（历史执行记录，改写等于篡改证据）：已结束的 `generic_task` / `channel_sync_task` 及其条目、
  * `operation_audit`、`tracking_event`。它们仍记着当时的剧场；后果只有一个——对历史失败条目点"重试"会在
@@ -58,6 +61,7 @@ export type RehomeRefusalCode =
   | "theater_not_ready"
   | "gate_unfinished_tasks"
   | "gate_unique_conflict"
+  | "gate_published_pages"
   | "gate_data_anomaly"
   | "count_mismatch"
   | "request_replay_conflict"
@@ -105,6 +109,12 @@ export type RehomeBlockers = {
   readonly uniqueKeyConflicts: { readonly total: number; readonly sample: readonly Record<string, unknown>[] };
   /** 推广链接新键与别的行撞了。 */
   readonly promoKeyConflicts: { readonly total: number };
+  /**
+   * 已发布（未删除）的文章正挂在这批推广链接上。改挂会把这些页面的可见性规则从"有网址"换成"有口令码且语种在白名单"，
+   * 可能让已被搜索引擎收录的页面变成 404——违反"公开网址冻结"（`docs/governance/AI_WORKFLOW.md`），所以必须为 0，
+   * 否则拒绝执行，由 Owner 单独批准后另行处理。
+   */
+  readonly publishedArticles: { readonly total: number; readonly sample: readonly Record<string, unknown>[] };
   /** 机构属于 PlotNovel 的书目挂在 MoboReader 与 PlotNovel 之外的剧场下。 */
   readonly itemsUnderOtherApps: { readonly total: number };
   /** 推广链接的剧场与其书目的剧场不一致（历史数据不一致，不敢动）。 */
@@ -357,6 +367,19 @@ async function inspect(tx: Tx, scope: Scope, lock: boolean) {
     WHERE trim(idempotency_key) = ANY(${newKeys}::text[]) AND id <> ALL(${promoIds}::uuid[])
   `))[0]?.n);
 
+  const publishedArticles = promoRows.length === 0 ? { total: 0, sample: [] } : {
+    total: toNumber((await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
+      SELECT count(*)::bigint AS n FROM article a
+      WHERE a.promo_link_id = ANY(${promoIds}::uuid[]) AND a.status = 'published' AND a.deleted_at IS NULL
+    `))[0]?.n),
+    sample: await sampleRows(tx, Prisma.sql`
+      SELECT a.id::text AS article_id, a.locale, a.novel_id::text AS novel_id, a.promo_link_id::text AS promo_link_id
+      FROM article a
+      WHERE a.promo_link_id = ANY(${promoIds}::uuid[]) AND a.status = 'published' AND a.deleted_at IS NULL
+      ORDER BY a.id LIMIT ${BLOCKER_SAMPLE_LIMIT}
+    `),
+  };
+
   const counts: RehomeCounts = {
     sourceItems: itemIds.length,
     sourceItemsAlreadyAtTarget: alreadyAtTarget,
@@ -373,6 +396,7 @@ async function inspect(tx: Tx, scope: Scope, lock: boolean) {
     activeCatalogScans: activeScans,
     uniqueKeyConflicts: uniqueConflicts,
     promoKeyConflicts: { total: promoKeyConflicts },
+    publishedArticles,
     itemsUnderOtherApps: { total: underOther },
     promoLinksNotAtSourceApp: { total: promoNotAtSource },
   };
@@ -385,6 +409,7 @@ function isBlocked(blockers: RehomeBlockers): boolean {
     || blockers.activeCatalogScans.total > 0
     || blockers.uniqueKeyConflicts.total > 0
     || blockers.promoKeyConflicts.total > 0
+    || blockers.publishedArticles.total > 0
     || blockers.itemsUnderOtherApps.total > 0
     || blockers.promoLinksNotAtSourceApp.total > 0;
 }
@@ -402,6 +427,14 @@ function refusalFor(blockers: RehomeBlockers): RehomeRefusedError {
     return new RehomeRefusedError(
       "gate_unique_conflict",
       `refused: moving would collide with ${blockers.uniqueKeyConflicts.total} existing source items / ${blockers.promoKeyConflicts.total} promo link keys at the target theater`,
+      blockers,
+    );
+  }
+  if (blockers.publishedArticles.total > 0) {
+    return new RehomeRefusedError(
+      "gate_published_pages",
+      `refused: ${blockers.publishedArticles.total} published articles are attached to these promo links; moving them could change `
+        + "the visibility of already-public pages (public URL freeze) -- needs a separate Owner decision",
       blockers,
     );
   }
