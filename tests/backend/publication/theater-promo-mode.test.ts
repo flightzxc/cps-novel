@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CODE_MODE_APP_NAME,
   codeModeAppName,
-  isCodeModeBookReady,
   isCodeModeTheater,
   normalizeStoreUrl,
   parseTheaterPromoConfig,
@@ -74,31 +73,6 @@ describe("normalizeStoreUrl：渲染前的最后一道防线", () => {
     const parsed = parseTheaterPromoConfig({ promoMode: "code", appStoreUrl: "javascript:alert(1)", googlePlayUrl: "https://play.google.com/store/apps/details?id=a.b" });
     expect(parsed.appStoreUrl).toBeNull();
     expect(parsed.googlePlayUrl).toBe("https://play.google.com/store/apps/details?id=a.b");
-  });
-});
-
-describe("isCodeModeBookReady：口令码非空 ∧ 语种在白名单", () => {
-  const config = { promoMode: "code", codeModeLocales: ["en"] };
-
-  it("口令码非空 + 语种 en → 就绪", () => {
-    expect(isCodeModeBookReady({ config, upstreamCode: "960031", novelLocale: "en" })).toBe(true);
-  });
-
-  it.each([null, undefined, "", "   ", "　 \t\n"])("口令码 %j（空白）→ 不就绪", (upstreamCode) => {
-    expect(isCodeModeBookReady({ config, upstreamCode, novelLocale: "en" })).toBe(false);
-  });
-
-  it.each(["fr", "zh-Hant", "", null, undefined])("语种 %j 不在白名单 → 不就绪", (novelLocale) => {
-    expect(isCodeModeBookReady({ config, upstreamCode: "960031", novelLocale })).toBe(false);
-  });
-
-  it("link 模式的剧场永远不适用口令码规则", () => {
-    expect(isCodeModeBookReady({ config: { promoMode: "link", codeModeLocales: ["en"] }, upstreamCode: "960031", novelLocale: "en" })).toBe(false);
-    expect(isCodeModeBookReady({ config: {}, upstreamCode: "960031", novelLocale: "en" })).toBe(false);
-  });
-
-  it("白名单为空 → 没有任何语种就绪", () => {
-    expect(isCodeModeBookReady({ config: { promoMode: "code" }, upstreamCode: "960031", novelLocale: "en" })).toBe(false);
   });
 });
 

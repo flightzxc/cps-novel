@@ -17,7 +17,8 @@
  *   - link 模式：`status = fetched` 且 web/app 网址至少一个非空（规则逐字不变）；
  *   - code 模式：`status = fetched` 且 `upstream_code` 非空、且书的语种在 `codeModeLocales` 里。
  *
- * 本文件只做"解析 + 判定"，不读库、不依赖 Prisma——worker、脚本、Web 都能引用。
+ * 本文件只做"解析 + 剧场模式判定"，不读库、不依赖 Prisma——worker、脚本、Web 都能引用。
+ * "一本书就绪与否"只有 `visibility.ts` 一处权威（JS）与它的 SQL 对应物，这里不重复实现。
  */
 import { DEFAULT_CODE_MODE_APP_NAME } from "../../lib/locale/code-mode-copy";
 
@@ -37,6 +38,11 @@ export const THEATER_CONFIG_KEYS = Object.freeze({
 export type TheaterPromoConfig = Readonly<{
   promoMode: TheaterPromoMode;
   agencyIds: readonly string[];
+  /**
+   * 解析后的展示/登记用副本（逐项裁剪、去重）。**不是就绪判定的依据**：公开可见性的唯一权威是
+   * `visibility.ts` 的 `isPromoReady` / `promoReadySql`，它们对配置里的元素按原样逐项比对（不裁剪），
+   * 与 SQL 的 `jsonb_exists` 逐字等价。这里故意不再提供第二个"书是否就绪"的函数，避免两套口径。
+   */
   codeModeLocales: readonly string[];
   appDisplayName: string | null;
   appStoreUrl: string | null;
@@ -108,25 +114,6 @@ export function parseTheaterPromoConfig(config: unknown): TheaterPromoConfig {
 
 export function isCodeModeTheater(config: unknown): boolean {
   return parseTheaterPromoConfig(config).promoMode === "code";
-}
-
-/**
- * 口令码模式的就绪判定（纯函数）。调用方负责先判 `status === "fetched"`——本函数只回答
- * "这个剧场的这本书，口令码够不够用"。
- *
- * `upstreamCode` 的"非空"口径与链接模式的网址完全一致：按 ECMAScript `String.prototype.trim` 修剪后
- * 长度大于 0（SQL 对应物用同一套字符集，见 `promoReadySql`）。
- */
-export function isCodeModeBookReady(input: {
-  readonly config: unknown;
-  readonly upstreamCode: string | null | undefined;
-  readonly novelLocale: string | null | undefined;
-}): boolean {
-  const theater = parseTheaterPromoConfig(input.config);
-  if (theater.promoMode !== "code") return false;
-  if (input.upstreamCode == null || input.upstreamCode.trim().length === 0) return false;
-  if (input.novelLocale == null || input.novelLocale.length === 0) return false;
-  return theater.codeModeLocales.includes(input.novelLocale);
 }
 
 /**

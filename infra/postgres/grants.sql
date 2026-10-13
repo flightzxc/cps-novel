@@ -136,7 +136,7 @@ GRANT SELECT (
 -- two reasons, both unavoidable for a theater whose upstream gives only a
 -- code and no URL: (1) the publish gate (`loadPublishGateFacts`) and the
 -- public access checks must test "is the code non-blank" to decide readiness;
--- (2) the `/go/<code>/continue` interstitial must show the code to the reader
+-- (2) the `/go/<code>/app` interstitial must show the code to the reader
 -- -- that page is the one and only place the code ever appears. Nothing else
 -- about the boundary moves: the code never enters a list/card/detail DTO,
 -- a sitemap, a log or an audit snapshot (tests pin each), Analyst/Scheduler

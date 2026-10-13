@@ -27,7 +27,7 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("GRANT SELECT (\n  id, channel_account_id, credential_type");
     expect(sql).not.toMatch(/GRANT SELECT ON TABLE channel_account_credential TO (?:web_app|analyst_ro)/);
     // v0.6.0：口令码模式剧场的上游只给口令码、不给网址——发布门禁 / 公开访问要判口令码是否非空，
-    // `/go/<码>/continue` 中间页要把它展示给读者，所以 web_app 的列级授权多了 upstream_code（且只多这一列）。
+    // `/go/<码>/app` 中间页要把它展示给读者，所以 web_app 的列级授权多了 upstream_code（且只多这一列）。
     expect(sql).toContain("GRANT SELECT (web_url, app_url, upstream_code) ON promo_link TO web_app");
     expect(sql).not.toMatch(/GRANT SELECT \([^)]*upstream_code[^)]*\) ON promo_link TO (?:analyst_ro|scheduler_app)/);
     expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url(?:, upstream_code)?\) ON promo_link TO analyst_ro/);
