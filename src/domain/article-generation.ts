@@ -50,6 +50,11 @@ export type ArticleGenerateBlockedReason =
   | "novel_deleted"
   | "already_exists"
   | "article_soft_deleted"
+  /**
+   * v0.6.0（Owner 10-14 拍板第 3 项）：口令码模式剧场（PlotNovel）的书，在其它剧场（MoboReader）里已有同语种、
+   * 同规范化书名的书——只保留 MoboReader 那一份，这一本不生成。只影响生成候选，不改已存在的数据。
+   */
+  | "duplicate_title_in_link_theater"
   | Exclude<NovelGeneratePromoOutcome, "ready">;
 
 export type NovelGenerateCandidate = {
@@ -72,6 +77,7 @@ export function articleGenerateBlockedReasonLabel(reason: ArticleGenerateBlocked
     novel_deleted: "书目已删除",
     already_exists: "已有 Article",
     article_soft_deleted: "已有已删除的 Article，需先处理历史记录",
+    duplicate_title_in_link_theater: "MoboReader 已有同名书",
     promo_link_missing: "缺少推广链接",
     promo_link_not_ready: "推广链接未就绪",
     promo_link_deleted: "推广链接已删除/无有效推广链接",

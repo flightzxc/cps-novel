@@ -7,9 +7,11 @@ import {
   type NovelGeneratePage,
   type PinnedNovelResult,
 } from "@/domain/article-generation";
+import { isCodeModeTheater } from "@/server/publication/theater-promo-mode";
 import { readyPromoLinkWhere } from "@/server/publication/visibility";
 
 import { resolveReadyPromoLinksForNovels, type PromoResolution } from "./promo";
+import { findDuplicatesInLinkTheaters } from "./theater-duplicates";
 
 export type { NovelGenerateCandidate } from "@/domain/article-generation";
 
@@ -30,7 +32,11 @@ export type ArticleGenerateAdmission = Readonly<{
   blockedReason?: ArticleGenerateBlockedReason;
 }>;
 
-type AdmissionDb = Parameters<typeof resolveReadyPromoLinksForNovels>[0];
+/**
+ * 准入判定读库：推广链接（必需），以及——只有当候选里出现口令码模式剧场的书时才会用到——书与剧场表（同名去重）。
+ * 真实 Prisma 客户端 / 事务客户端两者都有；只测推广判定的假库可以不带。
+ */
+type AdmissionDb = Parameters<typeof resolveReadyPromoLinksForNovels>[0] & Partial<Pick<PrismaClient, "channelApp" | "novel">>;
 
 function articleForNovelLocale(novel: NovelListRow) {
   return novel.articles.find((article) => article.locale === novel.locale);
@@ -54,6 +60,24 @@ export async function resolveArticleGenerateAdmissions(
   });
   const promos = await resolveReadyPromoLinksForNovels(db, promoCandidateIds);
   const admissions = new Map<string, ArticleGenerateAdmission>();
+
+  // v0.6.0 同名去重（Owner 10-14 拍板第 3 项）：口令码模式剧场的书，如果其它剧场（MoboReader）里已有同语种同规范化
+  // 书名的书，就不生成——只保留 MoboReader 那一份。只对"本来可以生成"的书判（已有文章 / 推广未就绪的书原因更靠前）。
+  const codeTheaterProbes: Array<{ id: string; locale: string; title: string }> = [];
+  for (const novelId of promoCandidateIds) {
+    const novel = rowsById.get(novelId);
+    const resolution = promos.get(novelId);
+    if (!novel || resolution?.outcome !== "ready") continue;
+    if (articleForNovelLocale(novel)) continue;
+    if (isCodeModeTheater(resolution.promo.channelApp?.config)) {
+      codeTheaterProbes.push({ id: novel.id, locale: novel.locale, title: novel.title });
+    }
+  }
+  let duplicateNovelIds = new Set<string>();
+  if (codeTheaterProbes.length > 0) {
+    if (!db.novel || !db.channelApp) throw new Error("duplicate_check_db_unavailable");
+    duplicateNovelIds = await findDuplicatesInLinkTheaters(db as Pick<PrismaClient, "channelApp" | "novel">, codeTheaterProbes);
+  }
 
   for (const novelId of requestedNovelIds) {
     const novel = rowsById.get(novelId);
@@ -84,6 +108,10 @@ export async function resolveArticleGenerateAdmissions(
         promoOutcome,
         blockedReason: existing.deletedAt === null ? "already_exists" : "article_soft_deleted",
       });
+      continue;
+    }
+    if (promoOutcome === "ready" && duplicateNovelIds.has(novelId)) {
+      admissions.set(novelId, { novelId, canGenerate: false, promoOutcome, blockedReason: "duplicate_title_in_link_theater" });
       continue;
     }
     admissions.set(novelId, promoOutcome === "ready"

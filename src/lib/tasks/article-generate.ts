@@ -145,6 +145,7 @@ function admissionSummaryFromResult(
     "novel_deleted",
     "already_exists",
     "article_soft_deleted",
+    "duplicate_title_in_link_theater",
     "promo_link_missing",
     "promo_link_not_ready",
     "promo_link_deleted",

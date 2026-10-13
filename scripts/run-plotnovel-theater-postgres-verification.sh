@@ -9,7 +9,8 @@
 #   3) readiness：口令码模式就绪规则 JS 与 SQL 逐字符等价、MoboReader 防误伤、公开列表 / 站点地图预筛、
 #      web_app 读 upstream_code 的列级授权、scheduler_app 的 queryActiveLocales 不被拒、
 #      领取批次能挑到 PlotNovel 剧场的书；
-#   4) 真实角色：web_app / worker_app / scheduler_app 全程无 permission denied。
+#   4) dedupe：口令码模式剧场的书与 MoboReader 同语种同名 → 不可生成（只影响候选，不改已有数据）；
+#   5) 真实角色：web_app / worker_app / scheduler_app 全程无 permission denied。
 # 最后重放 grants 之后跑数据字典漂移检查（drift 必须为 0）。
 # 最后一行：PLOTNOVEL_THEATER_POSTGRES_VERIFICATION=PASS
 set -euo pipefail
@@ -117,6 +118,7 @@ npm exec vitest run -- --project node \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts \
   tests/integration/plotnovel/rehome-postgres.test.ts \
   tests/integration/plotnovel/readiness-postgres.test.ts \
+  tests/integration/plotnovel/dedupe-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 # 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
@@ -124,7 +126,8 @@ npm exec vitest run -- --project node \
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/integration-result.json" \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts=8 \
   tests/integration/plotnovel/rehome-postgres.test.ts=13 \
-  tests/integration/plotnovel/readiness-postgres.test.ts=12; then
+  tests/integration/plotnovel/readiness-postgres.test.ts=12 \
+  tests/integration/plotnovel/dedupe-postgres.test.ts=5; then
   exit 1
 fi
 
