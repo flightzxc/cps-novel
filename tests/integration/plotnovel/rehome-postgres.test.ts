@@ -324,6 +324,56 @@ describe.skipIf(!enabled).sequential("v0.6.0 C：存量改挂（真实库）", (
     await expect(rehomePlotnovelSourceItems(worker, APPLY())).resolves.toMatchObject({ noop: false });
   });
 
+  it("拒绝：以小说编号 / 文章编号为目标的在途条目（文章生成叶子、自动打标、文章发布）一样挡住；别的书的不挡", async () => {
+    const world = await seedWorld();
+    const before = await snapshot();
+    const novel = world.plotBooks[0]!.novel!;
+    const lease = {
+      attemptCount: 1, executionToken: randomUUID(), leaseEpoch: 1n, lockedBy: "some-worker",
+      lockedUntil: new Date(Date.now() + 60_000), heartbeatAt: new Date(), startedAt: new Date(),
+    };
+    const makeTask = (taskType: string, hash: string, item: { targetType: string; targetId: string; status: "pending" | "processing" }) =>
+      owner.genericTask.create({
+        data: {
+          taskType, operationScopeHash: hash.repeat(64), mode: "apply", status: item.status, requestToken: randomUUID(), totalCount: 1,
+          items: { create: [{ targetType: item.targetType, targetId: item.targetId, status: item.status, payload: {}, ...(item.status === "processing" ? lease : {}) }] },
+        },
+      });
+
+    // 别的书（MoboReader 自己的）的在途条目不是拦截项
+    await makeTask("article.generate.v1", "1", { targetType: "novel", targetId: world.moboBooks[0]!.novel!.id, status: "pending" });
+    expect((await rehomePlotnovelSourceItems(worker, DRY())).blocked).toBe(false);
+
+    // 文章生成叶子：targetType = novel，目标是小说编号
+    const generate = await makeTask("article.generate.v1", "2", { targetType: "novel", targetId: novel.id, status: "pending" });
+    const dry = await rehomePlotnovelSourceItems(worker, DRY());
+    expect(dry.blocked).toBe(true);
+    expect(dry.blockers.pendingGenericTaskItems.total).toBe(1);
+    expect(dry.blockers.pendingGenericTaskItems.sample[0]).toMatchObject({ task_type: "article.generate.v1", target_type: "novel", target_id: novel.id });
+    await expect(rehomePlotnovelSourceItems(worker, APPLY())).rejects.toMatchObject({ code: "gate_unfinished_tasks" });
+    await owner.genericTask.delete({ where: { id: generate.id } });
+
+    // 自动打标：targetType = Novel，processing
+    const tagging = await makeTask("tagging.auto_classify.v1", "3", { targetType: "Novel", targetId: novel.id, status: "processing" });
+    await expect(rehomePlotnovelSourceItems(worker, APPLY())).rejects.toMatchObject({ code: "gate_unfinished_tasks" });
+    await owner.genericTask.delete({ where: { id: tagging.id } });
+
+    // 文章发布：目标是挂在这批推广链接上的（草稿）文章编号
+    const draft = await owner.article.create({
+      data: {
+        novelId: world.plotBooks[1]!.novel!.id, promoLinkId: world.promos[1]!.id, locale: "en", slug: "draft-to-publish", publicPageShortId: "pdraftpub001",
+        title: "Draft", summary: "s", body: "b", status: "draft", articleType: "novel_article",
+      },
+    });
+    const publish = await makeTask("article.publish.v1", "4", { targetType: "article", targetId: draft.id, status: "pending" });
+    await expect(rehomePlotnovelSourceItems(worker, APPLY())).rejects.toMatchObject({ code: "gate_unfinished_tasks" });
+    await owner.genericTask.delete({ where: { id: publish.id } });
+
+    expect(await snapshot()).toBe(before);
+    // 只剩别的书的条目时可以正常执行
+    await expect(rehomePlotnovelSourceItems(worker, APPLY())).resolves.toMatchObject({ noop: false });
+  });
+
   it("已结束的任务条目不挡路（历史记录不是拦截项）", async () => {
     const world = await seedWorld();
     await owner.genericTask.create({

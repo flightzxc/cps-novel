@@ -125,7 +125,7 @@ npm exec vitest run -- --project node \
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/integration-result.json" \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts=8 \
-  tests/integration/plotnovel/rehome-postgres.test.ts=14 \
+  tests/integration/plotnovel/rehome-postgres.test.ts=15 \
   tests/integration/plotnovel/readiness-postgres.test.ts=13 \
   tests/integration/plotnovel/dedupe-postgres.test.ts=5; then
   exit 1

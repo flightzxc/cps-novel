@@ -20,8 +20,14 @@
  *      PlotNovel 下建一份（已有就复用）并把书目的标签关联改指过去；再把这批书语种范围内的映射边复制一份
  *      到 PlotNovel 下（复制，不是移动——MoboReader 自己的书还要用）。否则这批书的"上游映射分类"会在
  *      下一次对账时消失。
- *   4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，改挂后旧任务条目会全部失败，所以执行前这批书不能
- *      有任何 `pending` / `processing` 的任务条目（领推广、试读、物化……），也不能有进行中的目录扫描。
+ *   4. 领取 handler 校验"书目所属剧场 == 任务里的剧场"，改挂后旧任务条目会全部失败；其它任务也是在书目、小说、
+ *      文章这几类对象上排队，改挂中途它们的前提会变。所以执行前这批书不能有任何在途（`pending` / `processing`）
+ *      的任务条目，也不能有进行中的目录扫描。"这批书的任务条目"按三种目标一起查：
+ *        - 书目编号：领推广、物化、建小说（`targetType = novel_source_item`），以及试读补采的同步任务条目
+ *          （`channel_sync_task_item.novel_source_item_id`）；
+ *        - 书目所属的小说编号：文章生成叶子（`targetType = novel`）、自动打标（`targetType = Novel`）；
+ *        - 挂在这批推广链接上的文章编号：文章发布（`targetType = article`）。
+ *      按 `target_id` 文本匹配（都是 uuid），不依赖 `targetType` 的拼写，以后再出现以这三类编号为目标的任务类型也会被挡住。
  *   5. 公开网址冻结：如果已有"已发布"的文章挂在这批推广链接上，改挂会把那些页面的可见性规则从"有网址"换成
  *      "有口令码且语种在白名单"，可能让已被搜索引擎收录的页面变成 404（`docs/governance/AI_WORKFLOW.md`）。
  *      所以这种情况直接拒绝执行（`gate_published_pages`），由 Owner 单独决定；草稿 / 已下架的文章不挡路。
@@ -311,16 +317,29 @@ async function inspect(tx: Tx, scope: Scope, lock: boolean) {
   `))[0]?.n);
 
   // --- 拦截项 ---
-  const pendingGeneric = itemIds.length === 0 ? { total: 0, sample: [] } : {
+  // 在途的通用任务条目要按"三种目标"一起查，因为不同任务类型把条目指向不同的东西：
+  //   - 书目编号：领推广、物化、建小说（targetType = novel_source_item）；
+  //   - 小说编号：文章生成叶子（targetType = novel）、自动打标（targetType = Novel）；
+  //   - 文章编号：文章发布（targetType = article），文章挂在这批推广链接上的那些。
+  // 编号都是 uuid，按 target_id 文本匹配，不依赖 targetType 的拼写——以后再出现以这三类编号为目标的任务类型也会被挡住。
+  const novelIds = itemIds.length === 0 ? [] : (await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT DISTINCT novel_id::text AS id FROM novel_source_item
+    WHERE id = ANY(${[...itemIds]}::uuid[]) AND novel_id IS NOT NULL
+  `)).map((row) => row.id);
+  const articleIds = promoIds.length === 0 ? [] : (await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id::text AS id FROM article WHERE promo_link_id = ANY(${promoIds}::uuid[])
+  `)).map((row) => row.id);
+  const taskTargetIds = [...itemIds, ...novelIds, ...articleIds];
+  const pendingGeneric = taskTargetIds.length === 0 ? { total: 0, sample: [] } : {
     total: toNumber((await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
       SELECT count(*)::bigint AS n FROM generic_task_item i
-      WHERE i.status IN ('pending', 'processing') AND i.target_id = ANY(${[...itemIds]}::text[])
+      WHERE i.status IN ('pending', 'processing') AND i.target_id = ANY(${taskTargetIds}::text[])
     `))[0]?.n),
     sample: await sampleRows(tx, Prisma.sql`
       SELECT i.id::text AS item_id, i.task_id::text AS task_id, t.task_type, t.status AS task_status,
              i.target_type, i.target_id, i.status AS item_status
       FROM generic_task_item i JOIN generic_task t ON t.id = i.task_id
-      WHERE i.status IN ('pending', 'processing') AND i.target_id = ANY(${[...itemIds]}::text[])
+      WHERE i.status IN ('pending', 'processing') AND i.target_id = ANY(${taskTargetIds}::text[])
       ORDER BY i.created_at, i.id LIMIT ${BLOCKER_SAMPLE_LIMIT}
     `),
   };
