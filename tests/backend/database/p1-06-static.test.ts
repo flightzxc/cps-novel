@@ -26,8 +26,13 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("REVOKE CREATE, TEMPORARY ON DATABASE");
     expect(sql).toContain("GRANT SELECT (\n  id, channel_account_id, credential_type");
     expect(sql).not.toMatch(/GRANT SELECT ON TABLE channel_account_credential TO (?:web_app|analyst_ro)/);
-    expect(sql).toContain("GRANT SELECT (web_url, app_url) ON promo_link TO web_app");
-    expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url\) ON promo_link TO analyst_ro/);
+    // v0.6.0：口令码模式剧场的上游只给口令码、不给网址——发布门禁 / 公开访问要判口令码是否非空，
+    // `/go/<码>/continue` 中间页要把它展示给读者，所以 web_app 的列级授权多了 upstream_code（且只多这一列）。
+    expect(sql).toContain("GRANT SELECT (web_url, app_url, upstream_code) ON promo_link TO web_app");
+    expect(sql).not.toMatch(/GRANT SELECT \([^)]*upstream_code[^)]*\) ON promo_link TO (?:analyst_ro|scheduler_app)/);
+    expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url(?:, upstream_code)?\) ON promo_link TO analyst_ro/);
+    // raw_links / raw_payload 仍然是 Worker 专属
+    expect(sql).not.toMatch(/GRANT SELECT \([^)]*\braw_links\b[^)]*\) ON promo_link TO (?:web_app|analyst_ro|scheduler_app)/);
     expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role");
     expect(sql).toContain("GRANT SELECT ON TABLE channel_account, channel_account_credential");
     expect(sql).toMatch(/GRANT SELECT ON TABLE channel_account,[\s\S]*side_effect_intent,[\s\S]*TO worker_app;/);

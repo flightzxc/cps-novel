@@ -1,4 +1,5 @@
 import { pickReadyPromoLink, type PromoLinkCandidate } from "@/server/article-rebind/guards";
+import { PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 
 export type ReadyPromoLink = PromoLinkCandidate & {
   readonly publicRedirectCode: string;
@@ -10,11 +11,18 @@ export type PromoResolution =
   | { readonly outcome: "promo_link_not_ready" }
   | { readonly outcome: "promo_link_deleted" };
 
+/**
+ * v0.6.0：select 里多了口令码模式需要的字段与两个嵌套关系（剧场配置、书的语种），与
+ * `PROMO_READINESS_SELECT` 一一对应。字面量类型必须写全——Prisma 的泛型靠它推断返回行形状。
+ */
 type PromoSelect = {
   id: true;
   status: true;
   webUrl: true;
   appUrl: true;
+  upstreamCode: true;
+  channelApp: { select: { config: true } };
+  novel: { select: { locale: true } };
   fetchedAt: true;
   publicRedirectCode: true;
 };
@@ -54,9 +62,7 @@ export async function resolveReadyPromoLinkForNovel(
     where: { novelId, deletedAt: null, status: "fetched" },
     select: {
       id: true,
-      status: true,
-      webUrl: true,
-      appUrl: true,
+      ...PROMO_READINESS_SELECT,
       fetchedAt: true,
       publicRedirectCode: true,
     },
@@ -90,9 +96,7 @@ export async function resolveReadyPromoLinksForNovels(
     where: { novelId: { in: unique }, deletedAt: null, status: "fetched" },
     select: {
       id: true,
-      status: true,
-      webUrl: true,
-      appUrl: true,
+      ...PROMO_READINESS_SELECT,
       fetchedAt: true,
       publicRedirectCode: true,
       novelId: true,

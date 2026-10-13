@@ -218,3 +218,54 @@ export async function seedPromo(promo: SeedPromo) {
     },
   });
 }
+
+export type SeedPublished = {
+  readonly appId: string;
+  readonly externalBookId: string;
+  readonly title: string;
+  readonly locale?: string;
+  readonly agencyId?: string | null;
+  readonly promo?: Partial<Pick<SeedPromo, "status" | "upstreamCode" | "webUrl" | "appUrl">>;
+  readonly articleStatus?: string;
+  readonly novelStatus?: string;
+  readonly coverUrl?: string | null;
+  /** 不建文章，只建书目 + 小说 + 推广（用于"可生成"判定）。 */
+  readonly withoutArticle?: boolean;
+};
+
+/** 一本"已发布"的书：小说 + 书目 + 推广链接 + 文章，全部在同一个剧场名下。 */
+export async function seedPublished(book: SeedPublished) {
+  const locale = book.locale ?? "en";
+  const { novel, source } = await seedBook({
+    appId: book.appId, externalBookId: book.externalBookId, title: book.title, locale, agencyId: book.agencyId,
+  });
+  await owner.novel.update({
+    where: { id: novel!.id },
+    data: { status: book.novelStatus ?? "published", coverUrl: book.coverUrl === undefined ? `https://img.example/${book.externalBookId}.jpg` : book.coverUrl },
+  });
+  const promo = await seedPromo({
+    appId: book.appId, novelId: novel!.id, sourceId: source.id,
+    status: book.promo?.status ?? "fetched",
+    upstreamCode: book.promo?.upstreamCode,
+    webUrl: book.promo?.webUrl,
+    appUrl: book.promo?.appUrl,
+  });
+  if (book.withoutArticle) return { novel: novel!, source, promo, article: null };
+  const token = randomUUID().replace(/-/g, "").slice(0, 12);
+  const article = await owner.article.create({
+    data: {
+      novelId: novel!.id,
+      promoLinkId: promo.id,
+      locale,
+      slug: `slug-${book.externalBookId}-${token}`,
+      publicPageShortId: `p${token}`,
+      title: book.title,
+      summary: `Summary of ${book.title}`,
+      body: `Body of ${book.title}. Read it at /go/${promo.publicRedirectCode}`,
+      status: book.articleStatus ?? "published",
+      articleType: "novel_article",
+      publishedAt: new Date(),
+    },
+  });
+  return { novel: novel!, source, promo, article };
+}

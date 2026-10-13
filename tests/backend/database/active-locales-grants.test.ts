@@ -52,7 +52,10 @@ const schemaSource = readFileSync(resolve(root, "prisma/schema.prisma"), "utf8")
 describe("scheduler active-locales read grants (L10N P5.2)", () => {
   const EXPECTED_ARTICLE_COLUMNS = ["locale", "deleted_at", "status", "novel_id", "promo_link_id"];
   const EXPECTED_NOVEL_COLUMNS = ["id", "deleted_at", "status"];
-  const EXPECTED_PROMO_LINK_COLUMNS = ["id", "novel_id", "status", "deleted_at", "web_url", "app_url"];
+  const EXPECTED_PROMO_LINK_COLUMNS = ["id", "novel_id", "status", "deleted_at", "web_url", "app_url", "channel_app_id"];
+  // v0.6.0：activePublicArticleWhere 的第三个（口令码模式剧场的粗预筛）分支经 channel_app 关系过滤，
+  // 只用到连接键与 JSON 配置列。
+  const EXPECTED_CHANNEL_APP_COLUMNS = ["id", "config"];
 
   function grantedColumns(table: string): string[] | null {
     const match = grants.match(new RegExp(`GRANT SELECT \\(([^)]+)\\) ON ${table} TO scheduler_app;`));
@@ -84,8 +87,23 @@ describe("scheduler active-locales read grants (L10N P5.2)", () => {
     }
   });
 
-  it("never grants scheduler_app whole-table SELECT on article/novel/promo_link", () => {
-    for (const table of ["article", "novel", "promo_link"]) {
+  it("v0.6.0：grants scheduler_app column-scoped SELECT on channel_app covering the code-mode branch's join key and config column", () => {
+    const columns = grantedColumns("channel_app");
+    expect(columns, "expected a `GRANT SELECT (...) ON channel_app TO scheduler_app;` line in infra/postgres/grants.sql").not.toBeNull();
+    for (const column of EXPECTED_CHANNEL_APP_COLUMNS) {
+      expect(columns, `channel_app.${column} is referenced by the captured SQL but not granted`).toContain(column);
+    }
+    expect(columns).toHaveLength(EXPECTED_CHANNEL_APP_COLUMNS.length);
+  });
+
+  it("v0.6.0：scheduler_app 永远读不到口令码（promo_link.upstream_code）也读不到 raw_links", () => {
+    const columns = grantedColumns("promo_link")!;
+    expect(columns).not.toContain("upstream_code");
+    expect(columns).not.toContain("raw_links");
+  });
+
+  it("never grants scheduler_app whole-table SELECT on article/novel/promo_link/channel_app", () => {
+    for (const table of ["article", "novel", "promo_link", "channel_app"]) {
       expect(
         grants,
         `${table} must stay column-scoped for scheduler_app -- a whole-table grant would also expose ${table === "article" ? "body/seo_metadata" : table === "novel" ? "title/description/author" : "upstream_code"}`,
@@ -94,8 +112,8 @@ describe("scheduler active-locales read grants (L10N P5.2)", () => {
     }
   });
 
-  it("never grants scheduler_app INSERT/UPDATE/DELETE on article/novel/promo_link", () => {
-    for (const table of ["article", "novel", "promo_link"]) {
+  it("never grants scheduler_app INSERT/UPDATE/DELETE on article/novel/promo_link/channel_app", () => {
+    for (const table of ["article", "novel", "promo_link", "channel_app"]) {
       expect(grants, `${table} must stay read-only for scheduler_app`).not.toMatch(
         new RegExp(`GRANT[^;]*\\b(INSERT|UPDATE|DELETE)\\b[^;]*\\b${table}\\b[^;]*scheduler_app`, "s"),
       );

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { enqueueMoboreaderPreviewRefreshTask, type MoboreaderPreviewTaskCreationResult } from "@/lib/tasks/moboreader";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
-import { buildPublicArticleWhere, isPromoReady } from "./visibility";
+import { buildPublicArticleWhere, isPromoReady, PROMO_READINESS_SELECT } from "./visibility";
 
 export type PublicationPreviewInput = {
   articleIds: readonly string[];
@@ -28,7 +28,7 @@ export async function enqueuePublicationPreviews(
   const articles = await db.article.findMany({
     where: buildPublicArticleWhere({ id: { in: ids }, articleType: "novel_article", locale: { in: [...SITE_LOCALES] } }, env),
     select: { id: true, novelId: true, promoLink: { select: {
-      status: true, webUrl: true, appUrl: true, deletedAt: true,
+      ...PROMO_READINESS_SELECT, deletedAt: true,
       channelAccountId: true, channelAppId: true, novelSourceItemId: true,
       novelSourceItem: { select: { novelId: true, channelAppId: true, deletedAt: true } },
     } } },

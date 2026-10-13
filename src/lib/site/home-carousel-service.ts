@@ -3,7 +3,9 @@ import type { PrismaClient } from "@prisma/client";
 import type { FeaturedEntry } from "@/features/public-ui/home/HomeScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { buildArticlePath } from "@/lib/slug/article-path";
-import { buildPublicListArticleWhere, isPromoReady } from "@/server/publication/visibility";
+import { excludeCodeModePromoWhere, loadCodeModeChannelAppIds } from "@/server/publication/code-mode-theaters";
+import { isCodeModeTheater } from "@/server/publication/theater-promo-mode";
+import { buildPublicListArticleWhere, isPromoReady, PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 
 import { toNovelDetailView, type PublicArticleDetailRecord } from "./mappers";
 import { listPreviewChapterRefs } from "./queries";
@@ -35,14 +37,14 @@ const SELECT = {
   id: true, title: true, summary: true, body: true, seoMetadata: true, slug: true, locale: true,
   publicPageShortId: true, publishedAt: true,
   novel: { select: { id: true, businessId: true, title: true, description: true, coverUrl: true, locale: true, totalChapterCount: true } },
-  promoLink: { select: { status: true, webUrl: true, appUrl: true, publicRedirectCode: true } },
+  promoLink: { select: { ...PROMO_READINESS_SELECT, publicRedirectCode: true } },
 } as const;
 
-async function fallbackRows(db: PrismaClient, locale: SiteLocale) {
+async function fallbackRows(db: PrismaClient, locale: SiteLocale, codeModeChannelAppIds: readonly string[]) {
   // C-25: the carousel is a list surface (it is a home-page listing, not a
   // detail/collectability boundary) — it uses the same stricter "list"
   // fragment as the public list (`public-list.ts`), excluding both `hidden` and `seo_only`.
-  return db.article.findMany({ where: { ...buildPublicListArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
+  return db.article.findMany({ where: { ...buildPublicListArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } }, ...excludeCodeModePromoWhere(codeModeChannelAppIds) }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
 }
 
 type CarouselRow = Awaited<ReturnType<typeof fallbackRows>>[number];
@@ -61,6 +63,9 @@ type CarouselRowWithNovel = CarouselRow & { novel: NonNullable<CarouselRow["nove
 
 async function toFeatured(db: PrismaClient, row: CarouselRowWithNovel): Promise<HomeCarouselItem | null> {
   if (!isPromoReady(row.promoLink) || !row.novel.coverUrl?.trim()) return null;
+  // v0.6.0：口令码模式剧场的书不进首页轮播（Owner 10-14 拍板第 4 项）。查询里已按剧场编号排除；这里是行级的第二道，
+  // 防止快照（home_carousel_serving）里残留的行或将来改动查询时把它放出来。
+  if (row.promoLink && isCodeModeTheater(row.promoLink.channelApp?.config)) return null;
   const record: PublicArticleDetailRecord = { ...row, promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null };
   const novel = toNovelDetailView(record, await listPreviewChapterRefs(db, row.novel.id));
   if (!novel) return null;
@@ -70,8 +75,13 @@ async function toFeatured(db: PrismaClient, row: CarouselRowWithNovel): Promise<
 
 export async function getHomeCarouselItems(locale: SiteLocale, db?: PrismaClient): Promise<HomeCarouselItem[]> {
   if (!db) return [];
-  const serving = await db.homeCarouselServing.findMany({ where: { locale, article: buildPublicListArticleWhere({ locale }) }, orderBy: { position: "asc" }, take: 5, select: { article: { select: SELECT } } });
-  const rows = serving.length > 0 ? serving.map((entry) => entry.article) : await fallbackRows(db, locale);
+  const codeModeChannelAppIds = await loadCodeModeChannelAppIds(db);
+  // 没有口令码剧场时，快照查询与改动前逐字相同（不多包一层 AND）。
+  const servedArticleWhere = codeModeChannelAppIds.length === 0
+    ? buildPublicListArticleWhere({ locale })
+    : { AND: [buildPublicListArticleWhere({ locale }), excludeCodeModePromoWhere(codeModeChannelAppIds)] };
+  const serving = await db.homeCarouselServing.findMany({ where: { locale, article: servedArticleWhere }, orderBy: { position: "asc" }, take: 5, select: { article: { select: SELECT } } });
+  const rows = serving.length > 0 ? serving.map((entry) => entry.article) : await fallbackRows(db, locale, codeModeChannelAppIds);
   const unique = new Set<string>();
   const result: HomeCarouselItem[] = [];
   for (const row of rows) {

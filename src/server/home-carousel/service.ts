@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { enqueueScheduledTask, type ScheduleDefinition, type ScheduledTaskInput, type TaskHandlerRegistry } from "@/lib/tasks";
+import { excludeCodeModePromoWhere, loadCodeModeChannelAppIds } from "@/server/publication/code-mode-theaters";
 import { buildPublicListArticleWhere } from "@/server/publication/visibility";
 import { queryActiveLocales } from "@/lib/locale/active-locales";
 import { SiteSettingNotSeededError } from "@/server/site-settings/service";
@@ -149,8 +150,10 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   // both `hidden` and `seo_only` Articles from ever being written into
   // `home_carousel_serving`. While `FEATURE_ARTICLE_SEO_VISIBILITY` is off
   // this degrades to exactly the pre-C-25 where-shape below.
+  // v0.6.0：首页轮播显式排除口令码模式剧场（PlotNovel）的书——Owner 10-14 拍板第 4 项（见 code-mode-theaters.ts）。
+  const codeModeChannelAppIds = await loadCodeModeChannelAppIds(tx);
   const rawRows = await tx.article.findMany({
-    where: { ...buildPublicListArticleWhere({ locale: input.locale }, env), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } },
+    where: { ...buildPublicListArticleWhere({ locale: input.locale }, env), novel: { status: "published", deletedAt: null, coverUrl: { not: null } }, ...excludeCodeModePromoWhere(codeModeChannelAppIds) },
     orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }],
     take: HOME_CAROUSEL_SCAN_LIMIT,
     select: { id: true, novelId: true, publishedAt: true, updatedAt: true, novel: { select: { coverUrl: true } } },
@@ -254,13 +257,17 @@ export async function upsertHomeCarouselManualSlot(input: { authorization: Admin
   const context = await auth(input.authorization, "admin.home_carousel.manual_upsert", input.requestId, deps);
   const config = await getHomeCarouselConfig(deps.db);
   if (!Number.isInteger(input.position) || input.position < 1 || input.position > config.slotCount) throw new Error("carousel_position_invalid");
-  const article = await deps.db.article.findFirst({ where: { id: input.articleId, locale: input.locale, status: "published", deletedAt: null, novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, select: { id: true, novelId: true } });
+  const article = await deps.db.article.findFirst({ where: { id: input.articleId, locale: input.locale, status: "published", deletedAt: null, novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, select: { id: true, novelId: true, promoLink: { select: { channelAppId: true } } } });
   // C-27: `novelId` is nullable at the type level, but the `novel: {
   // status: "published", ... }` filter above can only match a row whose
   // novel relation resolves (same reasoning as `computeHomeCarouselInTx`'s
   // `CarouselCandidateRowWithNovel` above) — this manual slot feature is
   // Novel-only, same as the auto-candidate path.
   if (!article || article.novelId === null) throw new Error("carousel_article_ineligible");
+  // v0.6.0：口令码模式剧场的书不进首页轮播（含手动位）。单独的错误码，让运营看得懂是这条规则而不是别的。
+  if (article.promoLink && (await loadCodeModeChannelAppIds(deps.db)).includes(article.promoLink.channelAppId)) {
+    throw new Error("carousel_code_mode_excluded");
+  }
   // Captured into its own `const` (rather than reading `article.novelId`
   // inside the transaction closure below) so its non-null narrowing from the
   // guard above survives crossing the closure boundary — TS narrows a

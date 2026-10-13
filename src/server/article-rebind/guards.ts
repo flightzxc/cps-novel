@@ -22,7 +22,7 @@
  * subset), the same "inject a fake, run against real Prisma unmodified"
  * discipline `src/server/articles/service.ts` and its own tests already use.
  */
-import { isPromoReady } from "@/server/publication/visibility";
+import { isPromoReady, PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 
 import type { RebindGuardCode } from "./errors";
 
@@ -70,6 +70,10 @@ export type PromoLinkCandidate = {
   webUrl: string | null;
   appUrl: string | null;
   fetchedAt: Date | string | null;
+  /** v0.6.0：口令码模式的就绪判定要看这三项（`PROMO_READINESS_SELECT`）；缺省按 link 模式判定。 */
+  upstreamCode?: string | null;
+  channelApp?: { config: unknown } | null;
+  novel?: { locale: string } | null;
 };
 
 // Prisma delegate args are intentionally generic — this module is exercised
@@ -120,7 +124,7 @@ async function resolveTargetPromoLink(
 ): Promise<PromoLinkCandidate | null> {
   const candidates = await db.promoLink.findMany({
     where: { novelId: targetNovelId, status: "fetched", deletedAt: null },
-    select: { id: true, status: true, webUrl: true, appUrl: true, fetchedAt: true },
+    select: { id: true, ...PROMO_READINESS_SELECT, fetchedAt: true },
     orderBy: [{ fetchedAt: "desc" }, { id: "asc" }],
   });
   return pickReadyPromoLink(candidates);

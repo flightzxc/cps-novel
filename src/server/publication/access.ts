@@ -38,6 +38,7 @@ import {
   isPublicationStatePublic,
   isPubliclyAccessible,
   isRightsBlocked,
+  PROMO_READINESS_SELECT,
 } from "./visibility";
 
 export type NovelArticleAccessResult =
@@ -124,7 +125,8 @@ const NOVEL_ARTICLE_ACCESS_SELECT = {
   status: true,
   seoVisibility: true,
   novel: { select: { status: true } },
-  promoLink: { select: { status: true, webUrl: true, appUrl: true } },
+  // v0.6.0：带上剧场与书的语种，口令码模式的就绪判定才有依据（片段来自 visibility.ts）。
+  promoLink: { select: PROMO_READINESS_SELECT },
 } as const satisfies Prisma.ArticleSelect;
 
 type NovelArticleAccessRow = Prisma.ArticleGetPayload<{ select: typeof NOVEL_ARTICLE_ACCESS_SELECT }>;

@@ -36,6 +36,10 @@ type PromoLinkFixture = {
   webUrl: string | null;
   appUrl: string | null;
   deletedAt: Date | null;
+  /** v0.6.0：口令码模式。 */
+  upstreamCode?: string | null;
+  channelApp?: { config: unknown } | null;
+  novel?: { locale: string } | null;
 };
 
 type WhereCondition = Record<string, unknown>;
@@ -55,12 +59,27 @@ function matchesScalar(value: unknown, condition: unknown): boolean {
   return value === condition;
 }
 
+/** Prisma 的 JSON `path` + `equals` 过滤（只实现 `readyPromoLinkWhere` 用到的这一种）：路径上取不到值 → 不匹配。 */
+function matchesJsonPath(config: unknown, condition: { path: string[]; equals: unknown }): boolean {
+  let cursor: unknown = config;
+  for (const segment of condition.path) {
+    if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) return false;
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return cursor === condition.equals;
+}
+
 /** Minimal generic Prisma-`where` interpreter — only the operators `readyPromoLinkWhere` actually uses. */
 function matchesWhere(row: PromoLinkFixture, where: WhereCondition): boolean {
   return Object.entries(where).every(([key, condition]) => {
     if (key === "OR") return (condition as WhereCondition[]).some((c) => matchesWhere(row, c));
     if (key === "AND") return (condition as WhereCondition[]).every((c) => matchesWhere(row, c));
     if (key === "NOT") return !matchesWhere(row, condition as WhereCondition);
+    if (key === "channelApp") {
+      // `{ channelApp: { is: { config: { path, equals } } } }`
+      const inner = (condition as { is: { config: { path: string[]; equals: unknown } } }).is;
+      return row.channelApp != null && matchesJsonPath(row.channelApp.config, inner.config);
+    }
     return matchesScalar((row as unknown as Record<string, unknown>)[key], condition);
   });
 }
@@ -70,7 +89,10 @@ function fixture(overrides: Partial<PromoLinkFixture> = {}): PromoLinkFixture {
 }
 
 function asReadinessState(row: PromoLinkFixture): PromoLinkReadinessState {
-  return { status: row.status, webUrl: row.webUrl, appUrl: row.appUrl };
+  return {
+    status: row.status, webUrl: row.webUrl, appUrl: row.appUrl,
+    upstreamCode: row.upstreamCode, channelApp: row.channelApp, novel: row.novel,
+  };
 }
 
 const WHERE = readyPromoLinkWhere();
@@ -88,6 +110,34 @@ describe("readyPromoLinkWhere agrees with isPromoReady", () => {
   it.each(agreeingFixtures)("$name: isPromoReady and the SQL predicate agree ($expected)", ({ row, expected }) => {
     expect(isPromoReady(asReadinessState(row))).toBe(expected);
     expect(matchesWhere(row, WHERE)).toBe(expected);
+  });
+
+  describe("v0.6.0 剧场模式：口令码模式的粗预筛是超集，link 模式（防误伤）一个字都没放宽", () => {
+    const CODE = { config: { promoMode: "code", codeModeLocales: ["en"] } };
+    const LINK = { config: { promoMode: "link" } };
+    const en = { locale: "en" };
+
+    it.each([
+      { name: "口令码模式、口令码非空、语种 en、无网址", row: fixture({ webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: CODE, novel: en }), authoritative: true, coarse: true },
+      { name: "🔴 link 模式、有口令码、无网址（MoboReader 防误伤）", row: fixture({ webUrl: null, appUrl: null, upstreamCode: "ABC123", channelApp: LINK, novel: en }), authoritative: false, coarse: false },
+      { name: "🔴 旧记录 config = {}、有口令码、无网址", row: fixture({ webUrl: null, appUrl: null, upstreamCode: "ABC123", channelApp: { config: {} }, novel: en }), authoritative: false, coarse: false },
+      { name: "没带剧场信息、有口令码、无网址", row: fixture({ webUrl: null, appUrl: null, upstreamCode: "ABC123" }), authoritative: false, coarse: false },
+      { name: "口令码模式但状态不是 fetched", row: fixture({ status: "pending", webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: CODE, novel: en }), authoritative: false, coarse: false },
+      { name: "口令码模式、已软删除", row: fixture({ deletedAt: new Date("2026-01-01T00:00:00.000Z"), webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: CODE, novel: en }), authoritative: true, coarse: false },
+    ])("$name", ({ row, authoritative, coarse }) => {
+      // isPromoReady 本身不认软删除（调用方上游过滤），所以软删除那一行的权威值只代表"码规则本身"。
+      expect(isPromoReady(asReadinessState(row))).toBe(authoritative);
+      expect(matchesWhere(row, WHERE)).toBe(coarse);
+    });
+
+    it("KNOWN GAP（已接受，同 link 模式的纯空白网址）：口令码模式下口令码为空 / 语种不在白名单，粗预筛放过、逐行 isPromoReady 剔除", () => {
+      const blankCode = fixture({ webUrl: null, appUrl: null, upstreamCode: "  ", channelApp: CODE, novel: en });
+      const wrongLocale = fixture({ webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: CODE, novel: { locale: "fr" } });
+      for (const row of [blankCode, wrongLocale]) {
+        expect(matchesWhere(row, WHERE)).toBe(true);
+        expect(isPromoReady(asReadinessState(row))).toBe(false);
+      }
+    });
   });
 
   it("deleted-but-otherwise-ready is excluded at the SQL layer — `isPromoReady` itself is not deletion-aware", () => {

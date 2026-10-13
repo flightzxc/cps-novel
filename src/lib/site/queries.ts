@@ -5,7 +5,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { asSiteLocale } from "./locale-label";
 import { resolveNovelArticlePublicAccessByShortId } from "@/server/publication/access";
-import { buildPrimaryArticleWhere, isPromoReady } from "@/server/publication/visibility";
+import { buildPrimaryArticleWhere, isPromoReady, PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 import { getSiteSetting, type SiteSettingSnapshot } from "@/server/site-settings/service";
 
 import { ARTICLE_CARD_SELECT, filterPromoReady, toPublicArticle } from "./article-card";
@@ -69,7 +69,7 @@ const ARTICLE_DETAIL_SELECT = {
   body: true,
   seoMetadata: true,
   promoLink: {
-    select: { status: true, webUrl: true, appUrl: true, publicRedirectCode: true },
+    select: { ...PROMO_READINESS_SELECT, publicRedirectCode: true },
   },
 } as const;
 

@@ -109,7 +109,7 @@ import { loadAllByIdCursor, whereAfterId } from "../src/lib/db/id-cursor-pages";
 import { terminatePendingTaskItems } from "../src/lib/tasks/task-termination";
 import { mergeTaskControlResult, type TaskControlMarker } from "../src/lib/tasks/task-control";
 import { enqueuePublicationPreviews } from "../src/server/publication/preview-enqueue";
-import { buildPublicArticleWhere, isPromoReady } from "../src/server/publication/visibility";
+import { buildPublicArticleWhere, isPromoReady, PROMO_READINESS_SELECT } from "../src/server/publication/visibility";
 import { SITE_LOCALES } from "../src/lib/locale/locale-canonical";
 
 export const CANCEL_BACKLOG_CONFIRM_PHRASE = "CANCEL-PREVIEW-BACKLOG";
@@ -493,6 +493,7 @@ type CandidateArticleRow = {
   novelId: string | null;
   promoLink: {
     status: string; webUrl: string | null; appUrl: string | null; deletedAt: Date | null;
+    upstreamCode: string | null; channelApp: { config: unknown }; novel: { locale: string };
     channelAccountId: string; channelAppId: string; novelSourceItemId: string;
     novelSourceItem: { novelId: string | null; channelAppId: string; deletedAt: Date | null };
   } | null;
@@ -517,7 +518,7 @@ async function fetchCandidateArticles(db: PrismaClient, env: NodeJS.ProcessEnv):
     select: {
       id: true, novelId: true,
       promoLink: { select: {
-        status: true, webUrl: true, appUrl: true, deletedAt: true,
+        ...PROMO_READINESS_SELECT, deletedAt: true,
         channelAccountId: true, channelAppId: true, novelSourceItemId: true,
         novelSourceItem: { select: { novelId: true, channelAppId: true, deletedAt: true } },
       } },

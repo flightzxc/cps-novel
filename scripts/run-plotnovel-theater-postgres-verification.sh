@@ -116,13 +116,15 @@ CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$secret_dir/credential-fingerprint.key"
 npm exec vitest run -- --project node \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts \
   tests/integration/plotnovel/rehome-postgres.test.ts \
+  tests/integration/plotnovel/readiness-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 # 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为（macOS bash 3.2）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/integration-result.json" \
   tests/integration/plotnovel/catalog-routing-postgres.test.ts=8 \
-  tests/integration/plotnovel/rehome-postgres.test.ts=13; then
+  tests/integration/plotnovel/rehome-postgres.test.ts=13 \
+  tests/integration/plotnovel/readiness-postgres.test.ts=12; then
   exit 1
 fi
 

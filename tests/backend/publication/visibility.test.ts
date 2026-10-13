@@ -35,6 +35,80 @@ function promo(overrides: Partial<Exclude<PromoLinkReadinessState, null>> = {}):
   return { status: "fetched", webUrl: "https://example.com/w", appUrl: null, ...overrides };
 }
 
+/**
+ * v0.6.0：就绪规则按推广所属剧场的 `config.promoMode` 二选一。两种模式互不相交——
+ * link（缺省）逐字不变；code（PlotNovel）看口令码 + 语种白名单，不看网址。
+ */
+describe("isPromoReady · 剧场模式（v0.6.0）", () => {
+  const CODE_THEATER = { config: { promoMode: "code", agencyIds: ["1351"], codeModeLocales: ["en"] } };
+  const LINK_THEATER = { config: { promoMode: "link", agencyIds: ["3366"] } };
+  function coded(overrides: Partial<Exclude<PromoLinkReadinessState, null>> = {}): PromoLinkReadinessState {
+    return { status: "fetched", webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: CODE_THEATER, novel: { locale: "en" }, ...overrides };
+  }
+
+  it("口令码模式：fetched + 口令码非空 + 语种在白名单 → 就绪（没有任何网址也就绪）", () => {
+    expect(isPromoReady(coded())).toBe(true);
+  });
+
+  it("口令码模式：状态不是 fetched → 不就绪", () => {
+    for (const status of ["pending", "failed", "registered_disabled"]) expect(isPromoReady(coded({ status }))).toBe(false);
+  });
+
+  it.each([null, undefined, "", "   ", "\u3000\u00a0\t\n"])("口令码模式：口令码 %j 视为空 → 不就绪", (upstreamCode) => {
+    expect(isPromoReady(coded({ upstreamCode }))).toBe(false);
+  });
+
+  it("口令码模式：书的语种不在白名单 / 没带语种信息 → 不就绪（失败方向是看不见）", () => {
+    expect(isPromoReady(coded({ novel: { locale: "fr" } }))).toBe(false);
+    expect(isPromoReady(coded({ novel: null }))).toBe(false);
+    expect(isPromoReady(coded({ novel: undefined }))).toBe(false);
+  });
+
+  it("口令码模式：白名单逐项原样比对（不 trim、不忽略大小写、不把字符串当数组）", () => {
+    expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code", codeModeLocales: [" en"] } } }))).toBe(false);
+    expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code", codeModeLocales: ["EN"] } } }))).toBe(false);
+    expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code", codeModeLocales: "en" } } }))).toBe(false);
+    expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code" } } }))).toBe(false);
+  });
+
+  it("口令码模式不看网址：有网址但口令码为空 → 仍不就绪", () => {
+    expect(isPromoReady(coded({ upstreamCode: null, webUrl: "https://example.com/w" }))).toBe(false);
+  });
+
+  it("🔴 防误伤：link 模式（MoboReader）下有口令码、没有网址 → 不就绪（规则逐字不变）", () => {
+    expect(isPromoReady({ status: "fetched", webUrl: null, appUrl: null, upstreamCode: "ABC123", channelApp: LINK_THEATER, novel: { locale: "en" } })).toBe(false);
+  });
+
+  it("🔴 防误伤：旧记录 config = {} 和没带剧场信息的调用点，一律按 link 处理——口令码模式的推广对它们不可见", () => {
+    expect(isPromoReady({ status: "fetched", webUrl: null, appUrl: null, upstreamCode: "ABC123", channelApp: { config: {} }, novel: { locale: "en" } })).toBe(false);
+    expect(isPromoReady({ status: "fetched", webUrl: null, appUrl: null, upstreamCode: "960031" })).toBe(false);
+    expect(isPromoReady({ status: "fetched", webUrl: null, appUrl: null, upstreamCode: "960031", channelApp: null })).toBe(false);
+  });
+
+  it("link 模式：有网址照旧就绪，不受剧场信息的有无影响", () => {
+    expect(isPromoReady({ status: "fetched", webUrl: "https://a", appUrl: null, channelApp: LINK_THEATER })).toBe(true);
+    expect(isPromoReady({ status: "fetched", webUrl: null, appUrl: "app://a", channelApp: { config: {} } })).toBe(true);
+    expect(isPromoReady({ status: "fetched", webUrl: "https://a", appUrl: null })).toBe(true);
+  });
+
+  it("promoMode 拼错（Code / codes / 非字符串）→ 按 link 处理", () => {
+    for (const promoMode of ["Code", "codes", true, 1]) {
+      expect(isPromoReady(coded({ channelApp: { config: { promoMode, codeModeLocales: ["en"] } } }))).toBe(false);
+    }
+  });
+
+  it("两种模式互不相交：口令码模式的推广有网址也不会因为'有网址'这条被认可（只认口令码规则）", () => {
+    expect(isPromoReady(coded({ webUrl: "https://example.com/w", upstreamCode: null }))).toBe(false);
+    expect(isPromoReady(coded({ webUrl: "https://example.com/w", novel: { locale: "fr" } }))).toBe(false);
+  });
+
+  it("isPubliclyAccessible / isIndexNowEligible 沿用同一个判定（口令码模式的推广 + 已发布 = 可访问 / 可推送）", () => {
+    expect(isPubliclyAccessible(published, published, coded())).toBe(true);
+    expect(isIndexNowEligible(published, published, coded())).toBe(true);
+    expect(isPubliclyAccessible(published, published, coded({ upstreamCode: null }))).toBe(false);
+  });
+});
+
 describe("isPromoReady", () => {
   it("is false for null", () => {
     expect(isPromoReady(null)).toBe(false);
