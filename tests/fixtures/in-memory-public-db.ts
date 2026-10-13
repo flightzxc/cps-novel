@@ -202,6 +202,13 @@ export function makeFakeDb(rows: readonly Row[], categories: readonly Category[]
         return [];
       },
     },
+    // v0.6.0：首页轮播读一次剧场表，找出口令码模式剧场（显式排除它们的书）。这里没有口令码剧场。
+    channelApp: {
+      findMany: async () => {
+        bump("channelApp.findMany");
+        return [];
+      },
+    },
     canonicalTag: {
       findFirst: async ({ where }: { where: { slug: string } }) => {
         bump("canonicalTag.findFirst");

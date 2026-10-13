@@ -46,13 +46,13 @@ export async function findDuplicatesInLinkTheaters(
       .filter((candidate) => candidate.normalized.length > 0);
     if (chunk.length === 0) continue;
 
-    const byLocale = new Map<string, typeof chunk>();
-    for (const candidate of chunk) byLocale.set(candidate.locale, [...(byLocale.get(candidate.locale) ?? []), candidate]);
+    const grouped = new Map<string, typeof chunk>();
+    for (const candidate of chunk) grouped.set(candidate.locale, [...(grouped.get(candidate.locale) ?? []), candidate]);
     const where: Prisma.NovelWhereInput = {
       deletedAt: null,
       id: { notIn: chunk.map((candidate) => candidate.id) },
       sourceItems: { some: { deletedAt: null, channelAppId: { notIn: codeModeIds } } },
-      OR: [...byLocale].flatMap(([locale, group]) => [
+      OR: [...grouped].flatMap(([locale, group]) => [
         { locale, titleNormalized: { in: group.map((candidate) => candidate.normalized) } },
         { locale, titleNormalized: null, title: { in: group.map((candidate) => candidate.title), mode: "insensitive" as const } },
       ]),
