@@ -232,6 +232,7 @@ async function runGenerate(
     novel,
     previewChapterCount,
     promoPublicRedirectCode: promo.promo.publicRedirectCode,
+    promoTheaterConfig: promo.promo.channelApp?.config,
   });
 
   const article = await createWithPublicPageShortIdRetry((candidateShortId) =>

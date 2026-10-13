@@ -19,6 +19,7 @@
  *
  * 本文件只做"解析 + 判定"，不读库、不依赖 Prisma——worker、脚本、Web 都能引用。
  */
+import { DEFAULT_CODE_MODE_APP_NAME } from "../../lib/locale/code-mode-copy";
 
 export const THEATER_PROMO_MODES = ["link", "code"] as const;
 export type TheaterPromoMode = (typeof THEATER_PROMO_MODES)[number];
@@ -129,10 +130,10 @@ export function isCodeModeBookReady(input: {
 }
 
 /**
- * 中间页（`/go/<站内码>/continue`）给读者看的 App 名：配置里没写就用 "PlotNovel"。
- * 不在这里做多语言——口令码模式目前只对英语书开放（见 ADR-V060 的已知限制）。
+ * 中间页（`/go/<站内码>/app`）与书页按钮给读者看的 App 名：配置里没写就用 "PlotNovel"。
+ * 不在这里做多语言——口令码模式目前只对英语书开放（见 ADR-V060 的已知限制，文案在 `code-mode-copy.ts`）。
  */
-export const DEFAULT_CODE_MODE_APP_NAME = "PlotNovel";
+export { DEFAULT_CODE_MODE_APP_NAME };
 
 export function codeModeAppName(config: TheaterPromoConfig): string {
   return config.appDisplayName ?? DEFAULT_CODE_MODE_APP_NAME;

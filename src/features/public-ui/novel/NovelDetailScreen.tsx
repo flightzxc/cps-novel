@@ -11,6 +11,7 @@ import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types"
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { PREVIEW_CHAPTERS_ANCHOR, PreviewChapterList } from "./PreviewChapterList";
+import { ChevronRightIcon, codeModeReadOnCta } from "./read-on-upstream";
 
 /**
  * 小说详情页。
@@ -49,6 +50,8 @@ export function NovelDetailScreen({
   const t = getPublicT(locale);
   const firstPreviewChapter = novel.previewChapters[0];
   const hasPreview = novel.previewChapters.length > 0;
+  // v0.6.0：口令码模式（PlotNovel）的入口文案；link 模式为 null，下面一切照旧。
+  const codeCta = codeModeReadOnCta(novel.readOnUpstreamMode, novel.readOnUpstreamAppName);
 
   return (
     <SiteShell locale={locale} chrome={chrome}>
@@ -99,7 +102,21 @@ export function NovelDetailScreen({
                 ) : null}
 
                 {/* 正式阅读入口只在拿到公开跳转码时渲染；渠道真实码绝不进页面 */}
-                {novel.readOnUpstreamHref ? (
+                {novel.readOnUpstreamHref && codeCta ? (
+                  // 口令码模式：按钮 + 下面一行小字（口令码在下一页，页面上不出现）
+                  <div className="flex flex-col items-start gap-2" data-testid="code-mode-read-cta">
+                    <ButtonLink
+                      href={novel.readOnUpstreamHref}
+                      variant="outline"
+                      size="lg"
+                      rel="nofollow sponsored"
+                    >
+                      {codeCta.label}
+                      <ChevronRightIcon />
+                    </ButtonLink>
+                    <p className="text-xs text-novel-fg-subtle">{codeCta.hint}</p>
+                  </div>
+                ) : novel.readOnUpstreamHref ? (
                   <ButtonLink
                     href={novel.readOnUpstreamHref}
                     variant="outline"
@@ -156,7 +173,12 @@ export function NovelDetailScreen({
       </Container>
 
       {/* --- 固定底部浮窗（B1）：没有公开跳转码时不渲染 --- */}
-      <StickyCTA locale={locale} href={novel.readOnUpstreamHref} />
+      <StickyCTA
+        locale={locale}
+        href={novel.readOnUpstreamHref}
+        mode={novel.readOnUpstreamMode}
+        appName={novel.readOnUpstreamAppName}
+      />
     </SiteShell>
   );
 }

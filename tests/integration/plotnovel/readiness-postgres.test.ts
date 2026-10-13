@@ -11,12 +11,13 @@
 import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { loadCodeModePageData } from "@/app/go/_lib/code-mode-page-data";
 import { queryActiveLocales } from "@/lib/locale/active-locales";
 import { loadNovelHreflangSiblings } from "@/lib/seo/novel-hreflang";
 import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
 import { listPublicNovelPage, queryPublicListCount } from "@/lib/site/public-list";
-import { resolvePublicArticleBySlugParam } from "@/lib/site/queries";
+import { getPublicChapterView, getPublicNovelDetail, resolvePublicArticleBySlugParam } from "@/lib/site/queries";
 import { isNovelIndexNowEligible, loadIndexNowCandidateArticle } from "@/lib/indexnow/eligibility";
 import { computeHomeCarouselInTx } from "@/server/home-carousel";
 import { readCatalogBatchContext } from "@/server/catalog-batch/service";
@@ -313,6 +314,41 @@ describe.skipIf(!enabled).sequential("v0.6.0 D：就绪规则按剧场模式（�
 
       expect((await loadNovelHreflangSiblings(web, w.plotReady.novel.id)).map((sibling) => sibling.locale)).toEqual(["en"]);
       expect(await loadNovelHreflangSiblings(web, w.moboCodeOnly.novel.id)).toEqual([]);
+    });
+
+    it("前台（真实 web_app 角色）：中间页取数拿到口令码；书页 / 章节页视图与站点地图里没有它；MoboReader 的 link 模式不会走到中间页", async () => {
+      const w = await world();
+      await owner.novelChapter.create({
+        data: { novelId: w.plotReady.novel.id, canonicalChapterNumber: 1, title: "Chapter One", status: "preview", content: { create: { body: "First paragraph.\n\nSecond paragraph.", charCount: 34, contentHash: "a".repeat(64), materializedAt: new Date() } } },
+      });
+      // 中间页：站内码 → 口令码 / App 名 / 商店链接 / 书名 / 回书页路径
+      const page = await loadCodeModePageData(web, w.plotReady.promo.publicRedirectCode);
+      expect(page).toMatchObject({
+        code: "960031", appName: "PlotNovel", title: "Plot Ready",
+        appStoreUrl: "https://apps.apple.com/app/plotnovel/id123",
+        googlePlayUrl: "https://play.google.com/store/apps/details?id=com.plotnovel",
+      });
+      expect(page?.backHref).toBe(`/novel/${w.plotReady.article!.slug}-p${w.plotReady.article!.publicPageShortId}`);
+      // 不就绪 / 不是口令码模式的推广不出中间页
+      expect(await loadCodeModePageData(web, w.plotBlank.promo.publicRedirectCode)).toBeNull();
+      expect(await loadCodeModePageData(web, w.plotPending.promo.publicRedirectCode)).toBeNull();
+      expect(await loadCodeModePageData(web, w.moboReady.promo.publicRedirectCode)).toBeNull();
+      expect(await loadCodeModePageData(web, w.moboCodeOnly.promo.publicRedirectCode)).toBeNull();
+
+      // 书页 / 章节页视图：有模式标记，没有口令码
+      const detail = await getPublicNovelDetail(web, w.plotReady.article!.id);
+      expect(detail).toMatchObject({ readOnUpstreamHref: `/go/${w.plotReady.promo.publicRedirectCode}`, readOnUpstreamMode: "code", readOnUpstreamAppName: "PlotNovel" });
+      const chapter = await getPublicChapterView(web, w.plotReady.article!.id, 1);
+      expect(chapter).toMatchObject({ readOnUpstreamMode: "code", readOnUpstreamAppName: "PlotNovel" });
+      expect(JSON.stringify([detail, chapter])).not.toContain("960031");
+      // MoboReader 的书页没有模式标记
+      expect(await getPublicNovelDetail(web, w.moboReady.article!.id)).not.toHaveProperty("readOnUpstreamMode");
+      expect(await getPublicNovelDetail(web, w.moboCodeOnly.article!.id)).toBeNull(); // 有码没网址：不就绪
+
+      // 站点地图（含章节页）里没有口令码
+      const files = await createSitemapFamilyBuilder(worker, ENV_OFF)({ type: "novelpage", locale: "en" });
+      expect(JSON.stringify(files)).not.toContain("960031");
+      expect(files.flatMap((file) => file.entries.map((entry) => entry.loc)).some((loc) => loc.includes("/chapter"))).toBe(true);
     });
 
     it("scheduler_app 的活跃语种查询：用真实调度器角色跑通（不被 permission denied），口令码模式的语种算活跃、防误伤的不算", async () => {

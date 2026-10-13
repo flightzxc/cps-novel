@@ -13,6 +13,7 @@ import {
 } from "@/domain/database-statuses";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildNovelTemplateValues, isTemplateRenderError, renderArticleDraft } from "@/lib/seo/template";
+import { applyCodeModeArticleCta } from "@/server/content-creation/code-mode-cta";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
@@ -256,7 +257,7 @@ async function regenerateCore(
     select: {
       id: true, locale: true, templateId: true, updatedAt: true,
       novel: { select: { id: true, title: true, description: true, coverUrl: true, totalChapterCount: true } },
-      promoLink: { select: { publicRedirectCode: true } },
+      promoLink: { select: { publicRedirectCode: true, channelApp: { select: { config: true } } } },
     },
   });
   if (!article) return { outcome: "article_not_found" };
@@ -280,14 +281,17 @@ async function regenerateCore(
   try {
     const source = validateStoredArticleTemplate(template);
     const previewChapterCount = await db.novelChapter.count({ where: { novelId: article.novel.id, status: "preview", deletedAt: null, content: { isNot: null } } });
-    const rendered = renderArticleDraft(source, buildNovelTemplateValues({
+    const redirectPath = article.promoLink ? `/go/${article.promoLink.publicRedirectCode}` : undefined;
+    const renderedDraft = renderArticleDraft(source, buildNovelTemplateValues({
       title: article.novel.title,
       description: article.novel.description,
       coverUrl: article.novel.coverUrl,
       totalChapterCount: article.novel.totalChapterCount,
       previewChapterCount,
-      promoRedirectUrl: article.promoLink ? `/go/${article.promoLink.publicRedirectCode}` : undefined,
+      promoRedirectUrl: redirectPath,
     }), { templateKey: template.templateKey, novelId: article.novel.id });
+    // v0.6.0：口令码模式剧场（PlotNovel）的号召链接文字换成英文 "Read on {App} App"；link 模式原样（见 code-mode-cta.ts）。
+    const rendered = applyCodeModeArticleCta(renderedDraft, { redirectPath, theaterConfig: article.promoLink?.channelApp?.config });
     const conflicted = await db.$transaction(async (tx) => {
       // Re-check the CAS window inside the transaction: the read above and
       // this write straddle the (possibly slow) template render, which is

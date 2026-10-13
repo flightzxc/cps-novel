@@ -5,6 +5,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { asSiteLocale } from "./locale-label";
 import { resolveNovelArticlePublicAccessByShortId } from "@/server/publication/access";
+import { codeModeAppName, isCodeModeTheater, parseTheaterPromoConfig } from "@/server/publication/theater-promo-mode";
 import { buildPrimaryArticleWhere, isPromoReady, PROMO_READINESS_SELECT } from "@/server/publication/visibility";
 import { getSiteSetting, type SiteSettingSnapshot } from "@/server/site-settings/service";
 
@@ -164,6 +165,20 @@ export async function resolvePublicArticleBySlugParam(
   return isCanonicalUrl ? { kind: access.kind, title: access.title } : { kind: "not_found" };
 }
 
+/**
+ * 详情 / 章节视图用的推广链接投影：公开跳转码 + 剧场模式标记 + App 名。
+ * 🔴 `upstreamCode`（渠道真实口令码）在 `isPromoReady` 里只判了"是否非空"，到这里为止——不进任何视图模型。
+ */
+function toPublicPromoLink(promoLink: NonNullable<ListedArticleDetail["promoLink"]>): NonNullable<PublicArticleDetailRecord["promoLink"]> {
+  const config = promoLink.channelApp?.config;
+  if (!isCodeModeTheater(config)) return { publicRedirectCode: promoLink.publicRedirectCode };
+  return {
+    publicRedirectCode: promoLink.publicRedirectCode,
+    promoMode: "code",
+    appName: codeModeAppName(parseTheaterPromoConfig(config)),
+  };
+}
+
 function toPublicArticleDetail(
   row: ListedArticleDetailWithNovel,
   tags: readonly PublicTaxonomyTag[] = [],
@@ -172,7 +187,7 @@ function toPublicArticleDetail(
     ...toPublicArticle(row, tags),
     body: row.body,
     seoMetadata: row.seoMetadata,
-    promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null,
+    promoLink: row.promoLink ? toPublicPromoLink(row.promoLink) : null,
   };
 }
 

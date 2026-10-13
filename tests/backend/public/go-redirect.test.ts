@@ -88,6 +88,8 @@ describe("GET /go/[code]", () => {
         appUrl: true,
         status: true,
         deletedAt: true,
+        // v0.6.0 唯一新增：剧场配置（分辨 link / code 模式）。路由从不 select 渠道口令码。
+        channelApp: { select: { config: true } },
       },
     });
 
@@ -247,5 +249,76 @@ describe("GET /go/[code]", () => {
     expect(create).not.toHaveBeenCalled();
     const leaked = await leakSurface(response, create.mock.calls[0]?.[0]);
     expect(leaked).not.toMatch(/upstreamCode/i);
+  });
+
+  // ---------------------------------------------------------------------------
+  // v0.6.0 口令码模式（PlotNovel）：/go/<站内码> → 302 到中间页 /go/<站内码>/app；link 模式一字不变
+  // ---------------------------------------------------------------------------
+  describe("v0.6.0 剧场模式", () => {
+    const CODE_THEATER = { config: { promoMode: "code", agencyIds: ["1351"], codeModeLocales: ["en"] } };
+    const LINK_THEATER = { config: { promoMode: "link", agencyIds: ["3366"] } };
+
+    it("🔴 link 模式（MoboReader）：响应与改动前逐字相同——302 到网址、no-store、记一次点击", async () => {
+      findUnique.mockResolvedValue(promo({ channelApp: LINK_THEATER }));
+      const response = await invoke(PUBLIC_CODE, { "x-forwarded-for": "203.0.113.9", "user-agent": "NovelTest/1.0" });
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(TARGET);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.text()).toBe("");
+      expect(create).toHaveBeenCalledOnce();
+      // 旧记录 config = {}、剧场信息缺失，同样走原来的逻辑
+      create.mockClear();
+      findUnique.mockResolvedValue(promo({ channelApp: { config: {} } }));
+      expect((await invoke(PUBLIC_CODE)).headers.get("location")).toBe(TARGET);
+      findUnique.mockResolvedValue(promo({ channelApp: null }));
+      expect((await invoke(PUBLIC_CODE)).headers.get("location")).toBe(TARGET);
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it("🔴 防误伤：link 模式下有口令码、没有网址 → 404（口令码模式的放行绝不波及 MoboReader）", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: LINK_THEATER }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: { config: {} } }));
+      expect((await invoke(PUBLIC_CODE)).status).toBe(404);
+    });
+
+    it("口令码模式：302 到站内中间页 /go/<码>/app（相对路径、no-store、无正文），不记点击，不碰网址", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: CODE_THEATER }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(`/go/${PUBLIC_CODE}/app`);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.text()).toBe("");
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("口令码模式即使推广链接带着网址，也去中间页而不是跳网址（两种模式互不相交）", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: TARGET, appUrl: null, channelApp: CODE_THEATER }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.headers.get("location")).toBe(`/go/${PUBLIC_CODE}/app`);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("口令码模式：状态不是 fetched / 已软删除 / 不存在 → 404，不重定向", async () => {
+      findUnique.mockResolvedValue(promo({ status: "pending", channelApp: CODE_THEATER }));
+      expect((await invoke(PUBLIC_CODE)).status).toBe(404);
+      findUnique.mockResolvedValue(promo({ deletedAt: new Date(), channelApp: CODE_THEATER }));
+      expect((await invoke(PUBLIC_CODE)).status).toBe(404);
+      findUnique.mockResolvedValue(null);
+      expect((await invoke(PUBLIC_CODE)).status).toBe(404);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("路由从不读也从不输出渠道口令码：查库的 select、重定向的响应面里都没有它", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: null, channelApp: CODE_THEATER }));
+      const response = await invoke(PUBLIC_CODE);
+      const leaked = await leakSurface(response, create.mock.calls[0]?.[0]);
+      expect(leaked).not.toContain(UPSTREAM_CODE);
+      expect(leaked).not.toMatch(/upstreamCode/i);
+      expect(JSON.stringify(findUnique.mock.calls)).not.toMatch(/upstream/i);
+    });
   });
 });

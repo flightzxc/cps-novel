@@ -21,6 +21,7 @@ import {
   type RenderedArticleDraft,
 } from "@/lib/seo/template";
 
+import { applyCodeModeArticleCta } from "./code-mode-cta";
 import { promoRedirectUrlFor } from "./promo";
 
 /**
@@ -51,10 +52,16 @@ export type NovelArticleRenderInput = {
   readonly previewChapterCount: number;
   /** 文章绑定的推广链接的公开跳转码；没有绑定时不传（`promo_redirect_url` 为空，模板里必须用 `{if}` 包裹）。 */
   readonly promoPublicRedirectCode?: string | null;
+  /**
+   * 文章绑定的推广链接所属剧场的 `config`（`channel_app.config`）。口令码模式（PlotNovel）下，正文里指向
+   * `/go/<站内码>` 的号召链接文字换成英文 "Read on {App} App"（`code-mode-cta.ts`）；缺省 / link 模式原样不动。
+   */
+  readonly promoTheaterConfig?: unknown;
 };
 
 export function renderNovelArticleDraft(input: NovelArticleRenderInput): RenderedArticleDraft {
-  return renderArticleDraft(
+  const redirectPath = input.promoPublicRedirectCode ? promoRedirectUrlFor(input.promoPublicRedirectCode) : undefined;
+  const draft = renderArticleDraft(
     input.source,
     buildNovelTemplateValues({
       title: input.novel.title,
@@ -66,4 +73,5 @@ export function renderNovelArticleDraft(input: NovelArticleRenderInput): Rendere
     }),
     { templateKey: input.templateKey, novelId: input.novel.id },
   );
+  return applyCodeModeArticleCta(draft, { redirectPath, theaterConfig: input.promoTheaterConfig });
 }

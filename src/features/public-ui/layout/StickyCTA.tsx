@@ -1,6 +1,7 @@
 import { ButtonLink } from "@/components/Button";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
+import { codeModeReadOnCta } from "@/features/public-ui/novel/read-on-upstream";
 
 /**
  * 固定底部浮窗（B1，照搬 CPS v8.5.1 `src/components/site/sticky-cta.tsx` 的
@@ -22,9 +23,21 @@ import { getPublicT } from "@/lib/locale/messages";
  * （`ChapterScreen` 的 `ChapterScreenBody`）都能直接渲染它，standalone 测试
  * 也不需要额外包一层 Provider。
  */
-export function StickyCTA({ locale, href }: { locale: SiteLocale; href?: string }) {
+export function StickyCTA({
+  locale,
+  href,
+  mode,
+  appName,
+}: {
+  locale: SiteLocale;
+  href?: string;
+  /** v0.6.0：`"code"` = 口令码模式剧场（PlotNovel），按钮文案改为 "Read on {App} App"；缺省 = link 模式，文案照旧。 */
+  mode?: "code";
+  appName?: string;
+}) {
   const t = getPublicT(locale);
   if (!href) return null;
+  const codeCta = codeModeReadOnCta(mode, appName);
 
   return (
     <>
@@ -43,7 +56,7 @@ export function StickyCTA({ locale, href }: { locale: SiteLocale; href?: string 
             rel="nofollow sponsored"
             className="w-full md:w-auto"
           >
-            {t("novel.readOnUpstream")}
+            {codeCta ? codeCta.label : t("novel.readOnUpstream")}
           </ButtonLink>
         </div>
       </div>
