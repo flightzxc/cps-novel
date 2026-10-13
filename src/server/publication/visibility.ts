@@ -250,7 +250,10 @@ export function promoReadySql(
   // 两种模式互不相交：剧场配置 `promoMode = 'code'` 才走口令码规则，其余（含缺省、拼错）一律走 link 规则。
   // `coalesce(jsonb_typeof(...), '')`：配置里没有 `codeModeLocales` 键时 `jsonb_typeof` 是 NULL，整条规则会变成
   // NULL 而不是 false——WHERE 里碰巧等价，但一旦被 NOT 包起来（"不可生成"分桶）就会漏行。这里必须是确定的 false。
-  return Prisma.sql`${column("status")} = 'fetched' AND (CASE WHEN ${channelApp("config")}->>'promoMode' = 'code' THEN (coalesce(btrim(${column("upstream_code")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' AND coalesce(jsonb_typeof(${localeList}), '') = 'array' AND jsonb_exists(${localeList}, ${novelLocale})) ELSE ${linkRule} END)`;
+  // `coalesce(locale, '') <> ''`：语种为空（或缺失）一律不就绪，对应 JS 侧 `localeInCodeModeWhitelist` 开头那句
+  // `locale == null || locale.length === 0 → false`。没有这一句，配置里的 `codeModeLocales` 含 `""` 且书的语种也是 `""`
+  // 时 `jsonb_exists` 会返回 true，而 JS 返回 false——两边在空语种边界上不等价（复核 NIT-8 抓到）。
+  return Prisma.sql`${column("status")} = 'fetched' AND (CASE WHEN ${channelApp("config")}->>'promoMode' = 'code' THEN (coalesce(btrim(${column("upstream_code")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' AND coalesce(${novelLocale}, '') <> '' AND coalesce(jsonb_typeof(${localeList}), '') = 'array' AND jsonb_exists(${localeList}, ${novelLocale})) ELSE ${linkRule} END)`;
 }
 
 /**

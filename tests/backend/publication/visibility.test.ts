@@ -71,6 +71,14 @@ describe("isPromoReady · 剧场模式（v0.6.0）", () => {
     expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code" } } }))).toBe(false);
   });
 
+  it("口令码模式：空语种边界——白名单含 \"\" 且书的语种也是 \"\" 时仍不就绪（SQL 侧有 coalesce(locale,'') <> '' 与之对应）", () => {
+    for (const codeModeLocales of [[""], ["", "en"]]) {
+      expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code", codeModeLocales } }, novel: { locale: "" } }))).toBe(false);
+    }
+    // 白名单里有 "" 不影响正常语种
+    expect(isPromoReady(coded({ channelApp: { config: { promoMode: "code", codeModeLocales: ["", "en"] } }, novel: { locale: "en" } }))).toBe(true);
+  });
+
   it("口令码模式不看网址：有网址但口令码为空 → 仍不就绪", () => {
     expect(isPromoReady(coded({ upstreamCode: null, webUrl: "https://example.com/w" }))).toBe(false);
   });

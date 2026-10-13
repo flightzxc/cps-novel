@@ -191,6 +191,8 @@ describe.skipIf(!enabled).sequential("v0.6.0 D：就绪规则按剧场模式（�
         { promoMode: "code", codeModeLocales: [" en"] },
         { promoMode: "code", codeModeLocales: ["EN"] },
         { promoMode: "code", codeModeLocales: [null, 5, "en"] },
+        { promoMode: "code", codeModeLocales: [""] }, // 空语种边界：白名单含 "" 且书的语种也是 ""
+        { promoMode: "code", codeModeLocales: ["", "en"] },
         { promoMode: "code", codeModeLocales: { 0: "en" } },
         { promoMode: "link", codeModeLocales: ["en"] },
         { promoMode: "Code", codeModeLocales: ["en"] },

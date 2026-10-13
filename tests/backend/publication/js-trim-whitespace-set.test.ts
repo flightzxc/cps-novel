@@ -98,7 +98,7 @@ describe("promoReadySql（带剧场别名）的形状（v0.6.0）", () => {
     expect(exotic.filter((char) => fragment.sql.includes(char))).toEqual([]);
     expect(fragment.text.replace(/\s+/g, " ")).toBe(
       "p.status = 'fetched' AND (CASE WHEN pca.config->>'promoMode' = 'code' THEN "
-      + "(coalesce(btrim(p.upstream_code, $1), '') <> '' AND coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array' "
+      + "(coalesce(btrim(p.upstream_code, $1), '') <> '' AND coalesce(n.locale, '') <> '' AND coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array' "
       + "AND jsonb_exists(pca.config->'codeModeLocales', n.locale)) "
       + "ELSE (coalesce(btrim(p.web_url, $2), '') <> '' OR coalesce(btrim(p.app_url, $3), '') <> '') END)",
     );
