@@ -1,0 +1,11 @@
+{
+  "name": "run-p1-06-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-p1-06-postgres-verification.sh"
+  ],
+  "startedAt": 1791952611.940116,
+  "finishedAt": 1791952875.2399738,
+  "durationSeconds": 263.29985785484314,
+  "exitCode": 0
+}

@@ -1,0 +1,11 @@
+{
+  "name": "run-p2-02b-article-template-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-p2-02b-article-template-postgres-verification.sh"
+  ],
+  "startedAt": 1791952894.6958442,
+  "finishedAt": 1791952901.4785962,
+  "durationSeconds": 6.78275203704834,
+  "exitCode": 0
+}

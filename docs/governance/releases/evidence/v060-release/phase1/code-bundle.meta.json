@@ -1,0 +1,11 @@
+{
+  "name": "code-bundle",
+  "command": [
+    "python3",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/.tmp/v060-release/phase1/bundle.py"
+  ],
+  "startedAt": 1791961285.319608,
+  "finishedAt": 1791961285.825045,
+  "durationSeconds": 0.5054371356964111,
+  "exitCode": 0
+}

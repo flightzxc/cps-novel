@@ -1,0 +1,11 @@
+{
+  "name": "run-publication-preview-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-publication-preview-postgres-verification.sh"
+  ],
+  "startedAt": 1791953048.36972,
+  "finishedAt": 1791953069.019701,
+  "durationSeconds": 20.649981021881104,
+  "exitCode": 0
+}

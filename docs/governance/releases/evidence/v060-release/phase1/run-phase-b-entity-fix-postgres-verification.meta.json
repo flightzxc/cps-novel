@@ -1,0 +1,11 @@
+{
+  "name": "run-phase-b-entity-fix-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-phase-b-entity-fix-postgres-verification.sh"
+  ],
+  "startedAt": 1791952904.845818,
+  "finishedAt": 1791952910.9747598,
+  "durationSeconds": 6.128941774368286,
+  "exitCode": 0
+}

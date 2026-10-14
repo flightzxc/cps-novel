@@ -1,0 +1,11 @@
+{
+  "name": "phase1-validation-final",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase1/validate-phase1.py"
+  ],
+  "startedAt": 1791961464.983588,
+  "finishedAt": 1791961465.15834,
+  "durationSeconds": 0.17475199699401855,
+  "exitCode": 0
+}

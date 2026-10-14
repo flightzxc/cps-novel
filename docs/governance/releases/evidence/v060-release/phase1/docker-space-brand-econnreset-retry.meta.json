@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-brand-econnreset-retry",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1791957552.397461,
+  "finishedAt": 1791957552.7593238,
+  "durationSeconds": 0.3618628978729248,
+  "exitCode": 0
+}

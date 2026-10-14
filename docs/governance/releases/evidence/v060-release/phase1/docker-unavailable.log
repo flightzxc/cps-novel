@@ -1,0 +1,4 @@
+command: docker version --format {{json .Server}}
+exit: 1
+stdout: null
+stderr: Error response from daemon: Docker Desktop is unable to start

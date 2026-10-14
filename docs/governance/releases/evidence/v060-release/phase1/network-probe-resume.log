@@ -1,0 +1,4 @@
+{"route":"direct","host":"registry.npmjs.org","status":200}
+{"route":"proxy","host":"registry.npmjs.org","status":200}
+{"route":"direct","host":"binaries.prisma.sh","status":404}
+{"route":"proxy","host":"binaries.prisma.sh","status":404}

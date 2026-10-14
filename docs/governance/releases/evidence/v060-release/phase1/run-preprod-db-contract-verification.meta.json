@@ -1,0 +1,11 @@
+{
+  "name": "run-preprod-db-contract-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-preprod-db-contract-verification.sh"
+  ],
+  "startedAt": 1791952947.7681122,
+  "finishedAt": 1791952955.264323,
+  "durationSeconds": 7.496210813522339,
+  "exitCode": 0
+}

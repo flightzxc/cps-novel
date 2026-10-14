@@ -1,0 +1,11 @@
+{
+  "name": "run-next-proxy-probe-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-next-proxy-probe-verification.sh"
+  ],
+  "startedAt": 1791952187.199693,
+  "finishedAt": 1791952198.778494,
+  "durationSeconds": 11.578800916671753,
+  "exitCode": 0
+}

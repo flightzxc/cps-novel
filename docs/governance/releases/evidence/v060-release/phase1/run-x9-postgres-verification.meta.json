@@ -1,0 +1,11 @@
+{
+  "name": "run-x9-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-x9-postgres-verification.sh"
+  ],
+  "startedAt": 1791953196.5881028,
+  "finishedAt": 1791953205.77498,
+  "durationSeconds": 9.186877250671387,
+  "exitCode": 0
+}

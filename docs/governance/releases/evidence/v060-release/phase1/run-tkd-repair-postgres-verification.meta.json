@@ -1,0 +1,11 @@
+{
+  "name": "run-tkd-repair-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-tkd-repair-postgres-verification.sh"
+  ],
+  "startedAt": 1791953173.454695,
+  "finishedAt": 1791953177.082641,
+  "durationSeconds": 3.627945899963379,
+  "exitCode": 0
+}

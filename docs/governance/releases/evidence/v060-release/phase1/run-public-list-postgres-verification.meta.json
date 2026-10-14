@@ -1,0 +1,11 @@
+{
+  "name": "run-public-list-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-public-list-postgres-verification.sh"
+  ],
+  "startedAt": 1791952975.297504,
+  "finishedAt": 1791953048.369132,
+  "durationSeconds": 73.07162809371948,
+  "exitCode": 0
+}

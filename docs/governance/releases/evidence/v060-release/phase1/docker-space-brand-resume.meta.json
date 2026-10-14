@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-brand-resume",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1791956634.078825,
+  "finishedAt": 1791956634.437103,
+  "durationSeconds": 0.3582780361175537,
+  "exitCode": 0
+}

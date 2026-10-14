@@ -1,0 +1,12 @@
+{
+  "name": "dictionary-static",
+  "command": [
+    "node",
+    "scripts/check-database-dictionary-drift.mjs",
+    "--static"
+  ],
+  "startedAt": 1791953249.9149818,
+  "finishedAt": 1791953249.962836,
+  "durationSeconds": 0.04785418510437012,
+  "exitCode": 0
+}

@@ -1,0 +1,103 @@
+{
+  "phase": 1,
+  "status": "PASS_NOT_DEPLOYED",
+  "version": "0.6.0",
+  "bump": "MINOR",
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "tree": "c44f44702924fcc32fac0dc62ccb39fa0128d502",
+  "artifact": {
+    "schemaVersion": 2,
+    "transport": "archive",
+    "approved_git_commit": "493eb23b034b0410780228535b3e293e4ee91f9a",
+    "version": "0.6.0",
+    "image_tag": "cps-novel:0.6.0-493eb23",
+    "image_platform": "linux/amd64",
+    "image_revision": "493eb23b034b0410780228535b3e293e4ee91f9a",
+    "archive_filename": "cps-novel-0.6.0-493eb23.tar.zst",
+    "archive_sha256": "9382e6085cd9d4a30eb8b346750d2c1638266f0d40bac705923112c8de715ace",
+    "oci": {
+      "target": {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8",
+        "size": 3293
+      },
+      "platform_manifest": {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8",
+        "size": 3293
+      },
+      "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "digest": "sha256:b670b94dddec1e699848b1eee87b90370502eb4b565e13b9fba8add9d58a419e",
+        "size": 13667
+      }
+    },
+    "layer_count": 20,
+    "built_at": "2026-10-14T04:47:30Z",
+    "source_repository": "https://github.com/flightzxc/cps-novel",
+    "identityNote": "Identity = approved_git_commit + oci.platform_manifest.digest + oci.config.digest + archive_sha256. image_tag alone is NOT identity. Which digest a host reports depends on its image store; both are recorded here.",
+    "versionIdentityIssue": "git tag may differ from package.json version; commit and digests are authoritative"
+  },
+  "archivePath": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.0/.tmp/v060-release/archive/cps-novel-0.6.0-493eb23.tar.zst",
+  "archiveBytes": 216433769,
+  "fullTests": {
+    "files": 660,
+    "passedFiles": 593,
+    "skippedFiles": 67,
+    "passed": 11397,
+    "failed": 0,
+    "skipped": 865,
+    "unhandled": 0
+  },
+  "runners": {
+    "count": 37,
+    "failed": 0,
+    "reusedPriorSuccessfulEvidence": true
+  },
+  "migrationCount": 27,
+  "tableCount": 58,
+  "dictionary": {
+    "total": 1349,
+    "active": 1279,
+    "drift": 0
+  },
+  "plotnovel": {
+    "files": 6,
+    "passed": 71,
+    "skipped": 0,
+    "grantsReplayIdempotent": true,
+    "openingExecuted": false
+  },
+  "strictProxyProbe": {
+    "next": "16.3.8",
+    "probes": 1742,
+    "knownFindings": 0
+  },
+  "brandSuccessStep": "brand-owner-resume-2",
+  "currentResumeEconnresetRetriesUsed": 0,
+  "historicalBuildFailures": {
+    "dockerUnavailable": 1,
+    "npmEconnreset": 2
+  },
+  "githubFinalReadback": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "remoteDeploymentHostsConnected": 0,
+  "governance": {
+    "phase1Evidence": true,
+    "annotatedTag": "pending_deployment_acceptance",
+    "changelog": "pending_deployment_acceptance",
+    "developmentLog": "pending_deployment_acceptance",
+    "notion": "pending_deployment_acceptance"
+  },
+  "secretScan": {
+    "valuesChecked": 11,
+    "leaks": 0,
+    "turnstileMatches": 0
+  },
+  "referencesUnchanged": true,
+  "heavyLockReleased": true,
+  "codeBundle": {
+    "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.0/.tmp/v060-release/cps-novel-v0.6.0.bundle",
+    "sha256": "92f02d29983d09d429ac2fa96fb4ffafaa183181b471bf98ca0a54adfc78a63e",
+    "bytes": 1221550
+  }
+}

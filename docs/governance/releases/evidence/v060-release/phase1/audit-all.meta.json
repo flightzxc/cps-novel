@@ -1,0 +1,12 @@
+{
+  "name": "audit-all",
+  "command": [
+    "npm",
+    "audit",
+    "--json"
+  ],
+  "startedAt": 1791952052.1332932,
+  "finishedAt": 1791952055.017558,
+  "durationSeconds": 2.8842649459838867,
+  "exitCode": 1
+}

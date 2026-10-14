@@ -1,0 +1,11 @@
+{
+  "name": "phase1-validation",
+  "command": [
+    "python3",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/.tmp/v060-release/phase1/validate-phase1.py"
+  ],
+  "startedAt": 1791961276.1954188,
+  "finishedAt": 1791961276.3548758,
+  "durationSeconds": 0.15945696830749512,
+  "exitCode": 0
+}

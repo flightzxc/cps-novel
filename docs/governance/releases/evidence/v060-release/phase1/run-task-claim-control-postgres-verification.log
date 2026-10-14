@@ -1,0 +1,19 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.0
+
+ ✓ |node| tests/integration/tasks/task-claim-skip-ineligible-parents-postgres.test.ts (12 tests) 540ms
+ ✓ |node| tests/integration/tasks/x10-task-control-postgres.test.ts (7 tests) 435ms
+
+ Test Files  2 passed (2)
+      Tests  19 passed (19)
+   Start at  13:46:11
+   Duration  1.46s (transform 253ms, setup 0ms, import 352ms, tests 975ms, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-task-claim-control-secrets.PBq3c5/integration-result.json
+  tests/integration/tasks/task-claim-skip-ineligible-parents-postgres.test.ts passed=12 skipped=0
+  tests/integration/tasks/x10-task-control-postgres.test.ts passed=7 skipped=0
+TASK_CLAIM_CONTROL_INTEGRATION=PASS files=2 passed=19 skipped=0
+{"status":"ok","models":58,"recordCount":1349,"activeCount":1279,"tableCount":58,"constraintCount":275,"indexCount":242,"triggerCount":4}
+TASK_CLAIM_CONTROL_DICTIONARY_DRIFT=0
+TASK_CLAIM_CONTROL_POSTGRES_VERIFICATION=PASS
+TASK_CLAIM_CONTROL_DISPOSABLE_DATABASE_CLEANED=yes

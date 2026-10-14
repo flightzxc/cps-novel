@@ -1,0 +1,11 @@
+{
+  "name": "git-push-final",
+  "command": [
+    "python3",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/.tmp/v060-release/phase1/push-final.py"
+  ],
+  "startedAt": 1791961276.3787038,
+  "finishedAt": 1791961285.2931468,
+  "durationSeconds": 8.914443016052246,
+  "exitCode": 0
+}

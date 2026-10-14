@@ -1,0 +1,11 @@
+{
+  "name": "b21",
+  "command": [
+    "/bin/bash",
+    "scripts/measure-tagging-task-memory.sh"
+  ],
+  "startedAt": 1791953250.5164568,
+  "finishedAt": 1791953309.593966,
+  "durationSeconds": 59.07750916481018,
+  "exitCode": 0
+}

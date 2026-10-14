@@ -1,0 +1,104 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.94kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 167B done
+#3 DONE 0.0s
+
+#4 [production-dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 76.66kB 0.0s done
+#5 DONE 0.0s
+
+#6 [runner  3/17] RUN apk add --no-cache bash libc6-compat openssl     && npm install --global npm@11.6.2 tsx@4.21.0
+#6 CACHED
+
+#7 [builder 2/3] RUN npm run build
+#7 CACHED
+
+#8 [runner  6/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#8 CACHED
+
+#9 [runner  4/17] RUN addgroup --system --gid 1001 nodejs     && adduser --system --uid 1001 --ingroup nodejs nextjs     && mkdir -p /app/runtime/static-sitemaps     && chown -R nextjs:nodejs /app/runtime
+#9 CACHED
+
+#10 [dependencies 7/8] COPY prisma ./prisma
+#10 CACHED
+
+#11 [dependencies 6/8] RUN npm ci
+#11 CACHED
+
+#12 [production-dependencies 2/8] WORKDIR /app
+#12 CACHED
+
+#13 [dependencies 8/8] RUN npx --no-install prisma generate
+#13 CACHED
+
+#14 [runner  5/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#14 CACHED
+
+#15 [builder 1/3] COPY . .
+#15 CACHED
+
+#16 [production-dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#16 CACHED
+
+#17 [production-dependencies 4/8] RUN npm install --global npm@11.6.2
+#17 CACHED
+
+#18 [runner  7/17] COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+#18 CACHED
+
+#19 [production-dependencies 5/8] COPY package.json package-lock.json ./
+#19 CACHED
+
+#20 [builder 3/3] RUN rm -rf .next/standalone/node_modules
+#20 CACHED
+
+#21 [production-dependencies 6/8] RUN npm ci --omit=dev
+#21 154.1 npm error code ECONNRESET
+#21 154.1 npm error network aborted
+#21 154.1 npm error network This is a problem related to network connectivity.
+#21 154.1 npm error network In most cases you are behind a proxy or have bad network settings.
+#21 154.1 npm error network
+#21 154.1 npm error network If you are behind a proxy, please make sure that the
+#21 154.1 npm error network 'proxy' config is set properly.  See: 'npm help config'
+#21 154.1 npm notice
+#21 154.1 npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+#21 154.1 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+#21 154.1 npm notice To update run: npm install -g npm@11.21.0
+#21 154.1 npm notice
+#21 154.1 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-14T05_59_13_566Z-debug-0.log
+#21 ERROR: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+------
+ > [production-dependencies 6/8] RUN npm ci --omit=dev:
+154.1 npm error network In most cases you are behind a proxy or have bad network settings.
+154.1 npm error network
+154.1 npm error network If you are behind a proxy, please make sure that the
+154.1 npm error network 'proxy' config is set properly.  See: 'npm help config'
+154.1 npm notice
+154.1 npm notice New minor version of npm available! 11.6.2 -> 11.21.0
+154.1 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+154.1 npm notice To update run: npm install -g npm@11.21.0
+154.1 npm notice
+154.1 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-14T05_59_13_566Z-debug-0.log
+------
+Dockerfile:28
+--------------------
+  26 |     
+  27 |     COPY package.json package-lock.json ./
+  28 | >>> RUN npm ci --omit=dev
+  29 |     
+  30 |     COPY prisma ./prisma
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/872ozyc9mj0ncrq6j89kl7okr

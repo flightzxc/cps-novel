@@ -1,0 +1,11 @@
+{
+  "name": "image-e2e",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/.tmp/v060-release/phase1/image-e2e.sh"
+  ],
+  "startedAt": 1791961256.527585,
+  "finishedAt": 1791961270.127147,
+  "durationSeconds": 13.599561929702759,
+  "exitCode": 0
+}

@@ -19,13 +19,16 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.0 —— 第一阶段准备中，尚未部署（2026-10-14 JST）
+### v0.6.0 —— 第一阶段 PASS，尚未部署（2026-10-14 JST）
 
 - 版本类型 **MINOR**。唯一基线 `ca6dbcc961b84f961c76b29cdd7b085a74f44b80`，来自 `integration/v0.6.0-2026-10-14`；发布分支 `release/v0.6.0-2026-10-14`。来源 `feat/plotnovel-code-theater-v060`（22 个提交），三个 no-ff 合并 `7beef996`、`73392a76`、`ca6dbcc9`，以及 `7b998d1e` Turnstile 证据打码修复。
 - 已合入 PlotNovel 口令码模式与数据库层收紧；新增迁移 `20261014120000_code_mode_upstream_code_guard`。迁移 **27 条**、业务表 **58 张**；字典 **1349 条**，其中 active **1279 条**。迁移由 migration_owner 执行，grants 由 postgres 单事务重放，均通过原 migrate-approved 步骤完成（Owner 本次裁决）；函数属主期望 migration_owner。
 - 两步走：先发代码，PlotNovel 开通另行执行。当前尚未部署；不登记剧场、不改挂、不修改状态、能力、领取批次或试读白名单。前台预期保持原样，遵守公开网址冻结；不修改 nginx、证书、DNS、搜索或其它业务开关，不执行 IndexNow 回填。
 - 第一阶段仅本地升版、完整门禁、GitHub 推送与 linux/amd64 不可变镜像归档；完成后停手。第二阶段须 Owner 明确授权，只限 haiyue-vps 低流量窗口；生产 env 仅改两个版本字段。
 - 生产 audit 门禁：0 critical、恰好四项 high（@prisma/config、deepmerge-ts、effect、prisma）；完整 audit 0 critical。annotated tag、生成 CHANGELOG、唯一发版日志及 Notion 同步回读在部署验收后完成。
+
+- 第一阶段完成：Final `493eb23b034b0410780228535b3e293e4ee91f9a` / tree `c44f44702924fcc32fac0dc62ccb39fa0128d502`；11,397 passed/0failed/无Unhandled，37运行器、迁移27/表58、字典1349/active1279/drift0、严格探针1742/0、B21/nginx矩阵/18变异/Compose/品牌镜像与发布镜像端到端均PASS。既有测试证据按Owner批准保留，本轮不重跑。
+- 镜像 `cps-novel:0.6.0-493eb23`，linux/amd64；归档SHA256 `9382e6085cd9d4a30eb8b346750d2c1638266f0d40bac705923112c8de715ace`；OCI target `sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8` / config `sha256:b670b94dddec1e699848b1eee87b90370502eb4b565e13b9fba8add9d58a419e`；原消费端--load验证PASS，Final已推送GitHub并回读一致。历史Docker不可用及两次ECONNRESET失败完整留证，Owner再授权后品牌一次通过，新重试额度0/1；未改网络配置。详见 [发布记录](releases/v0.6.0-preproduction.md)。
 
 ### v0.5.15 —— 已部署正式站（2026-10-11 02:07:56 JST）
 
@@ -487,7 +490,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.0` | 2026-10-14 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | `release/v0.6.0-2026-10-14`；基线 `ca6dbcc` | 第一阶段准备中，尚未部署 |
+| `v0.6.0` | 2026-10-14 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 第一阶段PASS，尚未部署 |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |
 | `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |
 | `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |

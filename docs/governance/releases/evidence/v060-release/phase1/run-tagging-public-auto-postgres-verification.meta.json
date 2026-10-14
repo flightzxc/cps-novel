@@ -1,0 +1,11 @@
+{
+  "name": "run-tagging-public-auto-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-tagging-public-auto-postgres-verification.sh"
+  ],
+  "startedAt": 1791953130.183022,
+  "finishedAt": 1791953168.80424,
+  "durationSeconds": 38.62121796607971,
+  "exitCode": 0
+}

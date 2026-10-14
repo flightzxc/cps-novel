@@ -1,0 +1,12 @@
+{
+  "name": "build",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "startedAt": 1791952028.31214,
+  "finishedAt": 1791952050.026447,
+  "durationSeconds": 21.714307069778442,
+  "exitCode": 0
+}

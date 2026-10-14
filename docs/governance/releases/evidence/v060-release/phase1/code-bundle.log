@@ -1,0 +1,9 @@
+.tmp/v060-release/cps-novel-v0.6.0.bundle is okay
+The bundle contains this ref:
+493eb23b034b0410780228535b3e293e4ee91f9a refs/heads/release/v0.6.0-2026-10-14
+The bundle requires this ref:
+db623505539c3ca55f55b1270aab829b8db102d7 
+The bundle uses this hash algorithm: sha1
+CODE_BUNDLE=PASS
+CODE_BUNDLE_SHA256=92f02d29983d09d429ac2fa96fb4ffafaa183181b471bf98ca0a54adfc78a63e
+CODE_BUNDLE_BYTES=1221550

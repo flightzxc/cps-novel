@@ -1,0 +1,11 @@
+{
+  "name": "run-preview-opening-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-preview-opening-postgres-verification.sh"
+  ],
+  "startedAt": 1791952958.928892,
+  "finishedAt": 1791952964.54349,
+  "durationSeconds": 5.614598035812378,
+  "exitCode": 0
+}

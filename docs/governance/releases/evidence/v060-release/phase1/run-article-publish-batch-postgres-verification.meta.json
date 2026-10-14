@@ -1,0 +1,11 @@
+{
+  "name": "run-article-publish-batch-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-article-publish-batch-postgres-verification.sh"
+  ],
+  "startedAt": 1791952099.0377421,
+  "finishedAt": 1791952124.2580822,
+  "durationSeconds": 25.22034001350403,
+  "exitCode": 0
+}

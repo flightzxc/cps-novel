@@ -1,0 +1,11 @@
+{
+  "name": "run-indexnow-sweep-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.0/scripts/run-indexnow-sweep-postgres-verification.sh"
+  ],
+  "startedAt": 1791952162.765541,
+  "finishedAt": 1791952187.199065,
+  "durationSeconds": 24.433523893356323,
+  "exitCode": 0
+}
