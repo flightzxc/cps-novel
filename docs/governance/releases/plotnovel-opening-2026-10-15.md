@@ -210,3 +210,5 @@ getbydataid/getchapterinfo各用原set-channel-capability-status.ts先预演后e
 **丙1PASS，到丙2停手等待Owner后台操作。** 最新授权文章金丝雀为20～50篇（取代早期计划固定20篇）；Owner在生成页确认英语候选及同名阻挡提示，核对选中剧场/数量后生成发布一次，提供生成/发布任务ID及文章ID，不自动补发失败或阻挡文章。本会话不代提交、不提前做公开验收；主动前台HTTP仍1/30，试读上游20次按任务另计。
 
 仍不宣称完整开通验收完成、不增加发版开发日志、不移动tag/Final。逐本成功/失败类别和章节数及后台入口见 [c1-canary-and-owner-handoff.md](evidence/plotnovel-opening-2026-10-15/c1-canary-and-owner-handoff.md)，机器状态见 [c1-result.json](evidence/plotnovel-opening-2026-10-15/c1-result.json)。env备份正文、口令、凭据和章节正文未进入证据。后续公开页面与IndexNow验收待Owner发布完成后继续。
+
+丙1停丙2治理提交82d60ef3已推送并回读。Notion原单条开通记录更新试读PASS、env链及Owner后台交接，于2026-10-14T18:48:44.058Z回读PASS；原历史正文完整保留。收据见 [notion-readback-c1.json](evidence/plotnovel-opening-2026-10-15/notion-readback-c1.json)。
