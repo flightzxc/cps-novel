@@ -149,3 +149,5 @@ Owner进一步授权数据库只读事务、容器日志、仓库代码排查，
 当前根因边界：解析不满足严格领码契约，恢复回读未见合格码，进入保护性人工复核；具体上游缺项/类型及延迟原因尚无证据。优先代码建议是补充只记录解析分支/字段名/类型/是否空白的诊断（body_not_json、envelope_not_object、data_not_object、koc_code_missing/null/blank/type），不记录口令/正文/网址，不放宽成功判定或重试getcode。只有取得真实字段契约差异证据后再决定适配器改动；不能把取消网址要求当修复，因为当前已不要求网址，也不能盲目增加等待时间宣称修复。
 
 进一步判断当前是否已可见，需要Owner另行授权精确目标的上游只读getlistpc探针；它可判断当前可见性，不能补证已经丢失的历史getcode字段形状。本轮到此停手，保持claimPromo disabled、阶段丙暂停。只读证据及唯一授权防护详见 [investigation-result.json](evidence/plotnovel-opening-2026-10-15/investigation-result.json)。辅助17查询未通过task_item_id/promo_link_id找到账户分组，因为原prepare不填写这两项；18按原request_summary书目ID/剧场/本批时间及幂等键修正查询，保留首次结果，没有改数据。
+
+只读排查与防护记录990a2eae已推送回读。Notion原单条运维记录已更新防护状态、608/1/26分组、证据局限及主控步骤说明，并于2026-10-14T14:58:01.446Z回读PASS，原历史正文完整保留。见 [notion-readback-investigation.json](evidence/plotnovel-opening-2026-10-15/notion-readback-investigation.json)。
