@@ -105,3 +105,5 @@ PlotNovel33本全部英语、linked、机构1351；推广口令存在标记仅7�
 发现门禁失败后未再执行手册步骤5两条汇总SQL，也未继续生产查询；现有一次只读事务完整保存本批推广/意图状态及全局人工复核计数。首条检查脚本的errorPresent仅为JSON是否非空诊断，不作为失败判据（JSON null可能使该布尔值为true）；任务失败计数及errorCode均为0/空，业务判断依据fetched和confirmed。
 
 本轮只更新脱敏记录、证据与Notion停手状态；阶段乙未验收通过、完整开通未完成。证据见 [canary-stop-result.json](evidence/plotnovel-opening-2026-10-15/canary-stop-result.json)；原始受控结论为CANARY_INSPECT_READONLY=PASS，业务门禁为STOP_B3_MANUAL_REVIEW_GATE_FAILED。外部请求仍1/30，白名单/公开页面未操作。
+
+停手检查点文档提交efbac3ce已推送并回读。Notion既有单条开通运维记录更新为乙3门禁FAIL并于2026-10-14T13:57:23.669Z回读PASS，历史正文逐字一致、没有重复条目；首次检查误比较fetch包装层的as-of时间戳产生FAIL，保留首次收据，改为原生content精确比较后PASS，没有额外写入Notion。收据见 [notion-readback-canary-stop.json](evidence/plotnovel-opening-2026-10-15/notion-readback-canary-stop.json)。

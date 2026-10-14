@@ -1,0 +1,17 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "readAt": "2026-10-14T13:57:23.669Z",
+  "sourceCommit": "efbac3ce494c0f369ae9d4b4403ae23668a99ee3",
+  "checks": {
+    "oneOpeningEntry": true,
+    "unrelatedHistoryUnchanged": true,
+    "expectedEdits": true,
+    "manualDeltaRecorded": true,
+    "stopRecorded": true,
+    "sourceCommitRecorded": true,
+    "noSiteKeyPatterns": true
+  },
+  "status": "PASS",
+  "comparison": "Native <content> compared exactly; first wrapper comparison FAIL due to fetch as-of last-edited timestamp only; no extra page write"
+}
+

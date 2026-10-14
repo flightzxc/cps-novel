@@ -1,0 +1,16 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "readAt": "2026-10-14T13:56:51.141Z",
+  "sourceCommit": "efbac3ce494c0f369ae9d4b4403ae23668a99ee3",
+  "checks": {
+    "oneOpeningEntry": true,
+    "unrelatedHistoryUnchanged": false,
+    "expectedEdits": false,
+    "manualDeltaRecorded": true,
+    "stopRecorded": true,
+    "sourceCommitRecorded": true,
+    "noSiteKeyPatterns": true
+  },
+  "status": "FAIL"
+}
+
