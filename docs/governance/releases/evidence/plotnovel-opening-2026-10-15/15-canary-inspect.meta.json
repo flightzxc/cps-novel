@@ -1,0 +1,9 @@
+{
+  "name": "15-canary-inspect",
+  "startedAt": 1791985965.122865,
+  "finishedAt": 1791985980.871082,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/15-canary-inspect.py",
+  "sshOrWrapperStderrSha256": null
+}

@@ -86,3 +86,22 @@ Owner确认继续甲3/甲4，并授权：若甲4数量与甲2一致（或来自�
 本批验收口径19/20成功、最多1普通失败、人工复核相对609基线无新增；凭据/权限/账号级故障立即停止。金丝雀读回完成后仍须Owner明确“继续阶段丙”，本次条件授权不含阶段丙。外部请求仍1/30，无新增HTTP。
 
 阶段甲已单独提交e69b71c8；本停点提交乙1/乙2及交接证据，未宣称阶段乙金丝雀已验收或完整开通完成。Notion单条运维记录已同步并回读PASS（2026-10-14T12:18:26.807Z），原历史逐字保留；来源治理4a3fcfa83a36e60ef8183b1496649223214fbaca已推送回读。收据见 [notion-readback-b3.json](evidence/plotnovel-opening-2026-10-15/notion-readback-b3.json)。结果见 [checkpoint-b3.json](evidence/plotnovel-opening-2026-10-15/checkpoint-b3.json) 与 [Owner交接](evidence/plotnovel-opening-2026-10-15/owner-canary-handoff.md)。
+
+## 乙3：Owner提供任务后的只读核查与门禁失败停手
+
+Owner提供父任务 `932851c3-1205-4fde-88f3-0e78355540d9`（后台 `/tasks/932851c3-1205-4fde-88f3-0e78355540d9`）。2026-10-14T13:52:51Z仅连接haiyue-vps只读核查，Final、env SHA、health及metadataConsistency通过；没有提交、重试或修改任务，没有新增主动HTTP请求。
+
+实际父批次为promo_claim / explicit_ids，共133本，分为MoboReader100本与PlotNovel33本，偏离约定的20本PlotNovel金丝雀。两个分片均终态completed、使用同一渠道账号UUID（也与既有MoboReader推广记录账号一致）：
+
+| 剧场 | 分片任务ID | 任务成功/失败/跳过 | 业务读回 |
+| --- | --- | --- | --- |
+| MoboReader | 3d639a78-a71b-4dfa-ba04-8c2e7597e89d | 100/0/0 | 本批意图confirmed100 |
+| PlotNovel | 4ebb8788-d716-4ab4-8916-1c29e6da8b83 | 33/0/0 | fetched/confirmed7，pending/manual_review_required26 |
+
+PlotNovel33本全部英语、linked、机构1351；推广口令存在标记仅7条为true，未读取口令值。业务确认比例为7/33（21.21%）；manual_review_required从历史609增至635，新增26条的创建时间均在本批内。原worker对需要人工复核的结果返回任务success，因此33/33任务成功不能作为领码业务验收通过；具体人工复核原因未继续调查，不能据此断言凭据/账号故障或上游成功/失败。
+
+**门禁FAIL，立即停手。** 不将133本混合批次或33本PlotNovel分片冒充20本验收；不进入阶段丙、不放量、不自动重复getcode、不换账号、不重置意图或推广数据、不自行回关claimPromo或剧场。任务已经全部终态，没有本批在途任务可暂停；若另有领取批次，Owner可按原手册选择批次级暂停。是否进一步只读排查或执行回关由Owner明确裁决；数据恢复/旧镜像回退仍停在Owner审批点，兼容标志要求不变。
+
+发现门禁失败后未再执行手册步骤5两条汇总SQL，也未继续生产查询；现有一次只读事务完整保存本批推广/意图状态及全局人工复核计数。首条检查脚本的errorPresent仅为JSON是否非空诊断，不作为失败判据（JSON null可能使该布尔值为true）；任务失败计数及errorCode均为0/空，业务判断依据fetched和confirmed。
+
+本轮只更新脱敏记录、证据与Notion停手状态；阶段乙未验收通过、完整开通未完成。证据见 [canary-stop-result.json](evidence/plotnovel-opening-2026-10-15/canary-stop-result.json)；原始受控结论为CANARY_INSPECT_READONLY=PASS，业务门禁为STOP_B3_MANUAL_REVIEW_GATE_FAILED。外部请求仍1/30，白名单/公开页面未操作。
