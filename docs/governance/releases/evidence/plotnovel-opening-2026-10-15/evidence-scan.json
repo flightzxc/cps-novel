@@ -1,9 +1,10 @@
 {
   "result": "PASS",
-  "files": 80,
+  "files": 81,
   "actualTemporarySecretsScanned": 12,
   "secretLeaks": 0,
   "turnstileKeyMatches": 0,
-  "upstreamCodeValues": "never selected or emitted; counts only; backup dump remains protected on server",
-  "externalRequests": 1
+  "upstreamCodeValues": "operational queries and outputs contain counts only; backup original data remains solely in protected remote dump",
+  "externalRequests": 1,
+  "notionReadback": "PASS"
 }

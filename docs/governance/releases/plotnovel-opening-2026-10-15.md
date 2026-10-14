@@ -85,4 +85,4 @@ Owner确认继续甲3/甲4，并授权：若甲4数量与甲2一致（或来自�
 
 本批验收口径19/20成功、最多1普通失败、人工复核相对609基线无新增；凭据/权限/账号级故障立即停止。金丝雀读回完成后仍须Owner明确“继续阶段丙”，本次条件授权不含阶段丙。外部请求仍1/30，无新增HTTP。
 
-阶段甲已单独提交e69b71c8；本停点提交乙1/乙2及交接证据，未宣称阶段乙金丝雀已验收或完整开通完成。当前Notion单条运维记录待同步并回读，随后补收据。结果见 [checkpoint-b3.json](evidence/plotnovel-opening-2026-10-15/checkpoint-b3.json) 与 [Owner交接](evidence/plotnovel-opening-2026-10-15/owner-canary-handoff.md)。
+阶段甲已单独提交e69b71c8；本停点提交乙1/乙2及交接证据，未宣称阶段乙金丝雀已验收或完整开通完成。Notion单条运维记录已同步并回读PASS（2026-10-14T12:18:26.807Z），原历史逐字保留；来源治理4a3fcfa83a36e60ef8183b1496649223214fbaca已推送回读。收据见 [notion-readback-b3.json](evidence/plotnovel-opening-2026-10-15/notion-readback-b3.json)。结果见 [checkpoint-b3.json](evidence/plotnovel-opening-2026-10-15/checkpoint-b3.json) 与 [Owner交接](evidence/plotnovel-opening-2026-10-15/owner-canary-handoff.md)。

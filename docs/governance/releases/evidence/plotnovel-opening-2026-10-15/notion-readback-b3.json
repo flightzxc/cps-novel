@@ -1,0 +1,20 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "sourceCommit": "4a3fcfa83a36e60ef8183b1496649223214fbaca",
+  "readbackAt": "2026-10-14T12:18:26.807Z",
+  "status": "PASS",
+  "checks": {
+    "singleOpeningEntry": true,
+    "historyUnchanged": true,
+    "stopB3": true,
+    "counts": true,
+    "backupList": true,
+    "candidate1204": true,
+    "manualReview609": true,
+    "source": true,
+    "siteKeysAbsent": true
+  },
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "openingState": "B1/B2 passed; STOP_B3_AWAIT_OWNER_CANARY; complete opening not accepted"
+}

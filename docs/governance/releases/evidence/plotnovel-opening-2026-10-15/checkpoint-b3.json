@@ -156,6 +156,8 @@
     }
   ],
   "externalRequests": 1,
-  "notion": "PENDING_SYNC",
-  "next": "Owner submit exactly one 20-book claim canary in catalog-sync and provide task ID; await explicit 继续阶段丙 after B canary verification"
+  "notion": "SYNC_READBACK_PASS",
+  "next": "Owner submit exactly one 20-book claim canary in catalog-sync and provide task ID; await explicit 继续阶段丙 after B canary verification",
+  "notionReadbackAt": "2026-10-14T12:18:26.807Z",
+  "governanceSourceCommit": "4a3fcfa83a36e60ef8183b1496649223214fbaca"
 }
