@@ -1,0 +1,176 @@
+{
+  "at": "2026-10-14T18:40:08.382231+00:00",
+  "sourceIds": [
+    "db8216e5-2349-4ebc-a513-7e408ecf2598",
+    "e55982ea-2543-43d5-8cad-811d28571c17",
+    "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+    "73fabb91-e8bd-4e05-be05-67799b39a529",
+    "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+    "00f76c41-041c-421c-bece-857e1ff48703",
+    "e702df26-1dab-41bf-8657-0fe5aad238dd",
+    "038ac0b3-a45c-427d-9cc2-52ff5bce0af9",
+    "5e1a5f5a-d553-44dd-a733-ccfe7243fa70",
+    "8eba21c0-7718-43c1-8c85-2af10a99b83c"
+  ],
+  "taskId": "51854b9b-6cb4-452c-89b6-d30976c03647",
+  "candidateCount": 10,
+  "capabilityApplies": [
+    {
+      "mode": "apply",
+      "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "capabilityKey": "getbydataid",
+      "beforeStatus": "registered_disabled",
+      "afterStatus": "enabled",
+      "wrote": true,
+      "auditId": "825823"
+    },
+    {
+      "mode": "apply",
+      "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "capabilityKey": "getchapterinfo",
+      "beforeStatus": "registered_disabled",
+      "afterStatus": "enabled",
+      "wrote": true,
+      "auditId": "825825"
+    }
+  ],
+  "caps": {
+    "getlistpc": "registered_disabled",
+    "claimPromo": "registered_disabled",
+    "getbydataid": "enabled",
+    "getchapterinfo": "enabled"
+  },
+  "survey": {
+    "mode": "survey",
+    "preflight": {
+      "status": "usable",
+      "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+      "credentialId": "dbcd20e8-e5b3-4216-9115-8aae8ddaeaff"
+    },
+    "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+    "requestId": "plotnovel-preview-canary-20261015",
+    "limit": 10,
+    "batchSize": 10,
+    "onlySourceItemIds": [
+      "db8216e5-2349-4ebc-a513-7e408ecf2598",
+      "e55982ea-2543-43d5-8cad-811d28571c17",
+      "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+      "73fabb91-e8bd-4e05-be05-67799b39a529",
+      "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+      "00f76c41-041c-421c-bece-857e1ff48703",
+      "e702df26-1dab-41bf-8657-0fe5aad238dd",
+      "038ac0b3-a45c-427d-9cc2-52ff5bce0af9",
+      "5e1a5f5a-d553-44dd-a733-ccfe7243fa70",
+      "8eba21c0-7718-43c1-8c85-2af10a99b83c"
+    ],
+    "candidateCount": 10,
+    "truncated": false,
+    "batches": [],
+    "sampleCandidates": [
+      {
+        "novelSourceItemId": "db8216e5-2349-4ebc-a513-7e408ecf2598",
+        "novelId": "da13ff56-e436-4ebe-8979-1d355a3d5f27",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "e55982ea-2543-43d5-8cad-811d28571c17",
+        "novelId": "fdc5acab-b9b2-4339-92d0-cfc2e1d3b35e",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+        "novelId": "c357b086-f654-4ce2-8960-211d7106fdb6",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "73fabb91-e8bd-4e05-be05-67799b39a529",
+        "novelId": "4e24d275-e429-439a-90be-a2b136a2a703",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+        "novelId": "f0d35d50-6614-44c0-8ea2-95a294c4931f",
+        "lastPreviewItemStatus": "skipped"
+      }
+    ],
+    "failureBreakdownByHash": {
+      "5449ac503e6375cea1db0e0b3b1361e6f3cccab7fb22f8fe2fd0f3be34f1a7bd": 10
+    }
+  },
+  "apply": {
+    "mode": "apply",
+    "preflight": {
+      "status": "usable",
+      "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+      "credentialId": "dbcd20e8-e5b3-4216-9115-8aae8ddaeaff"
+    },
+    "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+    "requestId": "plotnovel-preview-canary-20261015",
+    "limit": 10,
+    "batchSize": 10,
+    "onlySourceItemIds": [
+      "db8216e5-2349-4ebc-a513-7e408ecf2598",
+      "e55982ea-2543-43d5-8cad-811d28571c17",
+      "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+      "73fabb91-e8bd-4e05-be05-67799b39a529",
+      "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+      "00f76c41-041c-421c-bece-857e1ff48703",
+      "e702df26-1dab-41bf-8657-0fe5aad238dd",
+      "038ac0b3-a45c-427d-9cc2-52ff5bce0af9",
+      "5e1a5f5a-d553-44dd-a733-ccfe7243fa70",
+      "8eba21c0-7718-43c1-8c85-2af10a99b83c"
+    ],
+    "candidateCount": 10,
+    "truncated": false,
+    "batches": [
+      {
+        "batchIndex": 0,
+        "requestToken": "preview_backfill:plotnovel-preview-canary-20261015:0",
+        "itemCount": 10,
+        "enqueue": {
+          "queued": true,
+          "status": "enqueued",
+          "taskId": "51854b9b-6cb4-452c-89b6-d30976c03647",
+          "taskStatus": "pending",
+          "eligibleCount": 10,
+          "skipReasonCounts": {}
+        }
+      }
+    ],
+    "sampleCandidates": [
+      {
+        "novelSourceItemId": "db8216e5-2349-4ebc-a513-7e408ecf2598",
+        "novelId": "da13ff56-e436-4ebe-8979-1d355a3d5f27",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "e55982ea-2543-43d5-8cad-811d28571c17",
+        "novelId": "fdc5acab-b9b2-4339-92d0-cfc2e1d3b35e",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+        "novelId": "c357b086-f654-4ce2-8960-211d7106fdb6",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "73fabb91-e8bd-4e05-be05-67799b39a529",
+        "novelId": "4e24d275-e429-439a-90be-a2b136a2a703",
+        "lastPreviewItemStatus": "skipped"
+      },
+      {
+        "novelSourceItemId": "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+        "novelId": "f0d35d50-6614-44c0-8ea2-95a294c4931f",
+        "lastPreviewItemStatus": "skipped"
+      }
+    ],
+    "failureBreakdownByHash": {
+      "5449ac503e6375cea1db0e0b3b1361e6f3cccab7fb22f8fe2fd0f3be34f1a7bd": 10
+    }
+  },
+  "protectedBaseline": {
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "promoDigest": "5d798c488c454628139b0667e4c1db88521f8f5a490e0b9a5f9c65b66bfaa448"
+  }
+}

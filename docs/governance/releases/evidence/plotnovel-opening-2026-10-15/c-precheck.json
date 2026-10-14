@@ -1,0 +1,96 @@
+{
+  "at": "2026-10-14T18:35:35.46767+00:00",
+  "capabilities": {
+    "getlistpc": "registered_disabled",
+    "getbydataid": "registered_disabled",
+    "getchapterinfo": "registered_disabled",
+    "claimPromo": "registered_disabled"
+  },
+  "manualReview": 635,
+  "validPreviews": [
+    {
+      "source_id": "b76261cb-fdae-4fba-a2cb-39cd17ac3963",
+      "novel_id": "219b645e-a9a7-40a5-ba86-38d54f4bd7d3",
+      "n": 3,
+      "created_at": "2026-10-14T01:44:13.979+00:00"
+    },
+    {
+      "source_id": "43086541-d81b-47f3-be17-d6cf14eeec0c",
+      "novel_id": "85f0d73f-ddba-474b-bf0a-1c8d55a94939",
+      "n": 3,
+      "created_at": "2026-10-14T01:44:15.175+00:00"
+    },
+    {
+      "source_id": "f35e714f-0940-47ed-a4d6-bf230433dfbc",
+      "novel_id": "fa640231-d696-4c8a-8192-ada9628da2a6",
+      "n": 3,
+      "created_at": "2026-10-14T01:44:16.666+00:00"
+    },
+    {
+      "source_id": "59449d7a-c52c-484f-b6fa-157748b548d5",
+      "novel_id": "656f5d7a-3a04-4006-834b-9c069dc5eee4",
+      "n": 3,
+      "created_at": "2026-10-14T01:44:18.196+00:00"
+    },
+    {
+      "source_id": "c67e970d-bff7-4727-b215-fdb3eb539d30",
+      "novel_id": "04be12c5-1cf6-44cc-a216-4fed091f27ee",
+      "n": 3,
+      "created_at": "2026-10-14T01:44:19.693+00:00"
+    }
+  ],
+  "candidateCount": 2034,
+  "selected": [
+    {
+      "source_id": "db8216e5-2349-4ebc-a513-7e408ecf2598",
+      "novel_id": "da13ff56-e436-4ebe-8979-1d355a3d5f27",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "e55982ea-2543-43d5-8cad-811d28571c17",
+      "novel_id": "fdc5acab-b9b2-4339-92d0-cfc2e1d3b35e",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+      "novel_id": "c357b086-f654-4ce2-8960-211d7106fdb6",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "73fabb91-e8bd-4e05-be05-67799b39a529",
+      "novel_id": "4e24d275-e429-439a-90be-a2b136a2a703",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+      "novel_id": "f0d35d50-6614-44c0-8ea2-95a294c4931f",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "00f76c41-041c-421c-bece-857e1ff48703",
+      "novel_id": "397ee10f-84bc-4cbf-a14c-f9a4ff037db4",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "e702df26-1dab-41bf-8657-0fe5aad238dd",
+      "novel_id": "1179b4f3-7696-4d3a-b670-0d9fe272c4ae",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "038ac0b3-a45c-427d-9cc2-52ff5bce0af9",
+      "novel_id": "217c39d2-1be3-4d0e-981a-933562684193",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "5e1a5f5a-d553-44dd-a733-ccfe7243fa70",
+      "novel_id": "61432c68-3573-434f-894d-9fe8edbde80a",
+      "source_locale": "en"
+    },
+    {
+      "source_id": "8eba21c0-7718-43c1-8c85-2af10a99b83c",
+      "novel_id": "9b421386-e895-49db-82fd-c191ad87f6e3",
+      "source_locale": "en"
+    }
+  ],
+  "publishedArticles": 0
+}

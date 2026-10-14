@@ -1,0 +1,26 @@
+REMOTE_CONTEXT={"at": "2026-10-14T18:38:33.586540+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+C_PREFLIGHT_STDOUT=PREPROD_SITE_MODE=public
+IMAGE=PASS anchor=descriptor
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=true siteKey=set secret=file:admin_login_turnstile_secret_key
+PREPROD_PREFLIGHT=PASS
+
+C_RECREATE_STARTED=2026-10-14T18:38:42.800402+00:00
+C_RUNTIME_ORIGINAL_STDOUT=APP_RUNTIME=PASS image=cps-novel:0.6.0-493eb23 identity=verified
+HEALTH_WAIT=PASS service=web health=healthy
+HEALTH_WAIT=PASS service=worker health=healthy
+HEALTH_WAIT=PASS service=worker-light health=healthy
+RUNTIME_IMAGE_ONE=PASS service=web anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=worker-light anchor=manifest_descriptor
+RUNTIME_IMAGE_ONE=PASS service=scheduler anchor=manifest_descriptor
+RUNTIME_IMAGE=PASS services=web worker worker-light scheduler
+
+C_RUNTIME_READBACK={"startedAt": "2026-10-14T18:38:42.800402+00:00", "finishedAt": "2026-10-14T18:38:52.570456+00:00", "recreated": ["web", "worker", "worker-light"], "unchanged": ["postgres", "scheduler", "backup-timer"], "beforeIds": {"backup-timer": "0384819b06fc9b8b1204395e6e4618fcee52a26aeb07f660ed111a5f4fb4f7cc", "scheduler": "624eace5b093457f0bc2bb30c9b41afed2e6d2ec7eed31aaf74652776ba38e24", "worker": "fb0bd4bc5b5ca12d93517f66827479427cad9616a33e32524f36f2cf3e9c037a", "worker-light": "a43e0a0df91855ca8b70915db321fb22faf02817ec9cdddf0ca90841eff2594e", "web": "2c0be3428d1cd4039d0c1b76802514bf382a76b23cdd5413c3b19a12eb8c4f85", "postgres": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e"}, "afterIds": {"backup-timer": "0384819b06fc9b8b1204395e6e4618fcee52a26aeb07f660ed111a5f4fb4f7cc", "scheduler": "624eace5b093457f0bc2bb30c9b41afed2e6d2ec7eed31aaf74652776ba38e24", "worker": "89836c22b45fea370f30e35af5320411447bb659eaa8595c8b787d45535a68c8", "worker-light": "ad87854e59abbca77de1c45dfee0f4d4fba053be3cff2cb2d086316b70f334b0", "web": "b81070177321143c86eb8c1e82b86e367055f995c04c1867e1d6bbe3420eff31", "postgres": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e"}, "otherEnvIdentical": true, "sameImages": true, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed", "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369"}
+C_RUNTIME=PASS

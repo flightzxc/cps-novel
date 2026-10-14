@@ -1,0 +1,11 @@
+REMOTE_CONTEXT={"at": "2026-10-14T18:37:33.264582+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+COMPOSE_PREVIEW_PASSTHROUGH=PASS service=web
+COMPOSE_PREVIEW_PASSTHROUGH=PASS service=worker
+COMPOSE_PREVIEW_PASSTHROUGH=PASS service=worker-light
+ENV_SAFE_DIFF=--- before-whitelist-only
++++ after-whitelist-only
+@@ -0,0 +1 @@
++MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader,plotnovel
+
+ENV_PREVIEW_CHANGE={"at": "2026-10-14T18:37:33.452784+00:00", "beforeSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "afterSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369", "backup": "/opt/cps-novel/shared/env/preprod.env.bak-plotnovel-preview-20261014T183733Z", "backupMode": "0600", "otherBytesCmp": "PASS", "onlyChangedKey": "MOBOREADER_PREVIEW_SOURCE_APP_CODES", "afterValue": "moboreader,plotnovel"}
+ENV_ONE_WHITELIST_ONLY=PASS

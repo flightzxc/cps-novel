@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-14T18:37:33.452784+00:00",
+  "beforeSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832",
+  "afterSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+  "backup": "/opt/cps-novel/shared/env/preprod.env.bak-plotnovel-preview-20261014T183733Z",
+  "backupMode": "0600",
+  "otherBytesCmp": "PASS",
+  "onlyChangedKey": "MOBOREADER_PREVIEW_SOURCE_APP_CODES",
+  "afterValue": "moboreader,plotnovel"
+}

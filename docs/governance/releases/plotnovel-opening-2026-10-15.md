@@ -181,3 +181,32 @@ Owner进一步授权数据库只读事务、容器日志、仓库代码排查，
 逐本结果与全字段类型见 [readback-43-per-book.md](evidence/plotnovel-opening-2026-10-15/readback-43-per-book.md)，每本独立fields数组见 [readback-43-result.json](evidence/plotnovel-opening-2026-10-15/readback-43-result.json)，抽样与汇总亦在同一证据目录。请求43次按本次上游只读授权单独记账，前台验收HTTP仍1/30。后续补码、人工收口及代码修改均等待另行授权。
 
 43次回读治理提交ff6ba90c已推送并回读。Notion既有单条开通记录同步汇总、边界及诊断建议，并于2026-10-14T18:03:18.007Z回读PASS，原历史保留。见 [notion-readback-43.json](evidence/plotnovel-opening-2026-10-15/notion-readback-43.json)。
+
+## Owner确认上游问题后继续丙1，停丙2（客户端2026-10-15）
+
+Owner确认这批书在畅读后台点击领取也无反应，认定上游问题并等待上游答复；明确保持claimPromo关闭、635条人工复核不动，授权已有口令码的书继续阶段丙，先5～10本试读金丝雀，再到丙2停下等Owner后台生成发布20～50篇。该决定解除此前领码门禁失败后的阶段丙暂停，但不批准重领、推广修复或人工收口；本会话没有重复getcode或上游后台领取验证。
+
+丙1预检18:35:35Z：Final/health/metadata/env原摘要通过，四能力仍disabled、人工复核635、PlotNovel已发布0。英语/已有fetched口令/linked/无有效试读/无withdrawn/无在途预览候选2034，固定选10本。已有效试读仅5本，创建于10-14T01:44Z，均3章；这五个source ID逐项排除并在丙1结束再次读回仍各3章。未从635本人审中挑选金丝雀。
+
+### env与原镜像重建
+
+- 18:37:33Z改前SHA为359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832；备份 `/opt/cps-novel/shared/env/preprod.env.bak-plotnovel-preview-20261014T183733Z`，0600，仅服务器留存。
+- 只改/新增MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader,plotnovel；安全diff只含该行，剔除此行后cmp逐字一致。改后SHA **f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369**，后续common核查使用此新摘要，旧证据helper保持原样。
+- 原Compose渲染确认向web/worker/worker-light透传。原preflight PASS，读取已批准Final manifest并核验不可变镜像；18:38:42.800Z～18:38:52.570Z仅原preprod_compose_app_up --force-recreate web worker worker-light（内含--no-deps及不拉取/构建门禁），健康等待通过，原container identity对web/worker/worker-light/scheduler全PASS。
+- 三容器CID改变、镜像ID及引用不变，除白名单外Config.Env逐项相同；postgres/scheduler/backup-timer CID不变。health仍0.6.0/Final、metadataConsistency passed；没有release/deploy、migration或nginx动作。
+
+### 能力与原试读金丝雀
+
+getbydataid/getchapterinfo各用原set-channel-capability-status.ts先预演后enabled，operator codex，reason含plotnovel-preview-<能力>-enable-20261015，evidence指向服务器c-runtime.json；审计825823/825825。claimPromo/getlistpc仍registered_disabled，剧场仍active。没有恢复领码或改全局领码开关。
+
+原preview-backfill-recovery.ts以明确10个source IDs、--limit10/--batch-size10、request-id plotnovel-preview-canary-20261015先survey，再--apply --confirm APPLY_PREVIEW_BACKFILL；凭据预检usable，候选10/truncated=false。原工具actor为preview-backfill-recovery（没有operator参数，未改原接口）。单任务 **51854b9b-6cb4-452c-89b6-d30976c03647**，requestToken preview_backfill:plotnovel-preview-canary-20261015:0，eligible10/skipReasons空。
+
+任务18:40:08.732Z开始，18:40:26.354Z终态completed；success10/failed0/skipped0，成功率100%达到80%门槛。逐本attempt1，上游返回3～5章，按原策略物化各3章，全部30章body非空且displayAuthorized=true。原五本各3章保持不变。任务窗口观测getbydataid10/getchapterinfo10，均HTTP200/outcome ok；getcode0、preview_read_failed0。首次辅助日志计数误用事件名preview_read_failure，28只读复查使用原sink的preview_read_failed并留证；没有任务重试或门禁削弱。
+
+人工复核635条id/status/response_shape摘要前后完全一致，推广id/status/upstream_code_present/updated_at摘要亦一致；没有补码、改意图、重领、生成或发布文章。所有容器running，四应用healthy，backup-timer running；PlotNovel已发布仍0。成功率通过，未触发试读失败回关。
+
+### 丙2停点与治理
+
+**丙1PASS，到丙2停手等待Owner后台操作。** 最新授权文章金丝雀为20～50篇（取代早期计划固定20篇）；Owner在生成页确认英语候选及同名阻挡提示，核对选中剧场/数量后生成发布一次，提供生成/发布任务ID及文章ID，不自动补发失败或阻挡文章。本会话不代提交、不提前做公开验收；主动前台HTTP仍1/30，试读上游20次按任务另计。
+
+仍不宣称完整开通验收完成、不增加发版开发日志、不移动tag/Final。逐本成功/失败类别和章节数及后台入口见 [c1-canary-and-owner-handoff.md](evidence/plotnovel-opening-2026-10-15/c1-canary-and-owner-handoff.md)，机器状态见 [c1-result.json](evidence/plotnovel-opening-2026-10-15/c1-result.json)。env备份正文、口令、凭据和章节正文未进入证据。后续公开页面与IndexNow验收待Owner发布完成后继续。

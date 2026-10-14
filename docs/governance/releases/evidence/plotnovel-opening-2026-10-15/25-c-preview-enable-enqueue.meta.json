@@ -1,0 +1,9 @@
+{
+  "name": "25-c-preview-enable-enqueue",
+  "startedAt": 1792003198.080461,
+  "finishedAt": 1792003208.47725,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/25-c-preview-enable-enqueue.py",
+  "sshOrWrapperStderrSha256": null
+}

@@ -1,0 +1,9 @@
+{
+  "name": "26-c-preview-readback",
+  "startedAt": 1792003282.968051,
+  "finishedAt": 1792003287.395231,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/26-c-preview-readback.py",
+  "sshOrWrapperStderrSha256": null
+}

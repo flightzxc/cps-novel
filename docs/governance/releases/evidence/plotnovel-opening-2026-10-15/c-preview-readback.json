@@ -1,0 +1,219 @@
+{
+  "at": "2026-10-14T18:41:27.277215+00:00",
+  "task": {
+    "id": "51854b9b-6cb4-452c-89b6-d30976c03647",
+    "type": "moboreader.preview_refresh.v1",
+    "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+    "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+    "status": "completed",
+    "total": 10,
+    "success": 10,
+    "failed": 0,
+    "skipped": 0,
+    "startedAt": "2026-10-14T18:40:08.732307+00:00",
+    "completedAt": "2026-10-14T18:40:26.354354+00:00"
+  },
+  "items": [
+    {
+      "itemId": "c80e077f-3bb0-407e-b855-c99a9246895a",
+      "sourceId": "00f76c41-041c-421c-bece-857e1ff48703",
+      "novelId": "397ee10f-84bc-4cbf-a14c-f9a4ff037db4",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:23.372374+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:23.379+00:00"
+      }
+    },
+    {
+      "itemId": "e59b0d30-a9db-4027-8109-47c1aabf362a",
+      "sourceId": "038ac0b3-a45c-427d-9cc2-52ff5bce0af9",
+      "novelId": "217c39d2-1be3-4d0e-981a-933562684193",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:24.856836+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:24.863+00:00"
+      }
+    },
+    {
+      "itemId": "1fa55070-2e44-48fc-9a63-8a453e7343cd",
+      "sourceId": "0a379b8e-2ca5-4470-b4d3-61af4396539b",
+      "novelId": "f0d35d50-6614-44c0-8ea2-95a294c4931f",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:13.37156+00:00",
+      "upstreamCount": 3,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:13.382+00:00"
+      }
+    },
+    {
+      "itemId": "27b707ea-00d9-41b3-85bd-0564f9f24d80",
+      "sourceId": "5e1a5f5a-d553-44dd-a733-ccfe7243fa70",
+      "novelId": "61432c68-3573-434f-894d-9fe8edbde80a",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:14.001568+00:00",
+      "upstreamCount": 5,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:14.007+00:00"
+      }
+    },
+    {
+      "itemId": "7162e6de-e03c-433d-bca0-b02b28407e39",
+      "sourceId": "73fabb91-e8bd-4e05-be05-67799b39a529",
+      "novelId": "4e24d275-e429-439a-90be-a2b136a2a703",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:19.232813+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:19.238+00:00"
+      }
+    },
+    {
+      "itemId": "c070fd27-f869-4c5a-aac7-e71411a1072b",
+      "sourceId": "8eba21c0-7718-43c1-8c85-2af10a99b83c",
+      "novelId": "9b421386-e895-49db-82fd-c191ad87f6e3",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:20.349908+00:00",
+      "upstreamCount": 5,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:20.355+00:00"
+      }
+    },
+    {
+      "itemId": "c2d58e8e-40c8-40a1-9fbb-4b0b048c0da2",
+      "sourceId": "db8216e5-2349-4ebc-a513-7e408ecf2598",
+      "novelId": "da13ff56-e436-4ebe-8979-1d355a3d5f27",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:21.84713+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:21.853+00:00"
+      }
+    },
+    {
+      "itemId": "5758e005-4184-436f-adce-8f0ec038e547",
+      "sourceId": "e55982ea-2543-43d5-8cad-811d28571c17",
+      "novelId": "fdc5acab-b9b2-4339-92d0-cfc2e1d3b35e",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:16.035526+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:16.041+00:00"
+      }
+    },
+    {
+      "itemId": "eba3e02a-da1c-4440-aa4b-3b09041e5178",
+      "sourceId": "e702df26-1dab-41bf-8657-0fe5aad238dd",
+      "novelId": "1179b4f3-7696-4d3a-b670-0d9fe272c4ae",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:26.354354+00:00",
+      "upstreamCount": 4,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:26.359+00:00"
+      }
+    },
+    {
+      "itemId": "6acfac02-23cf-45fd-832c-5e63970d1343",
+      "sourceId": "fdcee1ef-07c1-4a69-9ff4-0bd2badea63f",
+      "novelId": "c357b086-f654-4ce2-8960-211d7106fdb6",
+      "status": "success",
+      "attempts": 1,
+      "finishedAt": "2026-10-14T18:40:17.365709+00:00",
+      "upstreamCount": 5,
+      "failureCode": null,
+      "unknownFailureCodeSha256": null,
+      "validChapterCount": 3,
+      "previewPolicy": {
+        "count": 3,
+        "display": true,
+        "index": true,
+        "cache": true,
+        "lastRefreshedAt": "2026-10-14T18:40:17.371+00:00"
+      }
+    }
+  ],
+  "capabilities": {
+    "getlistpc": "registered_disabled",
+    "claimPromo": "registered_disabled",
+    "getbydataid": "enabled",
+    "getchapterinfo": "enabled"
+  },
+  "protected": {
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "promoDigest": "5d798c488c454628139b0667e4c1db88521f8f5a490e0b9a5f9c65b66bfaa448"
+  }
+}
