@@ -179,3 +179,5 @@ Owner进一步授权数据库只读事务、容器日志、仓库代码排查，
 前后只读快照相同：635条人工复核、claimPromo disabled；43个样本意图状态/确认时间及推广状态/存在标记/updatedAt逐项一致，没有业务数据写入或回关人工记录。Final/env保持原值，未改任何解析代码或公开页面。诊断补强建议已按Owner第5条登记，不施工。
 
 逐本结果与全字段类型见 [readback-43-per-book.md](evidence/plotnovel-opening-2026-10-15/readback-43-per-book.md)，每本独立fields数组见 [readback-43-result.json](evidence/plotnovel-opening-2026-10-15/readback-43-result.json)，抽样与汇总亦在同一证据目录。请求43次按本次上游只读授权单独记账，前台验收HTTP仍1/30。后续补码、人工收口及代码修改均等待另行授权。
+
+43次回读治理提交ff6ba90c已推送并回读。Notion既有单条开通记录同步汇总、边界及诊断建议，并于2026-10-14T18:03:18.007Z回读PASS，原历史保留。见 [notion-readback-43.json](evidence/plotnovel-opening-2026-10-15/notion-readback-43.json)。
