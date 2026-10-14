@@ -151,3 +151,31 @@ Owner进一步授权数据库只读事务、容器日志、仓库代码排查，
 进一步判断当前是否已可见，需要Owner另行授权精确目标的上游只读getlistpc探针；它可判断当前可见性，不能补证已经丢失的历史getcode字段形状。本轮到此停手，保持claimPromo disabled、阶段丙暂停。只读证据及唯一授权防护详见 [investigation-result.json](evidence/plotnovel-opening-2026-10-15/investigation-result.json)。辅助17查询未通过task_item_id/promo_link_id找到账户分组，因为原prepare不填写这两项；18按原request_summary书目ID/剧场/本批时间及幂等键修正查询，保留首次结果，没有改数据。
 
 只读排查与防护记录990a2eae已推送回读。Notion原单条运维记录已更新防护状态、608/1/26分组、证据局限及主控步骤说明，并于2026-10-14T14:58:01.446Z回读PASS，原历史正文完整保留。见 [notion-readback-investigation.json](evidence/plotnovel-opening-2026-10-15/notion-readback-investigation.json)。
+
+## 后续代码改动建议：领码响应字段类型诊断（Owner 2026-10-15要求，仅登记）
+
+建议在parseClaimResponse及非JSON处理点增加独立、明确的解析分支标识：body_not_json、envelope_not_object、envelope_status_invalid、envelope_code_invalid、data_not_object、koc_code_missing、koc_code_null、koc_code_blank、koc_code_type_invalid。只记录受控字段名/路径、是否存在、原始类型、解析分支；不记录字段实际值、完整响应、口令码、网址、message、标题或凭据。诊断日志与response_shape共用同一白名单边界，使malformed_payload可按明确分支分组，不再需要由缺少诊断键推断。
+
+必须保持诊断异常不改变业务判定，不增加getcode重试、不放宽非空string与精确身份匹配，不自动处理manual_review_required。实施时补充仅码无网址、缺失/null/空串/错误类型、非JSON/对象异常、诊断回调异常及敏感值不进入日志的回归验证。这是后续代码建议，不是本轮代码施工或上线授权；当前业务代码与v0.6.0 Final保持一致。
+
+## Owner批准43次精确只读getlistpc回读（客户端2026-10-15）
+
+范围严格固定：指定父批次26本人审、7本成功对照，加历史608条按created_at/id排序等分抽10本（排名1/68/136/203/271/338/406/473/541/608）。共43个不同书目，同一渠道账号；每本只请求一次，不重试、不翻页、不调用getcode。历史样本包括2026-09-23最早至2026-10-14最晚记录。本次不补码、不结束人工复核、不改解析代码，阶段丙暂停。
+
+在worker容器运行受限一次性只读探针，复用原claim适配器readPromoAfterClaim和实际生产rateGate；当前getlistpc间隔1500ms、host gap250ms、remaining floor8，未修改限速/网络配置。transport严格只允许POST getlistpc原坐标name/orderType1/pageIndex1/pageSize100/projectType1，最多43次，拒绝其它路径；43次串行单次全部成功，无429或传输错误。数据库查询均事务只读并验证worker_app/transaction_read_only=on。独占start标记防止意外重跑，原响应及口令只在容器内临时内存，捕获输出仅字段名/类型/boolean及码存在性/长度，不保存正文。
+
+完成时间2026-10-14T17:59:07.126Z（UTC，Asia/Tokyo为2026-10-15）；getlistpc43/getcode0/retries0。
+
+| 分组 | 找到唯一目标 | 现在有码 | kocCode类型及长度 |
+| --- | ---: | ---: | --- |
+| 本批人工复核26本 | 26/26 | 0/26 | 全部字段存在、null，长度0 |
+| 成功对照7本 | 7/7 | 7/7 | 全部非空string，长度6 |
+| 历史抽样10本 | 10/10 | 0/10 | 全部字段存在、null，长度0 |
+
+在允许比较的存在性/类型/boolean范围内，有码7本与无码36本的系统性差异仅三项：kocCode、promoCreateTime、promotionalText（有码均string，无码均null）。其它字段类型一致；publicUrl/homeLink均null；onlyTikTok/hasTikTokPromoLink/isRelease均boolean false；payEpisFrom均number，未比较数值。不能把这些共同boolean标记当作领取资格差异。
+
+结论：这26本现在仍没有合格码，并非本地适配器因网址缺失漏读；历史10样本同样如此。本批距领取已数小时仍无码，结果不支持仅短时几秒延迟即可恢复的解释；10样本不能替代608全量，也不能由当前getlistpc字段倒推历史getcode具体缺项或确定上游业务原因。当前没有可补的有效码证据，不建议补码或批量裁决“未发生”；保持人工复核待后续Owner裁决。
+
+前后只读快照相同：635条人工复核、claimPromo disabled；43个样本意图状态/确认时间及推广状态/存在标记/updatedAt逐项一致，没有业务数据写入或回关人工记录。Final/env保持原值，未改任何解析代码或公开页面。诊断补强建议已按Owner第5条登记，不施工。
+
+逐本结果与全字段类型见 [readback-43-per-book.md](evidence/plotnovel-opening-2026-10-15/readback-43-per-book.md)，每本独立fields数组见 [readback-43-result.json](evidence/plotnovel-opening-2026-10-15/readback-43-result.json)，抽样与汇总亦在同一证据目录。请求43次按本次上游只读授权单独记账，前台验收HTTP仍1/30。后续补码、人工收口及代码修改均等待另行授权。

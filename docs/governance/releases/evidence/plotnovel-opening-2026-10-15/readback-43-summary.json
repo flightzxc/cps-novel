@@ -1,0 +1,914 @@
+{
+  "status": "READBACK_43_PASS_NO_RECONCILIATION",
+  "completedAt": "2026-10-14T17:59:07.126Z",
+  "ledger": {
+    "getlistpc": 43,
+    "getcode": 0,
+    "retries": 0
+  },
+  "cohorts": {
+    "new_manual": {
+      "samples": 26,
+      "foundTargets": 26,
+      "codeNonblank": 0,
+      "lengthCounts": {
+        "0": 26
+      }
+    },
+    "new_confirmed": {
+      "samples": 7,
+      "foundTargets": 7,
+      "codeNonblank": 7,
+      "lengthCounts": {
+        "6": 7
+      }
+    },
+    "historical_manual": {
+      "samples": 10,
+      "foundTargets": 10,
+      "codeNonblank": 0,
+      "lengthCounts": {
+        "0": 10
+      }
+    }
+  },
+  "fields": [
+    {
+      "name": "agencyId",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "agencyName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "allEpis",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "audioType",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "audioTypeName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "core",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "coverUrl",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "createTime",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "description",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "diskPath",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasAddMoboTree",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasAssetInfo",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasComicSync",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasMultiLanguage",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasTikTokPromoLink",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "hasVipAssetInfo",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "homeLink",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "id",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "isAdditionalRecommend",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "isRelease",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "kocCode",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": true
+    },
+    {
+      "name": "language",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "languageName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "localSubType",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "localSubTypeName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "localType",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "localTypeName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "logo",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "needReport",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "onlineUrl",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "onlyTikTok",
+      "with_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "boolean",
+          "booleanValue": false,
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "payEpisFrom",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "projectType",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "promoCreateTime",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": true
+    },
+    {
+      "name": "promotionalText",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": true
+    },
+    {
+      "name": "publicUrl",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "recommendList",
+      "with_code": [
+        {
+          "present": true,
+          "type": "array",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "array",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "seriesCode",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "seriesId",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "seriesName",
+      "with_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "string",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "seriesTypeList",
+      "with_code": [
+        {
+          "present": true,
+          "type": "array",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "array",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "shareRuleType",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "splitRatio",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "starSubsidyRate",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "subsidyBeginDate",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "subsidyEndDate",
+      "with_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "null",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    },
+    {
+      "name": "ttoSplitRatio",
+      "with_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 7
+        }
+      ],
+      "without_code": [
+        {
+          "present": true,
+          "type": "number",
+          "count": 36
+        }
+      ],
+      "shapeDifference": false
+    }
+  ],
+  "systematicShapeDifferences": [
+    "kocCode",
+    "promoCreateTime",
+    "promotionalText"
+  ],
+  "businessSnapshotUnchanged": true,
+  "claimCapability": "registered_disabled",
+  "manualReviewCount": 635,
+  "stageC": "PAUSED",
+  "diagnosticRecommendation": "Recorded only; field names/types/parser branch, no values or body, no implementation",
+  "limits": "Current getlistpc rows only; no historic getcode payload; numeric/string values not compared; sample10 does not prove whole608."
+}

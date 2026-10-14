@@ -1,0 +1,9 @@
+{
+  "name": "20-readback-sample-plan",
+  "startedAt": 1792000510.652642,
+  "finishedAt": 1792000515.029521,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/20-readback-sample-plan.py",
+  "sshOrWrapperStderrSha256": null
+}

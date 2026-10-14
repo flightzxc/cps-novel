@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-14 · 共 1319 个 commit
+生成时间：2026-10-14 · 共 1321 个 commit
+- `293dcf8` 2026-10-14 运维：补齐 PlotNovel 只读排查 Notion 回读收据  — _codex · GPT-6_
+- `990a2ea` 2026-10-14 运维：回关 PlotNovel 领取能力并记录只读排查结论  — _codex · GPT-6_
 - `cddea61` 2026-10-14 运维：补齐领码门禁失败的 Notion 回读收据  — _codex · GPT-6_
 - `efbac3c` 2026-10-14 运维：记录 PlotNovel 领码批次人工复核门禁失败并停手  — _codex · GPT-6_
 - `a7da766` 2026-10-14 运维：补齐 PlotNovel 乙3停点 Notion 回读收据  — _codex · GPT-6_

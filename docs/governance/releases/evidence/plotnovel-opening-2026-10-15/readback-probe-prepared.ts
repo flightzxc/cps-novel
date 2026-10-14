@@ -1,0 +1,99 @@
+import { PrismaClient } from '@prisma/client';
+import { createPromoLinkClaimAdapter, PromoLinkClaimAdapterError } from './src/lib/adapters/promo-link-claim';
+import { moboreaderUpstreamRateGate, resolveMoboreaderUpstreamRateLimitConfig, resolveMoboreaderPerEndpointRateGateConfig } from './src/lib/adapters/moboreader-rate-limit';
+import { resolveClaimCredentialReadiness } from './worker/credentials/claim-readiness';
+const PLAN = [{"cohort":"new_manual","intentId":"d82f728f-c274-4bdc-b4c6-bd08ceeced00","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"99e3b0a8-8ee1-46bc-baf4-8dc826ee0330","intentCreatedAt":"2026-10-14T13:44:05.619+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"26dde21d-6011-4ee5-a216-92dd7590b68f","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"66cf2b50-29ef-48e0-b309-e9d775995b3e","intentCreatedAt":"2026-10-14T13:44:13.763+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"d0e857c3-70db-4c56-a1fe-0aac19e6af83","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"ecf264f0-ac8b-4bff-abcb-284a12587e9d","intentCreatedAt":"2026-10-14T13:44:21.924+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"83e9a2ac-7f03-47d7-aeea-d46d59a829c4","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"ff1b24a1-4b35-4b68-b001-6b669094e5de","intentCreatedAt":"2026-10-14T13:44:29.968+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"9e993a0e-ba90-4dea-899b-f389e853631c","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"9c00e3b7-a685-438c-ad82-25790d11ac82","intentCreatedAt":"2026-10-14T13:44:41.467+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"0939cc3f-f6b8-4e15-88ab-23b6e8e5a9ce","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"f7c7ec97-3b95-47a7-a6fb-800cd94dbe5c","intentCreatedAt":"2026-10-14T13:44:52.555+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"694e3e28-2b38-4a28-848b-72bb309baacd","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"a8be4fe1-8445-4dfd-993f-6098d58db10b","intentCreatedAt":"2026-10-14T13:45:00.775+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"2da28dbc-e262-42df-adbb-f65e99ff5eb9","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"685d41bf-9bf3-4cf0-bac2-7a99c0c6c553","intentCreatedAt":"2026-10-14T13:45:12.093+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"ae992734-b28c-412b-844b-9bd95761f487","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"7af46ef8-d6b4-411b-ae98-14a1ff4fd9b2","intentCreatedAt":"2026-10-14T13:45:23.184+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"d5a9899c-10b4-4e2e-94d0-dfe1f289423f","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"686c65e6-959e-4b6d-866e-3fab0092fdcc","intentCreatedAt":"2026-10-14T13:45:34.467+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"b8ac15a3-39dd-4b26-a5b0-43ce105a61de","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"d71dff9e-3bd5-4358-9334-d5714a84f5ba","intentCreatedAt":"2026-10-14T13:45:45.955+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"31782643-4be5-4b43-b069-d7b9d0128f48","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"caadd1d8-893e-4ef2-bdb5-158b17a94863","intentCreatedAt":"2026-10-14T13:45:54.165+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"29f80488-142c-4959-a785-c231ab91b026","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"89555b1c-d0fe-4483-bec6-8c39c734cd76","intentCreatedAt":"2026-10-14T13:46:02.248+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"76c0467a-ff1b-4ba2-9a47-7b8b4f4e2d7a","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"b6029614-91b8-47d4-8ebe-0925748b8daf","intentCreatedAt":"2026-10-14T13:46:10.581+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"17a04b15-8e84-4cef-bd3e-01f6701b06b7","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"89c31781-80c3-4175-a7d2-2bf4d3205c30","intentCreatedAt":"2026-10-14T13:46:18.713+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"4264c2c4-0e54-47f7-b841-331731cf26fe","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"8b46dfe5-ba07-4203-aa74-6094fe62801a","intentCreatedAt":"2026-10-14T13:46:26.906+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"45723a50-d996-495c-b443-0feb1eb66334","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"dc6dd84e-9b00-4566-91e1-94362d499ef4","intentCreatedAt":"2026-10-14T13:46:35.081+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"dd389f45-72bb-4361-bb80-b94d6d7fc594","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"931a723c-d5d2-41ef-ba57-07d9b45ae13b","intentCreatedAt":"2026-10-14T13:46:43.402+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"811f0ca3-080c-4b52-8f34-43d9178ad85e","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"f1f5243f-58dd-437c-a7a0-475a3c1bb934","intentCreatedAt":"2026-10-14T13:46:51.686+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"fbee40c6-4438-4b0a-8038-434595babcb1","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"ae3c2674-66e3-45a9-a2ad-da9eed44484c","intentCreatedAt":"2026-10-14T13:47:00.034+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"cba03eb2-7edc-49cf-bd62-9ff4991c2917","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"aeaae504-84e7-4005-a779-f8e8885dc943","intentCreatedAt":"2026-10-14T13:47:07.966+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"a9357080-492f-4141-9f3a-4a0d5649a0a1","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"bbf9e3ae-1049-44fe-a496-8f17b7490260","intentCreatedAt":"2026-10-14T13:47:16.098+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"c62770d1-edeb-4c5e-b386-e090faa99a14","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"5849103e-a4fb-43e7-8f33-8702c2e72096","intentCreatedAt":"2026-10-14T13:47:24.337+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"c0d99712-6613-4487-99ef-c00e34dcd3cf","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"7f61943c-8df1-4b63-b250-026898f2a7b3","intentCreatedAt":"2026-10-14T13:47:32.42+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"1b4be9dc-b043-457a-a7e9-3c6a7634309e","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"d512dac8-5d01-47d9-b00f-e1112697b0d9","intentCreatedAt":"2026-10-14T13:47:40.716+00:00","historicalRank":null},{"cohort":"new_manual","intentId":"e0e4fd78-0bff-44cb-9cde-a35d6c66839f","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"80f5a41d-a173-4a2a-836d-33a42db6898e","intentCreatedAt":"2026-10-14T13:47:52.118+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"9cabb0b4-f938-470d-97d2-78dae559fe1f","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"96a1eef2-faa0-4696-a887-33f7f0b16e26","intentCreatedAt":"2026-10-14T13:44:38.392+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"d376a71e-9ad4-4cfe-94cb-6aeb3ee6271b","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"83899101-0df2-4ad9-a520-ab1d1f30922a","intentCreatedAt":"2026-10-14T13:44:49.538+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"952bbc80-007c-4010-99de-be6fcf8b13ca","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"fe722be8-2697-4579-bf21-e8eaa4c731df","intentCreatedAt":"2026-10-14T13:45:09.03+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"81f79536-e687-4af3-93ae-afd25d5a0722","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"94869b52-a0dd-4e1a-b633-67354cc0862c","intentCreatedAt":"2026-10-14T13:45:20.167+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"b2f3fe83-17f7-4602-afd9-dd82e8b7486b","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"81fdcc9a-bb60-420a-b10b-55875f735dc3","intentCreatedAt":"2026-10-14T13:45:31.257+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"625ef91f-5914-470d-b43d-58870b035c0f","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"6967f465-ac97-4a9b-aac1-3a172542d6c5","intentCreatedAt":"2026-10-14T13:45:42.542+00:00","historicalRank":null},{"cohort":"new_confirmed","intentId":"63ce9a96-ec2e-4c34-9a23-c03b9c5d255a","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"efdfbc86-9201-4529-9524-9f5a18e0e76e","intentCreatedAt":"2026-10-14T13:47:48.882+00:00","historicalRank":null},{"cohort":"historical_manual","intentId":"7652e733-78d9-4ac9-ae1e-b39b6f9c261a","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"002bfb46-5eb2-435d-a244-84dd28915dce","intentCreatedAt":"2026-09-23T05:15:37.382+00:00","historicalRank":1},{"cohort":"historical_manual","intentId":"4ea0f51f-821a-43e8-9966-1c343fb6478a","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"0e0c9ebe-4759-42e3-a638-4e38f9db2458","intentCreatedAt":"2026-09-25T09:32:02.035+00:00","historicalRank":68},{"cohort":"historical_manual","intentId":"ba1e4acf-8df5-4603-b15d-2f1fb01e1560","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"1a1123fb-db92-4cdf-9ce3-10a7ac1dc382","intentCreatedAt":"2026-09-25T12:35:43.65+00:00","historicalRank":136},{"cohort":"historical_manual","intentId":"ffb640d2-42a1-44db-a113-0b4459e2ea08","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"26311fb8-34fb-4388-a8b3-cfb650d75d28","intentCreatedAt":"2026-10-05T17:08:40.174+00:00","historicalRank":203},{"cohort":"historical_manual","intentId":"91f1315b-1641-496f-b7ea-97330864ce7e","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"32fc81e5-ac34-4e61-a340-790d615c03c8","intentCreatedAt":"2026-10-05T20:21:30.412+00:00","historicalRank":271},{"cohort":"historical_manual","intentId":"c991c37d-854f-4296-be42-f1b604761b51","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"3e8e6d8b-06f3-4a09-98ef-6c58eb8a01e5","intentCreatedAt":"2026-10-05T23:16:54.92+00:00","historicalRank":338},{"cohort":"historical_manual","intentId":"c57a3dc9-2c7e-47e0-b95b-da2f28dd733d","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"4ab70289-c9f9-4c6d-b14d-034e1d255e10","intentCreatedAt":"2026-10-06T02:28:24.016+00:00","historicalRank":406},{"cohort":"historical_manual","intentId":"cb952b1c-9357-44c1-ba68-b96efe79b56d","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"5a360133-9eac-4b75-a35b-595fc5e656b2","intentCreatedAt":"2026-10-08T06:13:26.91+00:00","historicalRank":473},{"cohort":"historical_manual","intentId":"bec67f8b-5243-48f8-9689-982f638d1a70","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"1d7983df-d8f2-434e-8437-6da640fcf807","intentCreatedAt":"2026-10-13T02:14:00.262+00:00","historicalRank":541},{"cohort":"historical_manual","intentId":"7ea6d3fd-769c-4f86-91ce-20904da81be9","accountId":"53f03fd8-951d-433e-ac66-784e82496a84","sourceId":"a6110774-08ff-441f-9aa6-1614249e0d2c","intentCreatedAt":"2026-10-14T02:17:25.201+00:00","historicalRank":608}];
+const APP='00de5521-d075-4472-87eb-cc5d1732f4d0', ACCOUNT='53f03fd8-951d-433e-ac66-784e82496a84';
+const ledger={getlistpc:0,getcode:0,retries:0};
+const results:any[]=[];
+class Stop extends Error {}
+const stop=(reason:string):never=>{throw new Stop(reason)};
+const kind=(v:unknown)=>v===null?'null':Array.isArray(v)?'array':typeof v;
+const isRecord=(v:any):v is Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+const same=(a:unknown,b:string|number)=>(typeof a==='string'&&!!a.trim()||typeof a==='number'&&Number.isFinite(a))&&String(a)===String(b);
+let current:any, observedRow:any=null, observation:any=null, rootShape:any=null;
+async function main(){
+ const db=new PrismaClient(); let token:string|undefined;
+ try {
+  const loaded=await db.$transaction(async tx=>{
+   await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+   const role=await tx.$queryRawUnsafe<any[]>("SELECT current_user::text role,current_setting('transaction_read_only') ro");
+   if(role[0]?.role!=='worker_app'||role[0]?.ro!=='on')stop('readonly_worker_role_required');
+   const app=await tx.channelApp.findUnique({where:{id:APP},select:{status:true,projectType:true,channelId:true}});
+   const account=await tx.channelAccount.findUnique({where:{id:ACCOUNT},select:{status:true,deletedAt:true,channelId:true}});
+   const cap=await tx.channelCapability.findUnique({where:{channelAppId_capabilityKey:{channelAppId:APP,capabilityKey:'claimPromo'}},select:{status:true}});
+   if(!app||app.status!=='active'||app.projectType!==1||!account||account.status!=='active'||account.deletedAt||app.channelId!==account.channelId||cap?.status!=='registered_disabled')stop('scope_or_capability_mismatch');
+   const credential=await resolveClaimCredentialReadiness(tx,ACCOUNT,new Date());
+   if(credential.status!=='ready')stop('credential_not_ready');
+   const coords:any[]=[];
+   for(const sample of PLAN){
+    const s=await tx.novelSourceItem.findUnique({where:{id:sample.sourceId},select:{id:true,title:true,channelAppId:true,externalAgencyId:true,deletedAt:true,rawPayload:true}});
+    if(!s||s.channelAppId!==APP||s.externalAgencyId!=='1351'||s.deletedAt||!s.title.trim()||!isRecord(s.rawPayload))stop('source_scope_invalid');
+    const raw=s.rawPayload;
+    for(const key of ['agencyId','seriesId','language'])if(!((typeof raw[key]==='string'&&!!String(raw[key]).trim())||(typeof raw[key]==='number'&&Number.isFinite(raw[key]))))stop('source_coordinate_invalid');
+    coords.push({...sample,request:{agencyId:raw.agencyId,seriesId:raw.seriesId,language:raw.language,projectType:app.projectType,name:s.title.trim(),offerType:'read'}});
+   }
+   if(coords.length!==43||new Set(coords.map(c=>c.sourceId)).size!==43)stop('sample_cardinality_invalid');
+   const snapshot=await snapshotDb(tx);
+   return {coords,token:credential.secret,snapshot};
+  },{timeout:30000});
+  token=loaded.token;
+  const policy={legacy:resolveMoboreaderUpstreamRateLimitConfig(process.env),perEndpoint:resolveMoboreaderPerEndpointRateGateConfig(process.env)};
+  console.log('PROBE_START='+JSON.stringify({at:new Date().toISOString(),samples:43,policy,dbReadonly:true,claimCapability:'registered_disabled',snapshot:loaded.snapshot}));
+  const realFetch=globalThis.fetch;
+  const guarded:typeof fetch=async(input,init)=>{
+   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+   if(!current||ledger.getlistpc>=43||url.origin!=='https://kocserver-cn.cdreader.com'||url.pathname!=='/api/v1/res/getlistpc'||init?.method!=='POST'||init?.redirect!=='error')stop('transport_scope_violation');
+   const body=JSON.parse(String(init.body));
+   if(Object.keys(body).sort().join(',')!==['name','orderType','pageIndex','pageSize','projectType'].sort().join(',')||body.name!==current.request.name||body.orderType!==1||body.pageIndex!==1||body.pageSize!==100||body.projectType!==1)stop('request_coordinate_violation');
+   ledger.getlistpc++;
+   const response=await realFetch(input,init);
+   if(response.ok){
+    let data:any;
+    try { data=await response.clone().json(); } catch { rootShape={json:false};return response; }
+    rootShape={json:true,envelopeType:kind(data),dataType:isRecord(data)?kind(data.data):'absent'};
+    const rows=isRecord(data)&&isRecord(data.data)&&Array.isArray(data.data.list)?data.data.list:[];
+    const matches=rows.filter((r:any)=>isRecord(r)&&same(r.agencyId,current.request.agencyId)&&same(r.seriesId,current.request.seriesId)&&same(r.language,current.request.language)&&same(r.projectType,current.request.projectType));
+    if(rows.length<100&&matches.length===1)observedRow=matches[0];
+   }
+   return response;
+  };
+  const adapter=createPromoLinkClaimAdapter({fetchImpl:guarded,rateGate:moboreaderUpstreamRateGate,onUpstreamObservation:o=>{observation={endpoint:o.endpoint,httpStatus:o.httpStatus,outcome:o.outcome};}});
+  for(const coord of loaded.coords){
+   current=coord;observedRow=null;observation=null;rootShape=null;
+   let result:any;
+   try{result=await adapter.readPromoAfterClaim!(coord.request,token);}catch(e){
+    const reason=e instanceof PromoLinkClaimAdapterError?e.code:e instanceof Stop?e.message:'unexpected_probe_error';
+    console.log('PROBE_STOP='+JSON.stringify({at:new Date().toISOString(),cohort:coord.cohort,sourceId:coord.sourceId,reason,observation,rootShape,ledger,completed:results.length}));
+    return {status:'STOPPED',reason,ledger,results};
+   }
+   if(observation?.httpStatus===429||['timeout','transport_error'].includes(observation?.outcome))stop('upstream_stop_condition');
+   if(!['found','missing'].includes(result.status)){
+    const row={cohort:coord.cohort,sourceId:coord.sourceId,foundTarget:false,adapterStatus:result.status,reason:result.reason??null,fields:[],codeNonblank:false,codeLength:0};
+    results.push(row);console.log('PROBE_BOOK='+JSON.stringify(row));continue;
+   }
+   if(!observedRow)stop('adapter_capture_identity_mismatch');
+   const code=typeof observedRow.kocCode==='string'?observedRow.kocCode.trim():'';
+   if((result.status==='found')!==!!code)stop('adapter_capture_code_mismatch');
+   const names=new Set([...Object.keys(observedRow),...['kocCode','publicUrl','homeLink','onlyTikTok','hasTikTokPromoLink','isRelease','payEpisFrom']]);
+   const fields=[...names].sort().map(name=>{
+    if(!/^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(name))stop('nonstandard_field_name');
+    const present=Object.hasOwn(observedRow,name),v=observedRow[name];return {name,present,type:present?kind(v):'absent',...(typeof v==='boolean'?{booleanValue:v}:{})};
+   });
+   const row={cohort:coord.cohort,sourceId:coord.sourceId,foundTarget:true,codeNonblank:!!code,codeLength:code.length,fields};
+   results.push(row);console.log('PROBE_BOOK='+JSON.stringify(row));observedRow=null;
+  }
+  const after=await db.$transaction(async tx=>{await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');return snapshotDb(tx);},{timeout:30000});
+  if(JSON.stringify(after)!==JSON.stringify(loaded.snapshot))stop('business_snapshot_changed_during_probe');
+  return {status:'PASS',at:new Date().toISOString(),ledger,dbReadonly:true,businessSnapshotUnchanged:true,results};
+ }finally{token=undefined;current=undefined;observedRow=null;await db.$disconnect();}
+}
+async function snapshotDb(tx:any){
+ const rows=await tx.$queryRawUnsafe("SELECT (SELECT count(*) FROM side_effect_intent WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND status='manual_review_required')::int manual_count,(SELECT status FROM channel_capability WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND capability_key='claimPromo') claim_status");
+ const ids=PLAN.map((x:any)=>x.sourceId);
+ const promos=await tx.promoLink.findMany({where:{novelSourceItemId:{in:ids},channelAppId:APP,channelAccountId:ACCOUNT},select:{id:true,novelSourceItemId:true,status:true,upstreamCodePresent:true,updatedAt:true},orderBy:{id:'asc'}});
+ const intents=await tx.sideEffectIntent.findMany({where:{id:{in:PLAN.map((x:any)=>x.intentId)}},select:{id:true,status:true,confirmedAt:true,responseShape:true},orderBy:{id:'asc'}});
+ // Whole responseShape kept only for in-memory equality; output no raw shape values.
+ return {manualCount:rows[0].manual_count,claimStatus:rows[0].claim_status,promos,intents:intents.map((i:any)=>({id:i.id,status:i.status,confirmedAt:i.confirmedAt}))};
+}
+main().then(x=>console.log('PROBE_RESULT='+JSON.stringify(x)),e=>{console.log('PROBE_RESULT='+JSON.stringify({status:'STOPPED',reason:e instanceof Stop?e.message:'unexpected_probe_error',ledger,results}));process.exitCode=1;});

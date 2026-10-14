@@ -1,0 +1,9 @@
+{
+  "name": "21-readback-43",
+  "startedAt": 1792000677.9591181,
+  "finishedAt": 1792000747.9621062,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/21-readback-43.py",
+  "sshOrWrapperStderrSha256": null
+}
