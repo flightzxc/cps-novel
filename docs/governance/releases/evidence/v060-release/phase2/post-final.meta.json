@@ -1,0 +1,11 @@
+{
+  "name": "post-final",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/post-check-v060.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964374.453036,
+  "finishedAt": 1791964391.9999738
+}

@@ -1,0 +1,11 @@
+{
+  "name": "upload-status-4",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/upload-status.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964145.711725,
+  "finishedAt": 1791964151.6546109
+}

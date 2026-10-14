@@ -3,7 +3,39 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-11 · 共 1282 个 commit
+生成时间：2026-10-14 · 共 1311 个 commit
+- `26f4a3e` 2026-10-14 文档：记录海阅 v0.6.0 第一阶段门禁与不可变发布工件  — _codex · GPT-6_
+
+## v0.6.0
+
+- `493eb23` 2026-10-14 发布：准备海阅 v0.6.0 六文件版本身份  — _codex · GPT-6_
+- `ca6dbcc` 2026-10-14 合并：v0.6.0 第二轮复核修复——字典漂移检查覆盖未登记函数（DEFINER 白名单硬规则）、取码函数系统函数限定 schema、手册回填核对口径与触发器一致  — _claude-code · claude-opus-5-5_
+- `5cc44bf` 2026-10-14 fix: 取码函数里的 jsonb 函数写全 schema；手册“回填一致”核对 SQL 的空白口径与触发器一致（复核 NIT-1、NIT-2）  — _claude-code · claude-sonnet-5-5_
+- `ba60c17` 2026-10-14 fix: 字典漂移检查看得见没登记的函数，尤其是 SECURITY DEFINER 函数（复核 MAJOR-1）  — _claude-code · claude-sonnet-5-5_
+- `73392a7` 2026-10-14 合并：v0.6.0 跟进——中间页去掉免责小字；口令码读取在数据库层收紧（web_app 不再能读 upstream_code，经 SECURITY DEFINER 函数取码，新增派生布尔列与触发器）  — _claude-code · claude-opus-5-5_
+- `684030a` 2026-10-14 docs: 数据库层收紧的 ADR / 运维手册 / 治理文档，并把手册步骤 0 的读回 SQL 做成真实库用例  — _claude-code · claude-sonnet-5-5_
+- `c1b0cad` 2026-10-14 test: 规模触发器用例造完数据后显式 ANALYZE，去掉对后台自动分析时机的依赖  — _claude-code · claude-sonnet-5-5_
+- `08db20e` 2026-10-14 feat: 数据库层收紧——web_app 不再能读 promo_link.upstream_code，口令码只经 SECURITY DEFINER 函数取（Owner 10-14）  — _claude-code · claude-sonnet-5-5_
+- `4e4bf93` 2026-10-14 feat: 口令码中间页去掉底部免责小字（运营决定）  — _claude-code · claude-sonnet-5-5_
+- `7beef99` 2026-10-14 合并：v0.6.0 接入畅读 PlotNovel 剧场（口令码模式）——剧场登记、目录按机构分流、存量改挂脚本、就绪规则按剧场模式二选一、同名去重、/go 口令码中间页与入口文案  — _claude-code · claude-opus-5-5_
+- `1c975ff` 2026-10-14 docs: 手册步骤 2 改为"含 1351 书目的批次必须中止"，ADR 同步闸门口径、去重规则与标签映射漂移限制（复核 MINOR-1/2/3/4、NIT-6）  — _claude-code · claude-sonnet-5-5_
+- `c442409` 2026-10-14 docs: 更正 /go 口令码分支与中间页的注释，使其与代码行为一致（复核 NIT-5、NIT-7）  — _claude-code · claude-sonnet-5-5_
+- `ae68a37` 2026-10-14 fix: 就绪 SQL 与 JS 在空语种边界上对齐（复核 NIT-8）  — _claude-code · claude-sonnet-5-5_
+- `7b7f05b` 2026-10-14 fix: 同名去重要求对侧"可用"——MoboReader 那本有就绪推广才排除 PlotNovel 这本（复核 MINOR-3）  — _claude-code · claude-sonnet-5-5_
+- `2ea888d` 2026-10-14 fix: 改挂闸门补全以小说编号、文章编号为目标的在途任务条目（复核 MINOR-1）  — _claude-code · claude-sonnet-5-5_
+- `7b998d1` 2026-10-14 文档：Turnstile 运维记录与证据中的站点密钥打码，修复密钥形态扫描用例  — _claude-code · claude-opus-5-5_
+- `1e9f84b` 2026-10-14 fix: 全量回归发现的三处遗漏——写入点登记表、目录分流的日志调用、授权注释里的字面量  — _claude-code · claude-sonnet-5-5_
+- `c004615` 2026-10-14 docs: v0.6.0 PlotNovel 口令码剧场——ADR、剧场开通运维手册、数据字典与权限矩阵同步  — _claude-code · claude-sonnet-5-5_
+- `494a205` 2026-10-14 fix: 改挂脚本增加"已发布文章"拦截项，避免改挂悄悄改变已公开页面的可见性  — _claude-code · claude-sonnet-5-5_
+- `8ecdb57` 2026-10-14 refactor: 删除只有测试在用的口令码就绪孪生函数，并更正授权注释里的中间页路径  — _claude-code · claude-sonnet-5-5_
+- `ceb5a38` 2026-10-14 feat: 前台口令码模式——/go 中间页、书页 / 章节页 / 底部浮条入口、文章号召文案  — _claude-code · claude-sonnet-5-5_
+- `e09325e` 2026-10-14 fix: 补齐全量 UI 回归发现的两处遗留（同名去重变量命名、首页轮播读剧场表的内存库替身）  — _claude-code · claude-sonnet-5-5_
+- `8eede0e` 2026-10-14 feat: 生成候选排除与 MoboReader 同语种同名的 PlotNovel 书  — _claude-code · claude-sonnet-5-5_
+- `9e2214f` 2026-10-14 feat: 推广就绪判断按剧场模式二选一（link 逐字不变；口令码模式看码 + 语种白名单）  — _claude-code · claude-sonnet-5-5_
+- `467292f` 2026-10-14 feat: 存量改挂脚本，把机构 1351 的书目与推广链接从 MoboReader 挪到 PlotNovel 剧场  — _claude-code · claude-sonnet-5-5_
+- `1deb9bc` 2026-10-14 feat: 目录扫描按机构分流，口令码模式的剧场允许只写口令码  — _claude-code · claude-sonnet-5-5_
+- `e29cf70` 2026-10-14 feat: 登记畅读 PlotNovel 剧场（口令码模式）并固化剧场推广模式配置契约  — _claude-code · claude-sonnet-5-5_
+- `3ee7a9f` 2026-10-11 docs: 记录海阅后台 Turnstile 第二次开闸与登录验收  — _codex · GPT-6_
 - `983b4ae` 2026-10-11 docs: 记录海阅后台 Turnstile 开闸验收中止与回退  — _codex · GPT-6_
 - `7b255c6` 2026-10-11 docs: 记录海阅 IndexNow 存量回填第二次放行与全量验收  — _codex · GPT-6_
 - `ad58a78` 2026-10-11 docs: 记录海阅 IndexNow 存量回填首次500篇放行与验收  — _codex · GPT-6_

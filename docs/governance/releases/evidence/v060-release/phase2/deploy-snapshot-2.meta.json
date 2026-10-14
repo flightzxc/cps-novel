@@ -1,0 +1,11 @@
+{
+  "name": "deploy-snapshot-2",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/deploy-snapshot.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964287.902194,
+  "finishedAt": 1791964292.163754
+}

@@ -1,0 +1,7 @@
+BEGIN
+{"new_column_exists" : false, "new_function_exists" : false}
+COMMIT
+
+
+NEW_SCHEMA_ABSENT=PASS
+NGINX_BEFORE_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}

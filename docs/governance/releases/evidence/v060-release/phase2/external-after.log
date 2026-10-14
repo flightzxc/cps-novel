@@ -1,0 +1,5 @@
+GO_AFTER={"status": 302, "locationSha256": "cd3e05e05efaaf1b87106c931bc37d8852f5881773ac88cad333b7723acbb2e5", "url": "https://pulsenovels.com/go/hpsuxf95w4", "proxy": "http://127.0.0.1:7899", "followRedirects": false}
+EXTERNAL={"kind": "english-book", "url": "https://pulsenovels.com/novel/contract-baby-and-billionaire-pg15q11wz", "status": 200, "bodySha256": "ac0e2713af861cd070a7bce76cd902cf9cabb81ed0a2b9a1ebf60bad9632e0ab", "plotnovelOccurrences": 0, "continueReading": true}
+EXTERNAL={"kind": "category", "url": "https://pulsenovels.com/category/adventure", "status": 200, "bodySha256": "95795120cd54bf4cf187331668cb7704f290038cb859d74e8559b1068aa47a16", "plotnovelOccurrences": 0, "continueReading": null}
+EXTERNAL={"kind": "sitemap-index", "url": "https://pulsenovels.com/sitemap.xml", "status": 200, "bodySha256": "e82cd427a5f139c003b58e797f53075b0ea01ba6cc6e26c2b2326437d01c0003", "plotnovelOccurrences": 0, "continueReading": null}
+EXTERNAL_ACCEPTANCE=PASS requests=5

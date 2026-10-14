@@ -1,0 +1,10 @@
+{
+  "name": "go-before",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/external-before.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791963210.887903,
+  "finishedAt": 1791963212.177572
+}

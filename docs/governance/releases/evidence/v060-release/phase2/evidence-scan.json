@@ -1,0 +1,8 @@
+{
+  "files": 78,
+  "actualTemporarySecretsScanned": 12,
+  "secretLeaks": 0,
+  "turnstileKeyMatches": 0,
+  "upstreamCodeValues": "not selected or emitted; counts only, negative stdout withheld",
+  "result": "PASS"
+}

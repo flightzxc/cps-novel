@@ -1,0 +1,11 @@
+{
+  "name": "expected-denial",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/permission-negative.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964366.136359,
+  "finishedAt": 1791964370.0704682
+}

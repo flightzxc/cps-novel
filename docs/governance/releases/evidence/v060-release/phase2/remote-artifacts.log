@@ -1,0 +1,39 @@
+cps-novel-0.6.0-493eb23.tar.zst: OK
+493eb23b034b0410780228535b3e293e4ee91f9a.json: OK
+cps-novel-v0.6.0.bundle: OK
+cps-novel-0.6.0-493eb23.tar.zst.sha256: OK
+Cloning into '/opt/cps-novel/releases/493eb23b034b0410780228535b3e293e4ee91f9a'...
+done.
+The bundle contains this ref:
+493eb23b034b0410780228535b3e293e4ee91f9a refs/heads/release/v0.6.0-2026-10-14
+The bundle requires this ref:
+db623505539c3ca55f55b1270aab829b8db102d7 
+The bundle uses this hash algorithm: sha1
+/opt/cps-novel/shared/artifacts/staging/v060/cps-novel-v0.6.0.bundle is okay
+From /opt/cps-novel/shared/artifacts/staging/v060/cps-novel-v0.6.0.bundle
+ * branch                release/v0.6.0-2026-10-14 -> FETCH_HEAD
+Previous HEAD position was db6235055 发布：准备海阅 v0.5.15 六文件版本身份
+HEAD is now at 493eb23b0 发布：准备海阅 v0.6.0 六文件版本身份
+REMOTE_CHECKOUT=PASS Final=493eb23b034b0410780228535b3e293e4ee91f9a tree=c44f44702924fcc32fac0dc62ccb39fa0128d502
+IDENTITY=PASS
+  target            sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8 (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8
+  config            sha256:b670b94dddec1e699848b1eee87b90370502eb4b565e13b9fba8add9d58a419e
+  platform          linux/amd64
+  revision          493eb23b034b0410780228535b3e293e4ee91f9a
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=493eb23b034b0410780228535b3e293e4ee91f9a
+  archive_sha256=9382e6085cd9d4a30eb8b346750d2c1638266f0d40bac705923112c8de715ace
+  image_tag=cps-novel:0.6.0-493eb23
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.6.0-493eb23
+  target             =sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8
+  platform_manifest  =sha256:f4ade4be05f705cfa9b4490305a4c3215a3fa00ec85dfd441848c1ce976c27a8
+  config             =sha256:b670b94dddec1e699848b1eee87b90370502eb4b565e13b9fba8add9d58a419e
+  platform           =linux/amd64
+  revision           =493eb23b034b0410780228535b3e293e4ee91f9a
+REMOTE_ARTIFACTS=PASS
+ARTIFACT_VERIFIED_DIR=/opt/cps-novel/shared/artifacts/verified/v060

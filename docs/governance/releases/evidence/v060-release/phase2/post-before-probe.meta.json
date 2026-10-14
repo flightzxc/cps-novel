@@ -1,0 +1,11 @@
+{
+  "name": "post-before-probe",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/post-check-v060.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964343.0043101,
+  "finishedAt": 1791964366.103837
+}

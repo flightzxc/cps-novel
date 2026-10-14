@@ -1,0 +1,11 @@
+{
+  "name": "step0",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/step0.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964337.6032152,
+  "finishedAt": 1791964342.97044
+}

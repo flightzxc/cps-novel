@@ -1,0 +1,10 @@
+{
+  "name": "upload",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/upload.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791963175.297036,
+  "finishedAt": 1791964145.5548291
+}

@@ -1,0 +1,2 @@
+EXPECTED_PERMISSION_PROBE={"startedAt": "2026-10-14T07:52:50.042904+00:00", "finishedAt": "2026-10-14T07:52:50.147603+00:00", "backendPid": 2433456, "directRead": "EXPECTED_PERMISSION_DENIED", "fakeCodeResult": "NULL", "savepointRecovery": "PASS", "expectedPostgresErrorCount": 1, "expectedStderr": "ERROR:  permission denied for table promo_link"}
+WEB_APP_RESTRICTED_READ=PASS

@@ -1,0 +1,11 @@
+{
+  "name": "predeploy-readiness",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/predeploy-readiness.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964184.6148858,
+  "finishedAt": 1791964201.576898
+}

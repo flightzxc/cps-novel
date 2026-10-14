@@ -1,0 +1,11 @@
+{
+  "name": "initial-schema-correction",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/remote-script-client.py",
+    ".tmp/v060-release/phase2/initial-schema-correction.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791963202.9784162,
+  "finishedAt": 1791963210.865466
+}

@@ -1,0 +1,10 @@
+{
+  "name": "external-after",
+  "command": [
+    "python3",
+    ".tmp/v060-release/phase2/external-after.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1791964370.1002629,
+  "finishedAt": 1791964374.4190469
+}

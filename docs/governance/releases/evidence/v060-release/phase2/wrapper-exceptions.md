@@ -1,0 +1,2 @@
+部署包装器记录：初次只读核查误用 upstream_code_normalized 作为待新增列名；旧迁移26条及checksum核验有效，随后 initial-schema-correction 以正确 upstream_code_present 与取码函数均不存在补核PASS。部署前readiness使用正确列名再次核查。未修改原门禁或业务代码。
+权限探针使用SAVEPOINT恢复预期拒绝，同会话虚构码返回NULL；应用异常计数与postgres此单条预期权限错误分开，并保留原始总计数，不修改日志配置。
