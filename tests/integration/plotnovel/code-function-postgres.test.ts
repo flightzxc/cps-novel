@@ -173,7 +173,11 @@ describe.skipIf(!enabled).sequential("v0.6.0 数据库层收紧：code_mode_upst
     it("不存在的站内码 / NULL / 空串 / 通配符 / 大小写与首尾空格不同的站内码 → NULL（只做精确匹配，不可枚举）", async () => {
       const w = await world();
       const real = w.plotReady.promo.publicRedirectCode;
-      for (const probe of ["nope", "", null, "%", "_", `${real}%`, `%${real.slice(1)}`, real.toUpperCase() === real ? real.toLowerCase() : real.toUpperCase(), ` ${real}`, `${real} `, `${real}\n`]) {
+      // 大小写翻转的变体：站内码恰好全是数字（随机码偶尔会）时翻转后与原码相同，那就不是"不同的站内码"，不能当反例
+      const swappedCase = [...real].map((char) => (char === char.toUpperCase() ? char.toLowerCase() : char.toUpperCase())).join("");
+      const probes: Array<string | null> = ["nope", "", null, "%", "_", `${real}%`, `%${real.slice(1)}`, ` ${real}`, `${real} `, `${real}\n`];
+      if (swappedCase !== real) probes.push(swappedCase);
+      for (const probe of probes) {
         expect(await codeFor(web, probe), JSON.stringify(probe)).toBeNull();
       }
       expect(await codeFor(web, real)).toBe("960031");
@@ -346,19 +350,29 @@ describe.skipIf(!enabled).sequential("v0.6.0 数据库层收紧：code_mode_upst
 
       expect(await owner.$queryRawUnsafe(statements[3]!)).toEqual([{ tgenabled: "O" }]);
 
-      // 回填一致：先造一点有口令码 / 空白口令码 / 没口令码的行，读回的两个计数必须是 0
+      // 回填一致：先造一点有口令码 / 空白口令码（含只有制表符、NBSP 这类 btrim 默认不去的字符）/ 没口令码的行，读回的三个计数必须是 0
       const { novel, source } = await seedBook({ appId: ids.plotApp, externalBookId: "readback", title: "Readback", agencyId: PLOT_AGENCY });
-      for (const [index, code] of ["960031", "  ", null, " x "].entries()) {
+      const codes: Array<string | null> = ["960031", "  ", null, " x ", "\t", "\u00a0", "\u3000\ufeff\u2028", "\u180e"];
+      for (const [index, code] of codes.entries()) {
         await seedPromo({ appId: ids.plotApp, novelId: novel!.id, sourceId: source.id, upstreamCode: code, offerType: `rb-${index}` });
       }
-      const [consistency] = await owner.$queryRawUnsafe<Array<{ nonblank_but_flag_false: bigint; null_but_flag_true: bigint }>>(statements[4]!);
+      const [consistency] = await owner.$queryRawUnsafe<Array<{ nonblank_but_flag_false: bigint; blank_but_flag_true: bigint; null_but_flag_true: bigint }>>(statements[4]!);
       expect(Number(consistency!.nonblank_but_flag_false)).toBe(0);
+      expect(Number(consistency!.blank_but_flag_true)).toBe(0);
       expect(Number(consistency!.null_but_flag_true)).toBe(0);
+      // 证明手册里用 25 字符集不是多余：如果写成默认 btrim(upstream_code)，只含制表符 / NBSP / U+3000 U+FEFF U+2028 的口令码会被误报成"非空但标记为 false"
+      const [naive] = await owner.$queryRaw<Array<{ n: bigint }>>`
+        SELECT count(*)::bigint AS n FROM promo_link WHERE upstream_code IS NOT NULL AND btrim(upstream_code) <> '' AND NOT upstream_code_present`;
+      expect(Number(naive!.n)).toBe(3); // "\t"、NBSP、"\u3000\ufeff\u2028"
+      // 反过来：U+180E 不在 JS trim 集合里 → 非空 → 标记为 true（触发器与 JS 一致）
+      const [mongolian] = await owner.$queryRaw<Array<{ upstream_code_present: boolean }>>`
+        SELECT upstream_code_present FROM promo_link WHERE upstream_code = ${"\u180e"}`;
+      expect(mongolian!.upstream_code_present).toBe(true);
 
-      // 基线 SQL 能跑：刚才造的那本机构 1351 的书挂在 plotnovel 名下，1 本书目、4 条推广链接
+      // 基线 SQL 能跑：刚才造的那本机构 1351 的书挂在 plotnovel 名下，1 本书目、codes.length 条推广链接
       const baseline = await owner.$queryRawUnsafe<Array<{ theater: string; items: bigint; promo_links: bigint }>>(statements[5]!);
       expect(baseline.map((row) => ({ theater: row.theater, items: Number(row.items), promo_links: Number(row.promo_links) }))).toEqual([
-        { theater: "plotnovel", items: 1, promo_links: 4 },
+        { theater: "plotnovel", items: 1, promo_links: codes.length },
       ]);
     });
   });

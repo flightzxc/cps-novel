@@ -63,8 +63,10 @@ FROM pg_proc p WHERE p.oid = 'public.code_mode_upstream_code(text)'::regprocedur
 -- 3) 触发器在位且启用（期望：O = 始终启用）
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'promo_link_upstream_code_present_sync' AND tgrelid = 'public.promo_link'::regclass;
 
--- 4) 回填一致（期望两个都是 0；只数数，不打印口令码）
-SELECT count(*) FILTER (WHERE upstream_code IS NOT NULL AND btrim(upstream_code) <> '' AND NOT upstream_code_present) AS nonblank_but_flag_false,
+-- 4) 回填一致（期望三个都是 0；只数数，不打印口令码）。空白口径必须和触发器一模一样：下面这串 U&'…' 就是迁移里触发器函数
+--    btrim 用的 25 个字符（与 JS String.prototype.trim 同一套），不能写成 btrim(upstream_code)（那只去空格，会把只含制表符 / NBSP 的口令码误报）
+SELECT count(*) FILTER (WHERE upstream_code IS NOT NULL AND coalesce(btrim(upstream_code, U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'), '') <> '' AND NOT upstream_code_present) AS nonblank_but_flag_false,
+       count(*) FILTER (WHERE upstream_code IS NOT NULL AND coalesce(btrim(upstream_code, U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'), '') = '' AND upstream_code_present) AS blank_but_flag_true,
        count(*) FILTER (WHERE upstream_code IS NULL AND upstream_code_present) AS null_but_flag_true
 FROM promo_link;
 
@@ -80,7 +82,7 @@ GROUP BY sa.code;
 
 再做两个公开页冒烟（`curl -sI`，无副作用）：抽一篇 MoboReader 已发布书页应为 200；抽一个 MoboReader 的 `/go/<站内码>` 应 302 到它原来的网址——证明 link 模式未被碰到。
 
-**必过**：迁移数 27；授权与函数读回与期望一致；触发器启用；回填一致；基线数量已记下；冒烟正常。授权不对 → 停，先让发版负责人重放 `grants.sql`，不要继续。
+**必过**：迁移数 27；授权与函数读回与期望一致；触发器启用；回填一致（第 4 条三个计数全为 0）；基线数量已记下；冒烟正常。授权不对 → 停，先让发版负责人重放 `grants.sql`，不要继续。
 
 再用 **`web_app` 身份**确认"读不到口令码"确实被拒（会得到 `permission denied`，这正是期望；只是确认，不会返回任何数据）：`SELECT upstream_code FROM promo_link LIMIT 1;`——应报 `ERROR: permission denied for table promo_link`。
 

@@ -123,6 +123,38 @@ describe("promoReadySql（带剧场别名）的形状（v0.6.0）", () => {
   });
 });
 
+describe("迁移里 SECURITY DEFINER 取码函数的 search_path 纪律（v0.6.0）", () => {
+  const migration = readFileSync(
+    path.resolve(import.meta.dirname, "../../../prisma/migrations/20261014120000_code_mode_upstream_code_guard/migration.sql"),
+    "utf8",
+  );
+  const body = migration.slice(migration.indexOf("CREATE FUNCTION public.code_mode_upstream_code"), migration.indexOf("REVOKE ALL ON FUNCTION public.code_mode_upstream_code"));
+  const code = body.replace(/--[^\n]*/g, "");
+
+  it("函数自带固定 search_path，且是 SECURITY DEFINER", () => {
+    expect(code).toContain("SECURITY DEFINER");
+    expect(code).toContain("SET search_path = pg_catalog, public");
+  });
+
+  it("表都写 public.<表>，用到的函数都写 pg_catalog.<函数>（没有裸的 jsonb_typeof / jsonb_exists / btrim）", () => {
+    for (const table of ["promo_link", "channel_app", "novel"]) {
+      expect(code, table).toMatch(new RegExp(`(FROM|JOIN) public\\.${table}\\b`));
+      expect(code, table).not.toMatch(new RegExp(`(FROM|JOIN) ${table}\\b`));
+    }
+    for (const fn of ["jsonb_typeof", "jsonb_exists", "btrim"]) {
+      expect(code, fn).not.toMatch(new RegExp(`(?<!pg_catalog\\.)\\b${fn}\\(`));
+    }
+    expect(code).toContain("pg_catalog.jsonb_typeof(");
+    expect(code).toContain("pg_catalog.jsonb_exists(");
+  });
+
+  it("触发器函数同样：btrim 写 pg_catalog.btrim", () => {
+    const trigger = migration.slice(migration.indexOf("CREATE FUNCTION public.promo_link_sync_upstream_code_present"), migration.indexOf("CREATE TRIGGER"));
+    expect(trigger.replace(/--[^\n]*/g, "")).not.toMatch(/(?<!pg_catalog\.)\bbtrim\(/);
+    expect(trigger).toContain("pg_catalog.btrim(");
+  });
+});
+
 describe("迁移里的 upstream_code_present 触发器字符集 === JS_TRIM_WHITESPACE_CHARACTERS（v0.6.0 数据库层收紧）", () => {
   const migration = readFileSync(
     path.resolve(import.meta.dirname, "../../../prisma/migrations/20261014120000_code_mode_upstream_code_guard/migration.sql"),
@@ -134,5 +166,15 @@ describe("迁移里的 upstream_code_present 触发器字符集 === JS_TRIM_WHIT
     expect(literals).toHaveLength(1);
     const codePoints = [...literals[0]!.matchAll(/\\([0-9A-Fa-f]{4})/g)].map((match) => parseInt(match[1]!, 16));
     expect(String.fromCodePoint(...codePoints)).toBe(JS_TRIM_WHITESPACE_CHARACTERS);
+  });
+
+  it("运维手册步骤 0 里‘回填一致’核对 SQL 用的 U&'…' 字面量与迁移里的逐字相同（不是默认的只去空格 btrim）", () => {
+    const runbook = readFileSync(path.resolve(import.meta.dirname, "../../../docs/operations/PLOTNOVEL_THEATER_OPENING_2026-10-14.md"), "utf8");
+    const migrationLiteral = migration.match(/U&'((?:\\[0-9A-Fa-f]{4})+)'/)![0];
+    const runbookLiterals = [...runbook.matchAll(/U&'((?:\\[0-9A-Fa-f]{4})+)'/g)].map((match) => match[0]);
+    expect(runbookLiterals.length).toBeGreaterThanOrEqual(2); // 非空判断与空白判断各一处
+    for (const literal of runbookLiterals) expect(literal).toBe(migrationLiteral);
+    // 解释性注释里提到 btrim(upstream_code) 没关系，但作为比较表达式（后面跟 <> 或 =）不能出现
+    expect(runbook).not.toMatch(/btrim\(upstream_code\)\s*(<>|=)/);
   });
 });

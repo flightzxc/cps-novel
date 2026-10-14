@@ -55,6 +55,12 @@ UPDATE public.promo_link SET upstream_code = upstream_code WHERE upstream_code I
 --   未删除 ∧ status = 'fetched' ∧ 剧场 config.promoMode = 'code' ∧ 口令码去空白后非空（upstream_code_present）
 --   ∧ 书的语种非空且是剧场 config.codeModeLocales 数组里的一项（元素按原样比较）。
 -- 其它任何情况（link 模式、查无此码、未就绪）都返回 NULL。
+--
+-- 防 search_path 劫持（SECURITY DEFINER 函数的标准纪律）：函数自带 SET search_path = pg_catalog, public，表一律写
+-- public.<表>，函数一律写 pg_catalog.<函数>（与上面触发器函数里的 pg_catalog.btrim 同一纪律）。`->` / `->>` / `=` 这几个运算符
+-- 不加 OPERATOR(pg_catalog.…) 前缀：函数的 search_path 把 pg_catalog 固定排在第一位，它里面正好有 (jsonb, text) 的精确匹配，
+-- 运算符解析里同等精确匹配取 search_path 靠前者，所以 public 里即使有人放了同名运算符也排在后面；
+-- 再者运行角色对 public 没有 CREATE 权限。写成 OPERATOR(pg_catalog.->>) 只会让这段规则更难和 isPromoReady 对照着读。
 CREATE FUNCTION public.code_mode_upstream_code(p_public_redirect_code text)
 RETURNS text
 LANGUAGE sql
@@ -72,8 +78,8 @@ AS $$
     AND ca.config->>'promoMode' = 'code'
     AND p.upstream_code_present
     AND coalesce(n.locale, '') <> ''
-    AND coalesce(jsonb_typeof(ca.config->'codeModeLocales'), '') = 'array'
-    AND jsonb_exists(ca.config->'codeModeLocales', n.locale)
+    AND coalesce(pg_catalog.jsonb_typeof(ca.config->'codeModeLocales'), '') = 'array'
+    AND pg_catalog.jsonb_exists(ca.config->'codeModeLocales', n.locale::text)
 $$;
 
 REVOKE ALL ON FUNCTION public.code_mode_upstream_code(text) FROM PUBLIC;
