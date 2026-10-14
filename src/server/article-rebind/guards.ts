@@ -71,6 +71,7 @@ export type PromoLinkCandidate = {
   appUrl: string | null;
   fetchedAt: Date | string | null;
   /** v0.6.0：口令码模式的就绪判定要看这三项（`PROMO_READINESS_SELECT`）；缺省按 link 模式判定。 */
+  upstreamCodePresent?: boolean;
   upstreamCode?: string | null;
   channelApp?: { config: unknown } | null;
   novel?: { locale: string } | null;

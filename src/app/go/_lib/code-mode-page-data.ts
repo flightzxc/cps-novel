@@ -8,8 +8,14 @@
  *
  * 渠道真实口令码从这里流向页面——它是读者此刻要用的公开推广口令，只在这一个页面出现；
  * 其它任何视图模型 / 日志 / 审计都不带它。
+ *
+ * 🔴 口令码**只能**经数据库函数 `public.code_mode_upstream_code(站内码)` 取（SECURITY DEFINER，EXECUTE 只授给 web_app）：
+ * web_app 在数据库层读不到 `promo_link.upstream_code`（列授权已撤），其它任何 web 路径都拿不到口令码。
+ * 函数自己再按"口令码模式剧场 + 就绪"的规则校验一遍（未删除 ∧ fetched ∧ promoMode=code ∧ 口令码非空 ∧ 语种在白名单），
+ * 不满足就返回 NULL——这里也就返回 null（页面 404）。上面的 `isPromoReady` 与函数同一套规则，两边必须一致；
+ * 真实库用例（tests/integration/plotnovel/code-function-postgres.test.ts）逐项钉住。
  */
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { buildArticlePath } from "@/lib/slug/article-path";
 import { asSiteLocale } from "@/lib/site/locale-label";
@@ -30,7 +36,7 @@ export type CodeModePageData = Readonly<{
   backHref?: string;
 }>;
 
-type PageDb = Pick<PrismaClient, "promoLink">;
+type PageDb = Pick<PrismaClient, "promoLink" | "$queryRaw">;
 
 export async function loadCodeModePageData(db: PageDb, publicRedirectCode: string): Promise<CodeModePageData | null> {
   const promoLink = await db.promoLink.findUnique({
@@ -52,7 +58,11 @@ export async function loadCodeModePageData(db: PageDb, publicRedirectCode: strin
   if (!isCodeModeTheater(promoLink.channelApp?.config)) return null;
   if (!isPromoReady(promoLink)) return null;
 
-  const code = promoLink.upstreamCode?.trim();
+  // 口令码：只经数据库函数取（见文件头）。函数返回 NULL = 数据库层认为它不该放行 → 与未就绪同样处理。
+  const rows = await db.$queryRaw<Array<{ code: string | null }>>(
+    Prisma.sql`SELECT public.code_mode_upstream_code(${publicRedirectCode}) AS code`,
+  );
+  const code = rows[0]?.code?.trim();
   if (!code) return null;
   const theater = parseTheaterPromoConfig(promoLink.channelApp?.config);
 

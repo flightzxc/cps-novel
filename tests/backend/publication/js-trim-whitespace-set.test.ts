@@ -9,6 +9,9 @@
  * `btrim` 对每个字符的实际行为）在 `tests/integration/site/promo-ready-sql-equivalence-postgres.test.ts`。
  * 将来 Node / V8 升级改变了空白字符集，这里会立刻变红。
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
@@ -91,17 +94,19 @@ describe("promoReadySql 的形状", () => {
 describe("promoReadySql（带剧场别名）的形状（v0.6.0）", () => {
   const theater = { channelAppAlias: "pca", novelAlias: "n" } as const;
 
-  it("口令码模式 / link 模式二选一；字符集作为绑定参数传入三份（口令码、web、app），文本里没有原始字符", () => {
+  it("口令码模式 / link 模式二选一；字符集作为绑定参数传入两份（web、app），口令码读派生布尔列、文本里没有原始字符", () => {
     const fragment = promoReadySql("p", theater);
-    expect(fragment.values).toEqual([JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
+    expect(fragment.values).toEqual([JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
     const exotic = [...JS_TRIM_WHITESPACE_CHARACTERS].filter((char) => !" \n\t".includes(char));
     expect(exotic.filter((char) => fragment.sql.includes(char))).toEqual([]);
     expect(fragment.text.replace(/\s+/g, " ")).toBe(
       "p.status = 'fetched' AND (CASE WHEN pca.config->>'promoMode' = 'code' THEN "
-      + "(coalesce(btrim(p.upstream_code, $1), '') <> '' AND coalesce(n.locale, '') <> '' AND coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array' "
+      + "(p.upstream_code_present AND coalesce(n.locale, '') <> '' AND coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array' "
       + "AND jsonb_exists(pca.config->'codeModeLocales', n.locale)) "
-      + "ELSE (coalesce(btrim(p.web_url, $2), '') <> '' OR coalesce(btrim(p.app_url, $3), '') <> '') END)",
+      + "ELSE (coalesce(btrim(p.web_url, $1), '') <> '' OR coalesce(btrim(p.app_url, $2), '') <> '') END)",
     );
+    // web_app 读不到 upstream_code 本身：就绪 SQL 里不能再出现它（只能出现派生列 upstream_code_present）
+    expect(fragment.text).not.toMatch(/\bupstream_code\b(?!_present)/);
   });
 
   it("不带剧场别名时是 v0.5.15 的老文本：只认 link 规则（没带剧场信息的调用点看不到口令码模式的书）", () => {
@@ -115,5 +120,19 @@ describe("promoReadySql（带剧场别名）的形状（v0.6.0）", () => {
     expect(() => promoReadySql("p", { channelAppAlias: "pca; DROP", novelAlias: "n" })).toThrow();
     expect(() => promoReadySql("p", { channelAppAlias: "pca", novelAlias: "N" })).toThrow();
     expect(() => promoReadySql("p", { channelAppAlias: "", novelAlias: "n" })).toThrow();
+  });
+});
+
+describe("迁移里的 upstream_code_present 触发器字符集 === JS_TRIM_WHITESPACE_CHARACTERS（v0.6.0 数据库层收紧）", () => {
+  const migration = readFileSync(
+    path.resolve(import.meta.dirname, "../../../prisma/migrations/20261014120000_code_mode_upstream_code_guard/migration.sql"),
+    "utf8",
+  );
+
+  it("触发器函数里 btrim 的 U&'…' 字面量逐码点等于 JS 的 25 个 trim 字符（迁移里恰好用到一次）", () => {
+    const literals = [...migration.matchAll(/U&'((?:\\[0-9A-Fa-f]{4})+)'/g)].map((match) => match[1]!);
+    expect(literals).toHaveLength(1);
+    const codePoints = [...literals[0]!.matchAll(/\\([0-9A-Fa-f]{4})/g)].map((match) => parseInt(match[1]!, 16));
+    expect(String.fromCodePoint(...codePoints)).toBe(JS_TRIM_WHITESPACE_CHARACTERS);
   });
 });

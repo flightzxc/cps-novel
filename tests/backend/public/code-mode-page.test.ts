@@ -5,9 +5,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findUnique } = vi.hoisted(() => ({ findUnique: vi.fn() }));
+const { findUnique, queryRaw } = vi.hoisted(() => ({ findUnique: vi.fn(), queryRaw: vi.fn() }));
 
-vi.mock("@/app/_lib/public-deps", () => ({ prisma: { promoLink: { findUnique } } }));
+vi.mock("@/app/_lib/public-deps", () => ({ prisma: { promoLink: { findUnique }, $queryRaw: queryRaw } }));
 vi.mock("@/server/site-settings/service", () => ({ getSiteSetting: async () => ({ siteName: "PulseNovel" }) }));
 
 import CodeModeInterstitialPage, { dynamic, generateMetadata } from "@/app/go/[code]/app/page";
@@ -29,7 +29,8 @@ function row(overrides: Record<string, unknown> = {}) {
     status: "fetched",
     webUrl: null,
     appUrl: null,
-    upstreamCode: UPSTREAM,
+    // web_app 读不到 upstream_code：行里只有派生布尔列；口令码经数据库函数取（下面的 queryRaw 替身）
+    upstreamCodePresent: true,
     deletedAt: null,
     channelApp: { config: CODE_CONFIG },
     novel: { locale: "en", title: "Fifty Million For Ten Years", coverUrl: "https://img.example/c.jpg" },
@@ -47,12 +48,18 @@ async function notFoundDigest(promise: Promise<unknown>): Promise<string> {
   return "rendered";
 }
 
+const DB = { promoLink: { findUnique }, $queryRaw: queryRaw } as never;
+
 describe("loadCodeModePageData", () => {
-  beforeEach(() => findUnique.mockReset());
+  beforeEach(() => {
+    findUnique.mockReset();
+    queryRaw.mockReset();
+    queryRaw.mockResolvedValue([{ code: UPSTREAM }]); // 数据库函数 code_mode_upstream_code 放行
+  });
 
   it("口令码模式 + 就绪：给出口令码、App 名、商店链接、书名、封面、回书页的站内路径", async () => {
     findUnique.mockResolvedValue(row());
-    const data = await loadCodeModePageData({ promoLink: { findUnique } } as never, PUBLIC_CODE);
+    const data = await loadCodeModePageData(DB, PUBLIC_CODE);
     expect(data).toEqual({
       code: UPSTREAM,
       appName: "PlotNovel",
@@ -70,28 +77,55 @@ describe("loadCodeModePageData", () => {
     ["link 模式（MoboReader）", row({ channelApp: { config: { promoMode: "link" } } })],
     ["旧记录 config = {}", row({ channelApp: { config: {} } })],
     ["状态不是 fetched", row({ status: "pending" })],
-    ["口令码空白", row({ upstreamCode: "   " })],
-    ["口令码缺失", row({ upstreamCode: null })],
+    ["口令码空白 / 缺失（派生布尔列为 false）", row({ upstreamCodePresent: false })],
     ["书的语种不在白名单", row({ novel: { locale: "fr", title: "x", coverUrl: null } })],
   ])("%s → null（页面 404）", async (_name, value) => {
     findUnique.mockResolvedValue(value);
-    expect(await loadCodeModePageData({ promoLink: { findUnique } } as never, PUBLIC_CODE)).toBeNull();
+    expect(await loadCodeModePageData(DB, PUBLIC_CODE)).toBeNull();
+  });
+
+  it("🔴 口令码只经数据库函数取：查库的 select 里没有 upstreamCode，函数按站内码调用一次；函数返回 NULL（数据库层不放行）→ null（页面 404）", async () => {
+    findUnique.mockResolvedValue(row());
+    expect(await loadCodeModePageData(DB, PUBLIC_CODE)).not.toBeNull();
+    expect(JSON.stringify(findUnique.mock.calls)).not.toMatch(/upstreamCode"?\s*:\s*true/);
+    expect(queryRaw).toHaveBeenCalledOnce();
+    const query = queryRaw.mock.calls[0]![0] as { text: string; values: unknown[] };
+    expect(query.text).toContain("public.code_mode_upstream_code(");
+    expect(query.values).toEqual([PUBLIC_CODE]);
+
+    // JS 判定就绪、但数据库函数返回 NULL（或空串）：不放行
+    for (const result of [[{ code: null }], [], [{ code: "   " }]]) {
+      queryRaw.mockResolvedValueOnce(result);
+      expect(await loadCodeModePageData(DB, PUBLIC_CODE)).toBeNull();
+    }
+  });
+
+  it("没有通过 JS 就绪判定的链接根本不会去调数据库函数（不为未就绪的行多发一次取码查询）", async () => {
+    findUnique.mockResolvedValue(row({ status: "pending" }));
+    await loadCodeModePageData(DB, PUBLIC_CODE);
+    findUnique.mockResolvedValue(row({ channelApp: { config: { promoMode: "link" } } }));
+    await loadCodeModePageData(DB, PUBLIC_CODE);
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
   it("商店链接配错（javascript: / http:）解析成 null，页面不渲染那个按钮", async () => {
     findUnique.mockResolvedValue(row({ channelApp: { config: { ...CODE_CONFIG, appStoreUrl: "javascript:alert(1)", googlePlayUrl: "http://play.google.com/x" } } }));
-    const data = await loadCodeModePageData({ promoLink: { findUnique } } as never, PUBLIC_CODE);
+    const data = await loadCodeModePageData(DB, PUBLIC_CODE);
     expect(data).toMatchObject({ appStoreUrl: null, googlePlayUrl: null });
   });
 
   it("没有已发布文章时没有返回链接", async () => {
     findUnique.mockResolvedValue(row({ articles: [] }));
-    expect((await loadCodeModePageData({ promoLink: { findUnique } } as never, PUBLIC_CODE))?.backHref).toBeUndefined();
+    expect((await loadCodeModePageData(DB, PUBLIC_CODE))?.backHref).toBeUndefined();
   });
 });
 
 describe("/go/[code]/app 页面", () => {
-  beforeEach(() => findUnique.mockReset());
+  beforeEach(() => {
+    findUnique.mockReset();
+    queryRaw.mockReset();
+    queryRaw.mockResolvedValue([{ code: UPSTREAM }]);
+  });
 
   it("元数据：noindex、nofollow、标题通用（不含书名与口令码）；动态渲染（不缓存）", () => {
     const metadata = generateMetadata();
@@ -109,7 +143,8 @@ describe("/go/[code]/app 页面", () => {
     expect(html).toContain("Continue reading on PlotNovel");
     expect(html).toContain("Fifty Million For Ten Years");
     expect(html).toContain('href="https://apps.apple.com/app/plotnovel/id123"');
-    expect(html).toContain("PlotNovel is a third-party app. PulseNovel may earn a commission.");
+    // 运营 10-14 决定去掉底部免责小字
+    expect(html).not.toMatch(/third-party|commission/i);
   });
 
   it("按站内码精确查库（不是按口令码）", async () => {
@@ -122,7 +157,8 @@ describe("/go/[code]/app 页面", () => {
   it.each([
     ["找不到", () => findUnique.mockResolvedValue(null), PUBLIC_CODE],
     ["不是口令码模式", () => findUnique.mockResolvedValue(row({ channelApp: { config: {} } })), PUBLIC_CODE],
-    ["口令码空白", () => findUnique.mockResolvedValue(row({ upstreamCode: " " })), PUBLIC_CODE],
+    ["口令码空白（派生布尔列为 false）", () => findUnique.mockResolvedValue(row({ upstreamCodePresent: false })), PUBLIC_CODE],
+    ["数据库函数不放行（返回 NULL）", () => { findUnique.mockResolvedValue(row()); queryRaw.mockResolvedValue([{ code: null }]); }, PUBLIC_CODE],
     ["站内码为空", () => findUnique.mockResolvedValue(row()), ""],
     ["站内码畸形（超长）", () => findUnique.mockResolvedValue(row()), "x".repeat(65)],
     ["站内码是坏的百分号编码", () => findUnique.mockResolvedValue(row()), "%E0%A4%A"],

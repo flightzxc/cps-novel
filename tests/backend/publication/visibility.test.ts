@@ -50,6 +50,21 @@ describe("isPromoReady · 剧场模式（v0.6.0）", () => {
     expect(isPromoReady(coded())).toBe(true);
   });
 
+  it("🔴 web_app 路径：口令码非空只看派生布尔列 upstreamCodePresent（web_app 读不到 upstream_code 本身），给了布尔列就以它为准", () => {
+    const webRow = (upstreamCodePresent: boolean, overrides: Partial<Exclude<PromoLinkReadinessState, null>> = {}): PromoLinkReadinessState =>
+      ({ status: "fetched", webUrl: null, appUrl: null, upstreamCodePresent, channelApp: CODE_THEATER, novel: { locale: "en" }, ...overrides });
+    expect(isPromoReady(webRow(true))).toBe(true); // 行里根本没有 upstreamCode 字段
+    expect(isPromoReady(webRow(false))).toBe(false);
+    // 两个都给时以布尔列为准（布尔列是触发器按口令码算出来的权威值）
+    expect(isPromoReady(webRow(false, { upstreamCode: "960031" }))).toBe(false);
+    expect(isPromoReady(webRow(true, { upstreamCode: null }))).toBe(true);
+    // 语种白名单、状态等其它条件照常
+    expect(isPromoReady(webRow(true, { novel: { locale: "fr" } }))).toBe(false);
+    expect(isPromoReady(webRow(true, { status: "pending" }))).toBe(false);
+    // link 模式不看布尔列
+    expect(isPromoReady(webRow(true, { channelApp: LINK_THEATER }))).toBe(false);
+  });
+
   it("口令码模式：状态不是 fetched → 不就绪", () => {
     for (const status of ["pending", "failed", "registered_disabled"]) expect(isPromoReady(coded({ status }))).toBe(false);
   });

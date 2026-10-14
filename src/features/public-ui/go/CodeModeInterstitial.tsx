@@ -8,7 +8,8 @@ import { CopyCodeButton } from "./CopyCodeButton";
 /**
  * 口令码模式中间页（v0.6.0，Owner 10-14 拍板第 1 项的设计稿三块画板：手机中间页、电脑中间页；书页按钮在
  * `NovelDetailScreen`）。读者从书页 / 文章 / 章节页的"Read on PlotNovel App"按钮点进来：
- * 书名 + 封面、**大号口令码 + 复制按钮**、三步说明（手机）或一句话说明（电脑）、App Store / Google Play 按钮、底部免责小字。
+ * 书名 + 封面、**大号口令码 + 复制按钮**、三步说明（手机）或一句话说明（电脑）、App Store / Google Play 按钮。
+ * （设计稿底部原有一行免责小字，运营 10-14 决定去掉，页面上不再渲染。）
  *
  * 🔴 这是整个站点里**唯一**会出现渠道真实口令码的地方：书页 / 文章页 / 章节页的 HTML、站点地图、日志里都没有它。
  * 钉着它的用例：`tests/backend/public/code-mode-leak.test.ts`（详情 / 卡片视图模型里没有口令码字段）、
@@ -139,10 +140,6 @@ export function CodeModeInterstitial({
                 </p>
               ) : null}
             </div>
-
-            <p className="text-center text-xs leading-normal text-novel-fg-subtle md:text-left md:text-[0.8125rem]">
-              {copy.disclaimer(brandName)}
-            </p>
           </div>
         </div>
       </main>

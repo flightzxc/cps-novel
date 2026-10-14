@@ -26,11 +26,17 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("REVOKE CREATE, TEMPORARY ON DATABASE");
     expect(sql).toContain("GRANT SELECT (\n  id, channel_account_id, credential_type");
     expect(sql).not.toMatch(/GRANT SELECT ON TABLE channel_account_credential TO (?:web_app|analyst_ro)/);
-    // v0.6.0：口令码模式剧场的上游只给口令码、不给网址——发布门禁 / 公开访问要判口令码是否非空，
-    // `/go/<码>/app` 中间页要把它展示给读者，所以 web_app 的列级授权多了 upstream_code（且只多这一列）。
-    expect(sql).toContain("GRANT SELECT (web_url, app_url, upstream_code) ON promo_link TO web_app");
-    expect(sql).not.toMatch(/GRANT SELECT \([^)]*upstream_code[^)]*\) ON promo_link TO (?:analyst_ro|scheduler_app)/);
-    expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url(?:, upstream_code)?\) ON promo_link TO analyst_ro/);
+    // v0.6.0（Owner 2026-10-14 数据库层收紧）：web_app 对 promo_link.upstream_code 没有任何读权限；
+    // 就绪判断读派生布尔列 upstream_code_present，中间页只经 SECURITY DEFINER 函数 code_mode_upstream_code() 取码。
+    expect(sql).toContain("GRANT SELECT (web_url, app_url, upstream_code_present) ON promo_link TO web_app");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app;");
+    // 任何角色（含 web_app）的列级授权清单里都不能出现裸的 upstream_code（派生列 upstream_code_present 除外）
+    expect(sql).not.toMatch(/GRANT SELECT \([^)]*\bupstream_code\b(?!_present)[^)]*\) ON promo_link/);
+    expect(sql).not.toMatch(/GRANT SELECT \([^)]*upstream_code_present[^)]*\) ON promo_link TO (?:analyst_ro|scheduler_app)/);
+    // EXECUTE 只授给 web_app，且函数不给 PUBLIC
+    expect(sql.match(/GRANT EXECUTE ON FUNCTION public\.code_mode_upstream_code\(text\) TO [^;]+;/g)).toEqual([
+      "GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app;",
+    ]);
     // raw_links / raw_payload 仍然是 Worker 专属
     expect(sql).not.toMatch(/GRANT SELECT \([^)]*\braw_links\b[^)]*\) ON promo_link TO (?:web_app|analyst_ro|scheduler_app)/);
     expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role");
@@ -194,8 +200,11 @@ describe("P1-06 database operations static contracts", () => {
     // v0.5.15 首页题材导航勾选 (20261010160000_canonical_tag_homepage_visible) adds one
     // canonical_tag field record (is_homepage_visible) -- no new physical constraint/index,
     // no new table (58 tables unchanged) -- 1342 + 1 = 1343.
-    expect(records).toHaveLength(1343);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1343);
+    // v0.6.0 口令码剧场·数据库层收紧 (20261014120000_code_mode_upstream_code_guard) adds 4 records:
+    // 1 field (promo_link.upstream_code_present), 1 trigger (promo_link_upstream_code_present_sync),
+    // 2 functions (the trigger function + the SECURITY DEFINER code_mode_upstream_code) -- 1343 + 4 = 1347.
+    expect(records).toHaveLength(1347);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1347);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

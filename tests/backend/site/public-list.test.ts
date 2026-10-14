@@ -68,10 +68,10 @@ describe("列表可见性 SQL 片段（publicListFromWhereSql）", () => {
       "n.deleted_at IS NULL",
       "p.status = 'fetched'",
       // link 模式（缺省）：规则逐字不变，要网址
-      "ELSE (coalesce(btrim(p.web_url, $3), '') <> '' OR coalesce(btrim(p.app_url, $4), '') <> '') END",
-      // 口令码模式：口令码非空 + 书的语种在剧场白名单里
-      "CASE WHEN pca.config->>'promoMode' = 'code' THEN",
-      "coalesce(btrim(p.upstream_code, $2), '') <> ''",
+      "ELSE (coalesce(btrim(p.web_url, $2), '') <> '' OR coalesce(btrim(p.app_url, $3), '') <> '') END",
+      // 口令码模式：口令码非空（读派生布尔列，web_app 读不到 upstream_code 本身）+ 书的语种在剧场白名单里
+      "CASE WHEN pca.config->>'promoMode' = 'code' THEN (p.upstream_code_present AND",
+      "coalesce(n.locale, '') <> ''",
       "coalesce(jsonb_typeof(pca.config->'codeModeLocales'), '') = 'array'",
       "jsonb_exists(pca.config->'codeModeLocales', n.locale)",
     ]) expect(text, condition).toContain(condition);
@@ -85,8 +85,9 @@ describe("列表可见性 SQL 片段（publicListFromWhereSql）", () => {
     expect(source.match(/JOIN promo_link p ON [^\n]*/g)).toEqual(["JOIN promo_link p ON p.id = a.promo_link_id"]);
   });
 
-  it("空白字符集作为绑定参数传入（口令码 / web / app 各一份），SQL 文本里没有原始空白字符", () => {
-    expect(fragment.values).toEqual(["en", JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
+  it("空白字符集作为绑定参数传入（web / app 各一份；口令码走派生布尔列，不再对 upstream_code 做 btrim），SQL 文本里没有原始空白字符", () => {
+    expect(fragment.values).toEqual(["en", JS_TRIM_WHITESPACE_CHARACTERS, JS_TRIM_WHITESPACE_CHARACTERS]);
+    expect(fragment.text).not.toMatch(/\bupstream_code\b(?!_present)/);
     const exotic = [...JS_TRIM_WHITESPACE_CHARACTERS].filter((char) => !" \n\t".includes(char));
     expect(exotic.filter((char) => fragment.text.includes(char))).toEqual([]);
   });
@@ -128,7 +129,7 @@ describe("分页查询的 SQL（编号 + 总数）", () => {
     await queryPublicListIds(db, { locale: "en", limit: 20, offset: 40, env: envOff });
     const text = squash(calls[0]!.text);
     expect(text).toContain("SELECT a.id AS id FROM article a");
-    expect(text).toContain("ORDER BY a.published_at DESC, a.id ASC LIMIT $5::int OFFSET $6::bigint");
+    expect(text).toContain("ORDER BY a.published_at DESC, a.id ASC LIMIT $4::int OFFSET $5::bigint");
     expect(text).not.toMatch(/NULLS (FIRST|LAST)/i);
     expect(calls[0]!.values.slice(-2)).toEqual([20, 40]);
     const source = readFileSync(path.resolve(process.cwd(), "src/lib/site/public-list.ts"), "utf8");
@@ -145,7 +146,7 @@ describe("分页查询的 SQL（编号 + 总数）", () => {
     // 范围部分（FROM … 到分类归属为止）逐字相同。
     const scope = (text: string) => text.slice(text.indexOf("FROM article a"), text.indexOf("EXISTS (") + "EXISTS (".length);
     expect(scope(count)).toBe(scope(ids));
-    expect(calls[0]!.values.slice(0, 5)).toEqual(calls[1]!.values.slice(0, 5));
+    expect(calls[0]!.values.slice(0, 4)).toEqual(calls[1]!.values.slice(0, 4));
   });
 
   it("不带分类时没有归属条件（全部作品页）", async () => {

@@ -726,6 +726,9 @@ model PromoLink {
   offerType             String    @map("offer_type") @db.VarChar(64)
   origin                String    @default("upstream_existing") @db.VarChar(32)
   upstreamCode          String?   @map("upstream_code") @db.Text
+  // v0.6.0：只表示"口令码去空白后是否非空"，由触发器 promo_link_upstream_code_present_sync 在每次 INSERT/UPDATE
+  // 时按 upstream_code 重算（写入方给什么值都会被覆盖）。web_app 不能读 upstream_code 本身，就绪判断读这一列。
+  upstreamCodePresent   Boolean   @default(false) @map("upstream_code_present")
   publicRedirectCode    String    @unique(map: "promo_link_public_redirect_code_key") @map("public_redirect_code") @db.VarChar(32)
   webUrl                String?   @map("web_url") @db.Text
   appUrl                String?   @map("app_url") @db.Text

@@ -20,7 +20,7 @@ type PromoSelect = {
   status: true;
   webUrl: true;
   appUrl: true;
-  upstreamCode: true;
+  upstreamCodePresent: true;
   channelApp: { select: { config: true } };
   novel: { select: { locale: true } };
   fetchedAt: true;

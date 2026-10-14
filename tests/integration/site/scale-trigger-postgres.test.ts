@@ -76,6 +76,13 @@ describe.skipIf(!enabled).sequential("B-38 规模触发器：告警日志 + scal
         { slug: "fr-mid", displayName: "Mid", ordinals: [[BIG_CATEGORY_COUNT + 1, BIG_LOCALE_COUNT]] },
       ],
     });
+    // 🔴 测试环境的确定性：全量对账是一条**没有绑定参数**的语句，PostgreSQL 对无参数的预处理语句只在第一次规划、
+    // 之后一直复用缓存的计划，直到相关表的统计信息变化把计划作废。beforeAll 里第一次对账时这些表只有 30 本书的
+    // 量，计划里嵌套循环按"几行"估算；这里紧接着要对 6 万本书对账，如果恰好没有后台自动分析在两次对账之间
+    // 把缓存计划作废，同一个连接就会拿着小表计划去跑 6 万 × 6 万的嵌套循环（实测 100 多秒，Prisma 60 秒事务超时）。
+    // 后台自动分析何时触发只取决于一次性库的运行时长（约每分钟一轮），这条用例因此会随整体耗时的几秒波动忽过忽挂。
+    // 造完数据后显式 ANALYZE：统计信息变化会广播作废所有连接上的缓存计划，下一次对账一定按 6 万本的真实规模重新规划。
+    await owner.$executeRawUnsafe("ANALYZE");
     await reconcileAllEffectiveTags(worker);
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
