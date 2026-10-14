@@ -1,0 +1,9 @@
+{
+  "name": "00-baseline",
+  "startedAt": 1791974590.463927,
+  "finishedAt": 1791974596.056444,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/00-baseline.py",
+  "sshOrWrapperStderrSha256": null
+}

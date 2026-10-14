@@ -1,0 +1,9 @@
+{
+  "name": "01-register-preview",
+  "startedAt": 1791974727.518583,
+  "finishedAt": 1791974733.6226401,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/01-register-preview.py",
+  "sshOrWrapperStderrSha256": null
+}

@@ -1,0 +1,9 @@
+{
+  "name": "04-rehome-preview",
+  "startedAt": 1791974859.032215,
+  "finishedAt": 1791974867.337735,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/04-rehome-preview.py",
+  "sshOrWrapperStderrSha256": null
+}

@@ -1,0 +1,9 @@
+{
+  "name": "02-register-apply",
+  "startedAt": 1791974781.722284,
+  "finishedAt": 1791974787.084109,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/02-register-apply.py",
+  "sshOrWrapperStderrSha256": null
+}

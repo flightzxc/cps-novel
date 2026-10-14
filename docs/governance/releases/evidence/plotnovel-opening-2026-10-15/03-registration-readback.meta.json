@@ -1,0 +1,9 @@
+{
+  "name": "03-registration-readback",
+  "startedAt": 1791974854.1259258,
+  "finishedAt": 1791974859.004284,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/03-registration-readback.py",
+  "sshOrWrapperStderrSha256": null
+}

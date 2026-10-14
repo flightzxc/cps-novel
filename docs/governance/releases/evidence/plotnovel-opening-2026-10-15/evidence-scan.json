@@ -1,0 +1,8 @@
+{
+  "result": "PASS",
+  "actualTemporarySecretsScanned": 12,
+  "secretLeaks": 0,
+  "turnstileKeyMatches": 0,
+  "upstreamCodeValues": "not selected or emitted; step0 counts only",
+  "externalLocation": "SHA256 only; plaintext header not saved"
+}

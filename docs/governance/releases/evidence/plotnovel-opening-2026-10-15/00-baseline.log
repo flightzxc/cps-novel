@@ -1,0 +1,14 @@
+REMOTE_CONTEXT={"at": "2026-10-14T10:43:14.076444+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+STEP0_RAW_BEGIN
+BEGIN
+27|20261014120000_code_mode_upstream_code_guard
+f|f|f|t|f|f|t|t
+migration_owner|t|{"search_path=pg_catalog, public"}|t|f|f|f|f|{migration_owner=X/migration_owner,web_app=X/migration_owner}
+O
+0|0|0
+moboreader|3845|2641
+{"agency1351" : [{"theater":"moboreader","items":3845,"promo_links":2641}], "sample" : {"slug":"contract-baby-and-billionaire","public_page_short_id":"g15q11wz","public_redirect_code":"hpsuxf95w4"}, "plotnovelApps" : 0}
+COMMIT
+STEP0_RAW_END
+BASELINE={"agency1351": [{"theater": "moboreader", "items": 3845, "promo_links": 2641}], "sample": {"slug": "contract-baby-and-billionaire", "public_page_short_id": "g15q11wz", "public_redirect_code": "hpsuxf95w4"}, "plotnovelApps": 0}
+PHASE_A0=PASS
