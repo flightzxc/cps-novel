@@ -7,7 +7,7 @@ import { COPIED_STATE_MS } from "@/features/public-ui/go/CopyCodeButton";
 
 /**
  * v0.6.0 F.1：口令码模式中间页——内容照设计稿（书名 + 封面、大号口令码 + 复制按钮、三步说明 / 一句话说明、
- * 两个商店按钮、免责小字）。商店链接缺哪个就不渲染哪个，都缺显示一句话兜底。
+ * 两个商店按钮；运营 10-14 决定去掉设计稿底部的免责小字，页面上没有它）。商店链接缺哪个就不渲染哪个，都缺显示一句话兜底。
  */
 const APP_STORE = "https://apps.apple.com/app/plotnovel/id123";
 const GOOGLE_PLAY = "https://play.google.com/store/apps/details?id=com.plotnovel";
@@ -84,10 +84,9 @@ describe("口令码模式中间页 · 内容", () => {
     expect(screen.getByTestId("code-mode-search-fallback").textContent).toBe('Search "PlotNovel" in your app store');
   });
 
-  it("返回书页链接：有就渲染，没有（文章已下线）整个不渲染；免责小字用站点品牌名", () => {
+  it("返回书页链接：有就渲染，没有（文章已下线）整个不渲染", () => {
     const { unmount } = render(page());
     expect(screen.getByTestId("code-mode-back").getAttribute("href")).toBe("/novel/fifty-million-abc123");
-    expect(screen.getByText("PlotNovel is a third-party app. PulseNovel may earn a commission.")).toBeTruthy();
     unmount();
     render(page({ backHref: undefined }));
     expect(screen.queryByTestId("code-mode-back")).toBeNull();
@@ -96,7 +95,14 @@ describe("口令码模式中间页 · 内容", () => {
   it("App 名来自剧场配置，不写死品牌", () => {
     render(page({ appName: "ReadNow" }));
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Continue reading on ReadNow");
-    expect(screen.getByText('ReadNow is a third-party app. PulseNovel may earn a commission.')).toBeTruthy();
+  });
+
+  it("🔴 没有免责小字（运营 10-14 决定去掉）：页面上不出现 third-party / commission 的任何字样", () => {
+    const { container } = render(page());
+    expect(container.textContent ?? "").not.toMatch(/third-party|commission/i);
+    expect(screen.queryByText(/may earn a commission/i)).toBeNull();
+    // 站点品牌名仍只出现在页头的品牌标识里
+    expect(within(container.querySelector("header") as HTMLElement).getByText("PulseNovel")).toBeTruthy();
   });
 
   it("无封面也能渲染（占位块），书名里的特殊字符按文本渲染而不是 HTML", () => {

@@ -38,7 +38,6 @@ export type CodeModeCopy = Readonly<{
     googlePlay: string;
     /** 两个商店链接都没配时的兜底一句话。 */
     searchInStore: string;
-    disclaimer: (siteName: string) => string;
   }>;
 }>;
 
@@ -65,7 +64,6 @@ export function codeModeCopy(appName: string): CodeModeCopy {
       appStore: "Download on the App Store",
       googlePlay: "Get it on Google Play",
       searchInStore: `Search "${appName}" in your app store`,
-      disclaimer: (siteName: string) => `${appName} is a third-party app. ${siteName} may earn a commission.`,
     },
   };
 }

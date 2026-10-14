@@ -238,7 +238,7 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 | `curl -sI /go/<站内码>` | 302，`Location` 是 `/go/<站内码>/app`（相对路径）|
 | `curl -sI /go/<站内码>/app` | 200，`Cache-Control` 含 `no-store`；HTML 里 `meta robots` 为 `noindex, nofollow, nocache` |
 | MoboReader 的某个 `/go/<站内码>` | 仍 302 到原网址（link 模式不变） |
-| 中间页 | 大号口令码 + 复制按钮 + 三步说明 + 商店按钮（链接没配则显示 `Search "PlotNovel" in your app store`）+ 免责小字；首页轮播里**没有** PlotNovel 的书 |
+| 中间页 | 大号口令码 + 复制按钮 + 三步说明 + 商店按钮（链接没配则显示 `Search "PlotNovel" in your app store`）；页面上**没有**免责小字（运营 10-14 去掉）；首页轮播里**没有** PlotNovel 的书 |
 
 ## 步骤 8：回滚方法
 

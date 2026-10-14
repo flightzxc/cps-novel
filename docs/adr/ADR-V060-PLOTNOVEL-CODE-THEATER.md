@@ -16,7 +16,7 @@
 
 ## 六项拍板（Owner 2026-10-14）
 
-1. **中间页方案**：`/go/<站内码>` 之下的独立页面，内容照设计稿（书名、封面、大号口令码、复制按钮、三步说明、商店按钮、免责小字，手机 / 电脑两种布局，默认"三步版"）。
+1. **中间页方案**：`/go/<站内码>` 之下的独立页面，内容照设计稿（书名、封面、大号口令码、复制按钮、三步说明、商店按钮，手机 / 电脑两种布局，默认"三步版"）。设计稿底部原有一行免责小字，运营 10-14 决定去掉（见 D7），页面上不再渲染。
 2. **App 下载链接按剧场配置**，所有书共用（`channel_app.config.appStoreUrl` / `googlePlayUrl`）。
 3. **与 MoboReader 同语种同名的书（约 20 本）只保留 MoboReader**，PlotNovel 那本不生成。
 4. **口令码模式的书照常进站点地图、IndexNow、列表、分类、搜索；首页轮播不进。**
@@ -107,7 +107,7 @@
 - 判定与列表、详情页走同一个 `isPromoReady`，不另写一份；找不到 / 已软删除 / 不是口令码模式 / 不就绪 → 404。
 - 不记录点击，复制按钮不埋点（拍板第 6 项）。
 - 两个商店链接任一缺失就不渲染那个按钮；都缺时显示 `Search "PlotNovel" in your app store`。
-- 底部小字：`PlotNovel is a third-party app. <站点名> may earn a commission.`
+- **没有免责小字**：设计稿底部原有的 `PlotNovel is a third-party app. <站点名> may earn a commission.` 已按运营 10-14 的决定去掉（手机 / 电脑版都没有；文案模块里的 `disclaimer` 一并删除，用例钉住页面上不出现 third-party / commission 字样）。
 
 **入口按钮**（书页、章节页、底部浮条）：口令码模式文案为 "Read on PlotNovel App"，按钮下一行小字 "Free app · your book code is on the next page"；link 模式完全不变。
 

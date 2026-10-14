@@ -109,7 +109,8 @@ describe("/go/[code]/app 页面", () => {
     expect(html).toContain("Continue reading on PlotNovel");
     expect(html).toContain("Fifty Million For Ten Years");
     expect(html).toContain('href="https://apps.apple.com/app/plotnovel/id123"');
-    expect(html).toContain("PlotNovel is a third-party app. PulseNovel may earn a commission.");
+    // 运营 10-14 决定去掉底部免责小字
+    expect(html).not.toMatch(/third-party|commission/i);
   });
 
   it("按站内码精确查库（不是按口令码）", async () => {
