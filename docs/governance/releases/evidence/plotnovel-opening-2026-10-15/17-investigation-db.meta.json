@@ -1,0 +1,9 @@
+{
+  "name": "17-investigation-db",
+  "startedAt": 1791989377.01311,
+  "finishedAt": 1791989385.737463,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/17-investigation-db.py",
+  "sshOrWrapperStderrSha256": null
+}

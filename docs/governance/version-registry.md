@@ -21,7 +21,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.6.0 —— 已部署正式站（2026-10-14 16:51:08 JST / 15:51:08 +0800）
 
-- PlotNovel运维进度：甲阶段及乙1/乙2PASS，剧场active/claimPromo enabled；2026-10-14T13:52:51Z核查Owner批次932851c3：实际MoboReader100本/PlotNovel33本，PlotNovel任务33成功但业务confirmed仅7、人工复核新增26（609→635）。**乙3门禁失败停手，未进入阶段丙，完整开通未验收**；不自动重领/修数据/回关。见 [开通运维记录](releases/plotnovel-opening-2026-10-15.md)。
+- PlotNovel运维进度：甲及乙1/乙2PASS；Owner批次MoboReader100正常、PlotNovel7确认/26人工复核。历史608与新增26同签名，另1条readback_unconfirmed；累计635。经Owner授权仅回关PlotNovel claimPromo（审计825591），剧场仍active/MoboReader不变；**只读排查完成，具体原始缺项及延迟未能确定，阶段丙暂停、完整开通未验收**。133本由主控后台步骤的排序保留勾选造成，非Owner操作失误。见 [开通运维记录](releases/plotnovel-opening-2026-10-15.md)。
 
 - MINOR，Final `493eb23b034b0410780228535b3e293e4ee91f9a` / tree `c44f44702924fcc32fac0dc62ccb39fa0128d502`；Owner明确授权仅haiyue-vps，原RELEASE=PASS/EXIT=0。**代码已部署，PlotNovel尚未开通，前台行为不变。** migration_owner迁移、postgres单事务grants重放已完成，27finished/0rolled_back；函数属主/授权/触发器/回填读回全PASS。
 - 维护07:50:17.442447Z～07:51:07.396574Z，49.954127秒；新迁移2,613.864ms。env只改两版本行、cmp PASS，在线备份740,463,067字节/restore-list PASS；五应用healthy、postgres CID不变，投影0/0/0，IndexNow无熔断/429/积压；四应用Next16.3.8/运行依赖门禁PASS，写闸/白名单/nginx摘要不变、backup-timer RUNNING。

@@ -1,0 +1,9 @@
+q="""
+WITH targets AS (SELECT ti.target_id source_id,t.channel_app_id app_id FROM generic_task_item ti JOIN generic_task t ON t.id=ti.task_id WHERE t.parent_task_id='932851c3-1205-4fde-88f3-0e78355540d9')
+SELECT json_build_object('at',clock_timestamp(),'rawEvidenceSentinels',(SELECT json_agg(x) FROM (SELECT app_id,count(*) n,count(*) FILTER(WHERE s.raw_payload->>'kocCode'='[redacted]') koc_code_redacted,count(*) FILTER(WHERE s.raw_payload->>'publicUrl'='[redacted]') public_url_redacted,count(*) FILTER(WHERE s.raw_payload->>'homeLink'='[redacted]') home_link_redacted FROM targets t JOIN novel_source_item s ON s.id::text=t.source_id GROUP BY app_id) x),'manualOfferTypes',(SELECT json_agg(x) FROM (SELECT CASE WHEN p.offer_type='read' THEN 'read' ELSE 'other' END offer_type,count(*) n FROM side_effect_intent i JOIN promo_link p ON p.idempotency_key=i.target_id AND p.channel_app_id=i.channel_app_id WHERE i.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND i.status='manual_review_required' GROUP BY CASE WHEN p.offer_type='read' THEN 'read' ELSE 'other' END) x),'currentPlotClaimStatus',(SELECT status FROM channel_capability WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND capability_key='claimPromo'));
+"""
+raw=sql(q);print('BOUNDARY_READBACK='+json.dumps(json.JSONDecoder().raw_decode(raw[raw.index('{'):])[0]),flush=True)
+files=['src/lib/adapters/promo-link-claim.ts','src/lib/adapters/moboreader.ts','worker/handlers/promo-link-claim.ts','worker/handlers/moboreader.ts','src/lib/tasks/side-effect-intent.ts']
+r=run(['docker','exec',NAMES['worker'],'sha256sum']+['/app/'+p for p in files])
+print('DEPLOYED_CODE_SHA256='+json.dumps(dict((line.split()[1].removeprefix('/app/'),line.split()[0]) for line in r.stdout.splitlines())),flush=True)
+print('INVESTIGATION_BOUNDARY_READONLY=PASS',flush=True)

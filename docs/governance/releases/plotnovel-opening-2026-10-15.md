@@ -107,3 +107,45 @@ PlotNovel33本全部英语、linked、机构1351；推广口令存在标记仅7�
 本轮只更新脱敏记录、证据与Notion停手状态；阶段乙未验收通过、完整开通未完成。证据见 [canary-stop-result.json](evidence/plotnovel-opening-2026-10-15/canary-stop-result.json)；原始受控结论为CANARY_INSPECT_READONLY=PASS，业务门禁为STOP_B3_MANUAL_REVIEW_GATE_FAILED。外部请求仍1/30，白名单/公开页面未操作。
 
 停手检查点文档提交efbac3ce已推送并回读。Notion既有单条开通运维记录更新为乙3门禁FAIL并于2026-10-14T13:57:23.669Z回读PASS，历史正文逐字一致、没有重复条目；首次检查误比较fetch包装层的as-of时间戳产生FAIL，保留首次收据，改为原生content精确比较后PASS，没有额外写入Notion。收据见 [notion-readback-canary-stop.json](evidence/plotnovel-opening-2026-10-15/notion-readback-canary-stop.json)。
+
+## Owner授权只读排查与领取防护（2026-10-14T14:48Z～14:53Z）
+
+Owner进一步授权数据库只读事务、容器日志、仓库代码排查，并明确授权一项防护写入：PlotNovel claimPromo回关registered_disabled。禁止getcode、重领、修改业务数据及记录回关；任何上游只读接口调用均需另行批准。阶段丙继续暂停。本轮没有调用任何上游接口，也没有新建扫描任务。
+
+**批次事实更正**：Owner说明133本由主控提供的后台步骤缺陷造成：默认排序勾选的100本MoboReader在改排序后保留，继而带入33本PlotNovel；不是Owner操作失误。仓库证据吻合：页面CatalogSyncClient的key只取canonicalFilter，后者排除sort；选中集合由组件状态保留。MoboReader100本全部confirmed，无需处理；排查对象为PlotNovel33本（7确认、26人工复核）。先前20本口径差异保留为历史记录，不作为此次事故责任判断。
+
+**防护已完成**：手册步骤8原set-channel-capability-status.ts先dry-run再apply；operator codex，reason原文“排查领码人工复核期间暂停”，审计825591。14:48:21Z读回，仅PlotNovel claimPromo由enabled改为registered_disabled；剧场仍active、其它三能力仍disabled、MoboReader全部状态与能力逐项不变。14:53Z再次读回disabled。Final/env未改，不回退镜像、不重建容器，不修改推广/意图/公开页面。
+
+### 解析与回读结论
+
+领码解析契约（src/lib/adapters/promo-link-claim.ts:223）：顶层必须是对象；status必须为boolean true、code必须为number 200；data必须是对象；data.kocCode必须为去掉首尾空白后非空的string。publicUrl/homeLink是可选string，缺失/空/非string均归为null，并不会导致malformed_payload。
+
+新增26条意图只记录failureCategory=malformed_payload、readbackStatus=promo_missing、readbackConfirmed=false；没有upstreamEnvelopeStatus/Code诊断键。这排除了已被该版本诊断记录的非成功status/code分支，但仍不能区分：非JSON正文、顶层非对象、data非对象、kocCode缺失/null/空串/非string。**不能以现有证据断言具体缺项或原始类型**。worker观测日志只记录HTTP/耗时，不记录响应正文或字段形状；133本rawPayload中的kocCode/publicUrl/homeLink全部为脱敏标记，不能当作原始响应证据或重建真实推广。
+
+精确回读先按agencyId/seriesId/language/projectType唯一匹配。promo_missing只会在已匹配到唯一目标行、该行kocCode不是非空string时返回；不要求publicUrl/homeLink，因此不是“网址缺失造成回读不匹配”。目前只能确认当时回读未见合格口令字段，不能区分上游延迟、持续空值或字段类型/命名差异。
+
+运行策略为3次只读回读、间隔2000ms。只读取既有worker日志：MoboReader窗口getcode100/getlistpc200；PlotNovel窗口getcode33/getlistpc118；451条全部HTTP200/outcome ok，无429/5xx/传输错误，worker-light该窗口无观测。PlotNovel118次与7本常规前后回读、26本前读及3次恢复回读数量一致；观测无书目关联ID，不把时间窗口归组冒充逐请求的书目标注。没有新增上游调用。
+
+### 原有609条人工复核签名
+
+| 分组 | 数量 | failureCategory | readbackStatus | readbackConfirmed |
+| --- | --- | --- | --- | --- |
+| 改挂前历史 | 608 | malformed_payload | promo_missing | false |
+| 改挂前历史 | 1 | readback_unconfirmed | promo_missing | false |
+| 本批新增 | 26 | malformed_payload | promo_missing | false |
+
+608条与新增26条的完整response_shape SHA256完全一致。历史1条代表getcode响应曾通过解析，但其后口令回读未确认；其余634条是同签名，不代表已证明同一种上游根因。当前635条对应read类型推广均pending/upstream_code_present=false，没有自动补齐。
+
+### 目录补码与人工收口
+
+现行v0.6.0已实现code模式目录同步只要求非空kocCode、不要求网址；书目已linked/novelId非空即可upsert推广为fetched、清错误并绑定文章。目录与领码均用同剧场/书目/账号/offerType=read幂等键，故同账号扫描取得合格码时可更新现有pending记录。MoboReader合法目录任务仍可按机构1351分流到active的PlotNovel；claimPromo关闭不取消此目录补码路径。但本轮没有发起扫描或开启PlotNovel getlistpc，未来上游是否返回码未知，因此“能补”是条件能力，不能承诺自动补齐。
+
+目录补码不会修改side_effect_intent；人工核对是worker终态，确认函数只允许prepared/claim_retry_blocked，数据库B15亦保护人工出边。依原X9后台人工裁决，Owner取得精确目标/同账号有效证据后选effect_confirmed并写reason，才将意图改为confirmed；此操作只更新意图和审计，automaticReconciliation=false，不自动补推广或文章。建议先获授权做只读证据核查、再经授权目录重扫补业务行、最后人工裁决。未见码的条目继续保留人工复核，不能凭一次未见码裁定no_effect_confirmed，也不能批量改635条或重复getcode。
+
+### 为什么7本成功、后续建议
+
+7本的task result.decision均claimed（不是已有码跳过或回读恢复），response_shape均confirmedFrom=prepared/hasWebUrl=false/hasAppUrl=false；对照MoboReader100本均claimed、confirmedFrom=prepared、两个网址标记true。prepared是getcode前已提交的本地意图状态，confirmedFrom记录本地状态迁移来源，表示本次领码解析成功且独立精确回读找到了相同码，随后在围栏事务中确认；它不是上游返回字段，也不表示领取前已经有码。7本同时证明无网址路径实际可成功。
+
+当前根因边界：解析不满足严格领码契约，恢复回读未见合格码，进入保护性人工复核；具体上游缺项/类型及延迟原因尚无证据。优先代码建议是补充只记录解析分支/字段名/类型/是否空白的诊断（body_not_json、envelope_not_object、data_not_object、koc_code_missing/null/blank/type），不记录口令/正文/网址，不放宽成功判定或重试getcode。只有取得真实字段契约差异证据后再决定适配器改动；不能把取消网址要求当修复，因为当前已不要求网址，也不能盲目增加等待时间宣称修复。
+
+进一步判断当前是否已可见，需要Owner另行授权精确目标的上游只读getlistpc探针；它可判断当前可见性，不能补证已经丢失的历史getcode字段形状。本轮到此停手，保持claimPromo disabled、阶段丙暂停。只读证据及唯一授权防护详见 [investigation-result.json](evidence/plotnovel-opening-2026-10-15/investigation-result.json)。辅助17查询未通过task_item_id/promo_link_id找到账户分组，因为原prepare不填写这两项；18按原request_summary书目ID/剧场/本批时间及幂等键修正查询，保留首次结果，没有改数据。

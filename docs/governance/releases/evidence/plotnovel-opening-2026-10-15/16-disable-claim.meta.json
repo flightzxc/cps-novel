@@ -1,0 +1,9 @@
+{
+  "name": "16-disable-claim",
+  "startedAt": 1791989293.2623181,
+  "finishedAt": 1791989302.208128,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/16-disable-claim.py",
+  "sshOrWrapperStderrSha256": null
+}

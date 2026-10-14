@@ -1,0 +1,343 @@
+{
+  "status": "INVESTIGATION_COMPLETE_STAGE_C_PAUSED",
+  "capabilityProtection": {
+    "at": "2026-10-14T14:48:21.869976+00:00",
+    "before": {
+      "apps": [
+        {
+          "code": "moboreader",
+          "status": "active",
+          "id": "85c2fb3e-28f8-476a-83f2-9647e2206192"
+        },
+        {
+          "code": "plotnovel",
+          "status": "active",
+          "id": "00de5521-d075-4472-87eb-cc5d1732f4d0"
+        }
+      ],
+      "capabilities": [
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "claimPromo",
+          "status": "enabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getbydataid",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getchapterinfo",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getlistpc",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "claimPromo",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getbydataid",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getchapterinfo",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getlistpc",
+          "status": "enabled"
+        }
+      ]
+    },
+    "after": {
+      "apps": [
+        {
+          "code": "moboreader",
+          "status": "active",
+          "id": "85c2fb3e-28f8-476a-83f2-9647e2206192"
+        },
+        {
+          "code": "plotnovel",
+          "status": "active",
+          "id": "00de5521-d075-4472-87eb-cc5d1732f4d0"
+        }
+      ],
+      "capabilities": [
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "claimPromo",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getbydataid",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getchapterinfo",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+          "key": "getlistpc",
+          "status": "registered_disabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "claimPromo",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getbydataid",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getchapterinfo",
+          "status": "enabled"
+        },
+        {
+          "appId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "key": "getlistpc",
+          "status": "enabled"
+        }
+      ]
+    },
+    "onlyPlotnovelClaimChanged": true,
+    "auditId": "825591"
+  },
+  "signatureGroups": [
+    {
+      "cohort": "historical",
+      "count": 608,
+      "shapeSha256": "00e653beb8faa50b446000c7160b4a2e152beb1ea23067d6f7ab26195eb25b92",
+      "keyTypes": {
+        "readbackStatus": "string",
+        "failureCategory": "string",
+        "readbackConfirmed": "boolean"
+      },
+      "failureCategory": "malformed_payload",
+      "readbackStatus": "promo_missing",
+      "readbackReason": null,
+      "readbackConfirmed": false,
+      "upstreamEnvelopeStatusType": null,
+      "upstreamEnvelopeCodeType": null,
+      "firstAt": "2026-09-23T05:15:37.382+00:00",
+      "lastAt": "2026-10-14T02:17:25.201+00:00"
+    },
+    {
+      "cohort": "historical",
+      "count": 1,
+      "shapeSha256": "a47029710d1d102cff69f720907c7ac749dbe5a1fa12fe7405b0a52c47edaf9e",
+      "keyTypes": {
+        "readbackStatus": "string",
+        "failureCategory": "string",
+        "readbackConfirmed": "boolean"
+      },
+      "failureCategory": "readback_unconfirmed",
+      "readbackStatus": "promo_missing",
+      "readbackReason": null,
+      "readbackConfirmed": false,
+      "upstreamEnvelopeStatusType": null,
+      "upstreamEnvelopeCodeType": null,
+      "firstAt": "2026-10-05T20:28:40.559+00:00",
+      "lastAt": "2026-10-05T20:28:40.559+00:00"
+    },
+    {
+      "cohort": "new",
+      "count": 26,
+      "shapeSha256": "00e653beb8faa50b446000c7160b4a2e152beb1ea23067d6f7ab26195eb25b92",
+      "keyTypes": {
+        "readbackStatus": "string",
+        "failureCategory": "string",
+        "readbackConfirmed": "boolean"
+      },
+      "failureCategory": "malformed_payload",
+      "readbackStatus": "promo_missing",
+      "readbackReason": null,
+      "readbackConfirmed": false,
+      "upstreamEnvelopeStatusType": null,
+      "upstreamEnvelopeCodeType": null,
+      "firstAt": "2026-10-14T13:44:05.619+00:00",
+      "lastAt": "2026-10-14T13:47:52.118+00:00"
+    }
+  ],
+  "businessAndIntentEvidence": {
+    "at": "2026-10-14T14:51:00.673162+00:00",
+    "taskDecisionGroups": [
+      {
+        "app_id": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "decision": "claimed",
+        "status": "success",
+        "n": 100
+      },
+      {
+        "app_id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "decision": "claimed",
+        "status": "success",
+        "n": 7
+      },
+      {
+        "app_id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "decision": "manual_review_required",
+        "status": "success",
+        "n": 26
+      }
+    ],
+    "confirmedGroups": [
+      {
+        "channel_app_id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "confirmed_from": "prepared",
+        "has_web_url": false,
+        "has_app_url": false,
+        "n": 7
+      },
+      {
+        "channel_app_id": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "confirmed_from": "prepared",
+        "has_web_url": true,
+        "has_app_url": true,
+        "n": 100
+      }
+    ],
+    "manualPromoGroups": [
+      {
+        "status": "pending",
+        "upstream_code_present": false,
+        "n": 635
+      }
+    ],
+    "rawPromoKeysRetained": [
+      {
+        "app_id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "koc_code_type": "string",
+        "public_url_type": "string",
+        "home_link_type": "string",
+        "n": 33
+      },
+      {
+        "app_id": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "koc_code_type": "string",
+        "public_url_type": "string",
+        "home_link_type": "string",
+        "n": 100
+      }
+    ]
+  },
+  "readbackPolicy": {
+    "PROMO_LINK_CLAIM_READBACK_ATTEMPTS": 3,
+    "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS": 2000
+  },
+  "logCounts": [
+    {
+      "service": "worker",
+      "cohorts": {
+        "moboreader_window": [
+          {
+            "endpoint": "getlistpc",
+            "httpStatus": 200,
+            "outcome": "ok",
+            "count": 200
+          },
+          {
+            "endpoint": "getcode",
+            "httpStatus": 200,
+            "outcome": "ok",
+            "count": 100
+          }
+        ],
+        "plotnovel_window": [
+          {
+            "endpoint": "getlistpc",
+            "httpStatus": 200,
+            "outcome": "ok",
+            "count": 118
+          },
+          {
+            "endpoint": "getcode",
+            "httpStatus": 200,
+            "outcome": "ok",
+            "count": 33
+          }
+        ]
+      },
+      "jsonLogLines": 451,
+      "unparsedLogLines": 0,
+      "rawLogsSaved": false,
+      "rawResponseBodiesAvailableInObservation": false
+    },
+    {
+      "service": "worker-light",
+      "cohorts": {
+        "moboreader_window": [],
+        "plotnovel_window": []
+      },
+      "jsonLogLines": 0,
+      "unparsedLogLines": 0,
+      "rawLogsSaved": false,
+      "rawResponseBodiesAvailableInObservation": false
+    }
+  ],
+  "boundary": {
+    "at": "2026-10-14T14:53:26.733415+00:00",
+    "rawEvidenceSentinels": [
+      {
+        "app_id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "n": 33,
+        "koc_code_redacted": 33,
+        "public_url_redacted": 33,
+        "home_link_redacted": 33
+      },
+      {
+        "app_id": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "n": 100,
+        "koc_code_redacted": 100,
+        "public_url_redacted": 100,
+        "home_link_redacted": 100
+      }
+    ],
+    "manualOfferTypes": [
+      {
+        "offer_type": "read",
+        "n": 635
+      }
+    ],
+    "currentPlotClaimStatus": "registered_disabled"
+  },
+  "deployedCodeIdentity": "PASS",
+  "upstreamRequestsThisInvestigation": 0,
+  "businessDataWrites": 0,
+  "onlyAuthorizedMutation": "PlotNovel claimPromo enabled -> registered_disabled; reason 排查领码人工复核期间暂停; audit825591",
+  "ownerBatchExplanation": "133本源于主控后台步骤未处理改排序保留勾选；非操作失误；MoboReader100 confirmed无需处理",
+  "confirmedConclusions": [
+    "Both claim response and precise readback accept code without URLs",
+    "promo_missing means one exact identity row found but kocCode is not a nonblank string",
+    "Historical608 and new26 response_shape signatures identical; historical1 readback_unconfirmed",
+    "Seven PlotNovel items are claimed, getcode parsed and post-readback matched the same code; confirmedFrom=prepared is previous local intent state",
+    "Catalog code-mode scan may upsert fetched from a future nonblank kocCode without URL, but does not close manual intent",
+    "X9 Web manual adjudication is required for manual_review_required exit and does not automatically repair PromoLink/Article"
+  ],
+  "unresolved": [
+    "Original getcode body/field types were not retained; exact parse failure branch cannot be determined",
+    "No later upstream visibility check performed; delay vs persistent empty/wrong-type code unresolved"
+  ],
+  "recommendations": [
+    "Keep PlotNovel claimPromo disabled and stage C paused",
+    "Add non-sensitive parser branch and field-type diagnostics before any newly authorized canary; do not weaken parser or identity guard",
+    "Only after Owner approval, perform precise upstream read-only getlistpc checks; never getcode",
+    "For verified existing effects, authorized catalog rescan fills business rows, then Owner X9 effect_confirmed with evidence; single missing readback cannot justify no_effect_confirmed",
+    "Do not change or retry MoboReader100 confirmed or PlotNovel7 confirmed"
+  ],
+  "externalAcceptanceRequests": 1
+}
