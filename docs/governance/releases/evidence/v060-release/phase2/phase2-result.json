@@ -474,6 +474,11 @@
     "changelog": "original generator core.abbrev=7",
     "versionRegistry": "written",
     "developmentLog": "one release entry",
-    "notion": "PENDING_SYNC_READBACK"
+    "notion": "SYNC_AND_READBACK_PASS",
+    "status": "COMPLETE",
+    "sourceCommit": "77ae24431d7ce9f4d43b5ece330f64c3afb2d290",
+    "gitSourcePushReadback": "PASS",
+    "tagObject": "64f3af5b2d842c2af71336f311dd19ebfea571d8",
+    "tagPeeledFinal": "493eb23b034b0410780228535b3e293e4ee91f9a"
   }
 }

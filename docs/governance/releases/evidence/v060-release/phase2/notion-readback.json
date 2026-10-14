@@ -1,0 +1,30 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "title": "🏷️ 海阅 版本管理与发版手账",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "sourceCommit": "77ae24431d7ce9f4d43b5ece330f64c3afb2d290",
+  "readbackAt": "2026-10-14T08:02:20.999Z",
+  "result": "PASS",
+  "checks": {
+    "snapshot": true,
+    "table": true,
+    "detail": true,
+    "log": true,
+    "final": true,
+    "goHash": true,
+    "keyRedaction": true,
+    "historyExactAfterRedaction": true,
+    "finalSyncStatus": true
+  },
+  "sections": [
+    "current snapshot",
+    "version table",
+    "formal release ledger",
+    "unique development log mirror"
+  ],
+  "historicalContentPreservedAfterKeyRedaction": true,
+  "historyComparedCharacters": 253795,
+  "turnstileHistoricalTokensRedacted": 1,
+  "rawTurnstileMatchesAfter": 0,
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a"
+}

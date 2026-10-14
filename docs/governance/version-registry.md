@@ -24,7 +24,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - MINOR，Final `493eb23b034b0410780228535b3e293e4ee91f9a` / tree `c44f44702924fcc32fac0dc62ccb39fa0128d502`；Owner明确授权仅haiyue-vps，原RELEASE=PASS/EXIT=0。**代码已部署，PlotNovel尚未开通，前台行为不变。** migration_owner迁移、postgres单事务grants重放已完成，27finished/0rolled_back；函数属主/授权/触发器/回填读回全PASS。
 - 维护07:50:17.442447Z～07:51:07.396574Z，49.954127秒；新迁移2,613.864ms。env只改两版本行、cmp PASS，在线备份740,463,067字节/restore-list PASS；五应用healthy、postgres CID不变，投影0/0/0，IndexNow无熔断/429/积压；四应用Next16.3.8/运行依赖门禁PASS，写闸/白名单/nginx摘要不变、backup-timer RUNNING。
 - 应用error/permissiondenied全0；postgres仅主动负向验证预期拒绝1条，SAVEPOINT恢复后虚构码NULL，非预期错误0。/go前后302和Location SHA一致，书页/分类/sitemap均200、Continue reading/无PlotNovel；代理外部5/10次。
-- annotated v0.6.0固定Final、原生成器七位SHA CHANGELOG、MINOR台账、唯一开发日志和证据已写；Notion同步读回PENDING。完整 [部署记录](releases/v0.6.0-preproduction.md) 与 [阶段二结果](releases/evidence/v060-release/phase2/phase2-result.json)。
+- annotated v0.6.0固定Final、原生成器七位SHA CHANGELOG、MINOR台账、唯一开发日志和证据已写；Notion四处同步回读PASS（2026-10-14T08:02:20.999Z）。完整 [部署记录](releases/v0.6.0-preproduction.md) 与 [阶段二结果](releases/evidence/v060-release/phase2/phase2-result.json)。
 
 #### v0.6.0 第一阶段交付快照（历史：当时尚未部署）
 
@@ -497,7 +497,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion读回待完成 |
+| `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |
 | `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |
 | `v0.5.13` | 2026-10-09 11:20:43 | PATCH | B-38 公开列表数据库分页与分类归属表（迁移 24、表 58）、B-40 运行镜像只带生产依赖 | Final `cc2655b0a3864f6ae6a665f46bad91f15d0a904a`；annotated `v0.5.13`；image `cps-novel:0.5.13-cc2655b` | 已部署正式站；部署后实测与外部验收 PASS；主控直接发布 |

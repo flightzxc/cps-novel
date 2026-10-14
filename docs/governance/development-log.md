@@ -46,7 +46,7 @@
 **变更内容**：口令码模式代码、派生布尔列/触发器/SECURITY DEFINER取码函数、web_app禁读上游口令码；27迁移/58业务表/字典1349-active1279。migration_owner执行迁移，grants由原脚本postgres单事务重放，函数属主migration_owner。10-14上游试读探测5本PlotNovel书全部成功、各3章，是探测结论，不代表剧场已开通。
 **影响范围**：公开网址冻结；本轮未登记、改挂、激活剧场或改能力/领取批次/试读白名单，未改业务开关、搜索、nginx、证书、DNS或做IndexNow回填。生产env只改两个版本字段，cmp PASS；在线逻辑备份及restore-list PASS。
 **验证方式**：既有第一阶段11397测试/37运行器/镜像E2E等成功证据按Owner批准有效；部署后health0.6.0/Final、五应用healthy、postgres CID不变。维护49.954127秒，新迁移2613.864ms；步骤0授权f/f/f/t/f/f/t/t、属主/secdef/search_path/EXECUTE/触发器及回填0/0/0通过；web_app预期拒绝、SAVEPOINT恢复后虚构码NULL；四应用Next16.3.8无开发依赖、投影0/0/0、IndexNow无熔断/429/积压、写闸/备份定时器PASS。五应用error/permissiondenied0，postgres仅预期主动探针1条，非预期0。外部5次全代理，同一/go前后302且Location SHA256均 `cd3e05e05efaaf1b87106c931bc37d8852f5881773ac88cad333b7723acbb2e5`；书页/分类/sitemap200、Continue reading、无PlotNovel。
-**后续待办**：PlotNovel开通另行取得Owner授权并执行专门手册；回滚仅v0.5.15，兼容标志须Owner回滚时明确批准。Git annotated tag固定Final、生成CHANGELOG/台账/本条日志已写；Notion四处同步回读待收官。证据与详情见 [v0.6.0发布记录](releases/v0.6.0-preproduction.md)。
+**后续待办**：PlotNovel开通另行取得Owner授权并执行专门手册；回滚仅v0.5.15，兼容标志须Owner回滚时明确批准。Git annotated tag固定Final、生成CHANGELOG/台账/本条日志已写；Notion四处同步回读PASS（2026-10-14T08:02:20.999Z），来源治理77ae2443与tag已推送回读；历史镜像补打码1处站点密钥，其他历史逐字保留。证据与详情见 [v0.6.0发布记录](releases/v0.6.0-preproduction.md)。
 
 ### 2026-10-11 02:07 - codex（GPT-6，正式发版执行；JST）
 
