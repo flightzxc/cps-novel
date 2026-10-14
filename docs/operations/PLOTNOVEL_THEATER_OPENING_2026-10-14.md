@@ -2,7 +2,11 @@
 
 - 状态：随 v0.6.0 交付的**草稿**，未执行。本文件不代表生产授权；每一步的生产变更档位由主控 / Codex 按"生产变更三档制度"判定，下表的"建议档位"只是起点。
 - 背景与设计：`docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md`。
-- 前提：v0.6.0 已发布（**无迁移**；`infra/postgres/grants.sql` 有改动，发版的数据库准备步骤会重放它）。发版本身不改变任何线上行为：新剧场尚未登记，MoboReader 的 `config` 里没有 `promoMode`，一律按 link 处理。
+- 前提：v0.6.0 已发布。**发版要点（数据库）**：
+  - **1 个迁移**：`20261014120000_code_mode_upstream_code_guard`（迁移数 26 → 27）。内容：`promo_link` 加一列 `upstream_code_present`（`BOOLEAN NOT NULL DEFAULT false`，加列不重写表，只需瞬时的表锁）、一个维护它的触发器与触发器函数、一个 SECURITY DEFINER 取码函数 `public.code_mode_upstream_code(text)`；迁移末尾对有口令码的行做一次"原值写回"的空更新来回填布尔列（只碰 `upstream_code` 非空的行，不改 `updated_at`）。**函数属主是执行迁移的角色，发版必须用 `migration_owner` 跑 `migrate deploy`**（`grants.sql` 也由它重放）。
+  - **`infra/postgres/grants.sql` 有改动，必须在迁移之后重放**（发版的数据库准备步骤本来就会重放；重放是幂等的）：`web_app` 对 `promo_link` 的列授权由 `(web_url, app_url, upstream_code)` 改为 `(web_url, app_url, upstream_code_present)`——**`web_app` 从此读不到 `upstream_code`**；新增 `GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app`。迁移和重放之间不要让新版 web 对外服务（重放前 `web_app` 没有 `upstream_code_present` 的读权限，公开页会报 `permission denied`）。
+  - 无新增环境变量。
+  - 发版本身不改变任何线上行为：新剧场尚未登记，MoboReader 的 `config` 里没有 `promoMode`，一律按 link 处理。
 - 执行方式：脚本在 worker 容器里跑（`DATABASE_URL` 是 `worker_app`）。命令里的容器名以 `docker ps` 为准；一律加 `</dev/null`，不要让 `docker exec` 吃掉终端输入。
 - 🔴 铁律：任何输出、截图、聊天里**不得出现上游口令码**；下面的只读核对一律只数数，不打印 `upstream_code`。
 
@@ -27,17 +31,44 @@
 
 ## 步骤 0：发版后只读核对（L1）
 
-在只读会话里跑（`PGOPTIONS='-c default_transaction_read_only=on'`，SQL 走标准输入）：
+在只读会话里以**特权角色**（`migration_owner` 或只读运维账号）跑（`PGOPTIONS='-c default_transaction_read_only=on'`，SQL 走标准输入；不要用 `web_app` 跑，它本来就读不了其中一些对象）：
 
 ```sql
--- 1) 列级授权（期望：t / f / f / t / t）
-SELECT has_column_privilege('web_app',       'promo_link', 'upstream_code',  'SELECT') AS web_reads_code,
-       has_column_privilege('scheduler_app', 'promo_link', 'upstream_code',  'SELECT') AS scheduler_reads_code,
-       has_column_privilege('analyst_ro',    'promo_link', 'upstream_code',  'SELECT') AS analyst_reads_code,
-       has_column_privilege('scheduler_app', 'channel_app', 'config',        'SELECT') AS scheduler_reads_theater_config,
-       has_column_privilege('scheduler_app', 'promo_link',  'channel_app_id','SELECT') AS scheduler_reads_promo_app;
+-- 0) 迁移已应用：期望 27 个已完成迁移，最新一条是 20261014120000_code_mode_upstream_code_guard
+SELECT count(*) AS applied, max(migration_name) AS latest
+FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;
 
--- 2) 改挂前基线：机构 1351 的书目 / 推广链接现在挂在谁名下（期望全在 moboreader，数量与 10-14 的 3,830 / 2,599 同量级）
+-- 1) 列级授权（期望：f / f / f / t / f / f / t / t）——web_app 读不到口令码本身，只读派生布尔列
+SELECT has_column_privilege('web_app',       'promo_link', 'upstream_code',         'SELECT') AS web_reads_code,
+       has_column_privilege('scheduler_app', 'promo_link', 'upstream_code',         'SELECT') AS scheduler_reads_code,
+       has_column_privilege('analyst_ro',    'promo_link', 'upstream_code',         'SELECT') AS analyst_reads_code,
+       has_column_privilege('web_app',       'promo_link', 'upstream_code_present', 'SELECT') AS web_reads_present,
+       has_column_privilege('scheduler_app', 'promo_link', 'upstream_code_present', 'SELECT') AS scheduler_reads_present,
+       has_column_privilege('analyst_ro',    'promo_link', 'upstream_code_present', 'SELECT') AS analyst_reads_present,
+       has_column_privilege('scheduler_app', 'channel_app', 'config',               'SELECT') AS scheduler_reads_theater_config,
+       has_column_privilege('scheduler_app', 'promo_link',  'channel_app_id',       'SELECT') AS scheduler_reads_promo_app;
+
+-- 2) 取码函数的形状与授权（期望：migration_owner / t / {"search_path=pg_catalog, public"} / t / f / f / f / f；acl 里没有空 grantee）
+SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS security_definer, p.proconfig AS config,
+       has_function_privilege('web_app',       p.oid, 'EXECUTE') AS web_exec,
+       has_function_privilege('worker_app',    p.oid, 'EXECUTE') AS worker_exec,
+       has_function_privilege('scheduler_app', p.oid, 'EXECUTE') AS scheduler_exec,
+       has_function_privilege('analyst_ro',    p.oid, 'EXECUTE') AS analyst_exec,
+       has_function_privilege('backup_role',   p.oid, 'EXECUTE') AS backup_exec,
+       p.proacl::text AS acl
+FROM pg_proc p WHERE p.oid = 'public.code_mode_upstream_code(text)'::regprocedure;
+-- 属主不是 migration_owner（例如用超级用户跑了迁移）→ 用超级用户执行 ALTER FUNCTION public.code_mode_upstream_code(text) OWNER TO migration_owner;
+-- 并重放 grants.sql，再重读本条
+
+-- 3) 触发器在位且启用（期望：O = 始终启用）
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'promo_link_upstream_code_present_sync' AND tgrelid = 'public.promo_link'::regclass;
+
+-- 4) 回填一致（期望两个都是 0；只数数，不打印口令码）
+SELECT count(*) FILTER (WHERE upstream_code IS NOT NULL AND btrim(upstream_code) <> '' AND NOT upstream_code_present) AS nonblank_but_flag_false,
+       count(*) FILTER (WHERE upstream_code IS NULL AND upstream_code_present) AS null_but_flag_true
+FROM promo_link;
+
+-- 5) 改挂前基线：机构 1351 的书目 / 推广链接现在挂在谁名下（期望全在 moboreader，数量与 10-14 的 3,830 / 2,599 同量级）
 SELECT sa.code AS theater, count(DISTINCT s.id) AS items, count(p.id) AS promo_links
 FROM novel_source_item s
 JOIN channel_app ca ON ca.id = s.channel_app_id
@@ -49,7 +80,9 @@ GROUP BY sa.code;
 
 再做两个公开页冒烟（`curl -sI`，无副作用）：抽一篇 MoboReader 已发布书页应为 200；抽一个 MoboReader 的 `/go/<站内码>` 应 302 到它原来的网址——证明 link 模式未被碰到。
 
-**必过**：授权五个值与期望一致；基线数量已记下；冒烟正常。授权不对 → 停，先让发版负责人重放 `grants.sql`，不要继续。
+**必过**：迁移数 27；授权与函数读回与期望一致；触发器启用；回填一致；基线数量已记下；冒烟正常。授权不对 → 停，先让发版负责人重放 `grants.sql`，不要继续。
+
+再用 **`web_app` 身份**确认"读不到口令码"确实被拒（会得到 `permission denied`，这正是期望；只是确认，不会返回任何数据）：`SELECT upstream_code FROM promo_link LIMIT 1;`——应报 `ERROR: permission denied for table promo_link`。
 
 ## 步骤 1：发版后登记剧场（L2）
 
@@ -252,6 +285,6 @@ WHERE sa.code = 'plotnovel' AND i.status = 'manual_review_required';   -- 与改
 | 步骤 4～5（已 active、已开 `claimPromo`） | 能力回关：`set-channel-capability-status.ts --capability claimPromo --to registered_disabled --reason … --apply`；领取批次批次级暂停 / 中止。**⚠ 不要把 PlotNovel 置回 `registered_disabled`，除非同时保证目录扫描一直暂停**——改挂之后书目已在 PlotNovel 名下，目录分流一旦退回任务剧场，下一次扫描会在 MoboReader 名下重建同一批书（唯一键按剧场分开），造成重复档和重复领取 |
 | 步骤 6（加了试读白名单） | 环境变量去掉 `plotnovel`，两条能力回 `registered_disabled`，重建容器 |
 | 步骤 7（已发布） | 停止后续批次。**已发布页面的撤回 / 下线受"公开网址冻结"约束，必须 Owner 单独批准**；批准后用现有"批量撤回"工具。不要用改配置的方式偷偷让页面 404 |
-| 整体退回 v0.5.15 镜像 | grants 的新增是加法、无迁移，留着无害。⚠ 旧代码不分剧场：**退回期间必须保持目录扫描暂停**，否则机构 1351 的书又会被记到 MoboReader 名下并与已改挂的存量重复；旧代码要求推广有网址，已发布的 PlotNovel 页面会因"不就绪"变 404，同样属于冻结影响，需 Owner 批准 |
+| 整体退回 v0.5.15 镜像 | 迁移是加法（一列、一个触发器、两个函数）且没有逆向脚本，旧代码不读它们，留着无害；`grants.sql` 若重放成旧版也无害（旧代码用不到新列与函数）。⚠ 旧代码不分剧场：**退回期间必须保持目录扫描暂停**，否则机构 1351 的书又会被记到 MoboReader 名下并与已改挂的存量重复；旧代码要求推广有网址，已发布的 PlotNovel 页面会因"不就绪"变 404，同样属于冻结影响，需 Owner 批准 |
 
 **紧急止血**（需要立刻让口令码模式的书从公开列表 / 站点地图消失）：把 PlotNovel 剧场 `config.codeModeLocales` 置为 `[]`（Codex 的 SQL，L3；下一次站点地图刷新后生效）。这会让这些页面变 404，属于冻结影响，必须 Owner 批准；事后该剧场的登记脚本会报 `metadata_drift`，恢复时要把配置改回登记值。本版没有给这件事做脚本开关（ADR 已知限制 L3 / L4）。

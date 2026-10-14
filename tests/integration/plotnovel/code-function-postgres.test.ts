@@ -11,6 +11,9 @@
  *   5. worker_app / scheduler_app 的行为不变；
  *   6. 中间页取数（loadCodeModePageData）端到端仍然可用。
  */
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadCodeModePageData } from "@/app/go/_lib/code-mode-page-data";
@@ -306,6 +309,57 @@ describe.skipIf(!enabled).sequential("v0.6.0 数据库层收紧：code_mode_upst
       } finally {
         await owner.$executeRawUnsafe("DROP SCHEMA IF EXISTS evil CASCADE");
       }
+    });
+  });
+
+  describe("运维手册步骤 0 的发版读回 SQL（照手册原文执行，期望值就是手册写的）", () => {
+    it("迁移数 / 列授权 / 函数形状与授权 / 触发器 / 回填一致，逐条与手册写的期望值相符", async () => {
+      const runbook = readFileSync(path.resolve(import.meta.dirname, "../../../docs/operations/PLOTNOVEL_THEATER_OPENING_2026-10-14.md"), "utf8");
+      const section = runbook.slice(runbook.indexOf("## 步骤 0"), runbook.indexOf("## 步骤 1"));
+      const block = section.match(/```sql\n([\s\S]*?)```/)?.[1];
+      expect(block).toBeTruthy();
+      const statements = block!.split(/;\s*\n/).map((chunk) => chunk.trim()).filter((chunk) => /^(--[^\n]*\n\s*)*(SELECT|WITH)/i.test(chunk));
+      expect(statements).toHaveLength(6); // 0) 迁移数 1) 列授权 2) 函数 3) 触发器 4) 回填一致 5) 基线
+
+      // 手册里的 SQL 以 `owner` 身份执行；这些读回都不返回口令码
+      const [migrations] = await owner.$queryRawUnsafe<Array<{ applied: bigint; latest: string }>>(statements[0]!);
+      const migrationDirs = readdirSync(path.resolve(import.meta.dirname, "../../../prisma/migrations"), { withFileTypes: true }).filter((entry) => entry.isDirectory());
+      expect(Number(migrations!.applied)).toBe(migrationDirs.length);
+      expect(migrations!.latest).toBe("20261014120000_code_mode_upstream_code_guard");
+
+      const [columns] = await owner.$queryRawUnsafe<Array<Record<string, boolean>>>(statements[1]!);
+      expect(columns).toEqual({
+        web_reads_code: false, scheduler_reads_code: false, analyst_reads_code: false,
+        web_reads_present: true, scheduler_reads_present: false, analyst_reads_present: false,
+        scheduler_reads_theater_config: true, scheduler_reads_promo_app: true,
+      });
+
+      const [fn] = await owner.$queryRawUnsafe<Array<{
+        owner: string; security_definer: boolean; config: string[]; web_exec: boolean; worker_exec: boolean; scheduler_exec: boolean;
+        analyst_exec: boolean; backup_exec: boolean; acl: string;
+      }>>(statements[2]!);
+      expect(fn).toMatchObject({
+        owner: "migration_owner", security_definer: true, config: ["search_path=pg_catalog, public"],
+        web_exec: true, worker_exec: false, scheduler_exec: false, analyst_exec: false, backup_exec: false,
+      });
+      expect(fn!.acl).not.toMatch(/(^|[{,])=X/);
+
+      expect(await owner.$queryRawUnsafe(statements[3]!)).toEqual([{ tgenabled: "O" }]);
+
+      // 回填一致：先造一点有口令码 / 空白口令码 / 没口令码的行，读回的两个计数必须是 0
+      const { novel, source } = await seedBook({ appId: ids.plotApp, externalBookId: "readback", title: "Readback", agencyId: PLOT_AGENCY });
+      for (const [index, code] of ["960031", "  ", null, " x "].entries()) {
+        await seedPromo({ appId: ids.plotApp, novelId: novel!.id, sourceId: source.id, upstreamCode: code, offerType: `rb-${index}` });
+      }
+      const [consistency] = await owner.$queryRawUnsafe<Array<{ nonblank_but_flag_false: bigint; null_but_flag_true: bigint }>>(statements[4]!);
+      expect(Number(consistency!.nonblank_but_flag_false)).toBe(0);
+      expect(Number(consistency!.null_but_flag_true)).toBe(0);
+
+      // 基线 SQL 能跑：刚才造的那本机构 1351 的书挂在 plotnovel 名下，1 本书目、4 条推广链接
+      const baseline = await owner.$queryRawUnsafe<Array<{ theater: string; items: bigint; promo_links: bigint }>>(statements[5]!);
+      expect(baseline.map((row) => ({ theater: row.theater, items: Number(row.items), promo_links: Number(row.promo_links) }))).toEqual([
+        { theater: "plotnovel", items: 1, promo_links: 4 },
+      ]);
     });
   });
 

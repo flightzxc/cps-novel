@@ -161,7 +161,7 @@ if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/
   tests/integration/plotnovel/rehome-postgres.test.ts=15 \
   tests/integration/plotnovel/readiness-postgres.test.ts=13 \
   tests/integration/plotnovel/dedupe-postgres.test.ts=6 \
-  tests/integration/plotnovel/code-function-postgres.test.ts=19; then
+  tests/integration/plotnovel/code-function-postgres.test.ts=20; then
   exit 1
 fi
 
