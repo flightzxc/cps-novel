@@ -14,7 +14,9 @@
 #      SECURITY DEFINER 函数 code_mode_upstream_code(站内码) 取（口令码模式 + 就绪才返回，其余 NULL，与 isPromoReady 逐项对照），
 #      函数属主 / 固定 search_path / EXECUTE 只授 web_app，触发器维护的 upstream_code_present 写入方改不了，
 #      worker_app / scheduler_app 行为不变，中间页取数端到端可用；
-#   6) 真实角色：web_app / worker_app / scheduler_app 全程无 permission denied（除上面明确断言的拒绝）。
+#   6) drift-check：字典漂移检查看得见没登记的函数——没登记的 SECURITY DEFINER 函数 / 存储过程 / 其它 schema 里的 DEFINER
+#      函数 / 没登记的普通函数都会失败，登记了但不在白名单也失败，登记且在白名单内才通过，扩展自带的函数不算；
+#   7) 真实角色：web_app / worker_app / scheduler_app 全程无 permission denied（除上面明确断言的拒绝）。
 # grants.sql 在这里重放两次，ACL 摘要必须逐字相同（幂等）。
 # 最后重放 grants 之后跑数据字典漂移检查（drift 必须为 0）。
 # 最后一行：PLOTNOVEL_THEATER_POSTGRES_VERIFICATION=PASS
@@ -152,6 +154,7 @@ npm exec vitest run -- --project node \
   tests/integration/plotnovel/readiness-postgres.test.ts \
   tests/integration/plotnovel/dedupe-postgres.test.ts \
   tests/integration/plotnovel/code-function-postgres.test.ts \
+  tests/integration/plotnovel/drift-check-postgres.test.ts \
   --no-file-parallelism --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
 
 # 硬断言（B-31 共用断言）：不允许任何文件被整文件跳过；通过数不得低于下限（= 该文件当前用例数）。
@@ -161,7 +164,8 @@ if ! node scripts/lib/assert-vitest-no-skipped-files.mjs PLOTNOVEL "$secret_dir/
   tests/integration/plotnovel/rehome-postgres.test.ts=15 \
   tests/integration/plotnovel/readiness-postgres.test.ts=13 \
   tests/integration/plotnovel/dedupe-postgres.test.ts=6 \
-  tests/integration/plotnovel/code-function-postgres.test.ts=20; then
+  tests/integration/plotnovel/code-function-postgres.test.ts=20 \
+  tests/integration/plotnovel/drift-check-postgres.test.ts=9; then
   exit 1
 fi
 
