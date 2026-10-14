@@ -1,0 +1,9 @@
+{
+  "name": "14-canary-handoff",
+  "startedAt": 1791979925.270154,
+  "finishedAt": 1791979929.8778722,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/14-canary-handoff.py",
+  "sshOrWrapperStderrSha256": null
+}

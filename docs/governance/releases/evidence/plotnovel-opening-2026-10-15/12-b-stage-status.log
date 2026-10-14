@@ -1,0 +1,464 @@
+REMOTE_CONTEXT={"at": "2026-10-14T12:09:55.124392+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+B_STAGE_EXIT={"exit": 0, "at": "2026-10-14T12:09:41.204279+00:00"}
+BEGIN_FILE=b-stage.log
+REMOTE_CONTEXT={"at": "2026-10-14T12:09:15.794488+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+B1_RECHECK={"mode": "dry-run", "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192", "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "targetStatus": "registered_disabled", "agencyIds": ["1351"], "counts": {"sourceItems": 3845, "sourceItemsAlreadyAtTarget": 0, "promoLinks": 2641, "promoLinksByStatus": {"fetched": 2032, "pending": 609}, "sideEffectIntents": 2638, "labelLinks": 7914, "sourceLabelsToCreate": 3, "mappingEdgesToCopy": 11}, "blockers": {"pendingGenericTaskItems": {"total": 0, "sample": []}, "pendingSyncTaskItems": {"total": 0, "sample": []}, "activeCatalogScans": {"total": 0, "sample": []}, "uniqueKeyConflicts": {"total": 0, "sample": []}, "promoKeyConflicts": {"total": 0}, "publishedArticles": {"total": 0, "sample": []}, "itemsUnderOtherApps": {"total": 0}, "promoLinksNotAtSourceApp": {"total": 0}}, "blocked": false, "noop": false, "applied": null}
+REHOME_APPLY={"mode": "apply", "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192", "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "targetStatus": "registered_disabled", "agencyIds": ["1351"], "counts": {"sourceItems": 3845, "sourceItemsAlreadyAtTarget": 0, "promoLinks": 2641, "promoLinksByStatus": {"fetched": 2032, "pending": 609}, "sideEffectIntents": 2638, "labelLinks": 7914, "sourceLabelsToCreate": 3, "mappingEdgesToCopy": 11}, "blockers": {"pendingGenericTaskItems": {"total": 0, "sample": []}, "pendingSyncTaskItems": {"total": 0, "sample": []}, "activeCatalogScans": {"total": 0, "sample": []}, "uniqueKeyConflicts": {"total": 0, "sample": []}, "promoKeyConflicts": {"total": 0}, "publishedArticles": {"total": 0, "sample": []}, "itemsUnderOtherApps": {"total": 0}, "promoLinksNotAtSourceApp": {"total": 0}}, "blocked": false, "noop": false, "applied": {"rehomedSourceItems": 3845, "rehomedPromoLinks": 2641, "rekeyedPromoLinks": 2641, "updatedSideEffectIntents": 2638, "repointedLabelLinks": 7914, "createdSourceLabels": 3, "copiedMappingEdges": 11, "auditId": "825156", "sourceItemIdsSha256": "eb38ec0ba7cb99282152db9150a3daf63e0acb8363ec2c252d1beb540a4400ee"}}
+REHOME_NOOP={"mode": "dry-run", "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192", "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "targetStatus": "registered_disabled", "agencyIds": ["1351"], "counts": {"sourceItems": 0, "sourceItemsAlreadyAtTarget": 3845, "promoLinks": 0, "promoLinksByStatus": {}, "sideEffectIntents": 0, "labelLinks": 0, "sourceLabelsToCreate": 0, "mappingEdgesToCopy": 0}, "blockers": {"pendingGenericTaskItems": {"total": 0, "sample": []}, "pendingSyncTaskItems": {"total": 0, "sample": []}, "activeCatalogScans": {"total": 0, "sample": []}, "uniqueKeyConflicts": {"total": 0, "sample": []}, "promoKeyConflicts": {"total": 0}, "publishedArticles": {"total": 0, "sample": []}, "itemsUnderOtherApps": {"total": 0}, "promoLinksNotAtSourceApp": {"total": 0}}, "blocked": false, "noop": true, "applied": null}
+B1_READBACK={"at": "2026-10-14T12:09:23.971831+00:00", "ownership": [{"theater": "plotnovel", "items": 3845, "promo_links": 2641}], "stationSamplesUnchanged": 3, "sideEffectIntentsMatched": 2638, "intentStatusDifferences": 0, "wrongIntentOwners": 0, "noop": true, "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z"}
+ACTIVATE_PREVIEW={"mode": "dry-run", "wrote": false, "create": [], "moboreaderConfigPatch": null, "storeLinkChanges": {}, "appStatusChange": {"from": "registered_disabled", "to": "active"}, "capabilityStatuses": {"getlistpc": "registered_disabled", "getbydataid": "registered_disabled", "getchapterinfo": "registered_disabled", "claimPromo": "registered_disabled"}, "auditIds": []}
+THEATER_ACTIVE={"mode": "apply", "wrote": true, "create": [], "moboreaderConfigPatch": null, "storeLinkChanges": {}, "appStatusChange": {"from": "registered_disabled", "to": "active"}, "capabilityStatuses": {"getlistpc": "registered_disabled", "getbydataid": "registered_disabled", "getchapterinfo": "registered_disabled", "claimPromo": "registered_disabled"}, "auditIds": ["825157"]}
+CLAIM_PREVIEW={"mode": "dry-run", "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "capabilityKey": "claimPromo", "currentStatus": "registered_disabled", "proposedStatus": "enabled", "reason": "plotnovel-claim-enable-20261015：改挂读回通过后启用领码", "evidenceRef": "/opt/cps-novel/shared/operations/plotnovel-opening-2026-10-15/b1-readback.json"}
+CLAIM_ENABLED={"mode": "apply", "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "capabilityKey": "claimPromo", "beforeStatus": "registered_disabled", "afterStatus": "enabled", "wrote": true, "auditId": "825158"}
+PROJECTION_BEFORE={"exit": 0, "missing": 0, "extra": 0, "changed": 0}
+PROJECTION_RECONCILE={"exit": 0, "output": "EFFECTIVE_TAG_RECONCILE inserted=0 updated=0 deleted=0 ms=1637\nEFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0"}
+PROJECTION_AFTER={"missing": 0, "extra": 0, "changed": 0}
+B1_B2_RESULT={"status": "B1_B2_PASS_STOP_B3_AWAIT_OWNER_CANARY", "completedAt": "2026-10-14T12:09:41.203312+00:00", "backup": {"backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z", "containerPath": "/var/lib/cps-novel/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump", "hostPath": "/opt/cps-novel/shared/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump", "createdAt": "2026-10-14T12:01:42.722778+00:00", "bytes": 97484269, "sha256": "49452fd35945bff68f5496b56b4c9e747bc781b2caacf410d2ff41729c25c3ba", "mode": "600", "tables": ["novel_source_item", "promo_link", "side_effect_intent", "source_label", "novel_source_item_label", "source_label_mapping"], "pgRestoreList": "PASS", "pgRestoreListSha256": "6beb18f82a9a093b7afe3b111d23192984fd47c5bf440e592eaace6356a9787d"}, "rehomeApplied": {"rehomedSourceItems": 3845, "rehomedPromoLinks": 2641, "rekeyedPromoLinks": 2641, "updatedSideEffectIntents": 2638, "repointedLabelLinks": 7914, "createdSourceLabels": 3, "copiedMappingEdges": 11, "auditId": "825156", "sourceItemIdsSha256": "eb38ec0ba7cb99282152db9150a3daf63e0acb8363ec2c252d1beb540a4400ee"}, "readback": {"at": "2026-10-14T12:09:23.971831+00:00", "ownership": [{"theater": "plotnovel", "items": 3845, "promo_links": 2641}], "stationSamplesUnchanged": 3, "sideEffectIntentsMatched": 2638, "intentStatusDifferences": 0, "wrongIntentOwners": 0, "noop": true, "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z"}, "activation": {"mode": "apply", "wrote": true, "create": [], "moboreaderConfigPatch": null, "storeLinkChanges": {}, "appStatusChange": {"from": "registered_disabled", "to": "active"}, "capabilityStatuses": {"getlistpc": "registered_disabled", "getbydataid": "registered_disabled", "getchapterinfo": "registered_disabled", "claimPromo": "registered_disabled"}, "auditIds": ["825157"]}, "claimEnable": {"mode": "apply", "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0", "capabilityKey": "claimPromo", "beforeStatus": "registered_disabled", "afterStatus": "enabled", "wrote": true, "auditId": "825158"}, "finalData": {"apps": [{"theater": "moboreader", "id": "85c2fb3e-28f8-476a-83f2-9647e2206192", "status": "active", "promoMode": "link", "agencyIds": ["3366"]}, {"theater": "plotnovel", "id": "00de5521-d075-4472-87eb-cc5d1732f4d0", "status": "active", "promoMode": "code", "agencyIds": ["1351"]}], "capabilities": {"getlistpc": "registered_disabled", "getbydataid": "registered_disabled", "getchapterinfo": "registered_disabled", "claimPromo": "enabled"}, "promoStatuses": {"fetched": 2032, "pending": 609}, "manualReviewRequired": 609, "plotnovelPublishedArticles": 0}, "projection": [0, 0, 0], "globalClaimGatesOpen": {"FEATURE_PROMO_LINK_CLAIM": true, "PROMO_LINK_CLAIM_ALLOW_WRITE": true}, "containersUnchanged": true, "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "previewWhitelistChanged": false, "claimCanarySubmitted": false, "publishedCanarySubmitted": false}
+PHASE_B1_B2=PASS
+
+END_FILE=b-stage.log
+BEGIN_FILE=b-stage.timeline.json
+[
+  {
+    "event": "B1_RECHECK",
+    "at": "2026-10-14T12:09:17.447360+00:00",
+    "value": {
+      "mode": "dry-run",
+      "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "targetStatus": "registered_disabled",
+      "agencyIds": [
+        "1351"
+      ],
+      "counts": {
+        "sourceItems": 3845,
+        "sourceItemsAlreadyAtTarget": 0,
+        "promoLinks": 2641,
+        "promoLinksByStatus": {
+          "fetched": 2032,
+          "pending": 609
+        },
+        "sideEffectIntents": 2638,
+        "labelLinks": 7914,
+        "sourceLabelsToCreate": 3,
+        "mappingEdgesToCopy": 11
+      },
+      "blockers": {
+        "pendingGenericTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "pendingSyncTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "activeCatalogScans": {
+          "total": 0,
+          "sample": []
+        },
+        "uniqueKeyConflicts": {
+          "total": 0,
+          "sample": []
+        },
+        "promoKeyConflicts": {
+          "total": 0
+        },
+        "publishedArticles": {
+          "total": 0,
+          "sample": []
+        },
+        "itemsUnderOtherApps": {
+          "total": 0
+        },
+        "promoLinksNotAtSourceApp": {
+          "total": 0
+        }
+      },
+      "blocked": false,
+      "noop": false,
+      "applied": null
+    }
+  },
+  {
+    "event": "REHOME_APPLY",
+    "at": "2026-10-14T12:09:22.860886+00:00",
+    "value": {
+      "mode": "apply",
+      "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "targetStatus": "registered_disabled",
+      "agencyIds": [
+        "1351"
+      ],
+      "counts": {
+        "sourceItems": 3845,
+        "sourceItemsAlreadyAtTarget": 0,
+        "promoLinks": 2641,
+        "promoLinksByStatus": {
+          "fetched": 2032,
+          "pending": 609
+        },
+        "sideEffectIntents": 2638,
+        "labelLinks": 7914,
+        "sourceLabelsToCreate": 3,
+        "mappingEdgesToCopy": 11
+      },
+      "blockers": {
+        "pendingGenericTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "pendingSyncTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "activeCatalogScans": {
+          "total": 0,
+          "sample": []
+        },
+        "uniqueKeyConflicts": {
+          "total": 0,
+          "sample": []
+        },
+        "promoKeyConflicts": {
+          "total": 0
+        },
+        "publishedArticles": {
+          "total": 0,
+          "sample": []
+        },
+        "itemsUnderOtherApps": {
+          "total": 0
+        },
+        "promoLinksNotAtSourceApp": {
+          "total": 0
+        }
+      },
+      "blocked": false,
+      "noop": false,
+      "applied": {
+        "rehomedSourceItems": 3845,
+        "rehomedPromoLinks": 2641,
+        "rekeyedPromoLinks": 2641,
+        "updatedSideEffectIntents": 2638,
+        "repointedLabelLinks": 7914,
+        "createdSourceLabels": 3,
+        "copiedMappingEdges": 11,
+        "auditId": "825156",
+        "sourceItemIdsSha256": "eb38ec0ba7cb99282152db9150a3daf63e0acb8363ec2c252d1beb540a4400ee"
+      }
+    }
+  },
+  {
+    "event": "REHOME_NOOP",
+    "at": "2026-10-14T12:09:23.732953+00:00",
+    "value": {
+      "mode": "dry-run",
+      "sourceChannelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "targetChannelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "targetStatus": "registered_disabled",
+      "agencyIds": [
+        "1351"
+      ],
+      "counts": {
+        "sourceItems": 0,
+        "sourceItemsAlreadyAtTarget": 3845,
+        "promoLinks": 0,
+        "promoLinksByStatus": {},
+        "sideEffectIntents": 0,
+        "labelLinks": 0,
+        "sourceLabelsToCreate": 0,
+        "mappingEdgesToCopy": 0
+      },
+      "blockers": {
+        "pendingGenericTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "pendingSyncTaskItems": {
+          "total": 0,
+          "sample": []
+        },
+        "activeCatalogScans": {
+          "total": 0,
+          "sample": []
+        },
+        "uniqueKeyConflicts": {
+          "total": 0,
+          "sample": []
+        },
+        "promoKeyConflicts": {
+          "total": 0
+        },
+        "publishedArticles": {
+          "total": 0,
+          "sample": []
+        },
+        "itemsUnderOtherApps": {
+          "total": 0
+        },
+        "promoLinksNotAtSourceApp": {
+          "total": 0
+        }
+      },
+      "blocked": false,
+      "noop": true,
+      "applied": null
+    }
+  },
+  {
+    "event": "B1_READBACK",
+    "at": "2026-10-14T12:09:23.972122+00:00",
+    "value": {
+      "at": "2026-10-14T12:09:23.971831+00:00",
+      "ownership": [
+        {
+          "theater": "plotnovel",
+          "items": 3845,
+          "promo_links": 2641
+        }
+      ],
+      "stationSamplesUnchanged": 3,
+      "sideEffectIntentsMatched": 2638,
+      "intentStatusDifferences": 0,
+      "wrongIntentOwners": 0,
+      "noop": true,
+      "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z"
+    }
+  },
+  {
+    "event": "ACTIVATE_PREVIEW",
+    "at": "2026-10-14T12:09:24.698483+00:00",
+    "value": {
+      "mode": "dry-run",
+      "wrote": false,
+      "create": [],
+      "moboreaderConfigPatch": null,
+      "storeLinkChanges": {},
+      "appStatusChange": {
+        "from": "registered_disabled",
+        "to": "active"
+      },
+      "capabilityStatuses": {
+        "getlistpc": "registered_disabled",
+        "getbydataid": "registered_disabled",
+        "getchapterinfo": "registered_disabled",
+        "claimPromo": "registered_disabled"
+      },
+      "auditIds": []
+    }
+  },
+  {
+    "event": "THEATER_ACTIVE",
+    "at": "2026-10-14T12:09:25.424640+00:00",
+    "value": {
+      "mode": "apply",
+      "wrote": true,
+      "create": [],
+      "moboreaderConfigPatch": null,
+      "storeLinkChanges": {},
+      "appStatusChange": {
+        "from": "registered_disabled",
+        "to": "active"
+      },
+      "capabilityStatuses": {
+        "getlistpc": "registered_disabled",
+        "getbydataid": "registered_disabled",
+        "getchapterinfo": "registered_disabled",
+        "claimPromo": "registered_disabled"
+      },
+      "auditIds": [
+        "825157"
+      ]
+    }
+  },
+  {
+    "event": "CLAIM_PREVIEW",
+    "at": "2026-10-14T12:09:26.363154+00:00",
+    "value": {
+      "mode": "dry-run",
+      "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "capabilityKey": "claimPromo",
+      "currentStatus": "registered_disabled",
+      "proposedStatus": "enabled",
+      "reason": "plotnovel-claim-enable-20261015：改挂读回通过后启用领码",
+      "evidenceRef": "/opt/cps-novel/shared/operations/plotnovel-opening-2026-10-15/b1-readback.json"
+    }
+  },
+  {
+    "event": "CLAIM_ENABLED",
+    "at": "2026-10-14T12:09:27.084326+00:00",
+    "value": {
+      "mode": "apply",
+      "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+      "capabilityKey": "claimPromo",
+      "beforeStatus": "registered_disabled",
+      "afterStatus": "enabled",
+      "wrote": true,
+      "auditId": "825158"
+    }
+  },
+  {
+    "event": "PROJECTION_BEFORE",
+    "at": "2026-10-14T12:09:33.382470+00:00",
+    "value": {
+      "exit": 0,
+      "missing": 0,
+      "extra": 0,
+      "changed": 0
+    }
+  },
+  {
+    "event": "PROJECTION_RECONCILE",
+    "at": "2026-10-14T12:09:36.973931+00:00",
+    "value": {
+      "exit": 0,
+      "output": "EFFECTIVE_TAG_RECONCILE inserted=0 updated=0 deleted=0 ms=1637\nEFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0"
+    }
+  },
+  {
+    "event": "PROJECTION_AFTER",
+    "at": "2026-10-14T12:09:40.907658+00:00",
+    "value": {
+      "missing": 0,
+      "extra": 0,
+      "changed": 0
+    }
+  },
+  {
+    "event": "B1_B2_RESULT",
+    "at": "2026-10-14T12:09:41.203631+00:00",
+    "value": {
+      "status": "B1_B2_PASS_STOP_B3_AWAIT_OWNER_CANARY",
+      "completedAt": "2026-10-14T12:09:41.203312+00:00",
+      "backup": {
+        "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z",
+        "containerPath": "/var/lib/cps-novel/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump",
+        "hostPath": "/opt/cps-novel/shared/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump",
+        "createdAt": "2026-10-14T12:01:42.722778+00:00",
+        "bytes": 97484269,
+        "sha256": "49452fd35945bff68f5496b56b4c9e747bc781b2caacf410d2ff41729c25c3ba",
+        "mode": "600",
+        "tables": [
+          "novel_source_item",
+          "promo_link",
+          "side_effect_intent",
+          "source_label",
+          "novel_source_item_label",
+          "source_label_mapping"
+        ],
+        "pgRestoreList": "PASS",
+        "pgRestoreListSha256": "6beb18f82a9a093b7afe3b111d23192984fd47c5bf440e592eaace6356a9787d"
+      },
+      "rehomeApplied": {
+        "rehomedSourceItems": 3845,
+        "rehomedPromoLinks": 2641,
+        "rekeyedPromoLinks": 2641,
+        "updatedSideEffectIntents": 2638,
+        "repointedLabelLinks": 7914,
+        "createdSourceLabels": 3,
+        "copiedMappingEdges": 11,
+        "auditId": "825156",
+        "sourceItemIdsSha256": "eb38ec0ba7cb99282152db9150a3daf63e0acb8363ec2c252d1beb540a4400ee"
+      },
+      "readback": {
+        "at": "2026-10-14T12:09:23.971831+00:00",
+        "ownership": [
+          {
+            "theater": "plotnovel",
+            "items": 3845,
+            "promo_links": 2641
+          }
+        ],
+        "stationSamplesUnchanged": 3,
+        "sideEffectIntentsMatched": 2638,
+        "intentStatusDifferences": 0,
+        "wrongIntentOwners": 0,
+        "noop": true,
+        "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z"
+      },
+      "activation": {
+        "mode": "apply",
+        "wrote": true,
+        "create": [],
+        "moboreaderConfigPatch": null,
+        "storeLinkChanges": {},
+        "appStatusChange": {
+          "from": "registered_disabled",
+          "to": "active"
+        },
+        "capabilityStatuses": {
+          "getlistpc": "registered_disabled",
+          "getbydataid": "registered_disabled",
+          "getchapterinfo": "registered_disabled",
+          "claimPromo": "registered_disabled"
+        },
+        "auditIds": [
+          "825157"
+        ]
+      },
+      "claimEnable": {
+        "mode": "apply",
+        "channelAppId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+        "capabilityKey": "claimPromo",
+        "beforeStatus": "registered_disabled",
+        "afterStatus": "enabled",
+        "wrote": true,
+        "auditId": "825158"
+      },
+      "finalData": {
+        "apps": [
+          {
+            "theater": "moboreader",
+            "id": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+            "status": "active",
+            "promoMode": "link",
+            "agencyIds": [
+              "3366"
+            ]
+          },
+          {
+            "theater": "plotnovel",
+            "id": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+            "status": "active",
+            "promoMode": "code",
+            "agencyIds": [
+              "1351"
+            ]
+          }
+        ],
+        "capabilities": {
+          "getlistpc": "registered_disabled",
+          "getbydataid": "registered_disabled",
+          "getchapterinfo": "registered_disabled",
+          "claimPromo": "enabled"
+        },
+        "promoStatuses": {
+          "fetched": 2032,
+          "pending": 609
+        },
+        "manualReviewRequired": 609,
+        "plotnovelPublishedArticles": 0
+      },
+      "projection": [
+        0,
+        0,
+        0
+      ],
+      "globalClaimGatesOpen": {
+        "FEATURE_PROMO_LINK_CLAIM": true,
+        "PROMO_LINK_CLAIM_ALLOW_WRITE": true
+      },
+      "containersUnchanged": true,
+      "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832",
+      "previewWhitelistChanged": false,
+      "claimCanarySubmitted": false,
+      "publishedCanarySubmitted": false
+    }
+  }
+]
+
+END_FILE=b-stage.timeline.json
+BEGIN_FILE=b-stage.wrapper.log
+
+END_FILE=b-stage.wrapper.log

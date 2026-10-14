@@ -1,0 +1,11 @@
+{
+  "readAt": "2026-10-14T12:12:09.904326+00:00",
+  "sourceStatusCounts": {
+    "linked": 3845
+  },
+  "unclaimedNonManualLinked": 1204,
+  "unclaimedNonManualLinkedEnglish": 1204,
+  "unclaimedNonManualPending": 0,
+  "pendingPromoRows": 609,
+  "manualReviewIntentBaseline": 609
+}

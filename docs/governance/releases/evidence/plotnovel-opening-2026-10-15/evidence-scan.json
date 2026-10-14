@@ -1,8 +1,9 @@
 {
   "result": "PASS",
+  "files": 80,
   "actualTemporarySecretsScanned": 12,
   "secretLeaks": 0,
   "turnstileKeyMatches": 0,
-  "upstreamCodeValues": "not selected or emitted; step0 counts only",
-  "externalLocation": "SHA256 only; plaintext header not saved"
+  "upstreamCodeValues": "never selected or emitted; counts only; backup dump remains protected on server",
+  "externalRequests": 1
 }

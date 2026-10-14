@@ -1,6 +1,6 @@
 # PlotNovel 剧场开通运维记录（2026-10-15 操作编号）
 
-## 当前状态：阶段甲PASS，条件批准改挂已满足，乙1/乙2待执行
+## 当前状态：甲阶段及乙1/乙2 PASS；停乙3等Owner提交领码金丝雀
 
 Owner授权执行计划；本轮仅完成甲0、甲1、甲2首次预演及完整任务清单。**PlotNovel已登记，尚未改挂、激活或开通业务。** 工作树release/v0.6.0-2026-10-14；线上v0.6.0 / Final `493eb23b034b0410780228535b3e293e4ee91f9a`，tag不移动，无业务代码/schema/nginx/版本身份改动。操作编号按Owner指定20261015，实际执行时间以原始UTC时间戳为准，本检查点于2026-10-14执行。
 
@@ -61,3 +61,28 @@ Owner确认继续甲3/甲4，并授权：若甲4数量与甲2一致（或来自�
 - 包装器跨行JSON解析错误已独立留证并修正；10c正式预演PASS。没有修改业务代码或削弱原门禁。
 
 阶段甲证据见 [phase-a-result.json](evidence/plotnovel-opening-2026-10-15/phase-a-result.json)。按Owner条件批准继续乙1/乙2；改挂后立即启用和对账，中间不插入治理等待；乙3停下等待Owner提交20本领码金丝雀。
+
+## 乙1：条件授权后的原脚本改挂与读回 PASS
+
+- 12:09Z执行前再次用正式backup reason预演，counts全部字段与甲4完全一致、所有blockers0、publishedArticles0；备份SHA再次核验一致。按条件批准执行原 `rehome-plotnovel-source-items.ts --apply --confirm REHOME_PLOTNOVEL_SOURCE_ITEMS --expected-source-items 3845 --expected-promo-links 2641`，operator codex、request-id仍plotnovel-rehome-20261015。
+- 单事务结果：书目3845、推广2641、推广幂等键2641、副作用意图2638、标签关联7914、新标签3、映射边11；审计825156，书目ID集合SHA256 `eb38ec0ba7cb99282152db9150a3daf63e0acb8363ec2c252d1beb540a4400ee`。
+- 后续原预演noop=true、sourceItems0/sourceItemsAlreadyAtTarget3845/blockers全0；机构1351全在plotnovel，3845/2641。三条站内码摘要与fetched状态逐项相同；2638条意图ID/状态逐项匹配、全部归属PlotNovel，状态差异0、错误属主0。
+- 读回证据先写服务器受保护b1-readback.json，马上进入乙2，没有插入治理等待；改挂完成到active间隔2.563754秒。
+
+## 乙2：启用与标签对账 PASS
+
+- 原登记工具先预演再apply，request-id plotnovel-activate-20261015、operator codex；12:09:25.424640Z剧场置active，审计825157，商店链接与MoboReader配置未改。
+- claimPromo原工具先预演再apply，CHANNEL_CAPABILITY_OPERATOR=codex，reason含plotnovel-claim-enable-20261015、evidence为服务器b1-readback.json；12:09:27.084326Z enabled，审计825158。该工具原CLI不接受request-id、审计requestId由工具生成，未伪造参数或改代码。
+- 原 `effective-tag-projection.ts check → reconcile --apply --confirm RECONCILE-EFFECTIVE-TAGS → check` 全执行；初次0/0/0，原reconcile inserted0/updated0/deleted0，最终0/0/0。
+- 12:09:41.203312Z最终读回：PlotNovel active/code/1351，claimPromo enabled；getlistpc/getbydataid/getchapterinfo仍registered_disabled。MoboReader active/link/3366。全局FEATURE_PROMO_LINK_CLAIM及PROMO_LINK_CLAIM_ALLOW_WRITE只读确认均true。
+- 所有容器ID不变，env SHA仍359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832；未重建容器、未改试读白名单、未新增公开文章（PlotNovel publishedArticles0）。完整B1/B2由一次受保护脱离SSH的运维进程串行执行，所有生产业务命令仍为容器内原脚本、无-i、stdin=/dev/null；无数据修正或手动SQL写入。
+
+## 当前乙3交接与待验收基线
+
+**到乙3停手，等待Owner在后台提交领码金丝雀。** 原有fetched2032、pending609；manual_review_required已有609条，2638条意图状态前后逐项一致，故没有新增。原手册约590排队仅为参考，当前609条全部需要人工核对，不当作可直接重领的队列，不自动释放、重复领码或换账号绕过。
+
+12:12:09Z只读补核：PlotNovel书目全部linked，共3845；已纳入/无fetched/无人工复核标记的英语候选1204。请Owner在 `/catalog-sync` 选PlotNovel、英语、已纳入、推广“未领取”，选择20本，并选择与MoboReader相同账号，提交一次后回传父批次任务ID。甲2没有暂停旧MoboReader批次，故无需恢复；本会话尚未代提交任何批次。
+
+本批验收口径19/20成功、最多1普通失败、人工复核相对609基线无新增；凭据/权限/账号级故障立即停止。金丝雀读回完成后仍须Owner明确“继续阶段丙”，本次条件授权不含阶段丙。外部请求仍1/30，无新增HTTP。
+
+阶段甲已单独提交e69b71c8；本停点提交乙1/乙2及交接证据，未宣称阶段乙金丝雀已验收或完整开通完成。当前Notion单条运维记录待同步并回读，随后补收据。结果见 [checkpoint-b3.json](evidence/plotnovel-opening-2026-10-15/checkpoint-b3.json) 与 [Owner交接](evidence/plotnovel-opening-2026-10-15/owner-canary-handoff.md)。

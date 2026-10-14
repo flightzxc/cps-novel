@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-14T12:09:23.971831+00:00",
+  "ownership": [
+    {
+      "theater": "plotnovel",
+      "items": 3845,
+      "promo_links": 2641
+    }
+  ],
+  "stationSamplesUnchanged": 3,
+  "sideEffectIntentsMatched": 2638,
+  "intentStatusDifferences": 0,
+  "wrongIntentOwners": 0,
+  "noop": true,
+  "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z"
+}
