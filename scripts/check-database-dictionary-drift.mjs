@@ -13,6 +13,17 @@ const dictionaryPath = path.join(
 );
 const staticOnly = process.argv.includes("--static");
 
+/**
+ * The ONLY SECURITY DEFINER functions the database may contain, keyed by function name. Shared by the static check
+ * (the dictionary record of a registered DEFINER function must match its entry) and the live-catalog check (any
+ * `prosecdef = true` function in a non-system schema that is not listed here fails the check, registered in the
+ * dictionary or not). Adding another DEFINER function therefore means editing this list on purpose, in the same
+ * change that adds the migration (v0.6.0 Owner 2026-10-14: database-level tightening of upstream_code).
+ */
+export const ALLOWED_DEFINER_FUNCTIONS = new Map([
+  ["code_mode_upstream_code", { schema: "public", identityArguments: "p_public_redirect_code text", returnType: "text" }],
+]);
+
 function fail(messages) {
   const problems = Array.isArray(messages) ? messages : [messages];
   throw new Error(`Database dictionary drift:\n- ${problems.join("\n- ")}`);
@@ -69,7 +80,12 @@ function parseDictionary(text) {
     });
 }
 
-function assertStaticConsistency(schemaTables, records) {
+/**
+ * @param {Map<string, Set<string>>} schemaTables
+ * @param {Array<Record<string, any>>} records
+ * @param {{ allowedDefinerFunctions?: Map<string, { schema: string, identityArguments: string, returnType: string }> }} [options]
+ */
+export function assertStaticConsistency(schemaTables, records, { allowedDefinerFunctions = ALLOWED_DEFINER_FUNCTIONS } = {}) {
   const problems = [];
   const keys = new Set();
   for (const record of records) {
@@ -119,19 +135,17 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
-  // Registered functions are of exactly two kinds: zero-argument SECURITY INVOKER trigger functions, and the one
-  // explicitly allow-listed SECURITY DEFINER function below. Adding any other SECURITY DEFINER function means
-  // changing this allow-list on purpose (v0.6.0 Owner 2026-10-14: database-level tightening of upstream_code).
-  const ALLOWED_DEFINER_FUNCTIONS = new Map([
-    ["code_mode_upstream_code", { identityArguments: "p_public_redirect_code text", returnType: "text" }],
-  ]);
+  // Registered functions are of exactly two kinds: zero-argument SECURITY INVOKER trigger functions, and the
+  // explicitly allow-listed SECURITY DEFINER functions (ALLOWED_DEFINER_FUNCTIONS, module level, shared with the
+  // live-catalog check below).
   for (const record of active.filter((item) => item.data_type === "function")) {
     const common = record.record_kind === "constraint" && record.managed_by === "migration_sql"
       && record.function_schema === "public";
     const triggerFunction = common && record.function_identity_arguments === ""
       && record.function_return_type === "trigger" && record.function_security === "invoker";
-    const allowed = ALLOWED_DEFINER_FUNCTIONS.get(record.physical_name);
+    const allowed = allowedDefinerFunctions.get(record.physical_name);
     const definerFunction = common && allowed !== undefined
+      && record.function_schema === allowed.schema
       && record.function_identity_arguments === allowed.identityArguments
       && record.function_return_type === allowed.returnType && record.function_security === "definer";
     if (!triggerFunction && !definerFunction) {
@@ -156,8 +170,18 @@ function assertStaticConsistency(schemaTables, records) {
   return { recordCount: records.length, activeCount: active.length };
 }
 
-async function assertCatalogConsistency(records) {
-  const prisma = new PrismaClient();
+/**
+ * @param {Array<Record<string, any>>} records parsed dictionary records
+ * @param {{
+ *   prisma?: import("@prisma/client").PrismaClient,
+ *   allowedDefinerFunctions?: Map<string, { schema: string, identityArguments: string, returnType: string }>,
+ * }} [options] `prisma`: reuse a client (tests); default opens one from DATABASE_URL and closes it afterwards.
+ */
+export async function assertCatalogConsistency(
+  records,
+  { prisma: injectedPrisma, allowedDefinerFunctions = ALLOWED_DEFINER_FUNCTIONS } = {},
+) {
+  const prisma = injectedPrisma ?? new PrismaClient();
   try {
     const [tables, columns, constraints, indexes, triggers, functions] = await Promise.all([
       prisma.$queryRawUnsafe(`
@@ -189,13 +213,23 @@ async function assertCatalogConsistency(records) {
         JOIN pg_namespace n ON n.oid = r.relnamespace
         WHERE n.nspname = 'public' AND NOT t.tgisinternal
       `),
+      // Every function / procedure / aggregate / window function in a NON-SYSTEM schema, except objects owned by an
+      // extension (pg_depend deptype 'e'). Not just `prokind = 'f'` in `public`: a SECURITY DEFINER procedure, or a
+      // function created in some other schema, must not be invisible to this check.
       prisma.$queryRawUnsafe(`
         SELECT n.nspname AS schema_name, p.proname AS name,
                pg_get_function_identity_arguments(p.oid) AS identity_arguments,
                format_type(p.prorettype, NULL) AS return_type,
-               p.prosecdef AS security_definer
+               p.prosecdef AS security_definer,
+               p.prokind::text AS kind
         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname = 'public' AND p.prokind = 'f'
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'
+          AND p.prokind IN ('f', 'p', 'a', 'w')
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_depend d
+            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
+          )
       `),
     ]);
 
@@ -247,6 +281,34 @@ async function assertCatalogConsistency(records) {
     for (const name of [...actualConstraints, ...actualIndexes, ...actualTriggers]) {
       if (!expectedPhysical.has(name)) problems.push(`database object missing from dictionary ${name}`);
     }
+
+    // Hard rule, independent of the dictionary: a SECURITY DEFINER function runs with its owner's privileges, so the
+    // set of them is an explicit allow-list. Any `prosecdef = true` function that is not on it fails the check,
+    // whether or not somebody remembered to register it.
+    const functionLabel = (fn) => `${fn.schema_name}.${fn.name}(${fn.identity_arguments})`;
+    for (const fn of functions.filter((candidate) => candidate.security_definer)) {
+      const allowed = allowedDefinerFunctions.get(fn.name);
+      if (
+        !allowed || allowed.schema !== fn.schema_name || allowed.identityArguments !== fn.identity_arguments
+        || allowed.returnType !== fn.return_type
+      ) {
+        problems.push(`SECURITY DEFINER function is not on the allow-list ${functionLabel(fn)}`);
+      }
+    }
+
+    // Reverse check for functions: every live function (non-system schema, not extension-owned) must have an active
+    // dictionary record with the same schema, name and identity arguments -- same discipline as constraints/indexes.
+    const registeredFunctions = new Set(
+      records
+        .filter((item) => item.status === "active" && item.record_kind === "constraint" && item.data_type === "function"
+          && item.managed_by !== "application_contract")
+        .map((item) => `${item.function_schema}.${item.physical_name}(${item.function_identity_arguments})`),
+    );
+    for (const fn of functions) {
+      if (!registeredFunctions.has(functionLabel(fn))) {
+        problems.push(`database function missing from dictionary ${functionLabel(fn)}`);
+      }
+    }
     // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
     // rebind tables (article_novel_rebind_preview/_batch/_batch_item) push the
     // live-catalog baseline from 49 to 52, mirroring the 52-model constant
@@ -263,19 +325,29 @@ async function assertCatalogConsistency(records) {
       triggerCount: actualTriggers.size,
     };
   } finally {
-    await prisma.$disconnect();
+    if (!injectedPrisma) await prisma.$disconnect();
   }
 }
 
-const [schema, dictionaryText] = await Promise.all([
-  readFile(schemaPath, "utf8"),
-  readFile(dictionaryPath, "utf8"),
-]);
-const schemaTables = parseSchema(schema);
-const records = parseDictionary(dictionaryText);
-const staticResult = assertStaticConsistency(schemaTables, records);
-const catalogResult = staticOnly ? null : await assertCatalogConsistency(records);
+export async function loadRepoDictionary() {
+  const [schema, dictionaryText] = await Promise.all([
+    readFile(schemaPath, "utf8"),
+    readFile(dictionaryPath, "utf8"),
+  ]);
+  return { schemaTables: parseSchema(schema), records: parseDictionary(dictionaryText) };
+}
 
-process.stdout.write(
-  `${JSON.stringify({ status: "ok", models: schemaTables.size, ...staticResult, ...catalogResult })}\n`,
-);
+async function main() {
+  const { schemaTables, records } = await loadRepoDictionary();
+  const staticResult = assertStaticConsistency(schemaTables, records);
+  const catalogResult = staticOnly ? null : await assertCatalogConsistency(records);
+
+  process.stdout.write(
+    `${JSON.stringify({ status: "ok", models: schemaTables.size, ...staticResult, ...catalogResult })}\n`,
+  );
+}
+
+// Run as a script (`node scripts/check-database-dictionary-drift.mjs [--static]`); importing it (tests) does not run it.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

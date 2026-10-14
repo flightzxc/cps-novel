@@ -203,8 +203,11 @@ describe("P1-06 database operations static contracts", () => {
     // v0.6.0 口令码剧场·数据库层收紧 (20261014120000_code_mode_upstream_code_guard) adds 4 records:
     // 1 field (promo_link.upstream_code_present), 1 trigger (promo_link_upstream_code_present_sync),
     // 2 functions (the trigger function + the SECURITY DEFINER code_mode_upstream_code) -- 1343 + 4 = 1347.
-    expect(records).toHaveLength(1347);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1347);
+    // v0.6.0 复核 MAJOR-1: the live-catalog function reverse check found two trigger functions from the initial
+    // migration that were never registered (reject_promo_public_redirect_code_change, reject_operation_audit_mutation);
+    // both are now registered -- 1347 + 2 = 1349 (no new migration, no new database object).
+    expect(records).toHaveLength(1349);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1349);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

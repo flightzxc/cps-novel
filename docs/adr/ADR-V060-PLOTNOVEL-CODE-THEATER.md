@@ -138,7 +138,12 @@
 
 **中间页**（`loadCodeModePageData`）：先按站内码查一次推广链接（不选口令码），用 `isPromoReady` 判定，再经 `$queryRaw` 调这个函数取码；函数返回 `NULL`（数据库层不放行）就 404。其它任何 web 路径都拿不到口令码。
 
-**数据字典合同**：`scripts/check-database-dictionary-drift.mjs` 的函数合同改为"零参数 SECURITY INVOKER 触发器函数"加"一个**明确白名单**的 SECURITY DEFINER 函数（`code_mode_upstream_code`）"；今后再新增任何 DEFINER 函数必须有意识地改这份白名单。字典 +4 条（字段 1、触发器 1、函数 2）。
+**数据字典合同与漂移检查**（`scripts/check-database-dictionary-drift.mjs`，Owner 复核 MAJOR-1 后加固）：
+- **白名单是模块级常量 `ALLOWED_DEFINER_FUNCTIONS`**（现在只有 `code_mode_upstream_code`，连 schema、参数、返回类型一起记），静态检查和活库检查共用。静态检查：字典里登记的函数只能是"零参数 SECURITY INVOKER 触发器函数"或白名单里的 DEFINER 函数。
+- **活库的硬规则，与字典登记无关**：库里（非系统 schema、非扩展自带）任何 `prosecdef = true` 的函数 / 存储过程，只要不在白名单（schema、名字、参数、返回类型任一不符）就失败——登记了也不行，没登记更不行。
+- **活库的函数反向核对**：库里每个函数 / 存储过程 / 聚合 / 窗口函数（`prokind IN ('f','p','a','w')`，不止 `public` 里的 `'f'`；排除扩展自带的 `pg_depend deptype = 'e'`，排除 `pg_catalog` / `information_schema` / toast / temp 等系统 schema）必须在字典里有 active 记录，按 `(schema, 名字, 参数)` 对上，对不上就失败——与约束 / 索引 / 触发器的反向核对同一纪律。
+- 所以今后某个迁移新建 SECURITY DEFINER 函数却没登记字典，静态检查虽然看不见活库，但活库检查（每个真实库运行器末尾都跑）一定失败；要放行必须在同一变更里改白名单。`tests/integration/plotnovel/drift-check-postgres.test.ts` 用真实库钉死：没登记的 DEFINER 函数 / 存储过程 / 别的 schema 里的 DEFINER 函数 / 没登记的普通函数 → 失败；登记了但不在白名单 → 失败；登记且在白名单内 → 通过；扩展自带的函数不算；整支 CLI 当子进程跑的退出码。
+- 字典 +4 条（字段 1、触发器 1、函数 2）；加固后的函数反向核对还发现初始迁移里有 2 个触发器函数（`reject_promo_public_redirect_code_change`、`reject_operation_audit_mutation`）从未登记，一并补登（+2，共 1349 条）。
 
 ### D9 公开网址冻结合规
 
