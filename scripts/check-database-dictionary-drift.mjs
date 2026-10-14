@@ -119,11 +119,23 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
+  // Registered functions are of exactly two kinds: zero-argument SECURITY INVOKER trigger functions, and the one
+  // explicitly allow-listed SECURITY DEFINER function below. Adding any other SECURITY DEFINER function means
+  // changing this allow-list on purpose (v0.6.0 Owner 2026-10-14: database-level tightening of upstream_code).
+  const ALLOWED_DEFINER_FUNCTIONS = new Map([
+    ["code_mode_upstream_code", { identityArguments: "p_public_redirect_code text", returnType: "text" }],
+  ]);
   for (const record of active.filter((item) => item.data_type === "function")) {
-    if (record.record_kind !== "constraint" || record.managed_by !== "migration_sql"
-      || record.function_schema !== "public" || record.function_identity_arguments !== ""
-      || record.function_return_type !== "trigger" || record.function_security !== "invoker") {
-      problems.push(`invalid registered trigger function contract ${record.stable_key}`);
+    const common = record.record_kind === "constraint" && record.managed_by === "migration_sql"
+      && record.function_schema === "public";
+    const triggerFunction = common && record.function_identity_arguments === ""
+      && record.function_return_type === "trigger" && record.function_security === "invoker";
+    const allowed = ALLOWED_DEFINER_FUNCTIONS.get(record.physical_name);
+    const definerFunction = common && allowed !== undefined
+      && record.function_identity_arguments === allowed.identityArguments
+      && record.function_return_type === allowed.returnType && record.function_security === "definer";
+    if (!triggerFunction && !definerFunction) {
+      problems.push(`invalid registered function contract ${record.stable_key}`);
     }
   }
 

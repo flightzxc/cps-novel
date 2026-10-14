@@ -493,7 +493,7 @@ type CandidateArticleRow = {
   novelId: string | null;
   promoLink: {
     status: string; webUrl: string | null; appUrl: string | null; deletedAt: Date | null;
-    upstreamCode: string | null; channelApp: { config: unknown }; novel: { locale: string };
+    upstreamCodePresent: boolean; channelApp: { config: unknown }; novel: { locale: string };
     channelAccountId: string; channelAppId: string; novelSourceItemId: string;
     novelSourceItem: { novelId: string | null; channelAppId: string; deletedAt: Date | null };
   } | null;

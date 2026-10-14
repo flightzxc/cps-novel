@@ -6,7 +6,12 @@
  *
  * 程序判定（isPromoReady）与数据库判定（promoReadySql）必须逐行一致；公开列表 / 搜索 / 详情 / 站点地图 /
  * IndexNow / hreflang / 发布门禁 / 可生成判定 / 领取批次 / 首页轮播，每一处都用真实角色跑一遍，
- * 因为单测测不出角色权限（web_app 要读 upstream_code，scheduler_app 的 queryActiveLocales 要读剧场配置）。
+ * 因为单测测不出角色权限（web_app 读不到 upstream_code、只读派生布尔列 upstream_code_present，scheduler_app 的
+ * queryActiveLocales 要读剧场配置）。
+ *
+ * 数据库层收紧（v0.6.0，Owner 2026-10-14）：web_app 对 promo_link.upstream_code 没有任何读权限；口令码非空由触发器
+ * 维护的布尔列表示，口令码本身只能经 SECURITY DEFINER 函数 code_mode_upstream_code() 取（该函数的逐项用例在
+ * code-function-postgres.test.ts）。
  */
 import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -67,14 +72,30 @@ describe.skipIf(!enabled).sequential("v0.6.0 D：就绪规则按剧场模式（�
   describe("列级授权（真实角色）", () => {
     beforeEach(async () => { await truncateDatabase(); await seedTheaters(); });
 
-    it("web_app 能读 upstream_code（发布门禁 / 中间页要用），读不了 raw_links；analyst_ro 与 scheduler_app 读不了 upstream_code", async () => {
+    it("🔴 web_app 读 upstream_code 被拒（permission denied）；只能读派生布尔列 upstream_code_present；读不了 raw_links；analyst_ro 与 scheduler_app 两列都读不了", async () => {
       await seedPublished({ appId: ids.plotApp, externalBookId: "g1", title: "Grant Book", agencyId: PLOT_AGENCY, promo: { upstreamCode: "960031" } });
-      const [row] = await web.$queryRaw<Array<{ upstream_code: string | null }>>`SELECT upstream_code FROM promo_link LIMIT 1`;
-      expect(row?.upstream_code).toBe("960031");
-      expect(await permissionDenied(() => web.$queryRaw`SELECT raw_links FROM promo_link LIMIT 1`)).toBe(true);
+      await seedPublished({ appId: ids.moboApp, externalBookId: "g2", title: "Mobo Grant", agencyId: MOBO_AGENCY, promo: { upstreamCode: "M1", webUrl: BIG_URL } });
+      // 任何形态都读不到口令码：裸 SELECT、Prisma select、表达式里引用、WHERE 里引用、SELECT *
+      expect(await permissionDenied(() => web.$queryRaw`SELECT upstream_code FROM promo_link LIMIT 1`)).toBe(true);
+      expect(await permissionDenied(() => web.promoLink.findMany({ select: { upstreamCode: true }, take: 1 }))).toBe(true);
+      expect(await permissionDenied(() => web.$queryRaw`SELECT length(upstream_code) FROM promo_link LIMIT 1`)).toBe(true);
+      expect(await permissionDenied(() => web.$queryRaw`SELECT id FROM promo_link WHERE upstream_code = '960031'`)).toBe(true);
       expect(await permissionDenied(() => web.$queryRaw`SELECT * FROM promo_link LIMIT 1`)).toBe(true);
-      expect(await permissionDenied(() => analyst.$queryRaw`SELECT upstream_code FROM promo_link LIMIT 1`)).toBe(true);
-      expect(await permissionDenied(() => scheduler.$queryRaw`SELECT upstream_code FROM promo_link LIMIT 1`)).toBe(true);
+      // 派生布尔列可读，且不含口令码
+      const rows = await web.$queryRaw<Array<{ upstream_code_present: boolean }>>`SELECT upstream_code_present FROM promo_link ORDER BY upstream_code_present`;
+      expect(rows).toEqual([{ upstream_code_present: true }, { upstream_code_present: true }]);
+      // 其它列的既有授权不变
+      expect(await permissionDenied(() => web.$queryRaw`SELECT status, channel_app_id, novel_id, web_url, app_url, public_redirect_code FROM promo_link LIMIT 1`)).toBe(false);
+      expect(await permissionDenied(() => web.$queryRaw`SELECT raw_links FROM promo_link LIMIT 1`)).toBe(true);
+      // analyst_ro、scheduler_app：口令码与布尔列都不给
+      for (const column of ["upstream_code", "upstream_code_present"]) {
+        expect(await permissionDenied(() => analyst.$queryRawUnsafe(`SELECT ${column} FROM promo_link LIMIT 1`)), `analyst ${column}`).toBe(true);
+        expect(await permissionDenied(() => scheduler.$queryRawUnsafe(`SELECT ${column} FROM promo_link LIMIT 1`)), `scheduler ${column}`).toBe(true);
+      }
+      // worker_app 照旧整表可读（领取 / 目录同步 / 站点地图都要读口令码）
+      const [workerRow] = await worker.$queryRaw<Array<{ upstream_code: string | null }>>`
+        SELECT upstream_code FROM promo_link WHERE upstream_code = '960031'`;
+      expect(workerRow?.upstream_code).toBe("960031");
       expect(await permissionDenied(() => scheduler.$queryRaw`SELECT config, id FROM channel_app LIMIT 1`)).toBe(false);
       expect(await permissionDenied(() => scheduler.$queryRaw`SELECT external_app_id FROM channel_app LIMIT 1`)).toBe(true);
       // web_app 仍然读不了凭据密文这类东西（边界没有因为这次授权松动）
@@ -83,7 +104,39 @@ describe.skipIf(!enabled).sequential("v0.6.0 D：就绪规则按剧场模式（�
   });
 
   describe("promoReadySql 与 isPromoReady 逐行等价", () => {
-    beforeAll(async () => { await truncateDatabase(); });
+    // 口令码"是否非空"在数据库里由触发器 promo_link_sync_upstream_code_present 算出来（web_app 读不到口令码本身，
+    // 就绪 SQL 只读这个布尔列）。这里在一张与 promo_link 同列名的临时表上挂**同一个触发器函数**，用它给每个样本口令码算
+    // 布尔值，再把布尔值喂给 promoReadySql——于是"触发器 + 就绪 SQL"整体与 JS 的 isPromoReady 逐行对照。
+    beforeAll(async () => {
+      await truncateDatabase();
+      await owner.$executeRawUnsafe("DROP TABLE IF EXISTS public.zz_code_present_probe");
+      await owner.$executeRawUnsafe("CREATE TABLE public.zz_code_present_probe (idx int PRIMARY KEY, upstream_code text, upstream_code_present boolean NOT NULL DEFAULT false)");
+      await owner.$executeRawUnsafe(`CREATE TRIGGER zz_probe_sync BEFORE INSERT OR UPDATE ON public.zz_code_present_probe
+        FOR EACH ROW EXECUTE FUNCTION public.promo_link_sync_upstream_code_present()`);
+    });
+    afterAll(async () => {
+      await owner.$executeRawUnsafe("DROP TABLE IF EXISTS public.zz_code_present_probe");
+    });
+
+    const presenceCache = new Map<string, boolean>();
+    /** 对每个不同的口令码（含 NULL）让触发器算一次布尔值；结果缓存，大矩阵只算不同的口令码。 */
+    async function presenceOf(codes: ReadonlyArray<string | null>): Promise<(code: string | null) => boolean> {
+      const key = (code: string | null) => (code === null ? NULL_SENTINEL : code);
+      const missing = [...new Set(codes.map(key))].filter((k) => !presenceCache.has(k));
+      for (let offset = 0; offset < missing.length; offset += 20_000) {
+        const chunk = missing.slice(offset, offset + 20_000);
+        await owner.$executeRawUnsafe("TRUNCATE public.zz_code_present_probe");
+        await owner.$executeRaw(Prisma.sql`
+          INSERT INTO public.zz_code_present_probe (idx, upstream_code)
+          SELECT t.idx::int, NULLIF(t.code, ${NULL_SENTINEL}) FROM unnest(${chunk}::text[]) WITH ORDINALITY AS t(code, idx)
+        `);
+        const rows = await owner.$queryRaw<Array<{ idx: number; upstream_code_present: boolean }>>`
+          SELECT idx, upstream_code_present FROM public.zz_code_present_probe ORDER BY idx`;
+        expect(rows).toHaveLength(chunk.length);
+        for (const row of rows) presenceCache.set(chunk[row.idx - 1]!, row.upstream_code_present);
+      }
+      return (code) => presenceCache.get(key(code))!;
+    }
 
     type Sample = {
       status: string;
@@ -98,15 +151,16 @@ describe.skipIf(!enabled).sequential("v0.6.0 D：就绪规则按剧场模式（�
 
     async function judgeInDatabase(samples: readonly Sample[]): Promise<boolean[]> {
       const enc = (value: string | null) => (value === null ? NULL_SENTINEL : value);
+      const present = await presenceOf(samples.map((s) => s.upstreamCode));
       const rows = await web.$queryRaw<Array<{ idx: number; ready: boolean }>>(Prisma.sql`
         SELECT p.idx::int AS idx, (${promoReadySql("p", { channelAppAlias: "pca", novelAlias: "n" })}) AS ready
         FROM (
           SELECT t.status, NULLIF(t.web_url, ${NULL_SENTINEL}) AS web_url, NULLIF(t.app_url, ${NULL_SENTINEL}) AS app_url,
-                 NULLIF(t.upstream_code, ${NULL_SENTINEL}) AS upstream_code, t.idx
+                 t.upstream_code_present, t.idx
           FROM unnest(
             ${samples.map((s) => s.status)}::text[], ${samples.map((s) => enc(s.webUrl))}::text[],
-            ${samples.map((s) => enc(s.appUrl))}::text[], ${samples.map((s) => enc(s.upstreamCode))}::text[]
-          ) WITH ORDINALITY AS t(status, web_url, app_url, upstream_code, idx)
+            ${samples.map((s) => enc(s.appUrl))}::text[], ${samples.map((s) => present(s.upstreamCode))}::boolean[]
+          ) WITH ORDINALITY AS t(status, web_url, app_url, upstream_code_present, idx)
         ) p
         JOIN (
           SELECT c.config::jsonb AS config, c.idx FROM unnest(${samples.map((s) => JSON.stringify(s.config))}::text[]) WITH ORDINALITY AS c(config, idx)

@@ -130,17 +130,6 @@ GRANT SELECT (
 -- Raw upstream payloads remain Worker-only. Web receives the two resolved
 -- destination columns because both the publish gate and the public /go route
 -- must test/resolve them. Analyst never receives them.
---
--- v0.6.0 (PlotNovel code-mode theater, docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md):
--- the promo CODE (`upstream_code`) is added to the Web column list for exactly
--- two reasons, both unavoidable for a theater whose upstream gives only a
--- code and no URL: (1) the publish gate (`loadPublishGateFacts`) and the
--- public access checks must test "is the code non-blank" to decide readiness;
--- (2) the `/go/<code>/app` interstitial must show the code to the reader
--- -- that page is the one and only place the code ever appears. Nothing else
--- about the boundary moves: the code never enters a list/card/detail DTO,
--- a sitemap, a log or an audit snapshot (tests pin each), Analyst/Scheduler
--- still cannot read it, and the raw upstream payload columns stay Worker-only.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
   source_language_name, source_locale, raw_language_scope, title, description, cover_url,
@@ -164,7 +153,20 @@ GRANT SELECT (
   error_kind, error_message, fetched_at, last_attempted_at, deleted_at,
   created_at, updated_at
 ) ON promo_link TO web_app, analyst_ro;
-GRANT SELECT (web_url, app_url, upstream_code) ON promo_link TO web_app;
+-- v0.6.0 (PlotNovel code-mode theater, docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md D8; Owner 2026-10-14
+-- "tighten at the database level"): web_app has NO read privilege on the promo CODE column at all -- not
+-- for MoboReader's rows, not for PlotNovel's. Two narrow paths replace it:
+--   (1) readiness only ever needs "is the code non-blank", so Web gets `upstream_code_present`, a boolean the
+--       `promo_link_upstream_code_present_sync` trigger recomputes on every INSERT/UPDATE (no writer can set
+--       it to a value that disagrees with the code); it contains no part of the code;
+--   (2) the `/go/<code>/app` interstitial gets the code through ONE SECURITY DEFINER function,
+--       `public.code_mode_upstream_code(text)`, which answers a single public redirect code and returns the code
+--       only when that link belongs to a code-mode theater and is ready (same rule as isPromoReady); anything
+--       else returns NULL. It is a scalar function -- there is nothing to enumerate.
+-- EXECUTE is granted to web_app ONLY (below). Worker keeps whole-table access; Scheduler and Analyst never see
+-- the code or the boolean.
+GRANT SELECT (web_url, app_url, upstream_code_present) ON promo_link TO web_app;
+GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app;
 GRANT SELECT (
   id, effect_key, operation_type, idempotency_key, target_type, target_id,
   task_item_type, task_item_id, channel_account_id, channel_app_id, promo_link_id,

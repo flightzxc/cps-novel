@@ -87,7 +87,9 @@ export type ArticleSeoVisibilityState = {
 /**
  * v0.6.0（口令码剧场）：就绪判定按**剧场模式**二选一，所以状态里多了三个**可选**字段。
  *
- *   - `upstreamCode`  口令码模式用（`promo_link.upstream_code`）；
+ *   - `upstreamCodePresent`  口令码模式用：口令码去空白后是否非空（`promo_link.upstream_code_present`，触发器按
+ *     `upstream_code` 重算的布尔列）。**web_app 读不到 `upstream_code` 本身**（数据库层只开了这一列和
+ *     `code_mode_upstream_code()` 函数），所以就绪判断只认这一列，不认口令码本身；
  *   - `channelApp`    推广所属剧场的 `config`（决定模式与口令码模式的语种白名单）；
  *   - `novel`         书的语种（`Novel.locale`），口令码模式要求它在 `codeModeLocales` 里。
  *
@@ -99,6 +101,11 @@ export type PromoLinkReadinessState = {
   readonly status: string;
   readonly webUrl: string | null;
   readonly appUrl: string | null;
+  readonly upstreamCodePresent?: boolean;
+  /**
+   * 仅供**能直接读 `upstream_code` 的角色**（worker / 运维脚本 / 测试夹具）在没有 `upstreamCodePresent` 时的退路。
+   * 两个都给时以 `upstreamCodePresent` 为准。web 路径永远不要选它（`web_app` 读它会 permission denied）。
+   */
   readonly upstreamCode?: string | null;
   readonly channelApp?: { readonly config: unknown } | null;
   readonly novel?: { readonly locale: string } | null;
@@ -113,13 +120,18 @@ export const PROMO_READINESS_SELECT = {
   status: true,
   webUrl: true,
   appUrl: true,
-  upstreamCode: true,
+  upstreamCodePresent: true,
   channelApp: { select: { config: true } },
   novel: { select: { locale: true } },
 } as const satisfies Prisma.PromoLinkSelect;
 
 function isNonBlank(value: string | null | undefined): boolean {
   return value != null && value.trim().length > 0;
+}
+
+/** 口令码是否非空：优先用布尔列（web 路径唯一能拿到的），退路才看口令码本身（能读它的角色）。 */
+function hasUpstreamCode(promoLink: NonNullable<PromoLinkReadinessState>): boolean {
+  return promoLink.upstreamCodePresent ?? isNonBlank(promoLink.upstreamCode);
 }
 
 /**
@@ -174,7 +186,7 @@ export function isPromoReady(promoLink: PromoLinkReadinessState): boolean {
   if (theaterConfig !== undefined && isCodeModeTheater(theaterConfig)) {
     // 口令码模式：不看网址（上游本来就不给），看口令码非空 + 书的语种在剧场白名单里。
     // 白名单按**原样**逐项比对（不做 trim/归一），与 SQL 的 `jsonb_exists` 逐字等价。
-    return isNonBlank(promoLink.upstreamCode) && localeInCodeModeWhitelist(theaterConfig, promoLink.novel?.locale);
+    return hasUpstreamCode(promoLink) && localeInCodeModeWhitelist(theaterConfig, promoLink.novel?.locale);
   }
   return isNonBlank(promoLink.webUrl) || isNonBlank(promoLink.appUrl);
 }
@@ -250,10 +262,12 @@ export function promoReadySql(
   // 两种模式互不相交：剧场配置 `promoMode = 'code'` 才走口令码规则，其余（含缺省、拼错）一律走 link 规则。
   // `coalesce(jsonb_typeof(...), '')`：配置里没有 `codeModeLocales` 键时 `jsonb_typeof` 是 NULL，整条规则会变成
   // NULL 而不是 false——WHERE 里碰巧等价，但一旦被 NOT 包起来（"不可生成"分桶）就会漏行。这里必须是确定的 false。
+  // `upstream_code_present`：口令码去空白后非空的布尔列（触发器按 `upstream_code` 逐字等价于 JS isNonBlank 地重算）。
+  // web_app 读不到 `upstream_code` 本身，所以这里不再直接对口令码做 btrim；字符集参数只剩 link 规则的两份（web / app）。
   // `coalesce(locale, '') <> ''`：语种为空（或缺失）一律不就绪，对应 JS 侧 `localeInCodeModeWhitelist` 开头那句
   // `locale == null || locale.length === 0 → false`。没有这一句，配置里的 `codeModeLocales` 含 `""` 且书的语种也是 `""`
   // 时 `jsonb_exists` 会返回 true，而 JS 返回 false——两边在空语种边界上不等价（复核 NIT-8 抓到）。
-  return Prisma.sql`${column("status")} = 'fetched' AND (CASE WHEN ${channelApp("config")}->>'promoMode' = 'code' THEN (coalesce(btrim(${column("upstream_code")}, ${JS_TRIM_WHITESPACE_CHARACTERS}), '') <> '' AND coalesce(${novelLocale}, '') <> '' AND coalesce(jsonb_typeof(${localeList}), '') = 'array' AND jsonb_exists(${localeList}, ${novelLocale})) ELSE ${linkRule} END)`;
+  return Prisma.sql`${column("status")} = 'fetched' AND (CASE WHEN ${channelApp("config")}->>'promoMode' = 'code' THEN (${column("upstream_code_present")} AND coalesce(${novelLocale}, '') <> '' AND coalesce(jsonb_typeof(${localeList}), '') = 'array' AND jsonb_exists(${localeList}, ${novelLocale})) ELSE ${linkRule} END)`;
 }
 
 /**
