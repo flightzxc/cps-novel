@@ -1,0 +1,9 @@
+{
+  "name": "08-six-table-backup",
+  "startedAt": 1791979288.294316,
+  "finishedAt": 1791979302.6101189,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/08-six-table-backup.py",
+  "sshOrWrapperStderrSha256": null
+}

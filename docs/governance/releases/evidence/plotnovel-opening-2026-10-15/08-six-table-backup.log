@@ -1,0 +1,82 @@
+REMOTE_CONTEXT={"at": "2026-10-14T12:01:32.324963+00:00", "final": "493eb23b034b0410780228535b3e293e4ee91f9a", "envSha256": "359c11323c7f837402dfea2755abd6456569188ef8c202b307600d86525db832", "containers": {"backup-timer": "cps-novel-backup-timer-1", "scheduler": "cps-novel-scheduler-1", "worker": "cps-novel-worker-1", "worker-light": "cps-novel-worker-light-1", "web": "cps-novel-web-1", "postgres": "cps-novel-postgres-1"}, "health": {"version": "0.6.0", "commit": "493eb23b034b0410780228535b3e293e4ee91f9a", "builtAt": "2026-10-14T04:47:30Z"}, "metadataConsistency": "passed"}
+SIX_TABLE_BACKUP_STARTED={"at": "2026-10-14T12:01:32.459189+00:00", "backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z", "tables": ["novel_source_item", "promo_link", "side_effect_intent", "source_label", "novel_source_item_label", "source_label_mapping"]}
+PG_RESTORE_LIST_BEGIN
+;
+; Archive created at 2026-10-14 12:01:32 UTC
+;     dbname: cps_novel
+;     TOC Entries: 65
+;     Compression: gzip
+;     Dump Version: 1.15-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 16.14 (Debian 16.14-1.pgdg13+1)
+;     Dumped by pg_dump version: 16.14 (Debian 16.14-1.pgdg13+1)
+;
+;
+; Selected TOC Entries:
+;
+226; 1259 16483 TABLE public novel_source_item migration_owner
+232; 1259 16540 TABLE public novel_source_item_label migration_owner
+233; 1259 16548 TABLE public promo_link migration_owner
+240; 1259 16656 TABLE public side_effect_intent migration_owner
+231; 1259 16532 TABLE public source_label migration_owner
+265; 1259 17413 TABLE public source_label_mapping migration_owner
+3677; 0 16483 TABLE DATA public novel_source_item migration_owner
+3679; 0 16540 TABLE DATA public novel_source_item_label migration_owner
+3680; 0 16548 TABLE DATA public promo_link migration_owner
+3681; 0 16656 TABLE DATA public side_effect_intent migration_owner
+3678; 0 16532 TABLE DATA public source_label migration_owner
+3682; 0 17413 TABLE DATA public source_label_mapping migration_owner
+3493; 2606 16547 CONSTRAINT public novel_source_item_label novel_source_item_label_pkey migration_owner
+3483; 2606 16493 CONSTRAINT public novel_source_item novel_source_item_pkey migration_owner
+3501; 2606 16559 CONSTRAINT public promo_link promo_link_pkey migration_owner
+3507; 2606 16666 CONSTRAINT public side_effect_intent side_effect_intent_pkey migration_owner
+3514; 2606 17425 CONSTRAINT public source_label_mapping source_label_mapping_pkey migration_owner
+3490; 2606 16539 CONSTRAINT public source_label source_label_pkey migration_owner
+3479; 1259 16808 INDEX public novel_source_app_locale_idx migration_owner
+3480; 1259 16809 INDEX public novel_source_app_split_ratio_idx migration_owner
+3481; 1259 16812 INDEX public novel_source_identity_key migration_owner
+3491; 1259 16823 INDEX public novel_source_item_label_active_idx migration_owner
+3494; 1259 16822 INDEX public novel_source_label_active_idx migration_owner
+3495; 1259 16824 INDEX public novel_source_label_key migration_owner
+3484; 1259 16807 INDEX public novel_source_novel_idx migration_owner
+3485; 1259 16811 INDEX public novel_source_status_seen_idx migration_owner
+3486; 1259 16810 INDEX public novel_source_updated_idx migration_owner
+3496; 1259 16829 INDEX public promo_link_account_status_idx migration_owner
+3497; 1259 16831 INDEX public promo_link_id_novel_key migration_owner
+3498; 1259 16826 INDEX public promo_link_idempotency_key_key migration_owner
+3499; 1259 16828 INDEX public promo_link_novel_status_idx migration_owner
+3502; 1259 16825 INDEX public promo_link_public_redirect_code_key migration_owner
+3503; 1259 16827 INDEX public promo_link_source_idx migration_owner
+3504; 1259 16830 INDEX public promo_link_status_fetched_idx migration_owner
+3505; 1259 16853 INDEX public side_effect_intent_effect_key_key migration_owner
+3508; 1259 16856 INDEX public side_effect_operation_idempotency_key migration_owner
+3509; 1259 16855 INDEX public side_effect_status_created_idx migration_owner
+3510; 1259 16854 INDEX public side_effect_target_created_idx migration_owner
+3487; 1259 16821 INDEX public source_label_identity_key migration_owner
+3488; 1259 16820 INDEX public source_label_kind_idx migration_owner
+3511; 1259 17426 INDEX public source_label_mapping_edge_key migration_owner
+3512; 1259 17427 INDEX public source_label_mapping_exact_active_idx migration_owner
+3515; 1259 17428 INDEX public source_label_mapping_tag_active_idx migration_owner
+3531; 2620 885786 TRIGGER public promo_link promo_link_upstream_code_present_sync migration_owner
+3532; 2620 17256 TRIGGER public promo_link promo_public_code_immutable_trigger migration_owner
+3533; 2620 152020 TRIGGER public side_effect_intent side_effect_manual_review_exit_guard migration_owner
+3516; 2606 16936 FK CONSTRAINT public novel_source_item novel_source_item_channel_app_id_fkey migration_owner
+3519; 2606 16981 FK CONSTRAINT public novel_source_item_label novel_source_item_label_novel_source_item_id_fkey migration_owner
+3520; 2606 16986 FK CONSTRAINT public novel_source_item_label novel_source_item_label_source_label_id_fkey migration_owner
+3517; 2606 16941 FK CONSTRAINT public novel_source_item novel_source_item_novel_id_fkey migration_owner
+3521; 2606 17006 FK CONSTRAINT public promo_link promo_link_channel_account_id_fkey migration_owner
+3522; 2606 17001 FK CONSTRAINT public promo_link promo_link_channel_app_id_fkey migration_owner
+3523; 2606 16991 FK CONSTRAINT public promo_link promo_link_novel_id_fkey migration_owner
+3524; 2606 16996 FK CONSTRAINT public promo_link promo_link_novel_source_item_id_fkey migration_owner
+3525; 2606 17076 FK CONSTRAINT public side_effect_intent side_effect_intent_channel_account_id_fkey migration_owner
+3526; 2606 17081 FK CONSTRAINT public side_effect_intent side_effect_intent_channel_app_id_fkey migration_owner
+3527; 2606 17086 FK CONSTRAINT public side_effect_intent side_effect_intent_promo_link_id_fkey migration_owner
+3518; 2606 16976 FK CONSTRAINT public source_label source_label_channel_app_id_fkey migration_owner
+3528; 2606 17508 FK CONSTRAINT public source_label_mapping source_label_mapping_approved_by_fkey migration_owner
+3529; 2606 17498 FK CONSTRAINT public source_label_mapping source_label_mapping_channel_app_id_fkey migration_owner
+3530; 2606 17503 FK CONSTRAINT public source_label_mapping source_label_mapping_tag_id_fkey migration_owner
+PG_RESTORE_LIST_END
+SIX_TABLE_BACKUP={"backupId": "plotnovel-pre-rehome-20261015-20261014T120132Z", "containerPath": "/var/lib/cps-novel/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump", "hostPath": "/opt/cps-novel/shared/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump", "createdAt": "2026-10-14T12:01:42.722778+00:00", "bytes": 97484269, "sha256": "49452fd35945bff68f5496b56b4c9e747bc781b2caacf410d2ff41729c25c3ba", "mode": "600", "tables": ["novel_source_item", "promo_link", "side_effect_intent", "source_label", "novel_source_item_label", "source_label_mapping"], "pgRestoreList": "PASS", "pgRestoreListSha256": "6beb18f82a9a093b7afe3b111d23192984fd47c5bf440e592eaace6356a9787d"}
+SIX_TABLE_BACKUP=PASS

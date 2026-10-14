@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-14 · 共 1313 个 commit
+生成时间：2026-10-14 · 共 1314 个 commit
+- `e8a2cba` 2026-10-14 运维：登记 PlotNovel 并交付甲2空阻挡清单停点  — _codex · GPT-6_
 - `062a51f` 2026-10-14 发布：收官海阅 v0.6.0 Notion 同步与治理回读  — _codex · GPT-6_
 - `77ae244` 2026-10-14 发布：登记海阅 v0.6.0 正式站部署与完整验收证据  — _codex · GPT-6_
 - `26f4a3e` 2026-10-14 文档：记录海阅 v0.6.0 第一阶段门禁与不可变发布工件  — _codex · GPT-6_

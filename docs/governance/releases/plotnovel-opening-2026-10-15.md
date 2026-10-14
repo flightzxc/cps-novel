@@ -1,6 +1,6 @@
 # PlotNovel 剧场开通运维记录（2026-10-15 操作编号）
 
-## 当前状态：甲2检查点，停手点一等待Owner确认
+## 当前状态：阶段甲PASS，条件批准改挂已满足，乙1/乙2待执行
 
 Owner授权执行计划；本轮仅完成甲0、甲1、甲2首次预演及完整任务清单。**PlotNovel已登记，尚未改挂、激活或开通业务。** 工作树release/v0.6.0-2026-10-14；线上v0.6.0 / Final `493eb23b034b0410780228535b3e293e4ee91f9a`，tag不移动，无业务代码/schema/nginx/版本身份改动。操作编号按Owner指定20261015，实际执行时间以原始UTC时间戳为准，本检查点于2026-10-14执行。
 
@@ -48,3 +48,16 @@ pendingGenericTaskItems、pendingSyncTaskItems、activeCatalogScans、uniqueKeyC
 本次仅甲2检查点，阶段甲尚未结束。记录与脱敏证据先提交、推送回读；不新增发版级开发日志、不登记“PlotNovel已开通”。CHANGELOG使用原生成器与core.abbrev=7。甲阶段结束时同步Notion运维记录并回读；本检查点未冒充Notion已同步或阶段甲已完成。
 
 原命令包装器、手册SQL、stdout和退出码、完整预演与任务清单、env摘要、请求明细均见 [证据目录](evidence/plotnovel-opening-2026-10-15/)，机器状态见 [checkpoint-a2.json](evidence/plotnovel-opening-2026-10-15/checkpoint-a2.json)。证据扫描PASS，口令码未SELECT或输出，站点密钥模式0，实际临时密钥泄漏0。本次没有数据修正或手册步骤偏离；首次改挂预演未被阻挡，仍遵守空清单停点。
+
+## 阶段甲续行与条件授权（本会话Owner确认）
+
+Owner确认继续甲3/甲4，并授权：若甲4数量与甲2一致（或来自新扫描的小幅增加）、全部blockers0、publishedArticles0、备份编号与pg_restore --list核验通过，则视为批准改挂，直接继续乙1/乙2，到乙3停。此授权取代上一节“甲4再次等待批准”的历史说明；尚无Owner后台操作。
+
+- 2026-10-14T11:59:30Z复查预演仍3845书目/2641推广，全部blockers0。
+- 最近VERIFIED基础备份20261011T170922Z，验证时间10-11T17:14:17Z，备份manifest摘要匹配；实际周备周期604800秒、新鲜度691200秒，年龄240319秒通过。日备last-success10-14T07:52:35Z/exit0，年龄14821秒、门槛93600秒通过。WAL archive_mode=on、archive_timeout=15min、failed_count0、ready0，最新归档11:50:31Z，无未恢复归档失败。
+- 六表受保护逻辑导出：备份编号 **plotnovel-pre-rehome-20261015-20261014T120132Z**；服务器文件 `/opt/cps-novel/shared/backups/logical/plotnovel-pre-rehome-20261015-20261014T120132Z.dump`，97,484,269字节，0600；SHA256 `49452fd35945bff68f5496b56b4c9e747bc781b2caacf410d2ff41729c25c3ba`；pg_restore --list覆盖六张TABLE DATA并PASS。备份正文不回传、不进入证据目录。
+- title_normalized初始缺失0，原脚本--dry-run与正式空操作均scanned0/updated0，最终缺失0，没有业务行回填写入。
+- 12:04:09Z甲4正式预演使用备份编号reason：数量仍3845/2641，没有使用小幅增加例外；counts全部字段与甲2一致，八类blockers全0、publishedArticles0、blocked=false。条件批准 **SATISFIED**。三条推广链接站内码摘要和fetched状态已保存，2638条副作用意图ID/状态基线仅保存在服务器受保护运维目录。
+- 包装器跨行JSON解析错误已独立留证并修正；10c正式预演PASS。没有修改业务代码或削弱原门禁。
+
+阶段甲证据见 [phase-a-result.json](evidence/plotnovel-opening-2026-10-15/phase-a-result.json)。按Owner条件批准继续乙1/乙2；改挂后立即启用和对账，中间不插入治理等待；乙3停下等待Owner提交20本领码金丝雀。

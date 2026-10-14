@@ -1,0 +1,9 @@
+{
+  "name": "10a-baseline-diagnostic",
+  "startedAt": 1791979374.112281,
+  "finishedAt": 1791979378.377471,
+  "exit": 1,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/10a-baseline-diagnostic.py",
+  "sshOrWrapperStderrSha256": "9b26497844379280473178655808c1dad246517339bd93520c3d9d8ee32133f8"
+}

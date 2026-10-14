@@ -1,0 +1,9 @@
+{
+  "name": "10-a4-final-preview",
+  "startedAt": 1791979309.483635,
+  "finishedAt": 1791979314.132649,
+  "exit": 1,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/10-a4-final-preview.py",
+  "sshOrWrapperStderrSha256": "9b26497844379280473178655808c1dad246517339bd93520c3d9d8ee32133f8"
+}
