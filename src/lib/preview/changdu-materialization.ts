@@ -11,7 +11,32 @@ export interface ChangduPreviewPlan {
   upstreamCount: number;
   materializedCount: number;
   chapters: readonly (MoboreaderPreviewChapter & { contentHash: string; charCount: number })[];
-  reason: "authoritative_non_empty" | "untrusted_or_empty";
+  /**
+   * B-42：本次响应里正文为空的章节号（升序）。这些章节不物化；数据库里已有的同号章节
+   * 由 `materializeChangduPreview` 原样保留（不覆盖、不置 stale）。
+   */
+  emptyChapterNumbers: readonly number[];
+  reason: "authoritative_non_empty" | "untrusted_or_empty" | "all_content_empty";
+}
+
+/**
+ * B-42：正文是否为空（空串或纯空白）。与此前适配器拒绝空正文用的是同一个判定
+ * （`!content.trim()`），只是从"整本失败"改成"跳过这一章"。
+ */
+export function isBlankPreviewContent(content: string): boolean {
+  return content.trim() === "";
+}
+
+/**
+ * B-42：一份上游响应里正文为空的章节号（升序）。给编排层用——试读编排（任务 handler）
+ * 按约定不直接碰章节正文（`tests/backend/contracts/p2-05-secret-and-scope.test.ts`），
+ * 只拿这份不含正文的章节号清单来决定"全部为空即无试读"并留痕。
+ */
+export function emptyPreviewChapterNumbers(chapterList: readonly MoboreaderPreviewChapter[]): number[] {
+  return chapterList
+    .filter((chapter) => isBlankPreviewContent(chapter.chapterContent))
+    .map((chapter) => chapter.i)
+    .sort((left, right) => left - right);
 }
 
 export interface BuildChangduPreviewPlanInput {
@@ -24,45 +49,41 @@ function hashContent(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+/**
+ * 试读物化计划（纯函数）。
+ *
+ * B-42（Owner 2026-10-11 口径："空正文收录，我们就是只要有推广链接就可以了"）：一章正文为空
+ * 不再让整本作废。所有行照旧过序号、章节 ID 与去重校验（任何一行不合格仍整份不可信）；
+ * 校验通过后跳过空正文章节，从第一个非空章节起按章节号升序取至多 `maxMaterializedChapters`
+ * 章。全部为空时不可信、不写任何东西（`all_content_empty`），由调用方记为"无试读"。
+ */
 export function buildChangduPreviewPlan(input: BuildChangduPreviewPlanInput): ChangduPreviewPlan {
   if (!Number.isSafeInteger(input.maxMaterializedChapters) || input.maxMaterializedChapters < 0) {
     throw new Error("invalid_preview_policy_cap");
   }
-  if (!input.trustedCompleteResponse || input.chapterList.length === 0) {
-    return {
-      authoritative: false,
-      upstreamCount: input.chapterList.length,
-      materializedCount: 0,
-      chapters: [],
-      reason: "untrusted_or_empty",
-    };
-  }
+  const untrusted = (reason: ChangduPreviewPlan["reason"] = "untrusted_or_empty"): ChangduPreviewPlan => ({
+    authoritative: false,
+    upstreamCount: input.chapterList.length,
+    materializedCount: 0,
+    chapters: [],
+    emptyChapterNumbers: [],
+    reason,
+  });
+  if (!input.trustedCompleteResponse || input.chapterList.length === 0) return untrusted();
   const ordered = [...input.chapterList].sort((left, right) => left.i - right.i);
   const seenNumbers = new Set<number>();
   const seenIds = new Set<string>();
   for (const chapter of ordered) {
-    if (!Number.isSafeInteger(chapter.i) || chapter.i < 1 || !chapter.chapterID || !chapter.chapterContent) {
-      return {
-        authoritative: false,
-        upstreamCount: input.chapterList.length,
-        materializedCount: 0,
-        chapters: [],
-        reason: "untrusted_or_empty",
-      };
+    if (!Number.isSafeInteger(chapter.i) || chapter.i < 1 || !chapter.chapterID || typeof chapter.chapterContent !== "string") {
+      return untrusted();
     }
-    if (seenNumbers.has(chapter.i) || seenIds.has(chapter.chapterID)) {
-      return {
-        authoritative: false,
-        upstreamCount: input.chapterList.length,
-        materializedCount: 0,
-        chapters: [],
-        reason: "untrusted_or_empty",
-      };
-    }
+    if (seenNumbers.has(chapter.i) || seenIds.has(chapter.chapterID)) return untrusted();
     seenNumbers.add(chapter.i);
     seenIds.add(chapter.chapterID);
   }
-  const chapters = ordered.slice(0, input.maxMaterializedChapters).map((chapter) => ({
+  const readable = ordered.filter((chapter) => !isBlankPreviewContent(chapter.chapterContent));
+  if (readable.length === 0) return untrusted("all_content_empty");
+  const chapters = readable.slice(0, input.maxMaterializedChapters).map((chapter) => ({
     ...chapter,
     contentHash: hashContent(chapter.chapterContent),
     charCount: [...chapter.chapterContent].length,
@@ -72,6 +93,7 @@ export function buildChangduPreviewPlan(input: BuildChangduPreviewPlanInput): Ch
     upstreamCount: input.chapterList.length,
     materializedCount: chapters.length,
     chapters,
+    emptyChapterNumbers: ordered.filter((chapter) => isBlankPreviewContent(chapter.chapterContent)).map((chapter) => chapter.i),
     reason: "authoritative_non_empty",
   };
 }
@@ -97,6 +119,10 @@ export interface MaterializeChangduPreviewResult {
   contentWrites: number;
   staleCount: number;
   restoredCount: number;
+  /** B-42：本次响应里正文为空、因而跳过的章节数。 */
+  emptyContentCount: number;
+  /** B-42：空正文章节号上已有、本次原样保留的试读章节数（不覆盖、不置 stale）。 */
+  preservedCount: number;
   hashPrefixes: readonly string[];
 }
 
@@ -118,6 +144,8 @@ export async function materializeChangduPreview(
       contentWrites: 0,
       staleCount: 0,
       restoredCount: 0,
+      emptyContentCount: 0,
+      preservedCount: 0,
       hashPrefixes: [],
     };
   }
@@ -152,6 +180,8 @@ export async function materializeChangduPreview(
         contentWrites: 0,
         staleCount: 0,
         restoredCount: 0,
+        emptyContentCount: 0,
+        preservedCount: 0,
         hashPrefixes: [],
       };
     }
@@ -254,15 +284,30 @@ export async function materializeChangduPreview(
       }
     }
 
+    // B-42：本次正文为空的章节号上，已有的试读章节原样保留——"空正文"只说明这次没拿到正文，
+    // 不说明这一章不再属于试读。置 stale 会让已收录的章节页 404 并移出站点地图（公开网址冻结）。
+    const preserved = plan.emptyChapterNumbers.length === 0
+      ? []
+      : await tx.novelChapter.findMany({
+          where: {
+            novelId: input.novelId,
+            status: "preview",
+            canonicalChapterNumber: { in: [...plan.emptyChapterNumbers] },
+            id: { notIn: retainedChapterIds },
+          },
+          select: { id: true, deletedAt: true, content: { select: { novelChapterId: true } } },
+        });
     const stale = await tx.novelChapter.updateMany({
       where: {
         novelId: input.novelId,
         status: "preview",
-        id: { notIn: retainedChapterIds },
+        id: { notIn: [...retainedChapterIds, ...preserved.map((chapter) => chapter.id)] },
         sourceItems: { some: { novelSourceItemId: input.novelSourceItemId, status: "materialized" } },
       },
       data: { status: "stale" },
     });
+    // 策略行的章节数与后台"实际落地"比对（`policyCountMatchesActual`），保留下来的可读章节要算进去。
+    const preservedReadableCount = preserved.filter((chapter) => chapter.deletedAt === null && chapter.content !== null).length;
     await tx.novelSourceItem.update({
       where: { id: input.novelSourceItemId },
       data: {
@@ -277,7 +322,7 @@ export async function materializeChangduPreview(
     });
     await tx.novelPreviewPolicy.update({
       where: { novelId: input.novelId },
-      data: { materializedChapterCount: plan.materializedCount, lastRefreshedAt: now },
+      data: { materializedChapterCount: plan.materializedCount + preservedReadableCount, lastRefreshedAt: now },
     });
     const auditSnapshot = {
       upstreamCount: plan.upstreamCount,
@@ -285,6 +330,8 @@ export async function materializeChangduPreview(
       contentWrites,
       staleCount: stale.count,
       restoredCount,
+      emptyContentCount: plan.emptyChapterNumbers.length,
+      preservedCount: preserved.length,
       characterCount: plan.chapters.reduce((sum, chapter) => sum + chapter.charCount, 0),
       hashPrefixes: plan.chapters.map((chapter) => chapter.contentHash.slice(0, 12)),
     };
@@ -309,6 +356,8 @@ export async function materializeChangduPreview(
       contentWrites,
       staleCount: stale.count,
       restoredCount,
+      emptyContentCount: plan.emptyChapterNumbers.length,
+      preservedCount: preserved.length,
       hashPrefixes: plan.chapters.map((chapter) => chapter.contentHash.slice(0, 12)),
     };
   };

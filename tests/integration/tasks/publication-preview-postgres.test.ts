@@ -6,7 +6,9 @@ import { materializeNovelFromSourceItem } from "@/server/content-creation/servic
 import { applyContentCreationBatch } from "@/server/content-creation/batch";
 import { applyPublishTransition, publishArticlesBatch } from "@/server/publish-gate/service";
 import { enqueuePublicationPreviews } from "@/server/publication/preview-enqueue";
+import { parsePreviewChaptersResponse } from "@/lib/adapters";
 import { buildWorkerAllowlist, createMoboreaderPreviewRefreshTask, createPromoLinkClaimTask } from "@/lib/tasks";
+import { refreshSitemapAfterPreviewTask } from "@/lib/tasks/preview-refresh-finalize";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "../../../worker/handlers/promo-link-claim";
@@ -56,6 +58,35 @@ async function cycle() {
   return processOneWorkerCycle({ prisma: worker, workerId: "wo1-local", handlers: registry,
     allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1,promo_link.claim.v1", registry), signal: new AbortController().signal });
 }
+
+// B-42 / B-46：真解析器 + 真 worker（worker_app）跑试读任务；上游响应由用例给定。
+const sitemapEnv = { ...env, FEATURE_SITEMAP_AUTO_REFRESH: "true" } satisfies NodeJS.ProcessEnv;
+const previewRow = (i: number, chapterContent: unknown) => ({ i, chapterID: `b42-${i}`, chapterName: `Chapter ${i}`, chapterShowName: null, chapterContent });
+async function previewCycles(chapterList: unknown, handlerEnv: NodeJS.ProcessEnv = env, maxCycles = 50) {
+  const registry = createMoboreaderWorkerHandlers(worker, { env: handlerEnv, adapter: {
+    listBooks: async () => { throw new Error("unexpected catalog call"); },
+    fetchBookMaterial: async () => ({ dataId: null, seriesId: null, materialType: null, materialStatus: null, statusText: null, rawEvidence: { __boundary: "approved_raw_evidence" } }),
+    fetchPreviewChapters: async () => parsePreviewChaptersResponse({ data: { bookId: "local", currentLanguage: "2", chapterList } }),
+  } });
+  let processed = 0;
+  while (processed < maxCycles && await processOneWorkerCycle({ prisma: worker, workerId: "b42-local", handlers: registry,
+    allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1", registry), signal: new AbortController().signal })) processed += 1;
+  return processed;
+}
+async function previewTask(sourceItemIds: string[]) {
+  // 同一本书再刷新一次：把上次刷新时间拨回去，越过新鲜度窗口（`fresh_preview`）。
+  for (const id of sourceItemIds) {
+    await owner.$executeRaw`UPDATE novel_preview_policy p SET last_refreshed_at = now() - interval '30 days'
+      FROM novel_source_item s WHERE s.id = ${id}::uuid AND p.novel_id = s.novel_id`;
+  }
+  const requestToken = `b42:${randomUUID()}`;
+  expect(await createMoboreaderPreviewRefreshTask(worker, { channelAccountId: foundation.account, channelAppId: foundation.app,
+    novelSourceItemIds: sourceItemIds, requestToken, actorId: "b42-local", requestId: randomUUID() }, env)).toMatchObject({ status: "enqueued" });
+  return owner.channelSyncTask.findUniqueOrThrow({ where: { requestToken } });
+}
+const chaptersOf = (novelId: string) => owner.novelChapter.findMany({ where: { novelId }, orderBy: { canonicalChapterNumber: "asc" },
+  select: { canonicalChapterNumber: true, status: true, content: { select: { body: true, contentHash: true } } } });
+const sitemapTasks = () => owner.genericTask.findMany({ where: { taskType: "sitemap_refresh" }, select: { id: true, status: true, params: true } });
 
 describe.skipIf(!enabled).sequential("publication preview real roles", () => {
   beforeAll(async () => {
@@ -227,6 +258,132 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
     await owner.article.update({ where: { id: hidden.article.id }, data: { seoVisibility: "hidden" } });
     expect((await enqueuePublicationPreviews(web, { articleIds: [hidden.article.id], requestId: randomUUID(), actorId: "test" }, { ...env, FEATURE_ARTICLE_SEO_VISIBILITY: "true" })).skipReasonCounts).toMatchObject({ article_not_public: 1 });
     expect(await owner.channelSyncTask.count()).toBe(0);
+  });
+
+  it("B-42 第 2 章正文为空：其余章节照常物化，条目成功并留空章节号", async () => {
+    const row = await seed(0, foundation.account, true);
+    const task = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, ""), previewRow(3, "three")])).toBe(1);
+    const item = await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task.id } });
+    expect(item).toMatchObject({ status: "success", error: null, result: {
+      upstreamCount: 3, emptyChapterNumbers: [2], materializedCount: 2, contentWrites: 2, staleCount: 0, restoredCount: 0, preservedCount: 0,
+    } });
+    expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"], [3, "preview", "three"]]);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 2 });
+  });
+
+  it("B-42 已上线的章节在上游变成空正文：原样保留（不覆盖、不置 stale），策略章节数算上它", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")])).toBe(1);
+    const before = await chaptersOf(row.novel.id);
+    const second = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "  "), previewRow(3, "three v2")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: second.id } })).toMatchObject({ status: "success", result: {
+      emptyChapterNumbers: [2], materializedCount: 2, contentWrites: 1, staleCount: 0, preservedCount: 1,
+    } });
+    const after = await chaptersOf(row.novel.id);
+    expect(after.map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"], [2, "preview", "two"], [3, "preview", "three v2"]]);
+    expect(after[1]!.content?.contentHash).toBe(before[1]!.content?.contentHash);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 3 });
+  });
+
+  it("B-42 保留只限空章节号：不在本次计划里、也不是空章号的旧章节照常置 stale", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")])).toBe(1);
+    const before = await chaptersOf(row.novel.id);
+    const second = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(2, ""), previewRow(3, "three"), previewRow(4, "four")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: second.id } })).toMatchObject({ status: "success", result: {
+      emptyChapterNumbers: [2], materializedCount: 2, staleCount: 1, preservedCount: 1,
+    } });
+    const after = await chaptersOf(row.novel.id);
+    expect(after.map((c) => [c.canonicalChapterNumber, c.status])).toEqual([[1, "stale"], [2, "preview"], [3, "preview"], [4, "preview"]]);
+    expect(after[1]!.content?.contentHash).toBe(before[1]!.content?.contentHash);
+    const readable = await owner.novelChapter.count({ where: { novelId: row.novel.id, status: "preview", deletedAt: null, content: { isNot: null } } });
+    expect(readable).toBe(3);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: readable });
+  });
+
+  it("B-42 全部章节为空 / chapterList 为 null：条目 skipped=无试读，不写章节，已有试读原样", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one")])).toBe(1);
+    const allEmpty = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, ""), previewRow(2, " \n ")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: allEmpty.id } })).toMatchObject({ status: "skipped", error: null,
+      result: { reason: "upstream_preview_all_chapters_empty", upstreamCount: 2, emptyChapterNumbers: [1, 2] } });
+    const nullList = await previewTask([row.source.id]);
+    expect(await previewCycles(null)).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: nullList.id } })).toMatchObject({ status: "skipped", error: null,
+      result: { reason: "upstream_preview_chapter_list_null", upstreamDiagnostic: { kind: "chapter_list_not_array", stage: "getchapterinfo", receivedType: "null" } } });
+    expect(await owner.channelSyncTask.findUniqueOrThrow({ where: { id: nullList.id } })).toMatchObject({ status: "completed", failedCount: 0, skippedCount: 1 });
+    expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"]]);
+  });
+
+  it("B-46 试读任务写入章节后经 worker_app 入队一次站点地图刷新；按任务粒度、水位线防重复", async () => {
+    const rows = [await seed(0, foundation.account, true), await seed(1, foundation.account, true)];
+    const task = await previewTask(rows.map((r) => r.source.id));
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv, 1)).toBe(1);
+    // 任务还有未完成条目：不触发。
+    expect(await sitemapTasks()).toEqual([]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const [refresh] = await sitemapTasks();
+    expect(refresh).toMatchObject({ status: "pending", params: { reason: "preview_chapters_written", triggeredBy: `moboreader.preview_refresh.v1#${task.id}` } });
+    // 水位线合并写进任务结果，建任务时写下的键原样保留。
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({
+      eligibleCount: 2, sitemapRefresh: { status: "queued", taskId: refresh!.id, coveredItemCount: 2, triggerCount: 1 },
+    });
+    // 重复回调（例如两个 worker 各提交最后一个条目）：水位线已覆盖，不再入队。
+    await refreshSitemapAfterPreviewTask(worker, task.id, { env: sitemapEnv });
+    expect(await sitemapTasks()).toHaveLength(1);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({ sitemapRefresh: { triggerCount: 1 } });
+  });
+
+  it("B-46 已有待处理刷新时合并（不撞在途唯一约束）；没写章节或开关关闭时不入队", async () => {
+    const [a, b, c, d] = [await seed(0, foundation.account, true), await seed(1, foundation.account, true), await seed(2, foundation.account, true), await seed(3, foundation.account, true)];
+    await previewTask([a.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const second = await previewTask([b.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const tasks = await sitemapTasks();
+    expect(tasks).toHaveLength(1);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: second.id } })).result).toMatchObject({ sitemapRefresh: { status: "coalesced", taskId: tasks[0]!.id } });
+    await owner.genericTaskItem.deleteMany({ where: { task: { taskType: "sitemap_refresh" } } });
+    await owner.genericTask.deleteMany({ where: { taskType: "sitemap_refresh" } });
+    // 全部为空（skipped）：没有可读章节变动，不入队。
+    const empty = await previewTask([c.source.id]);
+    expect(await previewCycles([previewRow(1, "")], sitemapEnv)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: empty.id } })).result).not.toHaveProperty("sitemapRefresh");
+    // 正文与已有的相同（contentWrites=0）：不入队。
+    await previewTask([a.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    // 开关关闭：写了章节也不入队，也不记水位。
+    const off = await previewTask([d.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], env)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: off.id } })).result).not.toHaveProperty("sitemapRefresh");
+  });
+
+  it("B-46 只置 stale、没有新写的试读任务也入队刷新（章节页要移出站点地图）", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")], env)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    const task = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(2, "two"), previewRow(3, "three")], sitemapEnv)).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task.id } })).toMatchObject({ status: "success", result: {
+      contentWrites: 0, restoredCount: 0, staleCount: 1,
+    } });
+    const tasks = await sitemapTasks();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ status: "pending", params: { reason: "preview_chapters_written", triggeredBy: `moboreader.preview_refresh.v1#${task.id}` } });
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({
+      sitemapRefresh: { status: "queued", taskId: tasks[0]!.id, coveredItemCount: 1, triggerCount: 1 },
+    });
   });
 
   for (const size of [50, 500]) it(`mixed local adapter load N=${size} through real worker and legal <=200 publish batches`, async () => {

@@ -57,6 +57,7 @@ export {
 export {
   analyzeTemplate,
   escapeHtmlText,
+  normalizeAbsoluteUrlValue,
   renderTemplateSlot,
   type RenderSlotOptions,
   type TemplateAnalysis,

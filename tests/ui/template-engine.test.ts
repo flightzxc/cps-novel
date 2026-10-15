@@ -37,6 +37,7 @@ import {
   isRegisteredTemplateField,
   isTemplateRenderError,
   narrowArticleTemplateSource,
+  normalizeAbsoluteUrlValue,
   renderArticleDraft,
   renderTemplateSlot,
   type ArticleTemplateSource,
@@ -470,6 +471,86 @@ describe("取值形态校验：逐字段独立，不共用一条 URL 规则", ()
         expect(error.field).toBe("cover_url");
         expect(error.constraint).toBe("absolute_url");
       }
+    });
+  });
+
+  describe("B-47：cover_url 路径 / 查询 / 片段里的非 ASCII 字符按 URL 标准百分号编码", () => {
+    it("非 ASCII 路径编码后通过，正文 img[src] 里是编码后的地址", () => {
+      const coverUrl = "https://cdn.example.com/cover/封面-café.jpg";
+      const encoded = "https://cdn.example.com/cover/%E5%B0%81%E9%9D%A2-caf%C3%A9.jpg";
+      expect(renderText("{cover_url}", values({ coverUrl }))).toBe(encoded);
+      expect(renderBody('<img src="{cover_url}" alt="">', values({ coverUrl }))).toBe(
+        `<img src="${encoded}" alt="">`,
+      );
+    });
+
+    it("查询与片段里的非 ASCII 同样编码；emoji（代理对）按一个码点编码", () => {
+      expect(
+        renderText(
+          "{cover_url}",
+          values({ coverUrl: "https://cdn.example.com/x.jpg?name=封面&a=1#片段" }),
+        ),
+      ).toBe("https://cdn.example.com/x.jpg?name=%E5%B0%81%E9%9D%A2&a=1#%E7%89%87%E6%AE%B5");
+      expect(renderText("{cover_url}", values({ coverUrl: "https://cdn.example.com/😀.jpg" }))).toBe(
+        "https://cdn.example.com/%F0%9F%98%80.jpg",
+      );
+    });
+
+    it("已经编码过的部分不重复编码；规范化幂等", () => {
+      expect(
+        renderText("{cover_url}", values({ coverUrl: "https://cdn.example.com/%E5%B0%81面.jpg" })),
+      ).toBe("https://cdn.example.com/%E5%B0%81%E9%9D%A2.jpg");
+      for (const raw of [
+        "https://cdn.example.com/cover/封面.jpg",
+        "https://cdn.example.com/%E5%B0%81面.jpg?q=中#文",
+        "https://cdn.example.com/a b/封面.jpg",
+      ]) {
+        const once = normalizeAbsoluteUrlValue(raw);
+        expect(normalizeAbsoluteUrlValue(once), JSON.stringify(raw)).toBe(once);
+      }
+    });
+
+    it("纯 ASCII 的值不经过 URL 序列化，逐字节原样（已生成文章重渲染不漂移）", () => {
+      for (const raw of [
+        "https://CDN.Example.com/x.jpg",
+        "https://cdn.example.com:443/a/./b/../x.jpg",
+        "https://cdn.example.com",
+        "https://cdn.example.com/%E5%B0%81.jpg",
+      ]) {
+        expect(normalizeAbsoluteUrlValue(raw)).toBe(raw);
+        expect(renderText("{cover_url}", values({ coverUrl: raw }))).toBe(raw);
+      }
+    });
+
+    it("🔴 除非 ASCII 外另含被拒字符、主机含非 ASCII、孤立代理项、协议不对——照旧拒绝", () => {
+      for (const bad of [
+        "https://cdn.example.com/a b/封面.jpg",
+        "https://cdn.example.com/a'封.jpg",
+        'https://cdn.example.com/封.jpg" onerror="x',
+        "https://cdn.example.com/<封>.jpg",
+        "https://cdn.example.com/a\\封.jpg",
+        "https://cdn.example.com/a\t封.jpg",
+        "https://封面.example.com/a.jpg",
+        "https://用户@cdn.example.com/a.jpg",
+        "https://cdn.example.com/\uD800封.jpg",
+        "HTTPS://cdn.example.com/封.jpg",
+        "javascript:alert('封')",
+        "//cdn.example.com/封.jpg",
+        "/covers/封.jpg",
+      ]) {
+        expect(normalizeAbsoluteUrlValue(bad), JSON.stringify(bad)).toBe(bad);
+        const error = captureError(() => renderText("{cover_url}", values({ coverUrl: bad })));
+        expect(error.code, `${JSON.stringify(bad)} 应被拒绝`).toBe(ERR_TEMPLATE_VALUE_INVALID);
+        expect(error.constraint).toBe("absolute_url");
+      }
+    });
+
+    it("只作用于 absolute_url 类型：promo_redirect_url 里的非 ASCII 不被编码、照旧拒绝", () => {
+      const error = captureError(() =>
+        renderText("{promo_redirect_url}", values({ promoRedirectUrl: "/go/码ab12" })),
+      );
+      expect(error.code).toBe(ERR_TEMPLATE_VALUE_INVALID);
+      expect(error.constraint).toBe("redirect_path");
     });
   });
 

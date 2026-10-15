@@ -32,7 +32,8 @@ import {
   totalChapterCountForUpdate,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
-import { materializeChangduPreview } from "../../src/lib/preview";
+import { emptyPreviewChapterNumbers, materializeChangduPreview } from "../../src/lib/preview";
+import { refreshSitemapAfterPreviewTask } from "../../src/lib/tasks/preview-refresh-finalize";
 import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
 import { refreshEffectiveTagsForNovels } from "../../src/server/tagging/effective-tag-projection";
 import { createHandlerRegistry, withTaskLeaseTransaction, type ProtectedWriteResult, type TaskHandler, type TaskLease } from "../../src/lib/tasks";
@@ -59,6 +60,7 @@ import { bindPromoLinkToArticles } from "./promo-link-binding";
 import { logUpstreamCallObservation } from "../observability/upstream-call-log";
 import { logPreviewReadFailure } from "../observability/preview-read-failure-log";
 import {
+  previewNullChapterListSkip,
   previewReadFailureOutcome,
   type PreviewReadFailureContext,
   type PreviewReadFailureLogEvent,
@@ -1759,6 +1761,12 @@ export function createMoboreaderPreviewHandler(
     try {
       preview = await adapter.fetchPreviewChapters(scope.requests.chapters, scope.token, signal);
     } catch (error) {
+      const noChapterList = previewNullChapterListSkip({
+        error,
+        stage: "getchapterinfo",
+        materialTypeSource: scope.requests.materialTypeSource,
+      });
+      if (noChapterList) return noChapterList;
       return previewReadFailureOutcome({
         error,
         stage: "getchapterinfo",
@@ -1778,6 +1786,21 @@ export function createMoboreaderPreviewHandler(
         },
       };
     }
+    // B-42（Owner 2026-10-11）：空正文章节跳过，不再整本失败；章节号只用于留痕和反馈上游，
+    // 不含正文。全部为空记为"无试读"——skipped，不写章节、不碰已有试读。
+    const emptyChapterNumbers = emptyPreviewChapterNumbers(preview.chapterList);
+    if (emptyChapterNumbers.length === preview.chapterList.length) {
+      return {
+        status: "skipped",
+        result: {
+          reason: "upstream_preview_all_chapters_empty",
+          materialTypeSource: scope.requests.materialTypeSource,
+          upstreamCount: preview.chapterList.length,
+          emptyChapterNumbers,
+        },
+      };
+    }
+    const emptyEvidence = emptyChapterNumbers.length > 0 ? { emptyChapterNumbers } : {};
     // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法2): both
     // upstream reads and the empty-preview judgement above already ran for
     // real. dry_run must stop here, without ever calling
@@ -1793,17 +1816,20 @@ export function createMoboreaderPreviewHandler(
           decision: "would_materialize",
           materialTypeSource: scope.requests.materialTypeSource,
           upstreamCount: preview.chapterList.length,
+          ...emptyEvidence,
         },
       };
     }
+    const result = {
+      materialTypeSource: scope.requests.materialTypeSource,
+      upstreamCount: preview.chapterList.length,
+      ...emptyEvidence,
+    };
     return {
       status: "success",
-      result: {
-        materialTypeSource: scope.requests.materialTypeSource,
-        upstreamCount: preview.chapterList.length,
-      },
+      result,
       protectedWrite: async (tx) => {
-        await materializeChangduPreview(tx, {
+        const written = await materializeChangduPreview(tx, {
           novelId: scope.novelId,
           novelSourceItemId: scope.novelSourceItemId,
           sourceFetchId: lease.itemId,
@@ -1813,6 +1839,18 @@ export function createMoboreaderPreviewHandler(
           chapterList: preview.chapterList,
           trustedCompleteResponse: true,
         });
+        // 写入计数随条目结果落库：B-46 的任务级收尾据此判断"这个任务有没有改动可读章节"。
+        return {
+          status: "success",
+          result: {
+            ...result,
+            materializedCount: written.materializedCount,
+            contentWrites: written.contentWrites,
+            staleCount: written.staleCount,
+            restoredCount: written.restoredCount,
+            preservedCount: written.preservedCount,
+          },
+        };
       },
     };
   };
@@ -1834,6 +1872,8 @@ export function createMoboreaderWorkerHandlers(
       family: "channel_sync",
       maxAttempts: 1,
       handler: createMoboreaderPreviewHandler(db, dependencies),
+      // B-46：任务全部条目结束、且写入了可读章节时，再入队一次站点地图刷新（任务粒度，自带合并）。
+      afterItemCommit: (taskId) => refreshSitemapAfterPreviewTask(db, taskId, { env: dependencies.env ?? process.env }),
     },
   });
 }

@@ -295,6 +295,32 @@ export function buildPreviewReadFailureLogEvent(
 }
 
 /**
+ * B-42（Owner 2026-10-16 确认）：`getchapterinfo` 返回 `chapterList: null` 记为"无试读"——
+ * 条目 `skipped`，不算失败、不写失败日志（`preview_read_failed`），也不碰已有试读章节。
+ * 原因用同一套去内容化的诊断（`kind` / `stage` / `receivedType` …）留在条目结果里，
+ * 便于按 source item 向上游反馈。
+ *
+ * 只认 `null` 这一种：字段缺失、是对象 / 字符串等其它形态仍按失败处理（返回 `null`，
+ * 由调用方走 `previewReadFailureOutcome`）。
+ */
+export function previewNullChapterListSkip(input: {
+  readonly error: unknown;
+  readonly stage: PreviewReadStage;
+  readonly materialTypeSource: unknown;
+}): TaskOutcome | null {
+  const report = describePreviewReadFailure(input.error, input.stage);
+  if (report.kind !== "chapter_list_not_array" || report.log.receivedType !== "null") return null;
+  return {
+    status: "skipped",
+    result: {
+      reason: "upstream_preview_chapter_list_null",
+      materialTypeSource: input.materialTypeSource,
+      upstreamDiagnostic: report.detail,
+    },
+  };
+}
+
+/**
  * The failed outcome for one Preview upstream read. Same status, same top-level
  * `code` and same `message` the handler returned before B-36 — `detail` is the
  * only addition, and the admin task page's safe-failure projection only ever

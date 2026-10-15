@@ -3,7 +3,7 @@
 - 状态：随 v0.6.0 交付的**草稿**，未执行。本文件不代表生产授权；每一步的生产变更档位由主控 / Codex 按"生产变更三档制度"判定，下表的"建议档位"只是起点。
 - 背景与设计：`docs/adr/ADR-V060-PLOTNOVEL-CODE-THEATER.md`。
 - 前提：v0.6.0 已发布。**发版要点（数据库）**：
-  - **1 个迁移**：`20261014120000_code_mode_upstream_code_guard`（迁移数 26 → 27）。内容：`promo_link` 加一列 `upstream_code_present`（`BOOLEAN NOT NULL DEFAULT false`，加列不重写表，只需瞬时的表锁）、一个维护它的触发器与触发器函数、一个 SECURITY DEFINER 取码函数 `public.code_mode_upstream_code(text)`；迁移末尾对有口令码的行做一次"原值写回"的空更新来回填布尔列（只碰 `upstream_code` 非空的行，不改 `updated_at`）。**函数属主是执行迁移的角色，发版必须用 `migration_owner` 跑 `migrate deploy`**（`grants.sql` 也由它重放）。
+  - **1 个迁移**：`20261014120000_code_mode_upstream_code_guard`（迁移数 26 → 27）。内容：`promo_link` 加一列 `upstream_code_present`（`BOOLEAN NOT NULL DEFAULT false`，加列不重写表，只需瞬时的表锁）、一个维护它的触发器与触发器函数、一个 SECURITY DEFINER 取码函数 `public.code_mode_upstream_code(text)`；迁移末尾对有口令码的行做一次"原值写回"的空更新来回填布尔列（只碰 `upstream_code` 非空的行，不改 `updated_at`）。**函数属主是执行迁移的角色，发版必须用 `migration_owner` 跑 `migrate deploy`**。`grants.sql` 不是由它重放：`scripts/preproduction/database.sh migrate-approved` 在迁移之后用 `postgres`（超级用户）以 `--single-transaction` 单事务重放 `infra/postgres/grants.sql`——文件开头的 REVOKE 会碰到 postgres 拥有的扩展函数，只有超级用户能真正改；单事务保证 REVOKE 与 GRANT 要么都生效、要么都回滚。
   - **`infra/postgres/grants.sql` 有改动，必须在迁移之后重放**（发版的数据库准备步骤本来就会重放；重放是幂等的）：`web_app` 对 `promo_link` 的列授权由 `(web_url, app_url, upstream_code)` 改为 `(web_url, app_url, upstream_code_present)`——**`web_app` 从此读不到 `upstream_code`**；新增 `GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app`。迁移和重放之间不要让新版 web 对外服务（重放前 `web_app` 没有 `upstream_code_present` 的读权限，公开页会报 `permission denied`）。
   - 无新增环境变量。
   - 发版本身不改变任何线上行为：新剧场尚未登记，MoboReader 的 `config` 里没有 `promoMode`，一律按 link 处理。
