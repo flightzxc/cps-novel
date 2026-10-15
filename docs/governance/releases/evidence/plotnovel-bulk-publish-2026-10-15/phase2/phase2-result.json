@@ -1,0 +1,29 @@
+{
+  "status": "STOP_WAVE1_GENERATION_FAILURE_RATE",
+  "opsCommit": "ab09d1beda4f0b26562ad7db1710d3c0855aec64",
+  "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+  "ownerApproved": true,
+  "controlReviewPassed": true,
+  "wave": 1,
+  "expected": 500,
+  "generatedDrafts": 488,
+  "failed": 12,
+  "failureRate": 0.024,
+  "threshold": 0.02,
+  "failureCategories": {
+    "finalize_failed": 12
+  },
+  "published": 0,
+  "publishedTotal": 50,
+  "laterWaveTasks": 0,
+  "activeExternalHttp": 0,
+  "getcodeCalls": 0,
+  "manualReviewCount": 635,
+  "protectedExisting50Identical": true,
+  "protectedManual635Identical": true,
+  "claimPromo": "registered_disabled",
+  "actionTaken": "stop_before_publish_no_retry_no_repair",
+  "finalRefresh": "not_executed",
+  "publicSampling": "not_executed",
+  "nextDecision": "Owner decides whether to authorize readonly investigation; no continuation authorized after stop"
+}

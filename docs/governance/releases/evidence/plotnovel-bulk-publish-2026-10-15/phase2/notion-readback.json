@@ -1,0 +1,17 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "at": "2026-10-15T08:49:44.725Z",
+  "status": "PASS",
+  "uniqueBulkEntry": true,
+  "unrelatedPrefixIdentical": true,
+  "phase1HistoricalSuffixIdentical": true,
+  "checks": {
+    "失败率2.4%超过2%": true,
+    "488篇草稿": true,
+    "finalize_failed": true,
+    "发布审计0": true,
+    "635条人工复核": true,
+    "后续三波未启动": true
+  },
+  "comparisonScope": "Notion content region; fetch wrapper as-of timestamp excluded"
+}

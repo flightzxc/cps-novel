@@ -1,0 +1,23 @@
+import subprocess,json,time,sys,pathlib,datetime
+root=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15/phase2');wave=int(sys.argv[1]);mode=sys.argv[2];samples=[]
+while True:
+ r=subprocess.run(['python3',str(root.parent/'supervise.py'),'status',str(wave)],stdin=subprocess.DEVNULL,text=True,capture_output=True)
+ if r.returncode:print(json.dumps({'status':'STOP','reason':'status_command_failed','exit':r.returncode}),flush=True);sys.exit(2)
+ x=json.loads(r.stdout);s=x['status'];b=s['mainPreviewBacklog'];backlog=b.get('pending',0)+b.get('processing',0);terminal=sum(b.get(k,0) for k in ['success','failed','skipped']);t=time.monotonic();samples.append((t,backlog,terminal))
+ reasons=list(s['stopReasons'])
+ if any(z['permissionDenied'] or z['error'] for z in x['logs'].values()):reasons.append('service_log_error')
+ if backlog:
+  old=[v for v in samples if t-v[0]>=900]
+  if old and terminal<=old[-1][2]:reasons.append('preview_15min_no_progress')
+  recent=[v for v in samples if t-v[0]<=630]
+  if len(recent)>1 and t-recent[0][0]>=600 and all(recent[i][1]>=recent[i-1][1] for i in range(1,len(recent))) and backlog>recent[0][1]:reasons.append('preview_10min_growth_no_decline')
+ out={'at':x['at'],'wave':wave,'mode':mode,'generation':s['generation'],'generationTasks':s['generationTasks'],'drafts':s['drafts'],'published':s['published'],'indexnow':s['indexnow'],'preview':s['preview'],'mainPreviewBacklog':b,'sitemap':s['sitemap'],'readyForNextWave':s['readyForNextWave'],'stopReasons':reasons,'logs':x['logs']}
+ print(json.dumps(out),flush=True)
+ if reasons:
+  p=root/'STOP.json'
+  if not p.exists():p.write_text(json.dumps(out,indent=2)+'\n');p.chmod(0o600)
+  sys.exit(2)
+ if mode=='generation' and s['generation']['notSubmitted']==0 and s['generation']['pending']==0 and all(t and t['status'] in ['completed','completed_with_errors','failed','cancelled'] for t in s['generationTasks']):sys.exit(0)
+ if mode=='closing' and s['readyForNextWave']:sys.exit(0)
+ if mode=='all-preview' and s['preview']['pending']==0 and s['preview']['missing']==0:sys.exit(0)
+ time.sleep(30)

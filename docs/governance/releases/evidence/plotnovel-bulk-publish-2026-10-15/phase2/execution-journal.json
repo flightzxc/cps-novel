@@ -1,0 +1,53 @@
+[
+  {
+    "at": "2026-10-15T08:45:58.306Z",
+    "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "event": "generate",
+    "wave": 1,
+    "chunk": 1,
+    "requestId": "plotnovel-bulk-20261015-w1-c1",
+    "taskId": "f793c18c-d286-4dd5-81c1-5ec04ce24822",
+    "duplicate": false,
+    "taskStatus": "pending",
+    "admission": {
+      "selectedCount": 200,
+      "submittedCount": 200,
+      "blockedCount": 0,
+      "blockedReasonCounts": {}
+    }
+  },
+  {
+    "at": "2026-10-15T08:45:58.836Z",
+    "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "event": "generate",
+    "wave": 1,
+    "chunk": 2,
+    "requestId": "plotnovel-bulk-20261015-w1-c2",
+    "taskId": "0fddd31d-62a2-4dab-bb9c-13bf47841158",
+    "duplicate": false,
+    "taskStatus": "pending",
+    "admission": {
+      "selectedCount": 200,
+      "submittedCount": 200,
+      "blockedCount": 0,
+      "blockedReasonCounts": {}
+    }
+  },
+  {
+    "at": "2026-10-15T08:45:59.320Z",
+    "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "event": "generate",
+    "wave": 1,
+    "chunk": 3,
+    "requestId": "plotnovel-bulk-20261015-w1-c3",
+    "taskId": "ff1b613e-c2f8-463f-95f3-1c9fb97d05e7",
+    "duplicate": false,
+    "taskStatus": "pending",
+    "admission": {
+      "selectedCount": 100,
+      "submittedCount": 100,
+      "blockedCount": 0,
+      "blockedReasonCounts": {}
+    }
+  }
+]

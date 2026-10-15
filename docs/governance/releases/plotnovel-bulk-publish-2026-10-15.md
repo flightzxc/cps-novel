@@ -1,8 +1,8 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：阶段一PASS，等待主控复核与Owner批准放量
+## 当前状态：阶段二第一波生成失败率2.4%，按门禁停手
 
-本次仅完成薄脚本、定向测试和生产只读plan。生产generate=0、publish=0、getcode=0，未新增页面，已发布仍50篇；claimPromo保持关闭，635条人工复核及其ID/status/response_shape摘要未变。尚无主控复核通过记录或Owner“批准放量”，阶段二未执行。
+主控已复核固定脚本ab09d1be通过，Owner已批准固定清单四波放量。第一波500本全部终态：488成功草稿、12失败（finalize_failed），失败率12/500=2.4%，超过2%上限，已在发布前停手。publish调用0、新增公开页面0、线上仍50篇，后三波未启动；未重试/补发/修数据/取消任务或执行最终刷新和抽查。claimPromo仍关闭，635条人工复核与原50篇页面摘要不变。后文阶段一交付事实保留为历史，当前以本节及阶段二停手记录为准。
 
 代码基线release/v0.6.0-2026-10-14@ed983f28377989605796030c06f8b9277c7ee7e8。新分支ops/plotnovel-bulk-publish-20261015，工作树/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops，真实node_modules，npm ci和Prisma generate已完成。固定脚本提交 **ab09d1beda4f0b26562ad7db1710d3c0855aec64**，仅留档ops分支、不合入集成，也不把脚本带入release分支。线上Final/tag仍493eb23b034b0410780228535b3e293e4ee91f9a，未发版/构建/拉取/重建镜像，不改schema、依赖、业务代码、env、能力或既有公开网址。
 
@@ -61,9 +61,9 @@ docker exec -w /app -e 'PGOPTIONS=-c default_transaction_read_only=on' cps-novel
 
 预演前后635条人工复核ID/status/response_shape摘要相同，既有50篇ID/status/slug/public_page_short_id/published_at/body摘要相同；web容器CID不变，Final及env SHA f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369不变。未输出码、凭据、env或正文。主动外部HTTP0；原脚本getcode/生成/发布调用均0。生产只运行plan，没有运行generate/publish/status或sitemap刷新。
 
-## 阶段二待批准后的执行门禁
+## 阶段二执行门禁（阶段一登记）
 
-本节仅列后续方案，命令未执行。批准必须同时指定主控复核通过、本ops提交和清单摘要以及Owner“批准放量”；任何源码或清单改变须重新交付复核。
+本节为阶段一登记的执行方案；本轮已获双重批准并执行至第一波生成停手。原批准要求同时指定主控复核通过、本ops提交和清单摘要以及Owner“批准放量”；任何源码或清单改变须重新交付复核。
 
 每波生成全部终态后，按不同书目计算失败率；>2%停手，≤2%仅发布成功草稿，失败留档不补发，所有清单项逐本核销。发布每次≤200，任何拒绝/冲突/not_found/aborted立即停后续调用，不重试。每块之间和等待期间由主机侧监督服务日志；permission denied立即停，脚本不取得Docker或额外数据库权限。
 
@@ -73,8 +73,32 @@ docker exec -w /app -e 'PGOPTIONS=-c default_transaction_read_only=on' cps-novel
 
 ## 治理与交接
 
-ops分支推送回读，不合入集成；本文件、脱敏证据与v0.6.0台账在release分支，CHANGELOG由原生成器/core.abbrev=7生成；Notion单独同步本次存量放量运维条目并回读。没有新增发版级开发日志或移动tag。阶段二每波结束均做治理提交后才进下一波。当前所有波次任务ID、发布数、IndexNow/试读/sitemap执行结果均为**未执行**。
+ops分支推送回读，不合入集成；本文件、脱敏证据与v0.6.0台账在release分支，CHANGELOG由原生成器/core.abbrev=7生成；Notion单独同步本次存量放量运维条目并回读。没有新增发版级开发日志或移动tag。阶段二每波结束均做治理提交后才进下一波。阶段一交付时所有波次均未执行；本轮第一波结果见下文，其他波次仍未执行。
 
-本次停在阶段一交付点：等待主控复核及Owner批准放量，claimPromo关闭、635人工复核保留。机器结果见[phase1-result.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/phase1-result.json)，门禁见[local-gates.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/local-gates.json)。
+阶段一历史停点为等待主控复核及Owner批准；本轮批准后停在第一波生成失败率门禁，claimPromo关闭、635人工复核保留。机器结果见[phase1-result.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/phase1-result.json)，门禁见[local-gates.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/local-gates.json)。
 
 阶段一治理提交6b6d570b已推送并回读。Notion手账新增本次独立运维条目，于2026-10-15T08:33:30.499Z回读PASS，唯一条目、完整清单摘要和未执行阶段二状态均一致，原无关历史逐字保留。仅有Notion按规范将正文中的一个>转义为\>的序列化差异，归一该处后新增正文精确一致。收据见[notion-readback.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/notion-readback.json)。
+
+## 阶段二：第一波生成后停手（2026-10-15）
+
+Owner本轮明确给出主控复核ab09d1be通过（tsc、真实库13/13、单测4/4与独立变异承重），并批准清单95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec四波500/500/500/485，承诺放量期间不在后台发布PlotNovel。脚本、清单、操作人及生产Final/env/CID重新核验一致，未重跑已通过的门禁或重新规划清单。
+
+基线08:45:09.684095Z（17:45:09 JST）；web原生连接/web_app，命令保持原CLI接口，外层stdin=/dev/null、docker exec不带-i。第一波generate于08:45:56.427437Z启动，200/200/100三块均selected=submitted、blocked=0、duplicate=false。
+
+| 块 / requestId尾部 | 生成任务ID | 本数 | 成功草稿 | 失败 | 终态 |
+| --- | --- | ---: | ---: | ---: | --- |
+| w1-c1 | f793c18c-d286-4dd5-81c1-5ec04ce24822 | 200 | 196 | 4 | completed_with_errors |
+| w1-c2 | 0fddd31d-62a2-4dab-bb9c-13bf47841158 | 200 | 193 | 7 | completed_with_errors |
+| w1-c3 | ff1b613e-c2f8-463f-95f3-1c9fb97d05e7 | 100 | 99 | 1 | completed_with_errors |
+
+requestId完整前缀plotnovel-bulk-20261015-。任务条目执行08:45:58.913910Z至08:46:17.567531Z，18.653621秒。08:46:37.200387Z只读status确认500=488成功+12失败，pending/skipped/notSubmitted均0，三个父任务全部终态；失败率**2.4%>2%**，stopReasons=generation_failure_or_skipped。12条error.code均finalize_failed、attempt_count均1；该记录类别不等于已定位根因，未进一步施工或重试。
+
+**停手结果**：保留488篇草稿和12条失败记录。publish调用0、article.publish审计0、后三波生成任务0；本次新增公开页面0、已发布总数仍50。没有继续IndexNow/试读/站点地图的本波发布收尾流程；状态accepted/pending均0指本波未发布，不表示新增页面已验收。最终手动刷新和3篇抽查未执行，主动外部HTTP0。没有重新提交、补发、取消任务、修数据、删除停手标记或恢复领码。
+
+停手只读读回（08:47:24.355388Z）：635条manual_review_required数量及ID/status/response_shape摘要未变；原50篇ID/status/slug/public_page_short_id/published_at/body摘要未变；claimPromo仍registered_disabled。env SHA f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369，Final和六服务CID均未变；全部healthy。自基线起web、worker、worker-light、scheduler、postgres、backup-timer的error/permission denied计数各0。业务任务12项失败单独报告，不能因日志error计数0记为生成通过。
+
+主机侧监督仅围绕批准CLI做摘要/身份/只读状态与日志采样，未复制业务规则；首次状态采样已见全部终态，未触发积压长窗口判断。受保护目录phase2/STOP.json阻止本监督程序后续写命令；没有伪造原CLI的stop事件，原execution.jsonl只包含实际三个generate事件。执行监督与只读SQL源码以.txt后缀归档，不进入编译范围。
+
+证据：[阶段二结果](evidence/plotnovel-bulk-publish-2026-10-15/phase2/phase2-result.json)、[失败分类及12条书目/任务ID](evidence/plotnovel-bulk-publish-2026-10-15/phase2/wave-1-stop-readback.json)、[原生成日志](evidence/plotnovel-bulk-publish-2026-10-15/phase2/execution-journal.json)、[停手快照](evidence/plotnovel-bulk-publish-2026-10-15/phase2/STOP.json)、[摘要索引](evidence/plotnovel-bulk-publish-2026-10-15/phase2/SHA256SUMS.json)。当前等待Owner下一步决定，未经再次授权不越过停手点。ops固定提交不变、仅留档；本次仅治理提交，未新增发版级开发日志，未移动tag或Final。
+
+本轮停手结果已同步既有Notion条目并回读PASS（2026-10-15T08:49:44.725Z）：唯一条目、失败率/数量/任务ID/停手范围一致；阶段一历史及无关正文逐字保留，比较排除fetch包装层as-of时间戳。收据见[Notion回读](evidence/plotnovel-bulk-publish-2026-10-15/phase2/notion-readback.json)。

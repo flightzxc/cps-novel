@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-15 · 共 1330 个 commit
+生成时间：2026-10-15 · 共 1331 个 commit
+- `b240091` 2026-10-15 运维：补齐 PlotNovel 存量放量阶段一的 Notion 与Git回读收据  — _codex · GPT-6_
 - `6b6d570` 2026-10-15 运维：交付 PlotNovel 存量放量阶段一脚本与1985本只读预演  — _codex · GPT-6_
 - `ed983f2` 2026-10-15 运维：补齐 PlotNovel 丙2验收的 Notion 同步与回读收据  — _codex · GPT-6_
 - `5e3aec5` 2026-10-15 运维：刷新试读完成后的站点地图并通过 PlotNovel 固定五篇验收  — _codex · GPT-6_

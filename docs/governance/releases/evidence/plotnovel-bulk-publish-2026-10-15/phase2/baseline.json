@@ -1,0 +1,108 @@
+{
+  "start": "2026-10-15T08:45:09.684095+00:00",
+  "approval": {
+    "opsCommit": "ab09d1beda4f0b26562ad7db1710d3c0855aec64",
+    "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "ownerApproved": true,
+    "controlReviewPassed": true,
+    "waveSizes": [
+      500,
+      500,
+      500,
+      485
+    ]
+  },
+  "containers": {
+    "web": {
+      "name": "cps-novel-web-1",
+      "id": "b81070177321143c86eb8c1e82b86e367055f995c04c1867e1d6bbe3420eff31",
+      "healthy": true
+    },
+    "worker": {
+      "name": "cps-novel-worker-1",
+      "id": "89836c22b45fea370f30e35af5320411447bb659eaa8595c8b787d45535a68c8",
+      "healthy": true
+    },
+    "worker-light": {
+      "name": "cps-novel-worker-light-1",
+      "id": "ad87854e59abbca77de1c45dfee0f4d4fba053be3cff2cb2d086316b70f334b0",
+      "healthy": true
+    },
+    "scheduler": {
+      "name": "cps-novel-scheduler-1",
+      "id": "624eace5b093457f0bc2bb30c9b41afed2e6d2ec7eed31aaf74652776ba38e24",
+      "healthy": true
+    },
+    "postgres": {
+      "name": "cps-novel-postgres-1",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "healthy": true
+    },
+    "backup-timer": {
+      "name": "cps-novel-backup-timer-1",
+      "id": "0384819b06fc9b8b1204395e6e4618fcee52a26aeb07f660ed111a5f4fb4f7cc",
+      "healthy": true
+    }
+  },
+  "protected": {
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "publishedCount": 50,
+    "publishedDigest": "c8f85a2fb36f451fb08e73220034c17b1671ce6c232523d65cd52c49ba13e937",
+    "publishedIds": [
+      "126d0a75-b7db-47c1-bdc5-a314646d2ec3",
+      "1444cbce-8116-49ae-ade9-a9e1322dcbcb",
+      "1b584308-cd7a-4a77-bb34-7af03fda93a5",
+      "1e18461b-d843-458f-ae1c-2e985a574584",
+      "1f67bfe2-d0d1-4e03-94d4-866fc9662de9",
+      "1fb5ec03-12b4-4a01-99df-001ef51cb7b6",
+      "2e4a5d78-83ec-4d8b-a153-b586ffda515a",
+      "3303e164-cb69-4ffa-8e82-20dfb5e2b16c",
+      "355b2dfd-7719-4581-92f9-907bc7cfffca",
+      "43e71800-278f-4c6b-a882-ebc98b5ed83e",
+      "59db08f5-8b71-48ce-ada5-e4443e473117",
+      "5e6e0e3a-ff7a-4583-93f7-f3d7adc05220",
+      "62acd3af-e552-4227-8f3a-44a96b99a25c",
+      "65b59fa6-3f32-4ec4-a851-fe7c456a3b77",
+      "65ba735b-f8d8-486e-b1d1-d13cf52b7783",
+      "6c0f43f0-0f7d-4404-8490-a7712071a180",
+      "6ce5a789-ea7f-4356-aafe-b99b27cb247d",
+      "77784243-c984-45ec-b642-51d3389183f0",
+      "79f2ef2f-7c07-4e59-9c6e-9db6213657f8",
+      "82417a70-e98f-4460-b84b-39bd0544fe90",
+      "8683a948-bcbc-45de-9e5a-c5e659cfccd4",
+      "888210e9-17c5-431b-8c76-c8480d47a962",
+      "899c9caa-203e-4fed-ad1d-65606ce845a5",
+      "90fe4351-eb9d-4262-9d85-b9674d0ec5b4",
+      "92ec9f70-ed71-477f-b35b-2c1ed5f8ee64",
+      "931bbe3e-17bd-48f5-84de-e786581817a9",
+      "97ab1e54-c43f-48cd-981e-b2489c0c7c44",
+      "9906af5b-168b-4f7a-8d25-7435b5c34f70",
+      "9becbe01-9712-45f8-9a48-ff2098426e1b",
+      "9d672ac5-00d5-4c41-bd6f-77287d6a3ef4",
+      "a1a9a6b4-b210-4311-a0a7-156cab710ea8",
+      "b3ff7003-1bab-42f7-afd4-5665ba8e23fb",
+      "c093e3d7-e607-4756-9414-a51e7fb1e9d8",
+      "c0a311b2-d646-428a-94db-0d72e33d09e7",
+      "c2e4da3c-b1bc-484b-ae64-ce822af488a7",
+      "c6216eed-f4ed-41c8-9125-e06e76f8325e",
+      "c79c5ca7-225e-41c4-9f08-d9be99e4e7cb",
+      "ca5796e1-e3e4-4b39-add1-987e21b2cd98",
+      "cde395e6-143c-42c2-99a2-92096070b621",
+      "d48d6ab8-2fef-4b93-b835-7f9c8f5bc481",
+      "dd7e0e0d-0bd3-4ea3-9fe4-ef7868b7c051",
+      "dd997898-8367-41ee-b817-fa63db8dc7ac",
+      "dfa986ff-37e4-4641-a165-80c70f37ac54",
+      "e79e67ec-3b7a-487f-8506-5f0f631b76b0",
+      "ebd22931-de97-45af-bd06-19a03f2733fd",
+      "f21e1c82-2267-4884-9293-80b108d05acf",
+      "f3056f59-6782-4f7e-b552-84d6fd3b976f",
+      "f6f016a5-c584-46b4-90b5-01355b7500ec",
+      "f8a1b627-38e1-4c7f-b3c6-ba5ba84c63fc",
+      "f8d872b0-8171-4c26-b719-6d7045267696"
+    ]
+  },
+  "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "activeExternalHttp": 0
+}
