@@ -212,3 +212,13 @@ getbydataid/getchapterinfo各用原set-channel-capability-status.ts先预演后e
 仍不宣称完整开通验收完成、不增加发版开发日志、不移动tag/Final。逐本成功/失败类别和章节数及后台入口见 [c1-canary-and-owner-handoff.md](evidence/plotnovel-opening-2026-10-15/c1-canary-and-owner-handoff.md)，机器状态见 [c1-result.json](evidence/plotnovel-opening-2026-10-15/c1-result.json)。env备份正文、口令、凭据和章节正文未进入证据。后续公开页面与IndexNow验收待Owner发布完成后继续。
 
 丙1停丙2治理提交82d60ef3已推送并回读。Notion原单条开通记录更新试读PASS、env链及Owner后台交接，于2026-10-14T18:48:44.058Z回读PASS；原历史正文完整保留。收据见 [notion-readback-c1.json](evidence/plotnovel-opening-2026-10-15/notion-readback-c1.json)。
+
+## 丙2：Owner后台发布50篇后，只读发现站点地图时序缺口而停手
+
+Owner回传生成任务48eba852-5fd8-479b-a74a-0b850ff6af71，说明50篇已发布；重复点击159a24f6被准入拦截、0篇，无需处理。本轮未操作重复任务。数据库读回生成completed/50success/0failed/0skipped、50个不同article ID，全部PlotNovel英语published/fetched有码，文章正文站内go码与绑定推广一致；50本均3章有效试读。DB发布时间2026-10-15T04:59:59.005Z～05:00:00.248Z。IndexNow50/50 accepted、HTTP200，熔断关闭/无429等待/due0/deadLetter0/无在途投递批次，635人工复核及claimPromo关闭保持。
+
+固定抽取按published_at/article_id排序第1、13、26、38、50篇。公开GET前只读定位去重站点地图分片时，发现当前静态图50书页齐全，但仅81/150相关章节URL，缺69。涉及5个English novelpage分片；没有换样。首个辅助包装器覆盖断言失败且未打印计数；31a先打印再核对，保留原失败证据；31b仅只读核对生成时点：最后sitemap task2cc950ef于05:00:43.975850Z完成，50本试读task60ad99a6于05:01:17.367472Z完成，之后未见后续sitemap任务，当前release仍2cc950ef。因而不是当前仍有试读/刷新任务在跑；时序符合刷新早于试读最终完成，尚未进一步审查代码根因。
+
+依原“任何异常立即停手”，不手动刷新、不改数据/代码/env/能力、不撤回页面、不补码/人工收口。轮播serving快照PlotNovel0条，但首页HTML、五篇按钮/小字、章节、go/中间页、口令泄漏及外部sitemap验证尚未执行，均不宣称PASS；本轮公开HTTP0，累计仍1/30。没有输出口令码、原始正文或章节内容。
+
+停手证据及待Owner批准的原CLI预演/刷新步骤见 [c2-sitemap-stop.md](evidence/plotnovel-opening-2026-10-15/c2-sitemap-stop.md)，机器结果见 [c2-stop-result.json](evidence/plotnovel-opening-2026-10-15/c2-stop-result.json)。原脚本必须在web_app身份的web容器运行，apply只入队，待现有worker完成后再核对覆盖并继续固定5篇验收；本轮未执行预演或apply。完整开通仍未验收，不登记最终已开通，不增加发版日志。

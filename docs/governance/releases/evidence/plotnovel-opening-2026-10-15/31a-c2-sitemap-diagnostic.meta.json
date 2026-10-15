@@ -1,0 +1,9 @@
+{
+  "name": "31a-c2-sitemap-diagnostic",
+  "startedAt": 1792043020.9291048,
+  "finishedAt": 1792043029.026776,
+  "exit": 1,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/31a-c2-sitemap-diagnostic.py",
+  "sshOrWrapperStderrSha256": "81a3a61b9882916e9b3b08a30943d9c06b54567923f20124ce8ab11d030da01f"
+}

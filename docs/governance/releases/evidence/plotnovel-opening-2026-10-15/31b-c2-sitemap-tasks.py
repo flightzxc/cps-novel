@@ -1,0 +1,4 @@
+q="""
+SELECT json_build_object('at',clock_timestamp(),'sitemapTasks',(SELECT json_agg(x) FROM (SELECT id,task_type,status,total_count,success_count,failed_count,skipped_count,created_at,completed_at FROM generic_task WHERE task_type LIKE '%sitemap%' AND created_at>='2026-10-15T04:57:00Z' ORDER BY created_at DESC LIMIT 15) x),'previewTaskWindow',(SELECT json_agg(x) FROM (SELECT t.id,t.status,t.created_at,t.completed_at,t.success_count,t.failed_count FROM channel_sync_task t WHERE t.task_type='moboreader.preview_refresh.v1' AND t.created_at>='2026-10-15T04:57:00Z' AND t.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' ORDER BY t.created_at DESC LIMIT 10) x));
+"""
+raw=sql(q);x=json.JSONDecoder().raw_decode(raw[raw.index('{'):])[0];print('C2_SITEMAP_TIMING='+json.dumps(x),flush=True);print('C2_SITEMAP_TIMING_READONLY=PASS',flush=True)

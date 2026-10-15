@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-14 · 共 1323 个 commit
+生成时间：2026-10-15 · 共 1325 个 commit
+- `f87fed5` 2026-10-15 运维：补齐丙1试读验收及丙2交接的 Notion 回读  — _codex · GPT-6_
+- `82d60ef` 2026-10-15 运维：启用 PlotNovel 试读并完成10本金丝雀后停在丙2  — _codex · GPT-6_
 - `8e489aa` 2026-10-15 运维：补齐43次只读回读的 Notion 核对收据  — _codex · GPT-6_
 - `ff6ba90` 2026-10-15 运维：记录 PlotNovel 43本精确只读回读及诊断建议  — _codex · GPT-6_
 - `293dcf8` 2026-10-14 运维：补齐 PlotNovel 只读排查 Notion 回读收据  — _codex · GPT-6_

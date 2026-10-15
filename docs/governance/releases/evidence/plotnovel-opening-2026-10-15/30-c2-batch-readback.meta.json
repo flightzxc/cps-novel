@@ -1,0 +1,9 @@
+{
+  "name": "30-c2-batch-readback",
+  "startedAt": 1792042829.61977,
+  "finishedAt": 1792042837.729527,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/30-c2-batch-readback.py",
+  "sshOrWrapperStderrSha256": null
+}
