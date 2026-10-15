@@ -479,7 +479,8 @@ describe.skipIf(!enabled)("Preview read failure · category lands on the failed 
           bookId: "b-1",
           currentLanguage: 2,
           chapterList: [
-            { i: 1, chapterID: "c-1", chapterName: BODY, chapterShowName: BODY, chapterContent: "" },
+            // B-42 之后空串正文是"跳过这一章"而不是失败；null 正文仍是上游形态错误。
+            { i: 1, chapterID: "c-1", chapterName: BODY, chapterShowName: BODY, chapterContent: null },
             { i: 2, chapterID: "c-2", chapterName: BODY, chapterShowName: BODY, chapterContent: `${BODY} locked` },
           ],
         },
@@ -495,7 +496,7 @@ describe.skipIf(!enabled)("Preview read failure · category lands on the failed 
         stage: "getchapterinfo",
         errorClass: "MoboreaderAdapterError",
         adapterCode: "malformed_payload",
-        receivedType: "empty_string",
+        receivedType: "null",
         chapterIndex: 0,
         chapterOrdinal: 1,
         chapterCount: 2,
@@ -542,7 +543,7 @@ describe.skipIf(!enabled)("Preview read failure · category lands on the failed 
       ORDER BY 1`);
     expect(groups.map((group) => ({ ...group, n: Number(group.n) }))).toEqual([
       { code: "upstream_material_read_failed", stage: "getbydataid", kind: "data_not_object", received: "string", n: 1 },
-      { code: "upstream_preview_read_failed", stage: "getchapterinfo", kind: "chapter_content_invalid", received: "empty_string", n: 1 },
+      { code: "upstream_preview_read_failed", stage: "getchapterinfo", kind: "chapter_content_invalid", received: "null", n: 1 },
     ]);
   });
 });

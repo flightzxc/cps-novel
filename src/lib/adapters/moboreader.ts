@@ -139,6 +139,7 @@ export interface MoboreaderPreviewChapter {
   chapterID: string;
   chapterName: string | null;
   chapterShowName: string | null;
+  /** 可能是空串或纯空白（B-42：上游空正文章节）；是否可读由 `isBlankPreviewContent` 判定。 */
   chapterContent: string;
 }
 
@@ -533,11 +534,13 @@ export function parsePreviewChaptersResponse(value: unknown): PreviewChaptersRes
     const chapterName = optionalString(row.chapterName);
     const chapterShowName = optionalString(row.chapterShowName);
     const rawContent: unknown = row.chapterContent;
-    if (typeof rawContent !== "string" || !rawContent.trim()) {
+    // B-42（Owner 2026-10-11）：正文是空串 / 纯空白时不再整本拒绝——这一行照样过序号、
+    // 章节 ID 与去重校验，原样交给 `buildChangduPreviewPlan` 跳过（见其头注释）。
+    // 正文缺失、null 或不是字符串仍是上游形态错误，照旧按 B-36 记诊断。
+    if (typeof rawContent !== "string") {
       malformed({
         kind: "chapter_content_invalid",
         receivedType: receivedKindOf(rawContent),
-        ...(typeof rawContent === "string" ? { valueLength: rawContent.length } : {}),
         chapterIndex,
         chapterOrdinal: i,
         chapterId: chapterID,

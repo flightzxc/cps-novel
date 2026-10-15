@@ -6,6 +6,7 @@ import { materializeNovelFromSourceItem } from "@/server/content-creation/servic
 import { applyContentCreationBatch } from "@/server/content-creation/batch";
 import { applyPublishTransition, publishArticlesBatch } from "@/server/publish-gate/service";
 import { enqueuePublicationPreviews } from "@/server/publication/preview-enqueue";
+import { parsePreviewChaptersResponse } from "@/lib/adapters";
 import { buildWorkerAllowlist, createMoboreaderPreviewRefreshTask, createPromoLinkClaimTask } from "@/lib/tasks";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
@@ -56,6 +57,33 @@ async function cycle() {
   return processOneWorkerCycle({ prisma: worker, workerId: "wo1-local", handlers: registry,
     allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1,promo_link.claim.v1", registry), signal: new AbortController().signal });
 }
+
+// B-42：真解析器 + 真 worker（worker_app）跑试读任务；上游响应由用例给定。
+const previewRow = (i: number, chapterContent: unknown) => ({ i, chapterID: `b42-${i}`, chapterName: `Chapter ${i}`, chapterShowName: null, chapterContent });
+async function previewCycles(chapterList: unknown, handlerEnv: NodeJS.ProcessEnv = env, maxCycles = 50) {
+  const registry = createMoboreaderWorkerHandlers(worker, { env: handlerEnv, adapter: {
+    listBooks: async () => { throw new Error("unexpected catalog call"); },
+    fetchBookMaterial: async () => ({ dataId: null, seriesId: null, materialType: null, materialStatus: null, statusText: null, rawEvidence: { __boundary: "approved_raw_evidence" } }),
+    fetchPreviewChapters: async () => parsePreviewChaptersResponse({ data: { bookId: "local", currentLanguage: "2", chapterList } }),
+  } });
+  let processed = 0;
+  while (processed < maxCycles && await processOneWorkerCycle({ prisma: worker, workerId: "b42-local", handlers: registry,
+    allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1", registry), signal: new AbortController().signal })) processed += 1;
+  return processed;
+}
+async function previewTask(sourceItemIds: string[]) {
+  // 同一本书再刷新一次：把上次刷新时间拨回去，越过新鲜度窗口（`fresh_preview`）。
+  for (const id of sourceItemIds) {
+    await owner.$executeRaw`UPDATE novel_preview_policy p SET last_refreshed_at = now() - interval '30 days'
+      FROM novel_source_item s WHERE s.id = ${id}::uuid AND p.novel_id = s.novel_id`;
+  }
+  const requestToken = `b42:${randomUUID()}`;
+  expect(await createMoboreaderPreviewRefreshTask(worker, { channelAccountId: foundation.account, channelAppId: foundation.app,
+    novelSourceItemIds: sourceItemIds, requestToken, actorId: "b42-local", requestId: randomUUID() }, env)).toMatchObject({ status: "enqueued" });
+  return owner.channelSyncTask.findUniqueOrThrow({ where: { requestToken } });
+}
+const chaptersOf = (novelId: string) => owner.novelChapter.findMany({ where: { novelId }, orderBy: { canonicalChapterNumber: "asc" },
+  select: { canonicalChapterNumber: true, status: true, content: { select: { body: true, contentHash: true } } } });
 
 describe.skipIf(!enabled).sequential("publication preview real roles", () => {
   beforeAll(async () => {
@@ -227,6 +255,50 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
     await owner.article.update({ where: { id: hidden.article.id }, data: { seoVisibility: "hidden" } });
     expect((await enqueuePublicationPreviews(web, { articleIds: [hidden.article.id], requestId: randomUUID(), actorId: "test" }, { ...env, FEATURE_ARTICLE_SEO_VISIBILITY: "true" })).skipReasonCounts).toMatchObject({ article_not_public: 1 });
     expect(await owner.channelSyncTask.count()).toBe(0);
+  });
+
+  it("B-42 第 2 章正文为空：其余章节照常物化，条目成功并留空章节号", async () => {
+    const row = await seed(0, foundation.account, true);
+    const task = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, ""), previewRow(3, "three")])).toBe(1);
+    const item = await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task.id } });
+    expect(item).toMatchObject({ status: "success", error: null, result: {
+      upstreamCount: 3, emptyChapterNumbers: [2], materializedCount: 2, contentWrites: 2, staleCount: 0, restoredCount: 0, preservedCount: 0,
+    } });
+    expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"], [3, "preview", "three"]]);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 2 });
+  });
+
+  it("B-42 已上线的章节在上游变成空正文：原样保留（不覆盖、不置 stale），策略章节数算上它", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")])).toBe(1);
+    const before = await chaptersOf(row.novel.id);
+    const second = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "  "), previewRow(3, "three v2")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: second.id } })).toMatchObject({ status: "success", result: {
+      emptyChapterNumbers: [2], materializedCount: 2, contentWrites: 1, staleCount: 0, preservedCount: 1,
+    } });
+    const after = await chaptersOf(row.novel.id);
+    expect(after.map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"], [2, "preview", "two"], [3, "preview", "three v2"]]);
+    expect(after[1]!.content?.contentHash).toBe(before[1]!.content?.contentHash);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 3 });
+  });
+
+  it("B-42 全部章节为空 / chapterList 为 null：条目 skipped=无试读，不写章节，已有试读原样", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one")])).toBe(1);
+    const allEmpty = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, ""), previewRow(2, " \n ")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: allEmpty.id } })).toMatchObject({ status: "skipped", error: null,
+      result: { reason: "upstream_preview_all_chapters_empty", upstreamCount: 2, emptyChapterNumbers: [1, 2] } });
+    const nullList = await previewTask([row.source.id]);
+    expect(await previewCycles(null)).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: nullList.id } })).toMatchObject({ status: "skipped", error: null,
+      result: { reason: "upstream_preview_chapter_list_null", upstreamDiagnostic: { kind: "chapter_list_not_array", stage: "getchapterinfo", receivedType: "null" } } });
+    expect(await owner.channelSyncTask.findUniqueOrThrow({ where: { id: nullList.id } })).toMatchObject({ status: "completed", failedCount: 0, skippedCount: 1 });
+    expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"]]);
   });
 
   for (const size of [50, 500]) it(`mixed local adapter load N=${size} through real worker and legal <=200 publish batches`, async () => {

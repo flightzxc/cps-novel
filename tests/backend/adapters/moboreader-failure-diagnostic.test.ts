@@ -60,10 +60,10 @@ describe("getchapterinfo: each validation names itself (B-36)", () => {
     ["chapterID is empty", body([chapter({ chapterID: "" })]), { kind: "chapter_id_invalid", receivedType: "empty_string" }],
     ["chapterContent is missing", body([chapter({ chapterContent: undefined })]), { kind: "chapter_content_invalid", receivedType: "undefined", chapterIndex: 0, chapterOrdinal: 1, chapterId: "c-1", chapterCount: 1 }],
     ["chapterContent is null", body([chapter({ chapterContent: null })]), { kind: "chapter_content_invalid", receivedType: "null" }],
-    ["chapterContent is an empty string", body([chapter({ chapterContent: "" })]), { kind: "chapter_content_invalid", receivedType: "empty_string", valueLength: 0 }],
-    ["chapterContent is only whitespace", body([chapter({ chapterContent: "  \n\t " })]), { kind: "chapter_content_invalid", receivedType: "blank_string", valueLength: 5 }],
     ["chapterContent is a number", body([chapter({ chapterContent: 7 })]), { kind: "chapter_content_invalid", receivedType: "integer" }],
-    ["a later row has the bad content", body([chapter(), chapter({ i: 2, chapterID: "c-2", chapterContent: "" }), chapter({ i: 3, chapterID: "c-3" })]), { kind: "chapter_content_invalid", chapterIndex: 1, chapterOrdinal: 2, chapterId: "c-2", chapterCount: 3 }],
+    ["a later row has the bad content", body([chapter(), chapter({ i: 2, chapterID: "c-2", chapterContent: null }), chapter({ i: 3, chapterID: "c-3" })]), { kind: "chapter_content_invalid", receivedType: "null", chapterIndex: 1, chapterOrdinal: 2, chapterId: "c-2", chapterCount: 3 }],
+    // B-42：空正文行本身不再拒绝，但它的身份校验照旧——空正文行带重复身份仍整份拒绝。
+    ["an empty-content row still has its identity checked", body([chapter(), chapter({ chapterContent: "" })]), { kind: "chapter_identity_duplicate", chapterIndex: 1, chapterOrdinal: 1, chapterId: "c-1", chapterCount: 2 }],
     ["two rows share (i, chapterID)", body([chapter(), chapter()]), { kind: "chapter_identity_duplicate", chapterIndex: 1, chapterOrdinal: 1, chapterId: "c-1", chapterCount: 2 }],
     ["bookId is null", body([chapter()], { bookId: null }), { kind: "book_id_invalid", receivedType: "null", chapterCount: 1 }],
     ["currentLanguage is missing", body([chapter()], { currentLanguage: undefined }), { kind: "current_language_invalid", receivedType: "undefined", chapterCount: 1 }],
@@ -84,7 +84,7 @@ describe("getchapterinfo: each validation names itself (B-36)", () => {
   });
 
   it("keeps the bare message for sites that never had a detail string, and the old detail text where one existed", () => {
-    expect(caught(() => parsePreviewChaptersResponse(body([chapter({ chapterContent: "" })]))).message)
+    expect(caught(() => parsePreviewChaptersResponse(body([chapter({ chapterContent: null })]))).message)
       .toBe("MoboReader read failed: malformed_payload");
     const idError = caught(() => parsePreviewChaptersResponse(body([chapter({ chapterID: null })])));
     expect(idError.detail).toBe("chapterID: expected a non-empty string or a finite number, received typeof object (null)");
@@ -105,6 +105,19 @@ describe("getchapterinfo: each validation names itself (B-36)", () => {
     expect(parsed.bookId).toBe("b-1");
     // An empty chapterList is a valid (if useless) response, handled upstream as "skipped".
     expect(parsePreviewChaptersResponse(body([])).chapterList).toEqual([]);
+  });
+
+  it("B-42：空串 / 纯空白正文不再整份拒绝，行原样交给物化计划（由它跳过）", () => {
+    const parsed = parsePreviewChaptersResponse(body([
+      chapter(),
+      chapter({ i: 2, chapterID: "c-2", chapterContent: "" }),
+      chapter({ i: 3, chapterID: "c-3", chapterContent: "  \n\t " }),
+    ]));
+    expect(parsed.chapterList.map((row) => [row.i, row.chapterID, row.chapterContent.trim() === ""])).toEqual([
+      [1, "c-1", false],
+      [2, "c-2", true],
+      [3, "c-3", true],
+    ]);
   });
 });
 
