@@ -36,6 +36,17 @@ export class OpsError extends Error { constructor(readonly code: string) { super
 function requireThat(condition: unknown, code: string): asserts condition { if (!condition) throw new OpsError(code); }
 export function sha256(bytes: string | Buffer) { return createHash("sha256").update(bytes).digest("hex"); }
 const record = (x: unknown): Record<string, unknown> => x && typeof x === "object" && !Array.isArray(x) ? x as Record<string, unknown> : {};
+export function generationFailurePolicy(errors: readonly unknown[], expected: number) {
+  // worker/runtime/worker.ts persists the error class in this exact redacted message.
+  // finalize_failed alone also covers database/permission failures and is never sufficient.
+  const knownTemplateFailures = errors.filter(error => {
+    const e = record(error);
+    return e.code === "finalize_failed" && e.message === "Item finalize failed: TemplateRenderError";
+  }).length;
+  const otherFailures = errors.length - knownTemplateFailures;
+  return { knownTemplateFailures, otherFailures,
+    allowed: Number.isSafeInteger(expected) && expected > 0 && otherFailures === 0 && knownTemplateFailures * 20 <= expected };
+}
 const equalIds = (a: readonly string[], b: readonly string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 export function chunksFor(ids: readonly string[]): Manifest["waves"] {
   const sorted = [...new Set(ids)].sort();
@@ -149,7 +160,7 @@ async function createPlan(db: PrismaClient, api: Api, actorId: string) {
 }
 async function taskFor(tx: Prisma.TransactionClient, m: Manifest, w: number, c: number) {
   const tasks = await tx.genericTask.findMany({ where: { taskType: "article.generate.v1", params: { path: ["requestId"], equals: generationRequest(w, c) } }, select: {
-    id: true, params: true, status: true, totalCount: true, items: { select: { id: true, targetId: true, status: true, result: true } },
+    id: true, params: true, status: true, totalCount: true, items: { select: { id: true, targetId: true, status: true, result: true, error: true } },
   } });
   requireThat(tasks.length <= 1, "generation_task_ambiguous");
   const t = tasks[0];
@@ -175,7 +186,8 @@ async function waveRows(tx: Prisma.TransactionClient, m: Manifest, w: number) {
     else { requireThat(["pending", "processing"].includes(i.status), "generation_item_state_refused"); generation.pending++; }
   }
   requireThat(Object.entries(generation).filter(([k]) => k !== "expected").reduce((n, [, v]) => n + v, 0) === ids.length, "generation_accounting_mismatch");
-  return { blocks, tasks, articles, generation, tasksTerminal: tasks.every(t => t && TERMINAL.includes(t.status)) };
+  const failurePolicy = generationFailurePolicy(items.filter(i => i.status === "failed").map(i => i.error), ids.length);
+  return { blocks, tasks, articles, generation, failurePolicy, tasksTerminal: tasks.every(t => t && TERMINAL.includes(t.status)) };
 }
 async function downstream(tx: Prisma.TransactionClient, api: Api) {
   const control = await api.control(tx);
@@ -202,11 +214,11 @@ async function statusInTx(tx: Prisma.TransactionClient, m: Manifest, w: number, 
   if (missingOutbox) stopReasons.push("indexnow_outbox_missing");
   if (controls.breakerOpen || controls.rateLimitWaiting || controls.blockedUrls) stopReasons.push("indexnow_control_stop");
   if (outbox.some(o => !["accepted", "pending", "processing"].includes(o.status))) stopReasons.push("indexnow_nonaccepted_failure");
-  if (g.failed / g.expected > .02 || g.skipped > 0) stopReasons.push("generation_failure_or_skipped");
+  if (!rows.failurePolicy.allowed || g.skipped > 0) stopReasons.push("generation_failure_or_skipped");
   if (preview.missing > 0) stopReasons.push("preview_dispatch_or_content_missing");
   if (preview.failed / preview.expected > .1) stopReasons.push("preview_failure_rate");
-  const readyForNextWave = stopReasons.length === 0 && rows.tasksTerminal && g.notSubmitted === 0 && g.pending === 0 && g.skipped === 0 && g.failed / g.expected <= .02 && published.length === g.success && accepted === published.length && !controls.breakerOpen && !controls.rateLimitWaiting && controls.blockedUrls === 0 && preview.expected > 0 && preview.missing === 0 && preview.completed / preview.expected >= .95 && preview.failed / preview.expected <= .1 && sitemap.lastGeneration.status === "success" && Date.parse(sitemap.lastGeneration.finishedAt ?? "") >= latestPublish && !!sitemap.task && TERMINAL.includes(sitemap.task.status) && sitemap.task.status === "completed";
-  return { wave: w, generation: g, generationTasks: rows.tasks.map(t => t ? { id: t.id, status: t.status, total: t.totalCount } : null), drafts: rows.articles.filter(a => a.status === "draft").length, published: published.length, indexnow: { accepted, pending: published.length - accepted - missingOutbox, missing: missingOutbox, ...controls }, preview, mainPreviewBacklog: Object.fromEntries(backlog.map(x => [x.status, x._count._all])), sitemap, stopReasons, readyForNextWave };
+  const readyForNextWave = stopReasons.length === 0 && rows.tasksTerminal && g.notSubmitted === 0 && g.pending === 0 && g.skipped === 0 && rows.failurePolicy.allowed && published.length === g.success && accepted === published.length && !controls.breakerOpen && !controls.rateLimitWaiting && controls.blockedUrls === 0 && preview.expected > 0 && preview.missing === 0 && preview.completed / preview.expected >= .95 && preview.failed / preview.expected <= .1 && sitemap.lastGeneration.status === "success" && Date.parse(sitemap.lastGeneration.finishedAt ?? "") >= latestPublish && !!sitemap.task && TERMINAL.includes(sitemap.task.status) && sitemap.task.status === "completed";
+  return { wave: w, generation: g, generationFailurePolicy: rows.failurePolicy, generationTasks: rows.tasks.map(t => t ? { id: t.id, status: t.status, total: t.totalCount } : null), drafts: rows.articles.filter(a => a.status === "draft").length, published: published.length, indexnow: { accepted, pending: published.length - accepted - missingOutbox, missing: missingOutbox, ...controls }, preview, mainPreviewBacklog: Object.fromEntries(backlog.map(x => [x.status, x._count._all])), sitemap, stopReasons, readyForNextWave };
 }
 function assertDownstream(x: Awaited<ReturnType<typeof downstream>>) { requireThat(!x.breakerOpen && !x.rateLimitWaiting && x.blockedUrls === 0, "indexnow_stop_condition"); }
 function safeError(error: unknown) { const c = record(error).code; return typeof c === "string" && /^[a-zA-Z0-9_]{1,100}$/.test(c) ? c : "unexpected_error"; }
@@ -233,7 +245,7 @@ export async function runCommand(args: Args, db: PrismaClient, api: Api, emit: (
     if (args.wave! > 1) requireThat((await readOnly(db, tx => statusInTx(tx, m, args.wave! - 1, api))).readyForNextWave, "previous_wave_not_ready");
     if (args.command === "publish") {
       const rows = await readOnly(db, tx => waveRows(tx, m, args.wave!)), g = rows.generation;
-      requireThat(rows.tasksTerminal && g.notSubmitted === 0 && g.pending === 0 && g.skipped === 0 && g.failed / g.expected <= .02, "generation_not_publishable");
+      requireThat(rows.tasksTerminal && g.notSubmitted === 0 && g.pending === 0 && g.skipped === 0 && rows.failurePolicy.allowed, "generation_not_publishable");
     }
     for (const c of m.waves[args.wave! - 1].chunks) {
       requireThat(!interrupted, "operator_interrupted");
