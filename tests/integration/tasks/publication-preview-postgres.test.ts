@@ -8,6 +8,7 @@ import { applyPublishTransition, publishArticlesBatch } from "@/server/publish-g
 import { enqueuePublicationPreviews } from "@/server/publication/preview-enqueue";
 import { parsePreviewChaptersResponse } from "@/lib/adapters";
 import { buildWorkerAllowlist, createMoboreaderPreviewRefreshTask, createPromoLinkClaimTask } from "@/lib/tasks";
+import { refreshSitemapAfterPreviewTask } from "@/lib/tasks/preview-refresh-finalize";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "../../../worker/handlers/promo-link-claim";
@@ -58,7 +59,8 @@ async function cycle() {
     allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1,promo_link.claim.v1", registry), signal: new AbortController().signal });
 }
 
-// B-42：真解析器 + 真 worker（worker_app）跑试读任务；上游响应由用例给定。
+// B-42 / B-46：真解析器 + 真 worker（worker_app）跑试读任务；上游响应由用例给定。
+const sitemapEnv = { ...env, FEATURE_SITEMAP_AUTO_REFRESH: "true" } satisfies NodeJS.ProcessEnv;
 const previewRow = (i: number, chapterContent: unknown) => ({ i, chapterID: `b42-${i}`, chapterName: `Chapter ${i}`, chapterShowName: null, chapterContent });
 async function previewCycles(chapterList: unknown, handlerEnv: NodeJS.ProcessEnv = env, maxCycles = 50) {
   const registry = createMoboreaderWorkerHandlers(worker, { env: handlerEnv, adapter: {
@@ -84,6 +86,7 @@ async function previewTask(sourceItemIds: string[]) {
 }
 const chaptersOf = (novelId: string) => owner.novelChapter.findMany({ where: { novelId }, orderBy: { canonicalChapterNumber: "asc" },
   select: { canonicalChapterNumber: true, status: true, content: { select: { body: true, contentHash: true } } } });
+const sitemapTasks = () => owner.genericTask.findMany({ where: { taskType: "sitemap_refresh" }, select: { id: true, status: true, params: true } });
 
 describe.skipIf(!enabled).sequential("publication preview real roles", () => {
   beforeAll(async () => {
@@ -299,6 +302,52 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
       result: { reason: "upstream_preview_chapter_list_null", upstreamDiagnostic: { kind: "chapter_list_not_array", stage: "getchapterinfo", receivedType: "null" } } });
     expect(await owner.channelSyncTask.findUniqueOrThrow({ where: { id: nullList.id } })).toMatchObject({ status: "completed", failedCount: 0, skippedCount: 1 });
     expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[1, "preview", "one"]]);
+  });
+
+  it("B-46 试读任务写入章节后经 worker_app 入队一次站点地图刷新；按任务粒度、水位线防重复", async () => {
+    const rows = [await seed(0, foundation.account, true), await seed(1, foundation.account, true)];
+    const task = await previewTask(rows.map((r) => r.source.id));
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv, 1)).toBe(1);
+    // 任务还有未完成条目：不触发。
+    expect(await sitemapTasks()).toEqual([]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const [refresh] = await sitemapTasks();
+    expect(refresh).toMatchObject({ status: "pending", params: { reason: "preview_chapters_written", triggeredBy: `moboreader.preview_refresh.v1#${task.id}` } });
+    // 水位线合并写进任务结果，建任务时写下的键原样保留。
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({
+      eligibleCount: 2, sitemapRefresh: { status: "queued", taskId: refresh!.id, coveredItemCount: 2, triggerCount: 1 },
+    });
+    // 重复回调（例如两个 worker 各提交最后一个条目）：水位线已覆盖，不再入队。
+    await refreshSitemapAfterPreviewTask(worker, task.id, { env: sitemapEnv });
+    expect(await sitemapTasks()).toHaveLength(1);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({ sitemapRefresh: { triggerCount: 1 } });
+  });
+
+  it("B-46 已有待处理刷新时合并（不撞在途唯一约束）；没写章节或开关关闭时不入队", async () => {
+    const [a, b, c, d] = [await seed(0, foundation.account, true), await seed(1, foundation.account, true), await seed(2, foundation.account, true), await seed(3, foundation.account, true)];
+    await previewTask([a.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const second = await previewTask([b.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    const tasks = await sitemapTasks();
+    expect(tasks).toHaveLength(1);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: second.id } })).result).toMatchObject({ sitemapRefresh: { status: "coalesced", taskId: tasks[0]!.id } });
+    await owner.genericTaskItem.deleteMany({ where: { task: { taskType: "sitemap_refresh" } } });
+    await owner.genericTask.deleteMany({ where: { taskType: "sitemap_refresh" } });
+    // 全部为空（skipped）：没有可读章节变动，不入队。
+    const empty = await previewTask([c.source.id]);
+    expect(await previewCycles([previewRow(1, "")], sitemapEnv)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: empty.id } })).result).not.toHaveProperty("sitemapRefresh");
+    // 正文与已有的相同（contentWrites=0）：不入队。
+    await previewTask([a.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], sitemapEnv)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    // 开关关闭：写了章节也不入队，也不记水位。
+    const off = await previewTask([d.source.id]);
+    expect(await previewCycles([previewRow(1, "one")], env)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: off.id } })).result).not.toHaveProperty("sitemapRefresh");
   });
 
   for (const size of [50, 500]) it(`mixed local adapter load N=${size} through real worker and legal <=200 publish batches`, async () => {

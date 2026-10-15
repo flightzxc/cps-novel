@@ -33,6 +33,7 @@ import {
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
 import { isBlankPreviewContent, materializeChangduPreview } from "../../src/lib/preview";
+import { refreshSitemapAfterPreviewTask } from "../../src/lib/tasks/preview-refresh-finalize";
 import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
 import { refreshEffectiveTagsForNovels } from "../../src/server/tagging/effective-tag-projection";
 import { createHandlerRegistry, withTaskLeaseTransaction, type ProtectedWriteResult, type TaskHandler, type TaskLease } from "../../src/lib/tasks";
@@ -1841,7 +1842,7 @@ export function createMoboreaderPreviewHandler(
           chapterList: preview.chapterList,
           trustedCompleteResponse: true,
         });
-        // 写入计数随条目结果落库（含 B-42 的保留章节数），便于逐本核对。
+        // 写入计数随条目结果落库：B-46 的任务级收尾据此判断"这个任务有没有改动可读章节"。
         return {
           status: "success",
           result: {
@@ -1874,6 +1875,8 @@ export function createMoboreaderWorkerHandlers(
       family: "channel_sync",
       maxAttempts: 1,
       handler: createMoboreaderPreviewHandler(db, dependencies),
+      // B-46：任务全部条目结束、且写入了可读章节时，再入队一次站点地图刷新（任务粒度，自带合并）。
+      afterItemCommit: (taskId) => refreshSitemapAfterPreviewTask(db, taskId, { env: dependencies.env ?? process.env }),
     },
   });
 }
