@@ -1,0 +1,55 @@
+{
+  "at": "2026-10-15T10:16:33.366299+00:00",
+  "reviewedOpsCommit": "11f4cb1146babd3564d57ee0819d5ee598daa4a4",
+  "ownerApprovedResume": true,
+  "scriptSha256": "62eb005c2dc0eccc783e676a3c830efdbb5bd71eb7d3ed88e4d812eac72d3c4f",
+  "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+  "archivedStop": "/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15/archives/resume-11f4cb11-20261015T101633Z/STOP.json",
+  "stopAction": "rename_to_protected_archive_not_delete",
+  "archiveHashes": {
+    "STOP.json": "fe0227f11a5922923fb5e7310d3b7e7cd0733f540bf2e8e8222cf2818e5a41dc",
+    "cli-before.ts.txt": "194438792336da3d054a2751c16737ef578906bc3de591eb43c3ccd3dd524660",
+    "supervise.py.txt": "e9d77595ce57d1c4699bb681f677eacab034751d12d4689dbec85c589f012302",
+    "watch.py.txt": "5dbe5812795236c159b0c465835bbae41b60c3c9f246ff802fe2629b33a0f8db",
+    "journal-before.jsonl": "cdc2273da9dedc15916b7d1856cf5e9dc3ef577ef2f869d326a09c02cc24fd32"
+  },
+  "journalUnchanged": true,
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+    "containersIdentical": true
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 26
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 37
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  },
+  "B47": "failed template books retained, no retry"
+}

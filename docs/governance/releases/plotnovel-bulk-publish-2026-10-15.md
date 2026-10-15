@@ -1,8 +1,8 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：第3波收尾PASS，已发布新增1456篇；继续按门禁执行
+## 当前状态：第4波收尾PASS，已发布新增1927篇；继续按门禁执行
 
-主控复核11f4cb11及Owner批准恢复后，第3波生成、发布、收尾已通过。累计新增发布1456篇，线上总1506篇；本波已知模板失败15本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
+主控复核11f4cb11及Owner批准恢复后，第4波生成、发布、收尾已通过。累计新增发布1927篇，线上总1977篇；本波已知模板失败14本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
 
 代码基线release/v0.6.0-2026-10-14@ed983f28377989605796030c06f8b9277c7ee7e8。新分支ops/plotnovel-bulk-publish-20261015，工作树/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops，真实node_modules，npm ci和Prisma generate已完成。固定脚本提交 **ab09d1beda4f0b26562ad7db1710d3c0855aec64**，仅留档ops分支、不合入集成，也不把脚本带入release分支。线上Final/tag仍493eb23b034b0410780228535b3e293e4ee91f9a，未发版/构建/拉取/重建镜像，不改schema、依赖、业务代码、env、能力或既有公开网址。
 
@@ -225,3 +225,36 @@ PlotNovel已发布总数1506=原50+累计新增1456；原50页面及635人工复
 这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
 
 第三波收尾后Owner因断网明确暂停。恢复时只读核验生产CLI摘要、485篇IndexNow与试读全部完成，第四波仍未提交；原记录/页面/635人工复核/env/CID不变。未重放前三波。暂停检查点已含本地CLI未提交退回旧版的改动，恢复时保留该工作文件及diff；以已审核11f4cb11的Git blob（SHA256 62eb005c2dc0eccc783e676a3c830efdbb5bd71eb7d3ed88e4d812eac72d3c4f）和容器实际字节为执行身份，不把本地旧工作文件部署或合入。
+
+## 第4波执行与收尾PASS（2026-10-15T13:39:51.760681+00:00）
+
+生成清单485本，成功并首次发布471篇、已知TemplateRenderError失败14本（2.887%），未知失败0；失败项保留、不重建/补发。草稿0，未提交/处理中/跳过均0；发布拒绝/冲突/not_found/aborted均0。任务ID：b6d4db7a-4bc5-497a-94fa-81bf90993455, 1cc941e4-ff50-4f7d-84c1-7b830beffc5a, cf52592a-1b33-4acb-8ea7-0c1ded9d0db0。
+
+生成CLI：2026-10-15T13:26:06.245073+00:00至2026-10-15T13:26:12.358225+00:00，exit=0。
+
+发布CLI：2026-10-15T13:27:30.133965+00:00至2026-10-15T13:27:48.258427+00:00，exit=0。
+
+IndexNow 471/471 accepted，pending/missing/死信0，熔断关闭、无429等待。试读按书目完成471/471，失败0，待处理0，缺失0；其中清单时已有有效试读3本。sitemap任务f0a057cf-94c3-4ff8-b2a0-384cd5f84713 completed，最近生成success@2026-10-15T13:28:28.318Z，覆盖本波发布时间、无待处理刷新。状态readyForNextWave=true；允许残余≤5%试读继续收尾，最终统一等终态后再补刷。
+
+PlotNovel已发布总数1977=原50+累计新增1927；原50页面及635人工复核摘要未变，claimPromo关闭，Final/env/CID不变。自原执行基线起各服务error/permission denied均0；已知模板失败单独核销，不将其掩为任务成功。主动外部HTTP0，最终抽样尚未执行。逐本核销见[本波证据](evidence/plotnovel-bulk-publish-2026-10-15/wave-4/result.json)。
+
+### 第4波模板失败书目（B-47修复后另行批准补发）
+
+| novelId | task itemId | 模板错误码 |
+| --- | --- | --- |
+| c631b659-4f79-4768-80ce-4c61f2966c6e | 038faa0f-bc8d-4e67-9f05-a67e2a77a7ab | ERR_TEMPLATE_VALUE_INVALID |
+| d0fc635e-71fa-4dbc-a8a0-72fb5fa0a695 | cc08f810-8312-4348-9743-4c4ae497c788 | ERR_TEMPLATE_VALUE_INVALID |
+| d930fbdc-02ed-4285-a00c-b55925c120f9 | e5612356-f9f5-44d4-b6cb-3ef42c56c697 | ERR_TEMPLATE_VALUE_INVALID |
+| da0ece41-6216-4cf4-849d-c75029cadf0e | 318dd524-5d3a-4dad-964a-83904d84bb68 | ERR_TEMPLATE_VALUE_INVALID |
+| da373ead-ae9f-4fb2-a319-6041e33649d8 | 673ecb1f-fa25-4715-97f6-c86bb10afadb | ERR_TEMPLATE_VALUE_INVALID |
+| dfd67f4a-a014-42f0-9ce7-e1f5b630d58a | a9b65c01-9f31-499a-ad5b-b3775733c2dc | ERR_TEMPLATE_VALUE_INVALID |
+| e1cff180-c9d7-402b-9c3b-b24122b52310 | b93bec27-7865-4408-9334-afffd2d918b1 | ERR_TEMPLATE_VALUE_INVALID |
+| eb7a743f-051b-4335-a470-74a60862b7ff | 147bf16a-4dd6-4928-a908-0bac86844dff | ERR_TEMPLATE_VALUE_INVALID |
+| ecb9ab94-cf60-417c-99f1-86a6ecfd8160 | dc636cd3-ef8d-4b9f-9dd2-e57ac1601d12 | ERR_TEMPLATE_VALUE_INVALID |
+| ece1d680-f62a-4715-ab88-3b9ee18aa511 | 65730c42-e502-4a9e-b42c-009fd3f22081 | ERR_TEMPLATE_VALUE_INVALID |
+| f2913f03-390c-4a7e-877e-e80782962a16 | ab214747-28a3-4224-88d3-68ada1b74e14 | ERR_TEMPLATE_VALUE_INVALID |
+| f7892692-4271-4668-a317-2368aeaf1ab0 | fd1dcb8b-7129-4b52-b31e-7c32e3413113 | ERR_TEMPLATE_VALUE_INVALID |
+| f7f84c54-1ddd-410b-b0b3-b81bff2534df | 794591d4-5f92-4220-83e8-afd5c3e5cb8c | ERR_TEMPLATE_VALUE_INVALID |
+| fe45dcb3-90e8-4837-b379-b95a9c0610a0 | 022412c6-67dc-4e25-98c4-5537e91af18d | ERR_TEMPLATE_VALUE_INVALID |
+
+这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。

@@ -1,0 +1,119 @@
+{
+  "at": "2026-10-15T13:26:28.622060+00:00",
+  "action": "status",
+  "wave": 4,
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+    "containersIdentical": true
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 3016
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 13
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 825
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  },
+  "status": {
+    "wave": 4,
+    "generation": {
+      "expected": 485,
+      "notSubmitted": 0,
+      "pending": 0,
+      "success": 471,
+      "failed": 14,
+      "skipped": 0
+    },
+    "generationFailurePolicy": {
+      "knownTemplateFailures": 14,
+      "otherFailures": 0,
+      "allowed": true
+    },
+    "generationTasks": [
+      {
+        "id": "b6d4db7a-4bc5-497a-94fa-81bf90993455",
+        "status": "completed_with_errors",
+        "total": 200
+      },
+      {
+        "id": "1cc941e4-ff50-4f7d-84c1-7b830beffc5a",
+        "status": "completed_with_errors",
+        "total": 200
+      },
+      {
+        "id": "cf52592a-1b33-4acb-8ea7-0c1ded9d0db0",
+        "status": "completed_with_errors",
+        "total": 85
+      }
+    ],
+    "drafts": 471,
+    "published": 0,
+    "indexnow": {
+      "accepted": 0,
+      "pending": 0,
+      "missing": 0,
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "deadLetters": 0,
+      "blockedUrls": 0
+    },
+    "preview": {
+      "expected": 0,
+      "alreadyValid": 0,
+      "completed": 0,
+      "failed": 0,
+      "pending": 0,
+      "missing": 0,
+      "taskIds": []
+    },
+    "mainPreviewBacklog": {
+      "failed": 339,
+      "skipped": 80006,
+      "success": 33033
+    },
+    "sitemap": {
+      "enabled": true,
+      "task": {
+        "id": "605244b7-8437-477f-8960-8cd635d56cc6",
+        "status": "completed",
+        "createdAt": "2026-10-15T10:46:49.586Z",
+        "completedAt": "2026-10-15T10:47:08.460Z"
+      },
+      "lastGeneration": {
+        "status": "success",
+        "finishedAt": "2026-10-15T10:47:08.442Z"
+      },
+      "published": {
+        "generatedAt": "2026-10-15T10:47:08.439Z",
+        "urlCount": 134567
+      }
+    },
+    "stopReasons": [],
+    "readyForNextWave": false
+  }
+}
