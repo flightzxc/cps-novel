@@ -1,0 +1,8 @@
+{
+  "errorClass": "NameError",
+  "missingSymbol": "HTMLParser",
+  "stage": "class definition before start marker, checker or HTTP",
+  "activeExternalHttpAtFailure": 0,
+  "correction": "import HTMLParser from Python standard library",
+  "businessGateChanged": false
+}

@@ -1,0 +1,10 @@
+import pathlib,json,sys,datetime,hashlib
+ROOT=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15');exec((ROOT/'supervise.py').read_text().split('action=sys.argv[1];')[0])
+assert not (OUT/'STOP.json').exists();states=[json.loads(run(cmd('status',w))) for w in range(1,5)]
+assert all(s['readyForNextWave'] and s['preview']['pending']==0 and s['preview']['missing']==0 and not s['stopReasons'] for s in states)
+protect();assert all(v['error']==0 and v['permissionDenied']==0 for v in logs().values())
+check=sql("""SELECT json_build_object('previewInFlightParents',count(DISTINCT t.id)) FROM channel_sync_task t JOIN channel_sync_task_item i ON i.task_id=t.id JOIN novel_source_item s ON s.id=i.novel_source_item_id JOIN article a ON a.novel_id=s.novel_id JOIN promo_link p ON p.id=a.promo_link_id WHERE t.task_type='moboreader.preview_refresh.v1' AND t.mode='apply' AND p.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND a.status='published' AND a.deleted_at IS NULL AND t.status NOT IN ('completed','completed_with_errors','failed','cancelled');""");assert check['previewInFlightParents']==0
+folder=OUT/'final';folder.mkdir(mode=0o700);assert not (folder/'sitemap-apply.json').exists()
+dry=json.loads(run(['docker','exec','-w','/app','-e','PGOPTIONS=-c default_transaction_read_only=on',web,'tsx','scripts/generate-static-sitemaps.ts','--dry-run']));(folder/'sitemap-dry-run.json').write_text(json.dumps(dry,indent=2)+'\n')
+apply=json.loads(run(['docker','exec','-w','/app',web,'tsx','scripts/generate-static-sitemaps.ts','--apply','--reason','PlotNovel存量放量试读全部终态后补齐B-46站点地图时序缺口','--request-id','plotnovel-bulk-sitemap-final-20261015']));assert apply['status'] in ['queued','coalesced']
+(folder/'sitemap-apply.json').write_text(json.dumps({'at':now(),'apply':apply,'previewReadback':check,'preRefreshStates':states,'protection':protect(),'logs':logs()},indent=2)+'\n');print(json.dumps({'dryRun':dry,'apply':apply,'previewReadback':check}))

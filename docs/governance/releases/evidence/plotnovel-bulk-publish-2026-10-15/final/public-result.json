@@ -1,0 +1,185 @@
+{
+  "at": "2026-10-15T13:44:57.938344+00:00",
+  "status": "PASS",
+  "reason": null,
+  "samples": [
+    {
+      "articleId": "3f400886-3284-46e9-91cd-00b78d8b2b79",
+      "novelId": "f4a4a0b8-a538-45dc-9fe9-23e553947097",
+      "bookPath": "/novel/dissected-on-your-medical-table-pq9koc2qa",
+      "goCode": "2h5b337rlu"
+    },
+    {
+      "articleId": "2007dc17-fa06-453a-ae1e-8638b5d1388a",
+      "novelId": "a9f7d51c-c395-49ce-a38d-8ca82f2e86b1",
+      "bookPath": "/novel/ceo-lunch-date-my-obsessive-brother-p0vixijgx",
+      "goCode": "xuyyoutei5"
+    },
+    {
+      "articleId": "4b067cea-31ac-4aa3-9496-3d91f4bb856f",
+      "novelId": "eef2331f-4ef3-4d16-a20b-b678cf93b1bc",
+      "bookPath": "/novel/mistaking-me-for-my-brother-s-mistress-pcwpm39mv",
+      "goCode": "yqlz2jd73p"
+    }
+  ],
+  "results": [
+    {
+      "sequence": 1,
+      "at": "2026-10-15T13:44:35.398333+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/novel/dissected-on-your-medical-table-pq9koc2qa",
+      "kind": "book",
+      "articleId": "3f400886-3284-46e9-91cd-00b78d8b2b79",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "cta": true,
+        "hint": true,
+        "canonicalMatches": true,
+        "upstreamCodeMatchingLines": 0
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-10-15T13:44:40.641378+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/2h5b337rlu",
+      "kind": "go",
+      "articleId": "3f400886-3284-46e9-91cd-00b78d8b2b79",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "redirectFollowed": false
+      }
+    },
+    {
+      "sequence": 3,
+      "at": "2026-10-15T13:44:41.956682+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/2h5b337rlu/app",
+      "kind": "interstitial",
+      "articleId": "3f400886-3284-46e9-91cd-00b78d8b2b79",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "noStore": true,
+        "noindex": true,
+        "codeCardMatches": true,
+        "stores": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      }
+    },
+    {
+      "sequence": 4,
+      "at": "2026-10-15T13:44:43.832956+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/novel/ceo-lunch-date-my-obsessive-brother-p0vixijgx",
+      "kind": "book",
+      "articleId": "2007dc17-fa06-453a-ae1e-8638b5d1388a",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "cta": true,
+        "hint": true,
+        "canonicalMatches": true,
+        "upstreamCodeMatchingLines": 0
+      }
+    },
+    {
+      "sequence": 5,
+      "at": "2026-10-15T13:44:46.957241+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/xuyyoutei5",
+      "kind": "go",
+      "articleId": "2007dc17-fa06-453a-ae1e-8638b5d1388a",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "redirectFollowed": false
+      }
+    },
+    {
+      "sequence": 6,
+      "at": "2026-10-15T13:44:48.045756+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/xuyyoutei5/app",
+      "kind": "interstitial",
+      "articleId": "2007dc17-fa06-453a-ae1e-8638b5d1388a",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "noStore": true,
+        "noindex": true,
+        "codeCardMatches": true,
+        "stores": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      }
+    },
+    {
+      "sequence": 7,
+      "at": "2026-10-15T13:44:50.871830+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/novel/mistaking-me-for-my-brother-s-mistress-pcwpm39mv",
+      "kind": "book",
+      "articleId": "4b067cea-31ac-4aa3-9496-3d91f4bb856f",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "cta": true,
+        "hint": true,
+        "canonicalMatches": true,
+        "upstreamCodeMatchingLines": 0
+      }
+    },
+    {
+      "sequence": 8,
+      "at": "2026-10-15T13:44:53.701160+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/yqlz2jd73p",
+      "kind": "go",
+      "articleId": "4b067cea-31ac-4aa3-9496-3d91f4bb856f",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "redirectFollowed": false
+      }
+    },
+    {
+      "sequence": 9,
+      "at": "2026-10-15T13:44:54.949382+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/yqlz2jd73p/app",
+      "kind": "interstitial",
+      "articleId": "4b067cea-31ac-4aa3-9496-3d91f4bb856f",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "noStore": true,
+        "noindex": true,
+        "codeCardMatches": true,
+        "stores": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      }
+    }
+  ],
+  "requests": 9,
+  "rawBodiesSaved": false,
+  "upstreamCodesSaved": false,
+  "redirectsFollowed": false,
+  "retries": 0
+}

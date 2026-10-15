@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-15T13:49:16.846Z",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "status": "PASS",
+  "previousHistoryPreserved": true,
+  "unrelatedContentPrefixIdentical": true,
+  "checks": {
+    "最终验收PASS": true,
+    "1,927": true,
+    "1,977": true,
+    "58本": true,
+    "5871有效": true,
+    "9/10": true,
+    "1927/1927 accepted": true,
+    "63ed97a4-ee18-4eaf-913e-1c438dd5de5d": true
+  },
+  "uniqueBulkEntry": true
+}

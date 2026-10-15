@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-15T13:43:31.819Z",
+  "databaseRole": "web_app",
+  "transactionReadOnly": "on",
+  "publishedTotal": 1977,
+  "newPublished": 1927,
+  "existingPublished": 50,
+  "newValidIndexableChapterPages": 5721,
+  "existingValidIndexableChapterPages": 150,
+  "expectedExisting": 50,
+  "originalBuilderBooks": 1977,
+  "expectedValidIndexableChapters": 5871,
+  "missingBookCount": 0,
+  "missingChapterCount": 0,
+  "unexpectedPlotChapterCount": 0,
+  "goUrlsInNovelSitemaps": 0,
+  "allPublishedBooksAreCandidates": true,
+  "staticRelease": "63ed97a4-ee18-4eaf-913e-1c438dd5de5d",
+  "shards": 7,
+  "samples": [
+    {
+      "articleId": "3f400886-3284-46e9-91cd-00b78d8b2b79",
+      "novelId": "f4a4a0b8-a538-45dc-9fe9-23e553947097",
+      "bookPath": "/novel/dissected-on-your-medical-table-pq9koc2qa",
+      "goCode": "2h5b337rlu"
+    },
+    {
+      "articleId": "2007dc17-fa06-453a-ae1e-8638b5d1388a",
+      "novelId": "a9f7d51c-c395-49ce-a38d-8ca82f2e86b1",
+      "bookPath": "/novel/ceo-lunch-date-my-obsessive-brother-p0vixijgx",
+      "goCode": "xuyyoutei5"
+    },
+    {
+      "articleId": "4b067cea-31ac-4aa3-9496-3d91f4bb856f",
+      "novelId": "eef2331f-4ef3-4d16-a20b-b678cf93b1bc",
+      "bookPath": "/novel/mistaking-me-for-my-brother-s-mistress-pcwpm39mv",
+      "goCode": "yqlz2jd73p"
+    }
+  ]
+}

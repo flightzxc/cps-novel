@@ -1,0 +1,6 @@
+import pathlib,subprocess,json
+root=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15');exec((root/'supervise.py').read_text().split('action=sys.argv[1];')[0])
+a=OUT/'final/sitemap-apply.json';ap=json.loads(a.read_text());state=json.loads(run(cmd('status',4)));assert state['sitemap']['task']['id']==ap['apply']['taskId'] and state['sitemap']['task']['status']=='completed' and state['sitemap']['lastGeneration']['status']=='success'
+f=OUT/'final/coverage.json';assert not f.exists();data=run(['docker','exec','-w','/app','-e','PGOPTIONS=-c default_transaction_read_only=on',web,'tsx','--tsconfig','/app/tsconfig.json','/tmp/plotnovel-bulk-final-coverage.ts']);x=json.loads(data);f.write_text(json.dumps(x,indent=2)+'\n');f.chmod(0o600)
+assert x['publishedTotal']==1977 and x['newPublished']==1927 and x['existingPublished']==50 and x['missingBookCount']==x['missingChapterCount']==x['unexpectedPlotChapterCount']==x['goUrlsInNovelSitemaps']==0 and x['allPublishedBooksAreCandidates'] and x['staticRelease']==ap['apply']['taskId']
+print(json.dumps(x))

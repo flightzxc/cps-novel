@@ -1,0 +1,19 @@
+{
+  "B47-failed-books.json": "cc6f25a9894daa76ce776a2fcbdec8fb53c5822a26aabd1134a5bb2527a9a107",
+  "coverage.json": "74362778954d4ddfc32f0b61c20ec5885ed0e5cc41afa2ad0aef037b64a404b7",
+  "external-requests.jsonl": "ad9f6882f9c1b0e6a5a3c80ade14158dd7a136c82e1df9a37e4f5e615520b10b",
+  "final-coverage.ts.txt": "5a83ba80f5f193f596e05b1e0d7d9310d6ba18e4d64bf3214e9a52eddfa153de",
+  "final-readback.py.txt": "da03b8cbc7b9cccc3502b90eee2f597088050c897ffdf7589bc8627dd768094e",
+  "final-refresh.py.txt": "84ebdffb03b31602a75d76b23e635c6b286d0184b23451f16591a0e941318358",
+  "notion-readback.json": "79da51b291ae1540c10e9e38985f70517e5e6ddebf808dbfa1efceb9070ab9c8",
+  "phase2-final-result.json": "f9287b891eeeba6a4fba5842eb06cc43d58e6b3eed0c32a01d8b440186f7115b",
+  "public-check.py.txt": "8869ff493eef0b86d8e214f62dde6e30d51212610135e7b9b456624f42f0b23e",
+  "public-result.json": "618d183207c522b59c357dce8949ceeddc866c69c3f7af7e2bd6042c6b985810",
+  "public-started.json": "de1108874650f978fc99b5ff303028fc17f3d980bec619234d54a6082dac9708",
+  "public-wrapper-first-failure.json": "7e18cab098175a4ca322550480193f17a4c4d38081e59a26b3b774e3c158c3a0",
+  "readback.json": "05f02105faefc3a5f2474ba4c78bef6af3947552e0745a65a2498c2476406dd3",
+  "run-coverage.py.txt": "c15e02ccd2634fb99ff26850e46270ae19ef3d54552b3b4af920a5c215ca9045",
+  "secret-checker.py.txt": "ef04e45ada171e7e092f02ac94309a64bc60355e00825e29d135226eafb6ea8f",
+  "sitemap-apply.json": "1e2212d9bb0f07ecc3c100044bc1e21d7d81cdac1e108ca39f754c69566ce8b4",
+  "sitemap-dry-run.json": "18e9c0a4a58404721c1da0f75ef81d62b3a19cb13b1be3352b54dff2c64ed25f"
+}

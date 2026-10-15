@@ -1,8 +1,8 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：第4波收尾PASS，已发布新增1927篇；继续按门禁执行
+## 当前状态：四波与最终验收PASS，新增发布1,927篇；58本模板失败留档
 
-主控复核11f4cb11及Owner批准恢复后，第4波生成、发布、收尾已通过。累计新增发布1927篇，线上总1977篇；本波已知模板失败14本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
+本次完成固定清单1985本逐本核销：1927篇成功生成并首次发布、58本已知TemplateRenderError留档，不重建任务或补发；线上PlotNovel已发布总数1977=原50+本次1927。四波IndexNow全部accepted、试读1927/1927完成且失败0；按原CLI预演后单次补刷，1977书页/5871有效可索引章节覆盖齐全，固定随机3篇共9次代理GET全部PASS。claimPromo关闭，635条人工复核及原50篇页面摘要不变。下文停手、阈值修订、暂停恢复均为过程历史，当前以本段和最终验收为准。
 
 代码基线release/v0.6.0-2026-10-14@ed983f28377989605796030c06f8b9277c7ee7e8。新分支ops/plotnovel-bulk-publish-20261015，工作树/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops，真实node_modules，npm ci和Prisma generate已完成。固定脚本提交 **ab09d1beda4f0b26562ad7db1710d3c0855aec64**，仅留档ops分支、不合入集成，也不把脚本带入release分支。线上Final/tag仍493eb23b034b0410780228535b3e293e4ee91f9a，未发版/构建/拉取/重建镜像，不改schema、依赖、业务代码、env、能力或既有公开网址。
 
@@ -258,3 +258,36 @@ PlotNovel已发布总数1977=原50+累计新增1927；原50页面及635人工复
 | fe45dcb3-90e8-4837-b379-b95a9c0610a0 | 022412c6-67dc-4e25-98c4-5537e91af18d | ERR_TEMPLATE_VALUE_INVALID |
 
 这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
+
+## 最终核销、站点地图与三篇公开验收PASS
+
+完成时间 **2026-10-15T22:45:30.006204+09:00（JST）**。固定清单、11f4cb11审核CLI与生产Final均未变；没有重跑前三波、重新规划、修数据、放开领码或处理人工复核。
+
+| 波次 | 清单 | 首次发布 | 已知模板失败 | 失败率 | 试读最终完成 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 500 | 488 | 12 | 2.400% | 488/488 |
+| 2 | 500 | 483 | 17 | 3.400% | 483/483 |
+| 3 | 500 | 485 | 15 | 3.000% | 485/485 |
+| 4 | 485 | 471 | 14 | 2.887% | 471/471 |
+| 合计 | 1985 | 1927 | 58 | 2.922% | 1927/1927 |
+
+逐本1985=1927成功发布+58已知模板失败，未知失败/跳过/未提交/残留草稿0。发布拒绝/冲突/not_found/aborted/意外再发布均0。58本保留原任务，按波次逐本列于上文及[B-47失败总表](evidence/plotnovel-bulk-publish-2026-10-15/final/B47-failed-books.json)；B-47修复后需另行批准统一补发，本次没有补发。原CLI journal24条实际事件（12 generate/12 publish）、0 stop，摘要3c1fea1d904e258df95805efdef7299ad18dc6d9abc0b9912b7375ceb21db37c；原主机STOP已归档、未删除。
+
+全部试读书目终态且在途父任务0后，web原生web_app执行原generate-static-sitemaps.ts --dry-run，再--apply一次，requestId=plotnovel-bulk-sitemap-final-20261015；任务 **63ed97a4-ee18-4eaf-913e-1c438dd5de5d** completed，最后生成success，预演全站137832 URL。复用原createSitemapFamilyBuilder作为只读覆盖判据，按原可见性/章节窗口/内容/授权规则核对静态新release：**1977书页、5871有效可索引章节页**，书页/章节缺失0、多余PlotNovel章节0、novelpage站点地图go URL0。本次新增书页1927、有效可索引章节页5721，原50书页/150章节保留；不把试读完成误写为“每本必须三章”，以原候选和实际有效章节计数。
+
+固定随机3篇：
+- articleId 3f400886-3284-46e9-91cd-00b78d8b2b79，novelId f4a4a0b8-a538-45dc-9fe9-23e553947097，公开路径 /novel/dissected-on-your-medical-table-pq9koc2qa。
+- articleId 2007dc17-fa06-453a-ae1e-8638b5d1388a，novelId a9f7d51c-c395-49ce-a38d-8ca82f2e86b1，公开路径 /novel/ceo-lunch-date-my-obsessive-brother-p0vixijgx。
+- articleId 4b067cea-31ac-4aa3-9496-3d91f4bb856f，novelId eef2331f-4ef3-4d16-a20b-b678cf93b1bc，公开路径 /novel/mistaking-me-for-my-brother-s-mistress-pcwpm39mv。
+
+每篇书页/go/中间页各GET一次，共**9/10请求**，全部指定7899代理，无HEAD/重试/跟随跳转。书页200、Read on PlotNovel App及Free app小字正确、canonical一致；go302且相对Location正确；中间页200/no-store/noindex，商店按钮/码卡身份/无免责文字符合要求。书页上游口令码匹配0，中间页仅自身口令可见、其他口令匹配0。响应正文和口令只在临时内存，不保存HTML、截图或口令，泄漏扫描只保留计数。
+
+公开检查包装器首次缺少HTMLParser导入，发生在类定义阶段、HTTP/启动标记之前，0次请求；补齐Python标准库导入后完成固定九次请求，未削弱业务断言或重试任何HTTP，首次错误与修正留证。
+
+最终自原执行基线以来六服务web/worker/worker-light/scheduler/postgres/backup-timer的error/permission denied计数各0；单独核对58条已知模板finalize日志全部对应失败书目，非预期finalize/double-finalize0，不用日志error计数0掩盖58项业务失败。IndexNow1927/1927 accepted，熔断关闭、无429等待、死信/失败/积压0。试读失败0、缺失0、待处理0。
+
+原50篇ID/status/slug/shortId/publishedAt/body摘要、635条人工复核ID/status/response_shape摘要均未变；claimPromo/getlistpc仍registered_disabled，getbydataid/getchapterinfo仍enabled；env摘要f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369及六容器CID不变。未更改镜像/schema/版本/公开网址规则或移动v0.6.0 tag/Final。ops分支仅留档，不合入集成或release；本地已有未提交旧CLI工作文件保留，生产使用审核Git工件；没有新增正式发版级开发日志。
+
+证据：[最终机器核销](evidence/plotnovel-bulk-publish-2026-10-15/final/phase2-final-result.json)、[生产读回](evidence/plotnovel-bulk-publish-2026-10-15/final/readback.json)、[站点地图覆盖](evidence/plotnovel-bulk-publish-2026-10-15/final/coverage.json)、[九次HTTP记录](evidence/plotnovel-bulk-publish-2026-10-15/final/external-requests.jsonl)、[公开断言结果](evidence/plotnovel-bulk-publish-2026-10-15/final/public-result.json)。
+
+最终Notion状态已同步并于2026-10-15T13:49:16.846Z回读PASS：唯一运维条目、全部数字/抽样/失败保留与最终PASS状态一致，原历史和无关正文逐字保留。六服务日志、最终站点地图候选及公开响应分别独立留证，未保存上游口令码或原始正文。版本台账、原生成器CHANGELOG与最终证据随治理提交推送；没有移动tag或新增正式发版开发日志。

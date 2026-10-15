@@ -1,0 +1,24 @@
+import pathlib,json,collections,hashlib
+ROOT=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15');exec((ROOT/'supervise.py').read_text().split('action=sys.argv[1];')[0])
+assert not (OUT/'STOP.json').exists();statuses=[json.loads(run(cmd('status',w))) for w in range(1,5)]
+assert all(s['readyForNextWave'] and s['preview']['pending']==0 and s['preview']['missing']==0 and not s['stopReasons'] for s in statuses)
+records=[json.loads((OUT/('wave-'+str(w))/'result.json').read_text()) for w in range(1,5)]
+items=[i for r in records for i in r['accounting']['items']];failed=[i for i in items if i['status']=='failed'];published=[i for i in items if i['status']=='success'];assert len(items)==1985 and len({i['novelId'] for i in items})==1985
+assert all(i['errorCode']=='finalize_failed' and i['errorClass']=='TemplateRenderError' and i['articleId'] is None for i in failed)
+assert len({i['articleId'] for i in published})==len(published) and all(i['articleStatus']=='published' for i in published)
+q="""SELECT json_build_object('publishedTotal',(SELECT count(*) FROM article a JOIN promo_link p ON p.id=a.promo_link_id WHERE p.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND a.status='published' AND a.deleted_at IS NULL),'capabilities',(SELECT json_object_agg(capability_key,status) FROM channel_capability WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0'));"""
+x=sql(q);assert x['publishedTotal']==50+len(published);assert x['capabilities']=={'claimPromo':'registered_disabled','getlistpc':'registered_disabled','getbydataid':'enabled','getchapterinfo':'enabled'}
+journal=run(['docker','exec',web,'cat',MAN+'.execution.jsonl']);events=[json.loads(l) for l in journal.splitlines()];assert len(events)==24 and all(e['event'] in ['generate','publish'] for e in events);assert len({e['requestId'] for e in events})==24
+assert all(e.get('rejected',0)==e.get('conflict',0)==e.get('not_found',0)==e.get('unexpectedRepublications',0)==e.get('notProcessed',0)==0 and not e.get('aborted') for e in events)
+known={i['itemId'] for i in failed};start=json.loads((OUT/'baseline.json').read_text())['start'];failEvents=[]
+for svc,c in containers.items():
+ r=__import__('subprocess').run(['docker','logs','--since',start,c['name']],stdin=__import__('subprocess').DEVNULL,capture_output=True,text=True);assert r.returncode==0
+ for line in (r.stdout+'\n'+r.stderr).splitlines():
+  try:v=json.loads(line)
+  except ValueError:continue
+  if not isinstance(v,dict):continue
+  if v.get('event') in ['worker_finalize_failed','worker_finalize_failed_twice']:failEvents.append({'service':svc,'event':v['event'],'itemId':v.get('itemId'),'knownTemplateItem':v.get('itemId') in known})
+assert all(e['knownTemplateItem'] and e['event']=='worker_finalize_failed' for e in failEvents),'unexpected_finalize_failure_log'
+l=logs();assert all(v['error']==0 and v['permissionDenied']==0 for v in l.values())
+r={'at':now(),'status':'PASS','manifestSha256':SHA,'scriptSha256':SCRIPT,'reviewedOpsCommit':'11f4cb1146babd3564d57ee0819d5ee598daa4a4','planned':1985,'publishedNew':len(published),'knownTemplateFailures':len(failed),'unknownGenerationFailures':0,'publishedTotal':x['publishedTotal'],'accounted':len(published)+len(failed),'capabilities':x['capabilities'],'waveStatuses':statuses,'failedBooks':failed,'failedBooksAction':'retained; no requeue/backfill; B-47 follow-up requires separate authorization','journalEvents':len(events),'journalStopEvents':0,'journalSha256':hashlib.sha256(journal.encode()).hexdigest(),'knownTemplateFinalizeLogEvents':len(failEvents),'unexpectedFinalizeLogEvents':0,'protection':protect(),'logs':l,'activeExternalHttp':9}
+f=OUT/'final'/'readback.json';assert not f.exists();f.write_text(json.dumps(r,indent=2)+'\n');f.chmod(0o600);print(json.dumps({k:v for k,v in r.items() if k not in ['waveStatuses','failedBooks']}))
