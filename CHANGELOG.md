@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-15 · 共 1333 个 commit
+生成时间：2026-10-15 · 共 1334 个 commit
+- `af64063` 2026-10-15 运维：完成 PlotNovel 第一波488篇发布与收尾核销  — _codex · GPT-6_
 - `bd060ac` 2026-10-15 运维：记录十二本模板只读诊断与放量阈值待复核状态  — _codex · GPT-6_
 - `5feb91c` 2026-10-15 运维：记录 PlotNovel 首波生成失败率超限并停止放量  — _codex · GPT-6_
 - `b240091` 2026-10-15 运维：补齐 PlotNovel 存量放量阶段一的 Notion 与Git回读收据  — _codex · GPT-6_

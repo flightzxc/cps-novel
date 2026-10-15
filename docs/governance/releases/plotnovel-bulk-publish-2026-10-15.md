@@ -1,8 +1,8 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：第1波收尾PASS，已发布新增488篇；继续按门禁执行
+## 当前状态：第2波收尾PASS，已发布新增971篇；继续按门禁执行
 
-主控已复核固定脚本ab09d1be通过，Owner已批准固定清单四波放量。第一波500本全部终态：488成功草稿、12失败（finalize_failed），失败率12/500=2.4%，超过2%上限，已在发布前停手。publish调用0、新增公开页面0、线上仍50篇，后三波未启动；未重试/补发/修数据/取消任务或执行最终刷新和抽查。claimPromo仍关闭，635条人工复核与原50篇页面摘要不变。后文阶段一交付事实保留为历史，当前以本节及阶段二停手记录为准。
+主控复核11f4cb11及Owner批准恢复后，第2波生成、发布、收尾已通过。累计新增发布971篇，线上总1021篇；本波已知模板失败17本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
 
 代码基线release/v0.6.0-2026-10-14@ed983f28377989605796030c06f8b9277c7ee7e8。新分支ops/plotnovel-bulk-publish-20261015，工作树/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops，真实node_modules，npm ci和Prisma generate已完成。固定脚本提交 **ab09d1beda4f0b26562ad7db1710d3c0855aec64**，仅留档ops分支、不合入集成，也不把脚本带入release分支。线上Final/tag仍493eb23b034b0410780228535b3e293e4ee91f9a，未发版/构建/拉取/重建镜像，不改schema、依赖、业务代码、env、能力或既有公开网址。
 
@@ -151,5 +151,41 @@ PlotNovel已发布总数538=原50+累计新增488；原50页面及635人工复�
 | 2bd00daa-1d89-4191-868e-47cea348bc87 | 9162aba8-a636-48a8-bd4f-29ed7b1375e4 | ERR_TEMPLATE_VALUE_INVALID |
 | 2d0ae15d-6734-4840-b8c3-88c6e7bdb719 | 8f6dd1c4-938c-4e38-bda4-80d8fecca527 | ERR_TEMPLATE_VALUE_INVALID |
 | 346954a7-c6e7-494d-8918-ceccff8b2340 | e24a0671-dd97-405a-b627-6baf4b64346b | ERR_TEMPLATE_VALUE_INVALID |
+
+这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
+
+## 第2波执行与收尾PASS（2026-10-15T10:44:05.375871+00:00）
+
+生成清单500本，成功并首次发布483篇、已知TemplateRenderError失败17本（3.400%），未知失败0；失败项保留、不重建/补发。草稿0，未提交/处理中/跳过均0；发布拒绝/冲突/not_found/aborted均0。任务ID：a0c92c40-5830-415b-948f-5885446936e9, 10e08deb-4322-44cd-9a2a-1ddbd4d8d94a, 4a24f571-674e-449c-abad-676652f324b2。
+
+生成CLI：2026-10-15T10:30:43.605126+00:00至2026-10-15T10:30:48.577512+00:00，exit=0。
+
+发布CLI：2026-10-15T10:31:25.155239+00:00至2026-10-15T10:31:40.150172+00:00，exit=0。
+
+IndexNow 483/483 accepted，pending/missing/死信0，熔断关闭、无429等待。试读按书目完成483/483，失败0，待处理0，缺失0；其中清单时已有有效试读2本。sitemap任务1bb3495c-36d4-4bd4-b5fb-efbdc224e73d completed，最近生成success@2026-10-15T10:32:06.424Z，覆盖本波发布时间、无待处理刷新。状态readyForNextWave=true；允许残余≤5%试读继续收尾，最终统一等终态后再补刷。
+
+PlotNovel已发布总数1021=原50+累计新增971；原50页面及635人工复核摘要未变，claimPromo关闭，Final/env/CID不变。自原执行基线起各服务error/permission denied均0；已知模板失败单独核销，不将其掩为任务成功。主动外部HTTP0，最终抽样尚未执行。逐本核销见[本波证据](evidence/plotnovel-bulk-publish-2026-10-15/wave-2/result.json)。
+
+### 第2波模板失败书目（B-47修复后另行批准补发）
+
+| novelId | task itemId | 模板错误码 |
+| --- | --- | --- |
+| 3fefed63-17e5-419c-8745-12184ec43b01 | 80af506d-e8d2-4705-b10d-16b90c3e2cd8 | ERR_TEMPLATE_VALUE_INVALID |
+| 40cee355-5e76-481a-bf91-00bc369d1514 | 308df0c2-84e8-4baa-a9c6-7d9a1056dab2 | ERR_TEMPLATE_VALUE_INVALID |
+| 410d0cdf-8dbe-4bbb-ada8-94491834840c | c27a280c-141a-4ced-95d9-3e78ec1618a1 | ERR_TEMPLATE_VALUE_INVALID |
+| 47ba9c6f-054e-4c94-8d3e-421a550da060 | ebeb11dc-2d9b-41e6-9f64-2865e71d1238 | ERR_TEMPLATE_VALUE_INVALID |
+| 4b6a3c3d-88ce-4533-bcdc-353e7c285b0d | 54c2c426-5e5c-4f69-9749-469419a1083c | ERR_TEMPLATE_VALUE_INVALID |
+| 4d3a5068-7a50-46c4-9a88-810e6970c139 | 933cd8c7-05bf-44aa-a181-b61a20171a9e | ERR_TEMPLATE_VALUE_INVALID |
+| 57b18a9b-37f6-4f57-911b-58a4591e730a | a69cc32a-49d8-48a4-a388-128eaa2f1594 | ERR_TEMPLATE_VALUE_INVALID |
+| 5fe258f5-d752-4b32-95e7-00f0ad600439 | 7ab107e0-589c-4ddc-812b-95de016522fb | ERR_TEMPLATE_VALUE_INVALID |
+| 668ad359-6ec1-45c8-b588-575e2c76c9ae | aef8d4f8-1a3f-4d41-b2ee-12da9732beca | ERR_TEMPLATE_VALUE_INVALID |
+| 6ece0a4d-9f4a-405c-b4aa-78e10df25628 | 2ffa7871-43b7-4404-90c6-11f7a33bf96b | ERR_TEMPLATE_VALUE_INVALID |
+| 716128d5-ebd1-4eb6-8631-386249a76027 | 2ca0bc03-3c42-4d51-a4d0-3ea2743a8457 | ERR_TEMPLATE_VALUE_INVALID |
+| 72c15194-679a-4a7e-8942-3ba5cbe6e618 | 7af2f507-992e-4664-bf40-03ddf6e176e5 | ERR_TEMPLATE_VALUE_INVALID |
+| 7580b19e-fc84-408f-8ddd-c49bbda9d6d4 | bcafa457-e78a-43ef-99da-30d17dd699c1 | ERR_TEMPLATE_VALUE_INVALID |
+| 77ad1197-8ae7-4a8d-9777-e7cb991d8c6e | 5373aeaf-f2e4-4816-967e-7e067c4f8461 | ERR_TEMPLATE_VALUE_INVALID |
+| 77bbead2-9989-4277-a0f2-4a4cd9900d5b | d0c4a1b9-e0bc-4da3-9dae-830c66624d1d | ERR_TEMPLATE_VALUE_INVALID |
+| 798613b2-0810-4abd-be32-81b9dc23311d | e4653885-da94-4757-bf26-91c42ade7015 | ERR_TEMPLATE_VALUE_INVALID |
+| 8153b554-f04d-41e7-82cc-ef77e9b3b832 | 482a26fe-623c-40cd-9f37-8f92d80aee53 | ERR_TEMPLATE_VALUE_INVALID |
 
 这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
