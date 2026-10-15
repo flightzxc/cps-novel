@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-15T08:29:48.451335+00:00",
+  "siteKeyMatches": 0,
+  "actualRuntimeSecretMatches": 0,
+  "credentialUrlMatches": 0,
+  "runtimeSecretsCompared": 12,
+  "cpsReferences": {
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux": {
+      "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+      "headMatches": true,
+      "statusMatches": true,
+      "statusLines": 0
+    },
+    "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin": {
+      "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+      "headMatches": true,
+      "statusMatches": true,
+      "statusLines": 198
+    }
+  },
+  "releaseContainsOpsScript": false,
+  "tagFinalUnchanged": true
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "old": "docs/governance/releases/evidence/plotnovel-opening-2026-10-15/readback-probe-prepared.ts",
+    "new": "docs/governance/releases/evidence/plotnovel-opening-2026-10-15/readback-probe-prepared.ts.txt",
+    "sha256": "874a53d9bade74abaa87c49c677d85e890cf781097826719ed4762bef583da28",
+    "bytesUnchanged": true
+  },
+  {
+    "old": "docs/governance/releases/evidence/v060-release/phase1/network-probe-proxy-only.cjs",
+    "new": "docs/governance/releases/evidence/v060-release/phase1/network-probe-proxy-only.cjs.txt",
+    "sha256": "a8164cd996a3f186d66a3f4d564775056cd08d07795556d904d648b21b01b601",
+    "bytesUnchanged": true
+  },
+  {
+    "old": "docs/governance/releases/evidence/v060-release/phase1/network-probe-resume.cjs",
+    "new": "docs/governance/releases/evidence/v060-release/phase1/network-probe-resume.cjs.txt",
+    "sha256": "308adb15981f33765542b2fab8a78e8a20d178094fb52df988052d39e22794fc",
+    "bytesUnchanged": true
+  }
+]

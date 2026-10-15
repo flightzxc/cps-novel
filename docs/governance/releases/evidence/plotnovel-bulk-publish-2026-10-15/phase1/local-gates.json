@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-15T08:25:02.515188+00:00",
+  "typecheckErrors": 0,
+  "lintErrors": 0,
+  "lintExistingWarnings": 16,
+  "testsPassed": 13,
+  "testsSkipped": 0,
+  "smokeResult": "PLOTNOVEL_BULK_OPS_POSTGRES_VERIFICATION=PASS",
+  "dictionaryDrift": 0,
+  "disposableDatabaseCleaned": true,
+  "scriptSha256": "194438792336da3d054a2751c16737ef578906bc3de591eb43c3ccd3dd524660",
+  "deviations": [
+    "三份历史运维探针仅追加.txt后缀，内容字节及sha256不变，更新证据索引以避免其作为业务源码进入tsc/lint；未修改业务实现"
+  ],
+  "developmentIterations": [
+    "初版夹具密码字段未满足真实库scrypt$v1$格式约束；已修正，仅一次性库",
+    "测试自身清理锁目录使用rm未指定recursive；已修正，仅测试临时目录"
+  ]
+}

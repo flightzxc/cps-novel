@@ -1,0 +1,42 @@
+{
+  "rawLogsRetainedLocally": {
+    "typecheck-1.log": {
+      "sha256": "799f58423e873d9b19b0d0af44c25e05f3390dc217ad8c4ab0d74b448643dc48",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/typecheck-1.log"
+    },
+    "typecheck-2.log": {
+      "sha256": "f913d6dec09ac6eb534dc6493eaa20b151c012449309988e96ab1ce405f4bc4a",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/typecheck-2.log"
+    },
+    "typecheck-3.log": {
+      "sha256": "5b177e5a08bb43170b6f1da8e55da27413ad1b0c11929c5a0bc0fe1a4359a567",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/typecheck-3.log"
+    },
+    "lint-1.log": {
+      "sha256": "296a8494f9314ec52a90e0edde06552fb1def494bf5a963bdbd68a72eef1586b",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/lint-1.log"
+    },
+    "smoke-1.log": {
+      "sha256": "8c557312508fc23e5b2783a8305e2abb79d8357d3db8172ebf32e30b3ddbc1a8",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/smoke-1.log"
+    },
+    "smoke-2.log": {
+      "sha256": "43c68c7079f340cee9bc7c053ac036a07ae8ba3c6382ae3b4b60581bfb993459",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/smoke-2.log"
+    },
+    "smoke-3.log": {
+      "sha256": "8b80b8949498d7692534ad96bfe67c835d329bfb3a682534cb7da147e7496469",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/smoke-3.log"
+    },
+    "smoke-final.log": {
+      "sha256": "ab7472739f954ff8730d5b4e23668be2482432135ca597882a34cef523489098",
+      "localPath": "/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops/.tmp/plotnovel-bulk-20261015/smoke-final.log"
+    }
+  },
+  "findings": [
+    "基线历史TS探针23个tsc错误，两个历史CJS探针6个lint错误；仅转文本归档，不改内容/摘要或代码门禁",
+    "新增夹具使用不合数据库格式的占位密码散列；改为满足scrypt$v1$前缀、不可认证的夹具值",
+    "测试rm目录缺少recursive，修正测试自己的临时锁目录清理"
+  ],
+  "finalResult": "PASS13/13 skipped0; typecheck0; lint0error/16existingwarnings"
+}

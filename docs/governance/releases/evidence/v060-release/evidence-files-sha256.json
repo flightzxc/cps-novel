@@ -1,6 +1,7 @@
 {
   "archive-manifest.json": "7d60cf0f1d68e79114cc22616ced9e957b3ae92c83947d574465704c0cd5463f",
   "evidence-scan.json": "0fd35885ff2d1565828de5a1986dcf0388061efe89cb9a1b6246eb2e438ec33a",
+  "phase1-result.json": "c2fa147a3c12d6c8e207d0578108db9f42be123d8b8afe8d17293d94622a94da",
   "phase1/archive-build.log": "e3b8f9f87f730dcbeb505689c255123e37461b331784c4cfaa9c77ffbbc085ce",
   "phase1/archive-build.meta.json": "56a4d256f558bd3cce7a8c2c524c094f7e9581e88f30805956f89a25e8e4c205",
   "phase1/archive-verify.log": "e4e1ede3db7265d8950f830f3eff96b433b67e01cc1aca66c787629bd1d34c36",
@@ -50,8 +51,8 @@
   "phase1/image-web.log": "0ed764e7bf6769c1cc3ec3e4f77e8fae351c972c789eb82e92addba72fb4fc66",
   "phase1/lint.log": "cb5bb7ba82d0bfe027a289d1aeeb984a79a8a15901ccab574b535e0e9fb99e54",
   "phase1/lint.meta.json": "02043ce30b300b459d90f641610b6cd413a467af18506a59967e594050042105",
-  "phase1/network-probe-proxy-only.cjs": "a8164cd996a3f186d66a3f4d564775056cd08d07795556d904d648b21b01b601",
-  "phase1/network-probe-resume.cjs": "308adb15981f33765542b2fab8a78e8a20d178094fb52df988052d39e22794fc",
+  "phase1/network-probe-proxy-only.cjs.txt": "a8164cd996a3f186d66a3f4d564775056cd08d07795556d904d648b21b01b601",
+  "phase1/network-probe-resume.cjs.txt": "308adb15981f33765542b2fab8a78e8a20d178094fb52df988052d39e22794fc",
   "phase1/network-probe-resume.log": "289e3b83bd4667dbde96f105e3eb7879e3262e8cd259ff9c471b07260a8849bb",
   "phase1/nginx-matrix.log": "8bb716cde4bb3c248ba6853d83ccb8f207bec51ec6b5dcb2e7c7a2a88cea969f",
   "phase1/nginx-matrix.meta.json": "9ff97edd3d073747d2dde51c2967eac77d86a7972b3ac215c52cff9092ea81fe",
@@ -150,6 +151,5 @@
   "phase1/typecheck.log": "5b177e5a08bb43170b6f1da8e55da27413ad1b0c11929c5a0bc0fe1a4359a567",
   "phase1/typecheck.meta.json": "5633a81f0b7de3180c3f0e3b550e8656515ada04f0905a2474e58121e4a5eb7b",
   "phase1/validate-phase1.py": "a69a7a41905f353d14286666153bdec802530f1efd39c349d7a650f1e2db65c5",
-  "phase1/wrapper-exceptions.md": "ddee55a67fb2602ef49826db445e7904fa05bc06ea3de60516183c15188cc075",
-  "phase1-result.json": "c2fa147a3c12d6c8e207d0578108db9f42be123d8b8afe8d17293d94622a94da"
+  "phase1/wrapper-exceptions.md": "ddee55a67fb2602ef49826db445e7904fa05bc06ea3de60516183c15188cc075"
 }

@@ -1,0 +1,14 @@
+{
+  "development-iterations.json": "e78eab9ff8abb39cdaa0ba92c30c407fe08edc15e3f77ae942466cca3b8499aa",
+  "historical-evidence-text-archive.json": "430a92dca02020aca1cbb3ce01e71aa1962ec1366d3c46c2a2ed25823c524879",
+  "lint-final-2.log": "be3f8264eb6025165325624b952c808f601e0bf141258b625020ccad7f72b738",
+  "local-gates.json": "1dd12804e9ecc9419f2d0658165ca95b8e367247a5b0ce752f2bff4d1faf725b",
+  "ops-git-readback.json": "c25d7e1f0940b4553e1efae9b673e51bbb1f2b68fd51e531cd1681cf7934f90d",
+  "phase1-result.json": "02c6af52dccf5548c2d21788c6e1953ac574484543b78ac552b86f5855c06e54",
+  "production-plan.log": "1b0f3daaa19140d60021e5d609958a58df90850937a48e6818676ffad4c6590c",
+  "production-plan.meta.json": "474d3e386b5dd6689a606016fc9c6053b00f9d29c00a8dd11f539a2f0e317cca",
+  "production-plan.py": "c72ee7cd7b7b0ee711eebb07b3c5ebf12dbd142ea24b60c4ea4bea34f432b53c",
+  "safety-readback.json": "c6b05964dcf19963e6ea3c168253f87cd3fcd436c8a99912889d9effc93002d0",
+  "smoke-final-2.log": "82ba758305014929099a5c12b62b8fd6ce0b23a646d75893461728079085bbe7",
+  "typecheck-final-2.log": "5b177e5a08bb43170b6f1da8e55da27413ad1b0c11929c5a0bc0fe1a4359a567"
+}

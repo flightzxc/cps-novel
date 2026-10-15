@@ -1,0 +1,95 @@
+{
+  "at": "2026-10-15T08:26:14.645186+00:00",
+  "host": "haiyue-vps",
+  "webContainer": "cps-novel-web-1",
+  "webContainerId": "b81070177321143c86eb8c1e82b86e367055f995c04c1867e1d6bbe3420eff31",
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+  "scriptSha256": "194438792336da3d054a2751c16737ef578906bc3de591eb43c3ccd3dd524660",
+  "plan": {
+    "command": "plan",
+    "actor": {
+      "id": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+      "username": "admin",
+      "role": "super_admin",
+      "status": "active"
+    },
+    "databaseRole": "web_app",
+    "transactionReadOnly": "on",
+    "appId": "00de5521-d075-4472-87eb-cc5d1732f4d0",
+    "population": 3860,
+    "eligibleCount": 1985,
+    "blockedReasons": {
+      "promo_link_missing": 1186,
+      "promo_link_not_ready": 635,
+      "already_exists": 50,
+      "duplicate_title_in_link_theater": 4
+    },
+    "manualReview": 635,
+    "publishedBaseline": 50,
+    "manifest": "/tmp/plotnovel-bulk-20261015-manifest.json",
+    "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "waves": [
+      {
+        "wave": 1,
+        "count": 500,
+        "chunks": [
+          200,
+          200,
+          100
+        ]
+      },
+      {
+        "wave": 2,
+        "count": 500,
+        "chunks": [
+          200,
+          200,
+          100
+        ]
+      },
+      {
+        "wave": 3,
+        "count": 500,
+        "chunks": [
+          200,
+          200,
+          100
+        ]
+      },
+      {
+        "wave": 4,
+        "count": 485,
+        "chunks": [
+          200,
+          200,
+          85
+        ]
+      }
+    ]
+  },
+  "protectedBefore": {
+    "at": "2026-10-15T08:26:11.444024+00:00",
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "publishedCount": 50,
+    "publishedDigest": "c8f85a2fb36f451fb08e73220034c17b1671ce6c232523d65cd52c49ba13e937"
+  },
+  "protectedAfter": {
+    "at": "2026-10-15T08:26:14.579388+00:00",
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "publishedCount": 50,
+    "publishedDigest": "c8f85a2fb36f451fb08e73220034c17b1671ce6c232523d65cd52c49ba13e937"
+  },
+  "protectedIdentical": true,
+  "hostManifest": "/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15/manifest.json",
+  "manifestMode": "0600",
+  "commandsExecuted": [
+    "plan"
+  ],
+  "generateCalls": 0,
+  "publishCalls": 0,
+  "getcodeCalls": 0,
+  "activeExternalHttp": 0
+}

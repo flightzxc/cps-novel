@@ -21,6 +21,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.6.0 —— 已部署正式站（2026-10-14 16:51:08 JST / 15:51:08 +0800）
 
+- PlotNovel存量放量运维（10-15）：阶段一薄脚本/13项真实角色及定向测试/生产只读plan已通过，清单1985本，四波500/500/500/485；ops提交ab09d1be仅留档不合入集成。生产新增0，已发布仍50、claimPromo关闭、635人工复核不动；停待主控复核和Owner批准放量。见[存量放量记录](releases/plotnovel-bulk-publish-2026-10-15.md)。
+
 - PlotNovel已开通（2026-10-15 15:50:13 JST）：已有口令码英语书的试读与公开发布链路验收PASS；试读10/10、Owner发布50篇/各3章、IndexNow50/50 accepted，按Owner批准原CLI补刷新后50书页/150章齐全，固定5篇全部通过，主动HTTP29/30。claimPromo仍关闭、635条人工复核保留待上游答复，不恢复领码或自行放量。首发与试读落库时序为已知行为，不归为v0.6.0/PlotNovel缺陷。见[开通运维记录](releases/plotnovel-opening-2026-10-15.md)。
 
 - MINOR，Final `493eb23b034b0410780228535b3e293e4ee91f9a` / tree `c44f44702924fcc32fac0dc62ccb39fa0128d502`；Owner明确授权仅haiyue-vps，原RELEASE=PASS/EXIT=0。**10-14发版时范围（历史）：代码已部署，PlotNovel尚未开通，前台行为不变。** migration_owner迁移、postgres单事务grants重放已完成，27finished/0rolled_back；函数属主/授权/触发器/回填读回全PASS。
