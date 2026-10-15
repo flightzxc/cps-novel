@@ -1,0 +1,13 @@
+import pathlib,subprocess,json,hashlib
+ROOT=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-bulk-publish-2026-10-15')
+exec((ROOT/'supervise.py').read_text().split('action=sys.argv[1];')[0])
+before=protect();journal=run(['docker','exec',web,'cat',MAN+'.execution.jsonl']);events=[json.loads(l) for l in journal.splitlines()];stops=[x for x in events if x.get('event')=='stop']
+stopfile=ROOT/'phase2/STOP.json'
+j={'events':len(events),'stopEvents':len(stops),'eventTypes':[x['event'] for x in events],'sha256':hashlib.sha256(journal.encode()).hexdigest(),'supervisorStopExists':stopfile.exists(),'supervisorStopSha256':hashlib.sha256(stopfile.read_bytes()).hexdigest() if stopfile.exists() else None,'journalModified':False,'supervisorStopModified':False,'lockExists':run(['docker','exec',web,'node','-e',"console.log(require('fs').existsSync('/tmp/plotnovel-bulk-20261015-manifest.json.lock'))"]).strip()=='true'}
+script=ROOT/'render-only-threshold-review.ts';script.write_text(DIAGNOSTIC_TS);script.chmod(0o644)
+run(['docker','cp',str(script),web+':/tmp/plotnovel-render-only-threshold-review.ts'])
+r=subprocess.run(['docker','exec','-w','/app','-e','PGOPTIONS=-c default_transaction_read_only=on',web,'tsx','--tsconfig','/app/tsconfig.json','/tmp/plotnovel-render-only-threshold-review.ts'],stdin=subprocess.DEVNULL,text=True,capture_output=True)
+if r.returncode:
+ print(r.stderr);raise RuntimeError('diagnostic_command_failed')
+x={'journal':j,'diagnostic':json.loads(r.stdout),'protectionBefore':before,'protectionAfter':protect()};assert run(['docker','exec',web,'cat',MAN+'.execution.jsonl'])==journal
+print(json.dumps(x))

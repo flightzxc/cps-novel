@@ -1,0 +1,22 @@
+{
+  "diagnosticWrapperFailures": [
+    {
+      "attempts": [
+        1,
+        2,
+        3
+      ],
+      "cause": "docker cp preserved 0600 root ownership; nonroot web process could not open temporary diagnostic entrypoint",
+      "effect": "entrypoint never loaded; no rendering or database query from diagnostic CLI",
+      "correction": "source-only diagnostic file copied 0644 inside web; protected server directory remains 0700",
+      "errorCode": "EACCES",
+      "firstEvidenceSha256": "2de5e52d506d392f4f155ca21f7c48721d84c875b7f522f1134d2b337f399762"
+    }
+  ],
+  "otherCorrections": [
+    "before entrypoint could load, replaced an unavailable promo projection channelAppId access with a READ ONLY ownership count query"
+  ],
+  "noBusinessOrDatabasePermissionChange": true,
+  "originalJournalUntouched": true,
+  "supervisorStopUntouched": true
+}

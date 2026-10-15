@@ -1,0 +1,13 @@
+{
+  "typecheckErrors": 0,
+  "lintErrors": 0,
+  "lintExistingWarnings": 16,
+  "unitPassed": 15,
+  "unitSkipped": 0,
+  "productionGenerateCalls": 0,
+  "productionPublishCalls": 0,
+  "scriptSha256": "62eb005c2dc0eccc783e676a3c830efdbb5bd71eb7d3ed88e4d812eac72d3c4f",
+  "baseOpsCommit": "ab09d1beda4f0b26562ad7db1710d3c0855aec64",
+  "status": "AWAIT_MAIN_CONTROL_REVIEW_NO_RESUME",
+  "policy": "Only finalize_failed plus exact persisted TemplateRenderError class; <=5 percent; any other failure stops"
+}

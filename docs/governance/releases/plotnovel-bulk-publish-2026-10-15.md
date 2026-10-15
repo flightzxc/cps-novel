@@ -1,6 +1,6 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：阶段二第一波生成失败率2.4%，按门禁停手
+## 当前状态：保持停手；按Owner修订已知失败阈值，待主控复核
 
 主控已复核固定脚本ab09d1be通过，Owner已批准固定清单四波放量。第一波500本全部终态：488成功草稿、12失败（finalize_failed），失败率12/500=2.4%，超过2%上限，已在发布前停手。publish调用0、新增公开页面0、线上仍50篇，后三波未启动；未重试/补发/修数据/取消任务或执行最终刷新和抽查。claimPromo仍关闭，635条人工复核与原50篇页面摘要不变。后文阶段一交付事实保留为历史，当前以本节及阶段二停手记录为准。
 
@@ -102,3 +102,21 @@ requestId完整前缀plotnovel-bulk-20261015-。任务条目执行08:45:58.91391
 证据：[阶段二结果](evidence/plotnovel-bulk-publish-2026-10-15/phase2/phase2-result.json)、[失败分类及12条书目/任务ID](evidence/plotnovel-bulk-publish-2026-10-15/phase2/wave-1-stop-readback.json)、[原生成日志](evidence/plotnovel-bulk-publish-2026-10-15/phase2/execution-journal.json)、[停手快照](evidence/plotnovel-bulk-publish-2026-10-15/phase2/STOP.json)、[摘要索引](evidence/plotnovel-bulk-publish-2026-10-15/phase2/SHA256SUMS.json)。当前等待Owner下一步决定，未经再次授权不越过停手点。ops固定提交不变、仅留档；本次仅治理提交，未新增发版级开发日志，未移动tag或Final。
 
 本轮停手结果已同步既有Notion条目并回读PASS（2026-10-15T08:49:44.725Z）：唯一条目、失败率/数量/任务ID/停手范围一致；阶段一历史及无关正文逐字保留，比较排除fetch包装层as-of时间戳。收据见[Notion回读](evidence/plotnovel-bulk-publish-2026-10-15/phase2/notion-readback.json)。
+
+## 已知模板失败阈值修订与只读诊断（18:38 JST）
+
+Owner确认首波12项属于个别书目TemplateRenderError，授权仅在ops分支修改阈值/分类并补单测，提交后停待主控复核。新政策：失败记录同时满足code=finalize_failed且错误类TemplateRenderError才计已知类别，按整波书目数允许≤5%；任何其他/缺失类别或已知失败>5%仍停手。原worker固定脱敏摘要`Item finalize failed: TemplateRenderError`可精确核对错误类，不单凭finalize_failed或字符串包含匹配放行。三个门禁（status、发布准入、下一波就绪）复用同一分类结果。只改运维CLI及其单测，不改业务规则/运行器/生产worker；requestId、清单、原任务/草稿、journal停手检查与互斥锁保持原样。
+
+本轮15项定向单测通过（原4+新增11）、skipped0；覆盖首波12/500、25/500恰好5%、26/500超限、末波24/485与25/485边界、未知/缺失/混合/非精确分类及无效分母。tsc0、lint0 error/16既有warning；没有重跑全量回归。脚本固定摘要见review-gates.json，修改待主控复核，本轮未把新版CLI送进生产，也没有generate/publish调用。
+
+只读诊断于2026-10-15T09:38:06.597Z在实际web容器、cwd=/app、原生web_app连接执行，PGOPTIONS开启默认只读，RepeatableRead事务显式READ ONLY。限定第一波12条失败任务/清单书目，复用现有模板选择、validateStoredArticleTemplate、推广解析、countPreviewChapters及renderNovelArticleDraft，使用原任务payload指定模板键；只在内存渲染，不调用生成函数、不落库、不生成文章或审计、不访问上游。
+
+**12/12复现同一错误**：TemplateRenderError / ERR_TEMPLATE_VALUE_INVALID，slot=body，field=cover_url，constraint=absolute_url；模板ID22751b2d-a802-4a59-9048-59435454c8d4、version1。原持久错误均finalize_failed且固定摘要精确对应TemplateRenderError。结论为封面字段不符合模板绝对网址合同；未输出封面原值、模板正文、渲染正文、口令或凭据。未做数据修复、模板放宽、重建任务或补发，12条失败保留。
+
+journal只读核验：3条generate、0条stop，SHA256 cdc2273da9dedc15916b7d1856cf5e9dc3ef577ef2f869d326a09c02cc24fd32，无遗留lock。另有主机监督phase2/STOP.json，SHA256 fe0227f11a5922923fb5e7310d3b7e7cd0733f540bf2e8e8222cf2818e5a41dc；两者均未修改/删除。无需轮换原CLI journal；复核通过后，若需解除主机监督停手，须先把该STOP文件与旧监督版本/摘要另存归档，记录本轮Owner例外及新审核提交，再恢复，不能直接删除历史。
+
+临时诊断入口首次docker cp沿用0600/root属主，web非root用户无法打开，退出EACCES；文件未加载，未进入渲染或数据库查询。已将不含凭据的临时诊断源码文件按0644复制，服务器受保护父目录仍0700，随后12项只读诊断完成。该临时入口权限错误单独留证，不混入业务权限错误计数；没有更改数据库/业务文件/容器用户权限或系统配置。首次证据摘要与修正见diagnostic-wrapper-iterations.json。
+
+诊断前后原50篇页面及635条人工复核摘要一致，env/Final/CID不变。放量保持停止，488篇草稿未发布，后三波未启动，claimPromo仍关闭。证据：[12本只渲染结果及journal核验](evidence/plotnovel-bulk-publish-2026-10-15/threshold-review/render-only-result.json)、[修订门禁](evidence/plotnovel-bulk-publish-2026-10-15/threshold-review/review-gates.json)。等待主控复核，通过后才发布488篇并继续后续波次；未把本次阈值修订记为已执行放量。
+
+阈值待复核与12本只读诊断已同步Notion原运维条目，2026-10-15T09:41:29.188Z回读PASS，原历史和无关正文保留；收据见threshold-review/notion-readback.json。

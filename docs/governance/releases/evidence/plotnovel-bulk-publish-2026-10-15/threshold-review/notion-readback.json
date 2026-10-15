@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-15T09:41:29.188Z",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "status": "PASS",
+  "unrelatedContentPrefixIdentical": true,
+  "priorHistorySuffixIdentical": true,
+  "checks": {
+    "等待主控复核阈值修订": true,
+    "ERR_TEMPLATE_VALUE_INVALID": true,
+    "cover_url": true,
+    "absolute_url": true,
+    "0条stop": true,
+    "15项定向单测PASS": true,
+    "62eb005c2dc0eccc783e676a3c830efdbb5bd71eb7d3ed88e4d812eac72d3c4f": true
+  }
+}
