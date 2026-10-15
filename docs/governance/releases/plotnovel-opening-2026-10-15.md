@@ -243,3 +243,5 @@ Owner确认81/150章节是既有首发与试读落库时序缺口：首发即触
 辅助脚本34过早对processing断言、35引用转义、36误用跨阶段全推广摘要作本轮基线，首次证据均保留并仅修正辅助检查；详见逐项验收的偏离说明。全推广聚合摘要与丙1不同，不能作本轮守恒结论，未归因或改数据；原635个人审守恒和丙2各门禁通过。没有重提刷新、重做HTTP、改业务代码或削弱原门禁。
 
 **阶段丙验收PASS；PlotNovel已开通已有口令码书的试读与公开发布链路。** claimPromo仍关闭，635个人审留待上游答复；不将先前领取26本人审改判成功，不自行恢复getcode、补码、人工收口或放量。后续文章批次由Owner/运营后台决定，每批≤500篇。Final/tag不移动，v0.6.0不再次发版、无新开发日志。完整逐项、固定5篇及请求明细见[c2-public-acceptance.md](evidence/plotnovel-opening-2026-10-15/c2-public-acceptance.md)，机器结果见[c2-result.json](evidence/plotnovel-opening-2026-10-15/c2-result.json)。
+
+丙2验收治理提交5e3aec53已推送并回读；Notion既有唯一开通记录于2026-10-15T06:55:41.923Z回读PASS，已同步Owner已知时序裁决、一次刷新50/150、固定五篇逐项PASS、29/30请求及领码继续关闭/635个人审保留。原无关历史逐字相同；Notion按规范省略新增块边界的一个空行后其余内容精确一致。收据见[notion-readback-c2-pass.json](evidence/plotnovel-opening-2026-10-15/notion-readback-c2-pass.json)。

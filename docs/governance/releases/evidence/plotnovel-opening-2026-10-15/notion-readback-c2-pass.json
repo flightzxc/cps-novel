@@ -1,0 +1,17 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "at": "2026-10-15T06:55:41.923Z",
+  "sourceCommit": "5e3aec53f42a1a673c59ae01214b02facd53b611",
+  "openingEntryCount": 1,
+  "contentExact": false,
+  "unrelatedHistoryExact": true,
+  "contains150": true,
+  "containsFivePass": true,
+  "claimDisabled": true,
+  "knownTimingRecorded": true,
+  "requests29": true,
+  "lastEdited": "2026-10-15T06:55:29.037Z",
+  "contentExactAfterDocumentedEmptyLineNormalization": true,
+  "normalization": "Notion omits one unsupported empty line between newly inserted paragraphs and existing history",
+  "status": "PASS"
+}

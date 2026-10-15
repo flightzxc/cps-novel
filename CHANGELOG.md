@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-15 · 共 1327 个 commit
+生成时间：2026-10-15 · 共 1328 个 commit
+- `5e3aec5` 2026-10-15 运维：刷新试读完成后的站点地图并通过 PlotNovel 固定五篇验收  — _codex · GPT-6_
 - `bd1effa` 2026-10-15 运维：补齐丙2站点地图停点的 Notion 回读收据  — _codex · GPT-6_
 - `f261050` 2026-10-15 运维：记录丙2站点地图章节覆盖缺口并按门禁停手  — _codex · GPT-6_
 - `f87fed5` 2026-10-15 运维：补齐丙1试读验收及丙2交接的 Notion 回读  — _codex · GPT-6_
