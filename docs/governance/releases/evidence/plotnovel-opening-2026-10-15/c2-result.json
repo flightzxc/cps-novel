@@ -1,0 +1,140 @@
+{
+  "status": "C2_PASS_EXISTING_CODE_PUBLICATION_AND_PREVIEW_ACCEPTED_CLAIM_DISABLED",
+  "acceptedAt": "2026-10-15T06:50:13.134713+00:00",
+  "acceptedScope": "已有口令码PlotNovel英语书的试读与公开发布链路；领码仍停用待上游答复",
+  "ownerSitemapDecision": "Owner确认首发触发刷新早于试读落库是已知时序缺口，MoboReader新书亦然，每日04:00 JST兜底刷新；不是v0.6.0或PlotNovel缺陷；授权原CLI预演后刷新一次",
+  "sitemapRequestId": "plotnovel-sitemap-after-preview-20261015",
+  "sitemapTaskId": "431d9fdb-87d0-4006-b5ba-1042326e5eba",
+  "sitemapCoverage": {
+    "sampleSitemaps": [
+      {
+        "fileName": "site_novelpage_en.xml",
+        "sampleUrls": [
+          "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2"
+        ],
+        "locCount": 10000
+      },
+      {
+        "fileName": "site_novelpage_en_2.xml",
+        "sampleUrls": [
+          "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8"
+        ],
+        "locCount": 10000
+      },
+      {
+        "fileName": "site_novelpage_en_3.xml",
+        "sampleUrls": [
+          "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q"
+        ],
+        "locCount": 10000
+      },
+      {
+        "fileName": "site_novelpage_en_4.xml",
+        "sampleUrls": [
+          "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6"
+        ],
+        "locCount": 10000
+      },
+      {
+        "fileName": "site_novelpage_en_5.xml",
+        "sampleUrls": [
+          "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3"
+        ],
+        "locCount": 8170
+      }
+    ],
+    "allBooksCovered": 50,
+    "allChaptersCovered": 150,
+    "allChapterSetsExact": true,
+    "currentRelease": "431d9fdb-87d0-4006-b5ba-1042326e5eba"
+  },
+  "publicAcceptance": {
+    "status": "PASS",
+    "fixedSamples": [
+      "126d0a75-b7db-47c1-bdc5-a314646d2ec3",
+      "62acd3af-e552-4227-8f3a-44a96b99a25c",
+      "931bbe3e-17bd-48f5-84de-e786581817a9",
+      "ca5796e1-e3e4-4b39-add1-987e21b2cd98",
+      "f8d872b0-8171-4c26-b719-6d7045267696"
+    ],
+    "requests": 29,
+    "newRequests": 28,
+    "redirectsFollowed": false,
+    "retries": 0,
+    "rawBodiesSaved": false
+  },
+  "publishedCanary": {
+    "generationTaskId": "48eba852-5fd8-479b-a74a-0b850ff6af71",
+    "publishedBooks": 50,
+    "validPreviewChapters": 150,
+    "indexnowAccepted": 50,
+    "indexnowControl": {
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "dueUrls": 0,
+      "deadLetterCount": 0,
+      "inFlightBatchTasks": 0
+    },
+    "duplicateSubmission159a24f6": "Owner报告准入拦截0篇，未处理"
+  },
+  "plotnovelCapabilities": {
+    "getlistpc": "registered_disabled",
+    "claimPromo": "registered_disabled",
+    "getbydataid": "enabled",
+    "getchapterinfo": "enabled"
+  },
+  "manualReviewCount": 635,
+  "manualIntentDigestMatchesC1": true,
+  "manualIntentDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+  "crossStagePromoAggregate": {
+    "c1Digest": "5d798c488c454628139b0667e4c1db88521f8f5a490e0b9a5f9c65b66bfaa448",
+    "currentDigest": "1d8446064f578ba385357e9c04c131f70f3cff55c7bd253f32e5f28abe0fc56a",
+    "equal": false,
+    "usedAsC2Gate": false,
+    "reason": "C1 aggregate predates Owner publication and is not a C2 before snapshot; no promo rows altered by this session"
+  },
+  "runtime": {
+    "at": "2026-10-15T06:51:42.479940+00:00",
+    "containers": {
+      "web": {
+        "id": "b81070177321143c86eb8c1e82b86e367055f995c04c1867e1d6bbe3420eff31",
+        "running": true,
+        "health": "healthy"
+      },
+      "worker-light": {
+        "id": "ad87854e59abbca77de1c45dfee0f4d4fba053be3cff2cb2d086316b70f334b0",
+        "running": true,
+        "health": "healthy"
+      },
+      "worker": {
+        "id": "89836c22b45fea370f30e35af5320411447bb659eaa8595c8b787d45535a68c8",
+        "running": true,
+        "health": "healthy"
+      },
+      "backup-timer": {
+        "id": "0384819b06fc9b8b1204395e6e4618fcee52a26aeb07f660ed111a5f4fb4f7cc",
+        "running": true,
+        "health": "healthy"
+      },
+      "scheduler": {
+        "id": "624eace5b093457f0bc2bb30c9b41afed2e6d2ec7eed31aaf74652776ba38e24",
+        "running": true,
+        "health": "healthy"
+      },
+      "postgres": {
+        "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+        "running": true,
+        "health": "healthy"
+      }
+    },
+    "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+    "final": "493eb23b034b0410780228535b3e293e4ee91f9a"
+  },
+  "containerIdsMatchC1": true,
+  "claimCanaryAccepted": false,
+  "claimPromoReopened": false,
+  "manualReviewsClosed": 0,
+  "newGetcodeCalls": 0,
+  "rollbackExecuted": false,
+  "next": "后续文章放量由Owner或运营后台执行，单批不超过500篇；上游领码问题待答复，恢复领码/补码/人工收口另行授权"
+}

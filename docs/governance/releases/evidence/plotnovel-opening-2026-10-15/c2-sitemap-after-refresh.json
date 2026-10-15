@@ -1,0 +1,43 @@
+{
+  "sampleSitemaps": [
+    {
+      "fileName": "site_novelpage_en.xml",
+      "sampleUrls": [
+        "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2"
+      ],
+      "locCount": 10000
+    },
+    {
+      "fileName": "site_novelpage_en_2.xml",
+      "sampleUrls": [
+        "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8"
+      ],
+      "locCount": 10000
+    },
+    {
+      "fileName": "site_novelpage_en_3.xml",
+      "sampleUrls": [
+        "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q"
+      ],
+      "locCount": 10000
+    },
+    {
+      "fileName": "site_novelpage_en_4.xml",
+      "sampleUrls": [
+        "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6"
+      ],
+      "locCount": 10000
+    },
+    {
+      "fileName": "site_novelpage_en_5.xml",
+      "sampleUrls": [
+        "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3"
+      ],
+      "locCount": 8170
+    }
+  ],
+  "allBooksCovered": 50,
+  "allChaptersCovered": 150,
+  "allChapterSetsExact": true,
+  "currentRelease": "431d9fdb-87d0-4006-b5ba-1042326e5eba"
+}

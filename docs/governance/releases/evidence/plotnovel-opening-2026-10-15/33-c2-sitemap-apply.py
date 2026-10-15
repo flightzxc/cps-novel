@@ -1,0 +1,1 @@
+r=run(['docker','exec',NAMES['web'],'tsx','scripts/generate-static-sitemaps.ts','--apply','--reason','PlotNovel金丝雀试读完成后补齐站点地图章节','--request-id','plotnovel-sitemap-after-preview-20261015']);x=json.loads(r.stdout);print('SITEMAP_APPLY='+json.dumps(x),flush=True);assert x['status'] in ['queued','coalesced'] and x['taskId'];print('SITEMAP_REQUEST_SUBMITTED=PASS',flush=True)

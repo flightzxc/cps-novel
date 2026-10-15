@@ -1,0 +1,9 @@
+{
+  "name": "35-c2-sitemap-coverage",
+  "startedAt": 1792046853.2216861,
+  "finishedAt": 1792046858.9942431,
+  "exit": 1,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/35-c2-sitemap-coverage.py",
+  "sshOrWrapperStderrSha256": "6417d45838b2c1bab7e5170410bb4db59f838040735f4e0ac6a2fe42a5f45bf3"
+}

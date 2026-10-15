@@ -1,0 +1,45 @@
+taskId='51854b9b-6cb4-452c-89b6-d30976c03647'
+q="""
+WITH target_task AS(SELECT * FROM channel_sync_task WHERE id='51854b9b-6cb4-452c-89b6-d30976c03647'),items AS(SELECT i.*,s.novel_id FROM channel_sync_task_item i JOIN novel_source_item s ON s.id=i.novel_source_item_id WHERE task_id='51854b9b-6cb4-452c-89b6-d30976c03647')
+SELECT json_build_object('at',clock_timestamp(),'task',(SELECT json_build_object('id',id,'type',task_type,'appId',channel_app_id,'accountId',channel_account_id,'status',status,'total',total_count,'success',success_count,'failed',failed_count,'skipped',skipped_count,'startedAt',started_at,'completedAt',completed_at) FROM target_task),'items',(SELECT json_agg(json_build_object('itemId',i.id,'sourceId',i.novel_source_item_id,'novelId',i.novel_id,'status',i.status,'attempts',i.attempt_count,'finishedAt',i.finished_at,'upstreamCount',CASE WHEN jsonb_typeof(i.result->'upstreamCount')='number' THEN i.result->'upstreamCount' ELSE NULL END,'failureCode',CASE WHEN i.error->>'code' IN ('upstream_material_read_failed','upstream_preview_read_failed','credential_validation_failed','credential_missing','credential_ambiguous','preview_account_unavailable','source_app_not_allowlisted','preview_read_capability_unavailable') THEN i.error->>'code' ELSE NULL END,'unknownFailureCodeSha256',CASE WHEN i.error->>'code' IS NOT NULL AND i.error->>'code' NOT IN ('upstream_material_read_failed','upstream_preview_read_failed','credential_validation_failed','credential_missing','credential_ambiguous','preview_account_unavailable','source_app_not_allowlisted','preview_read_capability_unavailable') THEN encode(sha256(convert_to(i.error->>'code','UTF8')),'hex') ELSE NULL END,'validChapterCount',(SELECT count(*) FROM novel_chapter c JOIN novel_chapter_content cc ON cc.novel_chapter_id=c.id WHERE c.novel_id=i.novel_id AND c.status='preview' AND c.deleted_at IS NULL AND btrim(cc.body)<>''),'previewPolicy',(SELECT json_build_object('count',materialized_chapter_count,'display',display_authorized,'index',index_authorized,'cache',cache_authorized,'lastRefreshedAt',last_refreshed_at) FROM novel_preview_policy p WHERE p.novel_id=i.novel_id)) ORDER BY i.novel_source_item_id) FROM items i),'capabilities',(SELECT json_object_agg(capability_key,status) FROM channel_capability WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0'),'protected',(SELECT json_build_object('manualCount',count(*),'manualDigest',encode(sha256(convert_to(string_agg(id::text||status||response_shape::text,'|' ORDER BY id),'UTF8')),'hex'),'promoDigest',(SELECT encode(sha256(convert_to(string_agg(id::text||status||upstream_code_present::text||updated_at::text,'|' ORDER BY id),'UTF8')),'hex') FROM promo_link WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0')) FROM side_effect_intent WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND status='manual_review_required'));
+"""
+raw=sql(q);x=json.JSONDecoder().raw_decode(raw[raw.index('{'):])[0]
+print('C_PREVIEW_READBACK='+json.dumps(x),flush=True)
+assert x['task'] and x['task']['total']==10 and len(x['items'])==10
+assert x['capabilities']=={'claimPromo':'registered_disabled','getlistpc':'registered_disabled','getbydataid':'enabled','getchapterinfo':'enabled'}
+base=json.loads(pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-opening-2026-10-15/c-manual-promo-baseline.json').read_text());assert x['protected']==base,'protected manual or promo changed'
+print('C_PREVIEW_PROTECTED_UNCHANGED=PASS',flush=True)
+
+q="""
+WITH ids AS(SELECT (i.result->>'articleId')::uuid id FROM generic_task_item i WHERE i.task_id='48eba852-5fd8-479b-a74a-0b850ff6af71' AND i.status='success'),articles AS(SELECT a.* FROM article a JOIN ids ON ids.id=a.id),details AS(SELECT a.id article_id,a.novel_id,a.locale,a.slug,a.public_page_short_id,a.status,a.published_at,p.public_redirect_code go_code,p.status promo_status,p.upstream_code_present,p.channel_app_id,CASE WHEN (regexp_match(a.body,'/go/([A-Za-z0-9_-]+)'))[1]=p.public_redirect_code THEN (regexp_match(a.body,'/go/([A-Za-z0-9_-]+)'))[1] ELSE NULL END body_go_code,(SELECT array_agg(c.canonical_chapter_number ORDER BY c.canonical_chapter_number) FROM novel_chapter c JOIN novel_chapter_content cc ON cc.novel_chapter_id=c.id WHERE c.novel_id=a.novel_id AND c.deleted_at IS NULL AND c.status='preview' AND btrim(cc.body)<>'') chapter_numbers,(SELECT json_agg(json_build_object('id',o.id,'status',o.status,'url',o.url,'revision',o.revision,'httpStatus',o.last_http_status) ORDER BY o.revision DESC) FROM indexnow_outbox o WHERE o.article_id=a.id) indexnow FROM articles a JOIN promo_link p ON p.id=a.promo_link_id)
+SELECT json_build_object('at',clock_timestamp(),'articles',(SELECT json_agg(d ORDER BY published_at,article_id) FROM details d),'plotCarouselServing',(SELECT count(*) FROM home_carousel_serving h JOIN article a ON a.id=h.article_id JOIN promo_link p ON p.id=a.promo_link_id WHERE p.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0'),'previewInFlight',(SELECT count(*) FROM channel_sync_task_item ti JOIN channel_sync_task t ON t.id=ti.task_id JOIN novel_source_item s ON s.id=ti.novel_source_item_id WHERE s.novel_id IN(SELECT novel_id FROM articles) AND t.task_type='moboreader.preview_refresh.v1' AND ti.status IN('pending','processing')));
+"""
+raw=sql(q);x=json.JSONDecoder().raw_decode(raw[raw.index('{'):])[0]
+assert len(x['articles'])==50 and len({a['article_id'] for a in x['articles']})==50
+assert all(a['locale']=='en' and a['status']=='published' and a['channel_app_id']=='00de5521-d075-4472-87eb-cc5d1732f4d0' and a['promo_status']=='fetched' and a['upstream_code_present'] and a['chapter_numbers'] and a['body_go_code']==a['go_code'] and a['indexnow'] and a['indexnow'][0]['status']=='accepted' for a in x['articles'])
+assert x['plotCarouselServing']==0 and x['previewInFlight']==0
+print('C2_BATCH_READBACK='+json.dumps(x),flush=True)
+status=json.loads(run(['docker','exec',NAMES['worker-light'],'tsx','scripts/indexnow-status.ts']).stdout)
+safe={'breakerOpen':status['control']['breaker']['open'],'rateLimitWaiting':status['control']['rateLimit']['waiting'],'dueUrls':status['outbox']['dueUrls'],'deadLetterCount':len(status['outbox']['deadLetters']),'inFlightBatchTasks':len(status['tasks']['inFlightBatchTasks'])}
+assert not safe['breakerOpen'] and not safe['rateLimitWaiting'] and safe['dueUrls']==0 and safe['deadLetterCount']==0 and safe['inFlightBatchTasks']==0
+print('C2_INDEXNOW_CONTROL='+json.dumps(safe),flush=True)
+print('C2_BATCH_READONLY=PASS',flush=True)
+
+q="""
+WITH RECURSIVE tree AS (SELECT * FROM generic_task WHERE id='48eba852-5fd8-479b-a74a-0b850ff6af71' UNION ALL SELECT t.* FROM generic_task t JOIN tree p ON t.parent_task_id=p.id)
+SELECT json_build_object('at',clock_timestamp(),'tasks',(SELECT json_agg(json_build_object('id',id,'parentId',parent_task_id,'type',task_type,'status',status,'total',total_count,'success',success_count,'failed',failed_count,'skipped',skipped_count,'createdAt',created_at,'completedAt',completed_at) ORDER BY created_at,id) FROM tree),'itemTargets',(SELECT json_agg(json_build_object('id',i.id,'taskId',i.task_id,'targetType',i.target_type,'targetId',i.target_id,'status',i.status,'resultKeys',(SELECT json_agg(key) FROM jsonb_object_keys(CASE WHEN jsonb_typeof(i.result)='object' THEN i.result ELSE '{}'::jsonb END) key),'articleId',CASE WHEN i.result->>'articleId' ~ '^[0-9a-f-]{36}$' THEN i.result->>'articleId' ELSE NULL END) ORDER BY i.task_id,i.id) FROM generic_task_item i JOIN tree t ON t.id=i.task_id),'allPublishedPlot',(SELECT count(*) FROM article a JOIN promo_link p ON p.id=a.promo_link_id WHERE p.channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND a.status='published' AND a.deleted_at IS NULL),'manualReview',(SELECT count(*) FROM side_effect_intent WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0' AND status='manual_review_required'),'capabilities',(SELECT json_object_agg(capability_key,status) FROM channel_capability WHERE channel_app_id='00de5521-d075-4472-87eb-cc5d1732f4d0'));
+"""
+raw=sql(q);x=json.JSONDecoder().raw_decode(raw[raw.index('{'):])[0];print('C2_DISCOVERY='+json.dumps(x),flush=True)
+assert x['manualReview']==635 and x['capabilities']=={'claimPromo':'registered_disabled','getlistpc':'registered_disabled','getbydataid':'enabled','getchapterinfo':'enabled'}
+assert x['allPublishedPlot']==50
+print('C2_DISCOVERY_READONLY=PASS',flush=True)
+
+states={}
+base=json.loads(pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-opening-2026-10-15/c-runtime.json').read_text())
+for service,name in NAMES.items():
+ info=json.loads(run(['docker','inspect',name]).stdout)[0]
+ states[service]={'id':info['Id'],'running':info['State']['Running'],'health':info['State'].get('Health',{}).get('Status')}
+ assert states[service]['running']
+ if service in ['web','worker','worker-light','scheduler']:assert states[service]['health']=='healthy'
+print('C2_FINAL_RUNTIME='+json.dumps({'at':stamp(),'containers':states,'envSha256':ENV_SHA,'final':FINAL}),flush=True)
+print('C2_FINAL_READBACK=PASS',flush=True)

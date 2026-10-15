@@ -1,0 +1,9 @@
+{
+  "name": "33-c2-sitemap-apply",
+  "startedAt": 1792046795.409614,
+  "finishedAt": 1792046802.68529,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/33-c2-sitemap-apply.py",
+  "sshOrWrapperStderrSha256": null
+}

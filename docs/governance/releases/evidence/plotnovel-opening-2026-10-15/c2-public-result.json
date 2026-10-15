@@ -1,0 +1,477 @@
+{
+  "startedAt": "2026-10-15T06:49:09.979440+00:00",
+  "samples": [
+    "126d0a75-b7db-47c1-bdc5-a314646d2ec3",
+    "62acd3af-e552-4227-8f3a-44a96b99a25c",
+    "931bbe3e-17bd-48f5-84de-e786581817a9",
+    "ca5796e1-e3e4-4b39-add1-987e21b2cd98",
+    "f8d872b0-8171-4c26-b719-6d7045267696"
+  ],
+  "results": [
+    {
+      "sequence": 2,
+      "kind": "plotnovel-book-article",
+      "url": "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "canonicalMatches": true,
+        "previewChapterLinks": 3,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "126d0a75-b7db-47c1-bdc5-a314646d2ec3"
+    },
+    {
+      "sequence": 3,
+      "kind": "plotnovel-preview-chapter",
+      "url": "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2/chapter/1",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "readerNonempty": true,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "126d0a75-b7db-47c1-bdc5-a314646d2ec3"
+    },
+    {
+      "sequence": 4,
+      "kind": "plotnovel-go",
+      "url": "https://pulsenovels.com/go/75mh4esdnh",
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "noFollow": true
+      },
+      "articleId": "126d0a75-b7db-47c1-bdc5-a314646d2ec3"
+    },
+    {
+      "sequence": 5,
+      "kind": "plotnovel-interstitial",
+      "url": "https://pulsenovels.com/go/75mh4esdnh/app",
+      "status": 200,
+      "checks": {
+        "cacheControlNoStore": true,
+        "robots": [
+          "noindex",
+          "nofollow",
+          "nocache"
+        ],
+        "codeCardMatchesDatabase": true,
+        "copyButton": "Copy code",
+        "steps": [
+          "Copy the code above.",
+          "Get the free PlotNovel app.",
+          "Open the app, tap Search and paste the code. The book opens right away."
+        ],
+        "appStoreLinkMatches": true,
+        "googlePlayLinkMatches": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      },
+      "articleId": "126d0a75-b7db-47c1-bdc5-a314646d2ec3"
+    },
+    {
+      "sequence": 6,
+      "kind": "plotnovel-book-article",
+      "url": "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "canonicalMatches": true,
+        "previewChapterLinks": 3,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "62acd3af-e552-4227-8f3a-44a96b99a25c"
+    },
+    {
+      "sequence": 7,
+      "kind": "plotnovel-preview-chapter",
+      "url": "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8/chapter/1",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "readerNonempty": true,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "62acd3af-e552-4227-8f3a-44a96b99a25c"
+    },
+    {
+      "sequence": 8,
+      "kind": "plotnovel-go",
+      "url": "https://pulsenovels.com/go/c04x758nrz",
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "noFollow": true
+      },
+      "articleId": "62acd3af-e552-4227-8f3a-44a96b99a25c"
+    },
+    {
+      "sequence": 9,
+      "kind": "plotnovel-interstitial",
+      "url": "https://pulsenovels.com/go/c04x758nrz/app",
+      "status": 200,
+      "checks": {
+        "cacheControlNoStore": true,
+        "robots": [
+          "noindex",
+          "nofollow",
+          "nocache"
+        ],
+        "codeCardMatchesDatabase": true,
+        "copyButton": "Copy code",
+        "steps": [
+          "Copy the code above.",
+          "Get the free PlotNovel app.",
+          "Open the app, tap Search and paste the code. The book opens right away."
+        ],
+        "appStoreLinkMatches": true,
+        "googlePlayLinkMatches": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      },
+      "articleId": "62acd3af-e552-4227-8f3a-44a96b99a25c"
+    },
+    {
+      "sequence": 10,
+      "kind": "plotnovel-book-article",
+      "url": "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "canonicalMatches": true,
+        "previewChapterLinks": 3,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "931bbe3e-17bd-48f5-84de-e786581817a9"
+    },
+    {
+      "sequence": 11,
+      "kind": "plotnovel-preview-chapter",
+      "url": "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q/chapter/1",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "readerNonempty": true,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "931bbe3e-17bd-48f5-84de-e786581817a9"
+    },
+    {
+      "sequence": 12,
+      "kind": "plotnovel-go",
+      "url": "https://pulsenovels.com/go/wptctbqej2",
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "noFollow": true
+      },
+      "articleId": "931bbe3e-17bd-48f5-84de-e786581817a9"
+    },
+    {
+      "sequence": 13,
+      "kind": "plotnovel-interstitial",
+      "url": "https://pulsenovels.com/go/wptctbqej2/app",
+      "status": 200,
+      "checks": {
+        "cacheControlNoStore": true,
+        "robots": [
+          "noindex",
+          "nofollow",
+          "nocache"
+        ],
+        "codeCardMatchesDatabase": true,
+        "copyButton": "Copy code",
+        "steps": [
+          "Copy the code above.",
+          "Get the free PlotNovel app.",
+          "Open the app, tap Search and paste the code. The book opens right away."
+        ],
+        "appStoreLinkMatches": true,
+        "googlePlayLinkMatches": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      },
+      "articleId": "931bbe3e-17bd-48f5-84de-e786581817a9"
+    },
+    {
+      "sequence": 14,
+      "kind": "plotnovel-book-article",
+      "url": "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "canonicalMatches": true,
+        "previewChapterLinks": 3,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "ca5796e1-e3e4-4b39-add1-987e21b2cd98"
+    },
+    {
+      "sequence": 15,
+      "kind": "plotnovel-preview-chapter",
+      "url": "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6/chapter/1",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "readerNonempty": true,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "ca5796e1-e3e4-4b39-add1-987e21b2cd98"
+    },
+    {
+      "sequence": 16,
+      "kind": "plotnovel-go",
+      "url": "https://pulsenovels.com/go/ic6ehc7844",
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "noFollow": true
+      },
+      "articleId": "ca5796e1-e3e4-4b39-add1-987e21b2cd98"
+    },
+    {
+      "sequence": 17,
+      "kind": "plotnovel-interstitial",
+      "url": "https://pulsenovels.com/go/ic6ehc7844/app",
+      "status": 200,
+      "checks": {
+        "cacheControlNoStore": true,
+        "robots": [
+          "noindex",
+          "nofollow",
+          "nocache"
+        ],
+        "codeCardMatchesDatabase": true,
+        "copyButton": "Copy code",
+        "steps": [
+          "Copy the code above.",
+          "Get the free PlotNovel app.",
+          "Open the app, tap Search and paste the code. The book opens right away."
+        ],
+        "appStoreLinkMatches": true,
+        "googlePlayLinkMatches": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      },
+      "articleId": "ca5796e1-e3e4-4b39-add1-987e21b2cd98"
+    },
+    {
+      "sequence": 18,
+      "kind": "plotnovel-book-article",
+      "url": "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "canonicalMatches": true,
+        "previewChapterLinks": 3,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "f8d872b0-8171-4c26-b719-6d7045267696"
+    },
+    {
+      "sequence": 19,
+      "kind": "plotnovel-preview-chapter",
+      "url": "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3/chapter/1",
+      "status": 200,
+      "checks": {
+        "ctaLabel": "Read on PlotNovel App",
+        "ctaHint": "Free app · your book code is on the next page",
+        "ctaAnchors": 2,
+        "stationHrefMatches": true,
+        "readerNonempty": true,
+        "upstreamCodeMatchingLines": 0
+      },
+      "articleId": "f8d872b0-8171-4c26-b719-6d7045267696"
+    },
+    {
+      "sequence": 20,
+      "kind": "plotnovel-go",
+      "url": "https://pulsenovels.com/go/sf00gxtigh",
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "noFollow": true
+      },
+      "articleId": "f8d872b0-8171-4c26-b719-6d7045267696"
+    },
+    {
+      "sequence": 21,
+      "kind": "plotnovel-interstitial",
+      "url": "https://pulsenovels.com/go/sf00gxtigh/app",
+      "status": 200,
+      "checks": {
+        "cacheControlNoStore": true,
+        "robots": [
+          "noindex",
+          "nofollow",
+          "nocache"
+        ],
+        "codeCardMatchesDatabase": true,
+        "copyButton": "Copy code",
+        "steps": [
+          "Copy the code above.",
+          "Get the free PlotNovel app.",
+          "Open the app, tap Search and paste the code. The book opens right away."
+        ],
+        "appStoreLinkMatches": true,
+        "googlePlayLinkMatches": true,
+        "disclaimerMatches": 0,
+        "otherUpstreamCodeMatchingLines": 0
+      },
+      "articleId": "f8d872b0-8171-4c26-b719-6d7045267696"
+    },
+    {
+      "sequence": 22,
+      "kind": "moboreader-go-after",
+      "url": "https://pulsenovels.com/go/hpsuxf95w4",
+      "status": 302,
+      "checks": {
+        "locationSha256": "cd3e05e05efaaf1b87106c931bc37d8852f5881773ac88cad333b7723acbb2e5",
+        "baselineMatches": true
+      }
+    },
+    {
+      "sequence": 23,
+      "kind": "sitemap-index",
+      "url": "https://pulsenovels.com/sitemap.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0
+      }
+    },
+    {
+      "sequence": 24,
+      "kind": "sitemap-related-shard",
+      "url": "https://pulsenovels.com/sitemap/site_novelpage_en.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0,
+        "sampleBooksCovered": 1,
+        "sampleChaptersCovered": 3
+      }
+    },
+    {
+      "sequence": 25,
+      "kind": "sitemap-related-shard",
+      "url": "https://pulsenovels.com/sitemap/site_novelpage_en_2.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0,
+        "sampleBooksCovered": 1,
+        "sampleChaptersCovered": 3
+      }
+    },
+    {
+      "sequence": 26,
+      "kind": "sitemap-related-shard",
+      "url": "https://pulsenovels.com/sitemap/site_novelpage_en_3.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0,
+        "sampleBooksCovered": 1,
+        "sampleChaptersCovered": 3
+      }
+    },
+    {
+      "sequence": 27,
+      "kind": "sitemap-related-shard",
+      "url": "https://pulsenovels.com/sitemap/site_novelpage_en_4.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0,
+        "sampleBooksCovered": 1,
+        "sampleChaptersCovered": 3
+      }
+    },
+    {
+      "sequence": 28,
+      "kind": "sitemap-related-shard",
+      "url": "https://pulsenovels.com/sitemap/site_novelpage_en_5.xml",
+      "status": 200,
+      "checks": {
+        "upstreamCodeMatchingLines": 0,
+        "goUrlCount": 0,
+        "sampleBooksCovered": 1,
+        "sampleChaptersCovered": 3
+      }
+    },
+    {
+      "sequence": 29,
+      "kind": "homepage",
+      "url": "https://pulsenovels.com/",
+      "status": 200,
+      "checks": {
+        "carouselPresent": true,
+        "plotnovelCarouselMatches": 0,
+        "upstreamCodeMatchingLines": 0
+      }
+    }
+  ],
+  "status": "PASS",
+  "rawBodiesSaved": false,
+  "redirectsFollowed": false,
+  "retries": 0,
+  "requestCount": 29,
+  "completedAt": "2026-10-15T06:50:13.134713+00:00",
+  "fixedSamplesPassed": 5,
+  "sampledChapterUrls": {
+    "126d0a75-b7db-47c1-bdc5-a314646d2ec3": [
+      "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2/chapter/1",
+      "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2/chapter/2",
+      "https://pulsenovels.com/novel/reborn-to-reach-the-stars-pd1v7iks2/chapter/3"
+    ],
+    "62acd3af-e552-4227-8f3a-44a96b99a25c": [
+      "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8/chapter/1",
+      "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8/chapter/2",
+      "https://pulsenovels.com/novel/ten-years-wasted-on-a-faithless-love-p97mamio8/chapter/3"
+    ],
+    "931bbe3e-17bd-48f5-84de-e786581817a9": [
+      "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q/chapter/1",
+      "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q/chapter/2",
+      "https://pulsenovels.com/novel/seventeen-stolen-papers-and-seven-days-left-p0zswdg2q/chapter/3"
+    ],
+    "ca5796e1-e3e4-4b39-add1-987e21b2cd98": [
+      "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6/chapter/1",
+      "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6/chapter/2",
+      "https://pulsenovels.com/novel/bound-to-the-cuckold-revenge-system-put0wsbu6/chapter/3"
+    ],
+    "f8d872b0-8171-4c26-b719-6d7045267696": [
+      "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3/chapter/1",
+      "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3/chapter/2",
+      "https://pulsenovels.com/novel/demoted-husband-departed-soul-peer2q0k3/chapter/3"
+    ]
+  }
+}

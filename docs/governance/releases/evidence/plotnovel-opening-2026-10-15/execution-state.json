@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-15T06:53:26.477283+00:00",
+  "state": "C2_PASS_EXISTING_CODE_PUBLICATION_AND_PREVIEW_ACCEPTED_CLAIM_DISABLED",
+  "final": "493eb23b034b0410780228535b3e293e4ee91f9a",
+  "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+  "externalRequests": 29,
+  "claimPromo": "registered_disabled",
+  "manualReview": 635,
+  "acceptedScope": "已有口令码PlotNovel英语书的试读与公开发布链路；领码仍停用待上游答复",
+  "next": "后续文章放量由Owner或运营后台执行，单批不超过500篇；上游领码问题待答复，恢复领码/补码/人工收口另行授权"
+}

@@ -1,6 +1,10 @@
 # PlotNovel 剧场开通运维记录（2026-10-15 操作编号）
 
-## 当前状态：甲阶段及乙1/乙2 PASS；停乙3等Owner提交领码金丝雀
+## 当前状态：丙2验收PASS；已有口令码书已开通，领码保持关闭
+
+PlotNovel已开通（2026-10-15 15:50:13 JST）：已有口令码英语书的试读和公开发布链路验收通过，50本各3章/共150章入图，固定5篇公开抽查PASS，IndexNow50/50 accepted；主动验收HTTP累计29/30。claimPromo保持关闭、635条人工复核保留等待上游答复；本轮不处理领码或放量。最新结果见本文末尾丙2续行及[逐项验收](evidence/plotnovel-opening-2026-10-15/c2-public-acceptance.md)。
+
+## 以下为甲2历史检查点（当时尚未改挂）
 
 Owner授权执行计划；本轮仅完成甲0、甲1、甲2首次预演及完整任务清单。**PlotNovel已登记，尚未改挂、激活或开通业务。** 工作树release/v0.6.0-2026-10-14；线上v0.6.0 / Final `493eb23b034b0410780228535b3e293e4ee91f9a`，tag不移动，无业务代码/schema/nginx/版本身份改动。操作编号按Owner指定20261015，实际执行时间以原始UTC时间戳为准，本检查点于2026-10-14执行。
 
@@ -224,3 +228,18 @@ Owner回传生成任务48eba852-5fd8-479b-a74a-0b850ff6af71，说明50篇已发�
 停手证据及待Owner批准的原CLI预演/刷新步骤见 [c2-sitemap-stop.md](evidence/plotnovel-opening-2026-10-15/c2-sitemap-stop.md)，机器结果见 [c2-stop-result.json](evidence/plotnovel-opening-2026-10-15/c2-stop-result.json)。原脚本必须在web_app身份的web容器运行，apply只入队，待现有worker完成后再核对覆盖并继续固定5篇验收；本轮未执行预演或apply。完整开通仍未验收，不登记最终已开通，不增加发版日志。
 
 丙2停手检查点f2610506已推送回读；Notion原单条记录更新50篇发布读回、69章节静态图差异及未执行的待批准方案，于2026-10-15T05:49:57.976Z回读PASS，旧历史保留。收据见 [notion-readback-c2-stop.json](evidence/plotnovel-opening-2026-10-15/notion-readback-c2-stop.json)。
+
+
+## 丙2续行：Owner批准已知时序的原CLI刷新，固定5篇验收PASS
+
+Owner确认81/150章节是既有首发与试读落库时序缺口：首发即触发刷新，试读稍后才落库；MoboReader新书同样如此，每日04:00 JST兜底刷新会补齐。按Owner裁决，不将其归为v0.6.0或PlotNovel缺陷。Owner明确批准原CLI先预演、刷新一次，150章齐全后继续固定五篇。
+
+原generate-static-sitemaps.ts在web/web_app执行--dry-run通过，各语种合计130113 URL；随后以reason“PlotNovel金丝雀试读完成后补齐站点地图章节”、request-id plotnovel-sitemap-after-preview-20261015执行--apply一次，返回queued，任务431d9fdb-87d0-4006-b5ba-1042326e5eba。现有worker于06:46:43.100196Z～06:47:10.071181Z完成（26.970985秒），success1/failed0/skipped0；current指向该任务，50书页及150章精确齐全，每本第1～3章全部在图。
+
+沿用第1/13/26/38/50篇，没有换样。五篇书/文章页与五个第一章均200、按钮Read on PlotNovel App、小字Free app · your book code is on the next page；5个go为302相对跳至同站内码/app，5个中间页200/no-store/robots noindex,nofollow,nocache、卡片与本书码内存匹配、复制按钮/三步/两个指定商店链接正确、免责文字计数0。书页/章节/首页/站点地图对本批50个真实码的逐行匹配均0，无原始HTML、章节内容、口令、截图或Mobo Location明文落盘。首页轮播PlotNovel0；sitemap索引及五个去重分片均200，覆盖样本5书/15章；MoboReader同站内码前后302且Location SHA完全相同。
+
+本轮28次GET，连同旧Mobo基线累计29/30；全部经指定7899代理，不额外HEAD/重试/跟随。06:50:13Z（15:50:13 JST）公开抽查PASS。50本各3章/IndexNow50/50 accepted、熔断关闭/429等待false/due0/deadLetter0/在途0再次读回；claimPromo/getlistpc disabled、试读两项enabled；635个人审ID/status/response_shape摘要仍一致，所有容器CID与丙1之后一致、四应用healthy、备份定时器running，Final/env原摘要不变。
+
+辅助脚本34过早对processing断言、35引用转义、36误用跨阶段全推广摘要作本轮基线，首次证据均保留并仅修正辅助检查；详见逐项验收的偏离说明。全推广聚合摘要与丙1不同，不能作本轮守恒结论，未归因或改数据；原635个人审守恒和丙2各门禁通过。没有重提刷新、重做HTTP、改业务代码或削弱原门禁。
+
+**阶段丙验收PASS；PlotNovel已开通已有口令码书的试读与公开发布链路。** claimPromo仍关闭，635个人审留待上游答复；不将先前领取26本人审改判成功，不自行恢复getcode、补码、人工收口或放量。后续文章批次由Owner/运营后台决定，每批≤500篇。Final/tag不移动，v0.6.0不再次发版、无新开发日志。完整逐项、固定5篇及请求明细见[c2-public-acceptance.md](evidence/plotnovel-opening-2026-10-15/c2-public-acceptance.md)，机器结果见[c2-result.json](evidence/plotnovel-opening-2026-10-15/c2-result.json)。

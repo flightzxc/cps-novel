@@ -1,0 +1,1 @@
+r=run(['docker','exec',NAMES['web'],'tsx','scripts/generate-static-sitemaps.ts','--dry-run']);x=json.loads(r.stdout);print('SITEMAP_DRY_RUN='+json.dumps(x),flush=True);assert x['status']=='dry_run' and x['urlCount']>0;print('SITEMAP_DRY_RUN=PASS',flush=True)

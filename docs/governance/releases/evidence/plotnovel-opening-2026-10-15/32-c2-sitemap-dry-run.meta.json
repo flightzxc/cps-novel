@@ -1,0 +1,9 @@
+{
+  "name": "32-c2-sitemap-dry-run",
+  "startedAt": 1792046764.945021,
+  "finishedAt": 1792046788.961736,
+  "exit": 0,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/32-c2-sitemap-dry-run.py",
+  "sshOrWrapperStderrSha256": null
+}

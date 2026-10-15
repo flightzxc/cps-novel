@@ -1,0 +1,9 @@
+{
+  "name": "36-c2-final-readback",
+  "startedAt": 1792047025.595916,
+  "finishedAt": 1792047033.32447,
+  "exit": 1,
+  "host": "haiyue-vps",
+  "script": ".tmp/plotnovel-opening-2026-10-15/36-c2-final-readback.py",
+  "sshOrWrapperStderrSha256": "4d6c212658d823dbf66fa8bd9bea2bd1575dce5b281a47478f55a4de27e85b49"
+}
