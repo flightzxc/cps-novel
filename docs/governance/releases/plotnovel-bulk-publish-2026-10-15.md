@@ -76,3 +76,5 @@ docker exec -w /app -e 'PGOPTIONS=-c default_transaction_read_only=on' cps-novel
 ops分支推送回读，不合入集成；本文件、脱敏证据与v0.6.0台账在release分支，CHANGELOG由原生成器/core.abbrev=7生成；Notion单独同步本次存量放量运维条目并回读。没有新增发版级开发日志或移动tag。阶段二每波结束均做治理提交后才进下一波。当前所有波次任务ID、发布数、IndexNow/试读/sitemap执行结果均为**未执行**。
 
 本次停在阶段一交付点：等待主控复核及Owner批准放量，claimPromo关闭、635人工复核保留。机器结果见[phase1-result.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/phase1-result.json)，门禁见[local-gates.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/local-gates.json)。
+
+阶段一治理提交6b6d570b已推送并回读。Notion手账新增本次独立运维条目，于2026-10-15T08:33:30.499Z回读PASS，唯一条目、完整清单摘要和未执行阶段二状态均一致，原无关历史逐字保留。仅有Notion按规范将正文中的一个>转义为\>的序列化差异，归一该处后新增正文精确一致。收据见[notion-readback.json](evidence/plotnovel-bulk-publish-2026-10-15/phase1/notion-readback.json)。

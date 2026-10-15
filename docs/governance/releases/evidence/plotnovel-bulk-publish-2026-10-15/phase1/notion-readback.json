@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-15T08:33:30.499Z",
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "opsCommit": "ab09d1beda4f0b26562ad7db1710d3c0855aec64",
+  "governanceCommit": "6b6d570b2a6ac08f0bd6ba64de4813faa36b7202",
+  "entryCount": 1,
+  "unrelatedHistoryExact": true,
+  "newEntryExact": false,
+  "manifestSha256Recorded": true,
+  "phase2NotExecuted": true,
+  "lastEdited": "2026-10-15T08:31:46.290Z",
+  "status": "PASS",
+  "newEntryExactAfterMarkdownEscaping": true,
+  "normalization": "Notion serializes one inline > as escaped \\> according to enhanced Markdown specification"
+}
