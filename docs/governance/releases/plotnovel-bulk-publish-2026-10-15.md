@@ -1,8 +1,8 @@
 # PlotNovel 存量文章放量运维（2026-10-15）
 
-## 当前状态：第2波收尾PASS，已发布新增971篇；继续按门禁执行
+## 当前状态：第3波收尾PASS，已发布新增1456篇；继续按门禁执行
 
-主控复核11f4cb11及Owner批准恢复后，第2波生成、发布、收尾已通过。累计新增发布971篇，线上总1021篇；本波已知模板失败17本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
+主控复核11f4cb11及Owner批准恢复后，第3波生成、发布、收尾已通过。累计新增发布1456篇，线上总1506篇；本波已知模板失败15本，逐本留档、不补发。claimPromo关闭，635条人工复核和原50篇页面不变。原2%门禁停手、阈值修订和只读诊断保留在下文历史章节；当前执行结果以最新波次及最终验收为准。
 
 代码基线release/v0.6.0-2026-10-14@ed983f28377989605796030c06f8b9277c7ee7e8。新分支ops/plotnovel-bulk-publish-20261015，工作树/Users/chenweifeng/Documents/cps海阅/plotnovel-bulk-ops，真实node_modules，npm ci和Prisma generate已完成。固定脚本提交 **ab09d1beda4f0b26562ad7db1710d3c0855aec64**，仅留档ops分支、不合入集成，也不把脚本带入release分支。线上Final/tag仍493eb23b034b0410780228535b3e293e4ee91f9a，未发版/构建/拉取/重建镜像，不改schema、依赖、业务代码、env、能力或既有公开网址。
 
@@ -189,3 +189,39 @@ PlotNovel已发布总数1021=原50+累计新增971；原50页面及635人工复�
 | 8153b554-f04d-41e7-82cc-ef77e9b3b832 | 482a26fe-623c-40cd-9f37-8f92d80aee53 | ERR_TEMPLATE_VALUE_INVALID |
 
 这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
+
+## 第3波执行与收尾PASS（2026-10-15T10:58:57.031013+00:00）
+
+生成清单500本，成功并首次发布485篇、已知TemplateRenderError失败15本（3.000%），未知失败0；失败项保留、不重建/补发。草稿0，未提交/处理中/跳过均0；发布拒绝/冲突/not_found/aborted均0。任务ID：041148d4-4869-46e1-8195-f74d97106360, d28164b9-47e4-4e5e-a724-bebd1e81e28e, 0da25c3f-d99b-4519-b691-02460a887156。
+
+生成CLI：2026-10-15T10:45:25.024813+00:00至2026-10-15T10:45:29.970908+00:00，exit=0。
+
+发布CLI：2026-10-15T10:46:29.176553+00:00至2026-10-15T10:46:43.882646+00:00，exit=0。
+
+IndexNow 485/485 accepted，pending/missing/死信0，熔断关闭、无429等待。试读按书目完成485/485，失败0，待处理0，缺失0；其中清单时已有有效试读2本。sitemap任务605244b7-8437-477f-8960-8cd635d56cc6 completed，最近生成success@2026-10-15T10:47:08.442Z，覆盖本波发布时间、无待处理刷新。状态readyForNextWave=true；允许残余≤5%试读继续收尾，最终统一等终态后再补刷。
+
+PlotNovel已发布总数1506=原50+累计新增1456；原50页面及635人工复核摘要未变，claimPromo关闭，Final/env/CID不变。自原执行基线起各服务error/permission denied均0；已知模板失败单独核销，不将其掩为任务成功。主动外部HTTP0，最终抽样尚未执行。逐本核销见[本波证据](evidence/plotnovel-bulk-publish-2026-10-15/wave-3/result.json)。
+
+### 第3波模板失败书目（B-47修复后另行批准补发）
+
+| novelId | task itemId | 模板错误码 |
+| --- | --- | --- |
+| 85585c6c-a5be-4a9b-bf18-b94666106bf5 | 9fea4f30-6fb2-4043-9b9a-9aaf7e5f3672 | ERR_TEMPLATE_VALUE_INVALID |
+| 8ab64dc5-2634-4dcf-b72a-c841ba39f15c | c9ee11f6-2e63-4080-8ccd-fabce4072d2b | ERR_TEMPLATE_VALUE_INVALID |
+| 8d02b946-85d1-497d-b6f6-5c44292f9ee3 | 7c1d71ca-29d8-433b-9299-085dc390543c | ERR_TEMPLATE_VALUE_INVALID |
+| 94aa50b9-023c-405d-9db7-320c84d5ad94 | e093cf2a-f784-4c76-8b34-7ac211c03107 | ERR_TEMPLATE_VALUE_INVALID |
+| 952e719f-6bc5-4e28-a3ff-ce09dbab085b | 7dd63c5c-6c5d-41ce-9dc2-09b89f6035f0 | ERR_TEMPLATE_VALUE_INVALID |
+| 977ce050-54da-4f0b-8445-9e5752c70c8f | 574e02ec-42e0-43ee-b415-e2b2114c3b8b | ERR_TEMPLATE_VALUE_INVALID |
+| 9e7319d7-dbb7-474b-8676-d6a5131f1afa | 1a834f10-9a71-4e1e-9366-4a4561eaffe4 | ERR_TEMPLATE_VALUE_INVALID |
+| a36df145-db67-4cb8-a995-0fd945f4ce85 | 9f47d05b-b54e-4901-b25d-88c3fd17ed03 | ERR_TEMPLATE_VALUE_INVALID |
+| a3d42871-135a-4681-a897-bc3bbbcbc23a | 4b213f00-6779-4cc7-9e8e-b73f70c421ee | ERR_TEMPLATE_VALUE_INVALID |
+| a8d242e9-c7f7-44bd-85a0-b925e0619cd8 | dcf31785-94e0-4fdd-b350-e4c5d2fd5e2c | ERR_TEMPLATE_VALUE_INVALID |
+| ae9d3c01-36be-467d-8bc6-a32f28b163d7 | 16091961-7b4d-44bc-a4f8-a42e0693bb79 | ERR_TEMPLATE_VALUE_INVALID |
+| b1db18a4-828b-4c5e-bcc9-b7669511927f | 2d376e4d-510f-4ed8-b0d4-362f94cde44e | ERR_TEMPLATE_VALUE_INVALID |
+| b95462c5-9bcb-4ab9-be95-73c54b7ee4d8 | 121ce40b-85c3-449d-b478-1bb770f1e403 | ERR_TEMPLATE_VALUE_INVALID |
+| c074f114-40ef-4eab-8126-6450ae10c883 | eb2a545f-d32f-4c2f-8ea2-551296f95979 | ERR_TEMPLATE_VALUE_INVALID |
+| c4d82857-3c28-464d-afe6-6bbaff7215e7 | bd1742ea-c872-4a87-b9e5-5368f92ec894 | ERR_TEMPLATE_VALUE_INVALID |
+
+这里只登记受影响书目，不执行B-47修复或补发；第一波12本cover_url/absolute_url已只渲染定位，后续各项按原任务错误分类留档。
+
+第三波收尾后Owner因断网明确暂停。恢复时只读核验生产CLI摘要、485篇IndexNow与试读全部完成，第四波仍未提交；原记录/页面/635人工复核/env/CID不变。未重放前三波。暂停检查点已含本地CLI未提交退回旧版的改动，恢复时保留该工作文件及diff；以已审核11f4cb11的Git blob（SHA256 62eb005c2dc0eccc783e676a3c830efdbb5bd71eb7d3ed88e4d812eac72d3c4f）和容器实际字节为执行身份，不把本地旧工作文件部署或合入。

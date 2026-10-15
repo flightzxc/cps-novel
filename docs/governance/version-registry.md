@@ -21,7 +21,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ### v0.6.0 —— 已部署正式站（2026-10-14 16:51:08 JST / 15:51:08 +0800）
 
-- PlotNovel存量放量运维（10-15）：复核11f4cb11后按已知TemplateRenderError≤5%政策恢复，第2波收尾PASS；累计新增发布971篇，线上总1021。本波483发布/17模板失败，失败逐本留档不补发；IndexNow全部accepted、试读及sitemap门禁PASS。claimPromo关闭、635人工复核与既有页面不变，继续逐波执行。见[存量放量记录](releases/plotnovel-bulk-publish-2026-10-15.md)。
+- PlotNovel存量放量运维（10-15）：复核11f4cb11后按已知TemplateRenderError≤5%政策恢复，第3波收尾PASS；累计新增发布1456篇，线上总1506。本波485发布/15模板失败，失败逐本留档不补发；IndexNow全部accepted、试读及sitemap门禁PASS。claimPromo关闭、635人工复核与既有页面不变，继续逐波执行。见[存量放量记录](releases/plotnovel-bulk-publish-2026-10-15.md)。
 
 - PlotNovel已开通（2026-10-15 15:50:13 JST）：已有口令码英语书的试读与公开发布链路验收PASS；试读10/10、Owner发布50篇/各3章、IndexNow50/50 accepted，按Owner批准原CLI补刷新后50书页/150章齐全，固定5篇全部通过，主动HTTP29/30。claimPromo仍关闭、635条人工复核保留待上游答复，不恢复领码或自行放量。首发与试读落库时序为已知行为，不归为v0.6.0/PlotNovel缺陷。见[开通运维记录](releases/plotnovel-opening-2026-10-15.md)。
 

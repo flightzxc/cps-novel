@@ -1,0 +1,196 @@
+{
+  "startedAt": "2026-10-15T10:45:25.024813+00:00",
+  "finishedAt": "2026-10-15T10:45:29.970908+00:00",
+  "command": [
+    "docker",
+    "exec",
+    "-w",
+    "/app",
+    "cps-novel-web-1",
+    "tsx",
+    "--tsconfig",
+    "/app/tsconfig.json",
+    "/tmp/plotnovel-bulk-generate-publish.ts",
+    "generate",
+    "--manifest",
+    "/tmp/plotnovel-bulk-20261015-manifest.json",
+    "--manifest-sha256",
+    "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+    "--actor-id",
+    "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+    "--wave",
+    "3",
+    "--confirm",
+    "PLOTNOVEL_BULK_GENERATE"
+  ],
+  "exit": 0,
+  "events": [
+    {
+      "at": "2026-10-15T10:45:27.019Z",
+      "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+      "event": "generate",
+      "wave": 3,
+      "chunk": 1,
+      "requestId": "plotnovel-bulk-20261015-w3-c1",
+      "taskId": "041148d4-4869-46e1-8195-f74d97106360",
+      "duplicate": false,
+      "taskStatus": "pending",
+      "admission": {
+        "selectedCount": 200,
+        "submittedCount": 200,
+        "blockedCount": 0,
+        "blockedReasonCounts": {}
+      }
+    },
+    {
+      "at": "2026-10-15T10:45:27.481Z",
+      "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+      "event": "generate",
+      "wave": 3,
+      "chunk": 2,
+      "requestId": "plotnovel-bulk-20261015-w3-c2",
+      "taskId": "d28164b9-47e4-4e5e-a724-bebd1e81e28e",
+      "duplicate": false,
+      "taskStatus": "pending",
+      "admission": {
+        "selectedCount": 200,
+        "submittedCount": 200,
+        "blockedCount": 0,
+        "blockedReasonCounts": {}
+      }
+    },
+    {
+      "at": "2026-10-15T10:45:27.906Z",
+      "manifestSha256": "95cae34466d3b672ff57fa8017c3cb0b7f0a64829c3ca99e665f9aa1d2ade1ec",
+      "event": "generate",
+      "wave": 3,
+      "chunk": 3,
+      "requestId": "plotnovel-bulk-20261015-w3-c3",
+      "taskId": "0da25c3f-d99b-4519-b691-02460a887156",
+      "duplicate": false,
+      "taskStatus": "pending",
+      "admission": {
+        "selectedCount": 100,
+        "submittedCount": 100,
+        "blockedCount": 0,
+        "blockedReasonCounts": {}
+      }
+    }
+  ],
+  "unexpectedOutputLines": 0,
+  "unexpectedOutputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "status": {
+    "wave": 3,
+    "generation": {
+      "expected": 500,
+      "notSubmitted": 0,
+      "pending": 439,
+      "success": 60,
+      "failed": 1,
+      "skipped": 0
+    },
+    "generationFailurePolicy": {
+      "knownTemplateFailures": 1,
+      "otherFailures": 0,
+      "allowed": true
+    },
+    "generationTasks": [
+      {
+        "id": "041148d4-4869-46e1-8195-f74d97106360",
+        "status": "processing",
+        "total": 200
+      },
+      {
+        "id": "d28164b9-47e4-4e5e-a724-bebd1e81e28e",
+        "status": "pending",
+        "total": 200
+      },
+      {
+        "id": "0da25c3f-d99b-4519-b691-02460a887156",
+        "status": "pending",
+        "total": 100
+      }
+    ],
+    "drafts": 60,
+    "published": 0,
+    "indexnow": {
+      "accepted": 0,
+      "pending": 0,
+      "missing": 0,
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "deadLetters": 0,
+      "blockedUrls": 0
+    },
+    "preview": {
+      "expected": 0,
+      "alreadyValid": 0,
+      "completed": 0,
+      "failed": 0,
+      "pending": 0,
+      "missing": 0,
+      "taskIds": []
+    },
+    "mainPreviewBacklog": {
+      "failed": 339,
+      "skipped": 80006,
+      "success": 32550
+    },
+    "sitemap": {
+      "enabled": true,
+      "task": {
+        "id": "1bb3495c-36d4-4bd4-b5fb-efbdc224e73d",
+        "status": "completed",
+        "createdAt": "2026-10-15T10:31:46.562Z",
+        "completedAt": "2026-10-15T10:32:06.447Z"
+      },
+      "lastGeneration": {
+        "status": "success",
+        "finishedAt": "2026-10-15T10:32:06.424Z"
+      },
+      "published": {
+        "generatedAt": "2026-10-15T10:32:06.421Z",
+        "urlCount": 132629
+      }
+    },
+    "stopReasons": [],
+    "readyForNextWave": false
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1994
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 9
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 516
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  },
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+    "containersIdentical": true
+  }
+}
