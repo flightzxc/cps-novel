@@ -32,7 +32,7 @@ import {
   totalChapterCountForUpdate,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
-import { isBlankPreviewContent, materializeChangduPreview } from "../../src/lib/preview";
+import { emptyPreviewChapterNumbers, materializeChangduPreview } from "../../src/lib/preview";
 import { refreshSitemapAfterPreviewTask } from "../../src/lib/tasks/preview-refresh-finalize";
 import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
 import { refreshEffectiveTagsForNovels } from "../../src/server/tagging/effective-tag-projection";
@@ -1788,10 +1788,7 @@ export function createMoboreaderPreviewHandler(
     }
     // B-42（Owner 2026-10-11）：空正文章节跳过，不再整本失败；章节号只用于留痕和反馈上游，
     // 不含正文。全部为空记为"无试读"——skipped，不写章节、不碰已有试读。
-    const emptyChapterNumbers = preview.chapterList
-      .filter((chapter) => isBlankPreviewContent(chapter.chapterContent))
-      .map((chapter) => chapter.i)
-      .sort((left, right) => left - right);
+    const emptyChapterNumbers = emptyPreviewChapterNumbers(preview.chapterList);
     if (emptyChapterNumbers.length === preview.chapterList.length) {
       return {
         status: "skipped",

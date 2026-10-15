@@ -27,6 +27,18 @@ export function isBlankPreviewContent(content: string): boolean {
   return content.trim() === "";
 }
 
+/**
+ * B-42：一份上游响应里正文为空的章节号（升序）。给编排层用——试读编排（任务 handler）
+ * 按约定不直接碰章节正文（`tests/backend/contracts/p2-05-secret-and-scope.test.ts`），
+ * 只拿这份不含正文的章节号清单来决定"全部为空即无试读"并留痕。
+ */
+export function emptyPreviewChapterNumbers(chapterList: readonly MoboreaderPreviewChapter[]): number[] {
+  return chapterList
+    .filter((chapter) => isBlankPreviewContent(chapter.chapterContent))
+    .map((chapter) => chapter.i)
+    .sort((left, right) => left - right);
+}
+
 export interface BuildChangduPreviewPlanInput {
   chapterList: readonly MoboreaderPreviewChapter[];
   maxMaterializedChapters: number;
