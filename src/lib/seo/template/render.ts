@@ -103,6 +103,67 @@ const ABSOLUTE_HTTP_URL = /^https?:\/\/[A-Za-z0-9._~:\/?#[\]@!$&()*+,;=%-]+$/;
  */
 const PUBLIC_REDIRECT_PATH = /^\/go\/[A-Za-z0-9]{1,32}$/;
 
+/** 是否含任一非 ASCII 码点。只用于判定，故意不带 `g`——带 `g` 的 `.test()` 会残留 `lastIndex`。 */
+const HAS_NON_ASCII = /[^\x00-\x7F]/u;
+
+/** 逐个非 ASCII 码点（`u` 标志下一对合法代理项算一个码点）。只用于 `replace`。 */
+const NON_ASCII_CODE_POINTS = /[^\x00-\x7F]/gu;
+
+/** 孤立代理项。`URL` 会把它静默换成 U+FFFD，得到一个指向别处的地址，所以直接不处理。 */
+const LONE_SURROGATE = /\p{Cs}/u;
+
+/** 取 `scheme://` 之后、第一个 `/` `?` `#` 之前的一段，即用户信息 + 主机 + 端口。 */
+const URL_AUTHORITY = /^https?:\/\/([^/?#]*)/;
+
+/**
+ * B-47：`absolute_url` 取值的渲染期规范化——把路径、查询、片段里的非 ASCII 字符按
+ * URL 标准（WHATWG）序列化成 UTF-8 百分号编码，然后**照旧**交给 `ABSOLUTE_HTTP_URL`
+ * 校验。正则本身一个字符都没放宽。
+ *
+ * 只对一种值动手：**除非 ASCII 字符以外，它本来就满足 absolute_url 合同**，且非 ASCII
+ * 只出现在主机之后。判定方式是把每个非 ASCII 码点换成占位字母后跑同一条正则，于是
+ * 「允许哪些 ASCII 字符」只有 `ABSOLUTE_HTTP_URL` 一处真源。其余一律原样返回：
+ *
+ * - 纯 ASCII 的值不经过 `URL`，渲染产物逐字节不变（已生成的文章重渲染不漂移）；
+ * - 同时含空格、引号、尖括号、反斜杠、控制字符的值原样返回、照旧被拒——`URL` 会把
+ *   这些也编码掉，但它们的拒绝是安全合同，不是本单要修的形态问题；
+ * - 主机或用户信息含非 ASCII（IDN）的值原样返回、照旧被拒——上游没出现过，转 punycode
+ *   属于扩大合同；
+ * - 含孤立代理项、`URL` 解析失败、协议不是 http/https、序列化后仍不过正则，都原样返回。
+ *
+ * 已经是 `%XX` 的部分 `URL` 不会再编码一次；产物是纯 ASCII，再跑一遍原样返回——幂等。
+ * 浏览器加载 `<img src>` 时对原值做的正是同一套序列化（页面是 UTF-8），所以编码后的
+ * 地址与书页上直接用原值请求到的是同一个资源。
+ *
+ * 为什么在渲染时、不在入库时：`Novel.cover_url` 受「只补空、不覆盖」合同约束，且同一个值
+ * 还写进站点地图 `<image:loc>`、og:image 与书页 img；入库时改要回填存量、改动已对外的
+ * 站点地图内容。CPS（v8.7.3）的同步与提级路径同样原样存上游封面、模板直接取用，它没有
+ * 本项目这层形态校验——缺口在校验这一侧，就在校验这一侧补。
+ */
+export function normalizeAbsoluteUrlValue(value: string): string {
+  if (!HAS_NON_ASCII.test(value)) return value;
+  if (LONE_SURROGATE.test(value)) return value;
+  if (!ABSOLUTE_HTTP_URL.test(value.replace(NON_ASCII_CODE_POINTS, "a"))) return value;
+
+  const authority = URL_AUTHORITY.exec(value)?.[1];
+  if (authority === undefined || HAS_NON_ASCII.test(authority)) return value;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return value;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return value;
+
+  const serialized = parsed.href;
+  return ABSOLUTE_HTTP_URL.test(serialized) ? serialized : value;
+}
+
+function normalizeValueForKind(kind: TemplateFieldKind, value: string): string {
+  return kind === "absolute_url" ? normalizeAbsoluteUrlValue(value) : value;
+}
+
 function isValueShapeValid(kind: TemplateFieldKind, value: string): boolean {
   switch (kind) {
     case "absolute_url":
@@ -362,13 +423,15 @@ export function renderTemplateSlot(
     }
 
     // 形态校验逐字段独立：站外资源要绝对 http/https，站内跳转要 /go/<码>。
-    if (!isValueShapeValid(definition.kind, value)) {
+    // 先做按类型的规范化（B-47：absolute_url 的非 ASCII 百分号编码），再用原正则校验。
+    const shaped = normalizeValueForKind(definition.kind, value);
+    if (!isValueShapeValid(definition.kind, shaped)) {
       throw new TemplateRenderError(ERR_TEMPLATE_VALUE_INVALID, {
         ...locate(field),
         constraint: definition.kind,
       });
     }
 
-    return options.context === "html" ? escapeHtmlText(value) : value;
+    return options.context === "html" ? escapeHtmlText(shaped) : shaped;
   });
 }
