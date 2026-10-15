@@ -288,6 +288,24 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
     expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 3 });
   });
 
+  it("B-42 保留只限空章节号：不在本次计划里、也不是空章号的旧章节照常置 stale", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")])).toBe(1);
+    const before = await chaptersOf(row.novel.id);
+    const second = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(2, ""), previewRow(3, "three"), previewRow(4, "four")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: second.id } })).toMatchObject({ status: "success", result: {
+      emptyChapterNumbers: [2], materializedCount: 2, staleCount: 1, preservedCount: 1,
+    } });
+    const after = await chaptersOf(row.novel.id);
+    expect(after.map((c) => [c.canonicalChapterNumber, c.status])).toEqual([[1, "stale"], [2, "preview"], [3, "preview"], [4, "preview"]]);
+    expect(after[1]!.content?.contentHash).toBe(before[1]!.content?.contentHash);
+    const readable = await owner.novelChapter.count({ where: { novelId: row.novel.id, status: "preview", deletedAt: null, content: { isNot: null } } });
+    expect(readable).toBe(3);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: readable });
+  });
+
   it("B-42 全部章节为空 / chapterList 为 null：条目 skipped=无试读，不写章节，已有试读原样", async () => {
     const row = await seed(0, foundation.account, true);
     await previewTask([row.source.id]);
@@ -348,6 +366,24 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
     expect(await previewCycles([previewRow(1, "one")], env)).toBe(1);
     expect(await sitemapTasks()).toEqual([]);
     expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: off.id } })).result).not.toHaveProperty("sitemapRefresh");
+  });
+
+  it("B-46 只置 stale、没有新写的试读任务也入队刷新（章节页要移出站点地图）", async () => {
+    const row = await seed(0, foundation.account, true);
+    await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, "one"), previewRow(2, "two"), previewRow(3, "three")], env)).toBe(1);
+    expect(await sitemapTasks()).toEqual([]);
+    const task = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(2, "two"), previewRow(3, "three")], sitemapEnv)).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task.id } })).toMatchObject({ status: "success", result: {
+      contentWrites: 0, restoredCount: 0, staleCount: 1,
+    } });
+    const tasks = await sitemapTasks();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ status: "pending", params: { reason: "preview_chapters_written", triggeredBy: `moboreader.preview_refresh.v1#${task.id}` } });
+    expect((await owner.channelSyncTask.findUniqueOrThrow({ where: { id: task.id } })).result).toMatchObject({
+      sitemapRefresh: { status: "queued", taskId: tasks[0]!.id, coveredItemCount: 1, triggerCount: 1 },
+    });
   });
 
   for (const size of [50, 500]) it(`mixed local adapter load N=${size} through real worker and legal <=200 publish batches`, async () => {
