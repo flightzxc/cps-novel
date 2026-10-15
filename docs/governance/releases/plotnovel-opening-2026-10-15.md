@@ -222,3 +222,5 @@ Owner回传生成任务48eba852-5fd8-479b-a74a-0b850ff6af71，说明50篇已发�
 依原“任何异常立即停手”，不手动刷新、不改数据/代码/env/能力、不撤回页面、不补码/人工收口。轮播serving快照PlotNovel0条，但首页HTML、五篇按钮/小字、章节、go/中间页、口令泄漏及外部sitemap验证尚未执行，均不宣称PASS；本轮公开HTTP0，累计仍1/30。没有输出口令码、原始正文或章节内容。
 
 停手证据及待Owner批准的原CLI预演/刷新步骤见 [c2-sitemap-stop.md](evidence/plotnovel-opening-2026-10-15/c2-sitemap-stop.md)，机器结果见 [c2-stop-result.json](evidence/plotnovel-opening-2026-10-15/c2-stop-result.json)。原脚本必须在web_app身份的web容器运行，apply只入队，待现有worker完成后再核对覆盖并继续固定5篇验收；本轮未执行预演或apply。完整开通仍未验收，不登记最终已开通，不增加发版日志。
+
+丙2停手检查点f2610506已推送回读；Notion原单条记录更新50篇发布读回、69章节静态图差异及未执行的待批准方案，于2026-10-15T05:49:57.976Z回读PASS，旧历史保留。收据见 [notion-readback-c2-stop.json](evidence/plotnovel-opening-2026-10-15/notion-readback-c2-stop.json)。
