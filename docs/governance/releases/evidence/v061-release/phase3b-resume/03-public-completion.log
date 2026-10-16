@@ -1,0 +1,1 @@
+PUBLIC_ACCEPTANCE=PASS new_http=9 cumulative_http=12 transport_attempts=10 tls_handshake_failure=1

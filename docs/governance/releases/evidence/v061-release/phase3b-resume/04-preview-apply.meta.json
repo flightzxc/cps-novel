@@ -1,0 +1,11 @@
+{
+  "name": "04-preview-apply",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b-resume/preview-apply-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792169974.1227698,
+  "finishedAt": 1792169987.015399
+}

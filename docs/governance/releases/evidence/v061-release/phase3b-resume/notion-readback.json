@@ -1,0 +1,40 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "title": "🏷️ 海阅 版本管理与发版手账",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "result": "PASS",
+  "operationStatus": "ALL PHASE3B ACCEPTANCE PASS",
+  "firstReadbackAt": "2026-10-16T17:05:32.162Z",
+  "finalReadbackAt": "2026-10-16T17:06:33.574Z",
+  "checks": {
+    "snapshot": true,
+    "table": true,
+    "formal": true,
+    "uniqueLog": true,
+    "ops": true,
+    "ownerBasis": true,
+    "numericRule": true,
+    "writtenChapters": true,
+    "nullSkips": true,
+    "httpBudget": true,
+    "b46": true,
+    "noTurnstile": true,
+    "unrelatedHistoryPreserved": true,
+    "finalSyncStatus": true
+  },
+  "historyComparedCharacters": 297179,
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "preview34": {
+    "success": 13,
+    "skipped": 21,
+    "failed": 0,
+    "contentWrites": 21
+  },
+  "newHttpRequests": 9,
+  "cumulativeHttpRequests": 12,
+  "extraTlsHandshakeFailuresWithoutHttp": 1,
+  "accidentalCoincidences": 18,
+  "forbiddenIndependentCodeExposure": 0,
+  "oldStopRetained": true,
+  "oldStopResolvedByOwner": true
+}

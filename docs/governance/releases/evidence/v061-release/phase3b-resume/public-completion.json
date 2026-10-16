@@ -1,0 +1,117 @@
+{
+  "at": "2026-10-16T16:59:15.818352+00:00",
+  "status": "PASS",
+  "reason": null,
+  "samples": [
+    {
+      "articleId": "7728ebb3-699a-4048-9e2d-7ebb377fd75e",
+      "novelId": "00d9bd97-fe97-429e-9d1b-39ee466f5f05",
+      "bookPath": "/novel/the-adoptive-father-was-critically-ill-and-his-wife-personally-destroyed-his-last-will-pgmatps3g",
+      "goCode": "mi5bhsrdm6"
+    },
+    {
+      "articleId": "053fc95e-86cc-4e83-af54-bfbb65dfddb7",
+      "novelId": "b95462c5-9bcb-4ab9-be95-73c54b7ee4d8",
+      "bookPath": "/novel/dog-and-trash-divorce-finalized-p8maadfzg",
+      "goCode": "c4a5ehs9wk"
+    },
+    {
+      "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8",
+      "novelId": "21cc69f0-eb6a-4abc-bfd9-f5774fbe5b6d",
+      "bookPath": "/novel/because-i-am-infertile-my-wife-turned-to-a-car-mechanic-p17xhvk0n",
+      "goCode": "r2y1duq8sl"
+    }
+  ],
+  "results": [
+    {
+      "sequence": 1,
+      "at": "2026-10-16T16:59:09.687155+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/r2y1duq8sl",
+      "kind": "go",
+      "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 302,
+      "checks": {
+        "relativeLocationMatches": true,
+        "redirectFollowed": false,
+        "boundaryScan": {
+          "checkedCodes": 2035,
+          "matchingRule": "(?<![0-9])CODE(?![0-9])",
+          "boundaryOccurrences": 0,
+          "boundaryMatchingCodeValues": 0,
+          "forbiddenBoundaryOccurrences": 0,
+          "allowedOwnInterstitialOccurrences": 0,
+          "accidentalCoincidenceOccurrences": 0,
+          "accidentalCoincidenceCodeValues": 0,
+          "boundaryContexts": [],
+          "rawCodeValuesPrinted": 0,
+          "sanitizedHtml": null
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-10-16T16:59:11.934700+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/go/r2y1duq8sl/app",
+      "kind": "interstitial",
+      "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {
+        "noStore": true,
+        "noindex": true,
+        "codeCardMatches": true,
+        "stores": true,
+        "disclaimerMatches": 0,
+        "forbiddenBoundaryOccurrences": 0,
+        "accidentalCoincidenceOccurrences": 3,
+        "boundaryScan": {
+          "checkedCodes": 2035,
+          "matchingRule": "(?<![0-9])CODE(?![0-9])",
+          "boundaryOccurrences": 3,
+          "boundaryMatchingCodeValues": 1,
+          "forbiddenBoundaryOccurrences": 0,
+          "allowedOwnInterstitialOccurrences": 3,
+          "accidentalCoincidenceOccurrences": 3,
+          "accidentalCoincidenceCodeValues": 1,
+          "boundaryContexts": [
+            {
+              "ownership": "self",
+              "allowedOwnInterstitial": true,
+              "positionCategory": "visible_text",
+              "tag": "p"
+            },
+            {
+              "ownership": "self",
+              "allowedOwnInterstitial": true,
+              "positionCategory": "script_json",
+              "tag": "script",
+              "scriptJsonKey": "children"
+            },
+            {
+              "ownership": "self",
+              "allowedOwnInterstitial": true,
+              "positionCategory": "script_json",
+              "tag": "script",
+              "scriptJsonKey": "code"
+            }
+          ],
+          "rawCodeValuesPrinted": 0,
+          "codeCardMatches": true,
+          "ownCodePresent": true,
+          "sanitizedHtml": null
+        }
+      }
+    }
+  ],
+  "requests": 2,
+  "stageCumulativeRequests": 5,
+  "rawBodiesSaved": false,
+  "upstreamCodesSaved": false,
+  "redirectsFollowed": false,
+  "retries": 0
+}

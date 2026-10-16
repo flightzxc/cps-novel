@@ -51,6 +51,9 @@
 **乙阶段运维补记（JST 2026-10-17）**：Owner已批准补发。58本生成/发布/试读全成功（失败0、跳过0）、总2035/目标草稿0/IndexNow58accepted；173非空章节，B-46自动刷新与来源任务关联并在终态后21.883秒完成，58书页+173有效章及原1977篇对应页面覆盖全PASS，无手刷。随机公网首篇book_upstream_code_leak检查未通过后停手，两次只读复核0命中、首轮原因未裁定；累计GET3/10，原1977/635摘要、env/容器保持、六服务error/permission denied0。34本原组/requestId候选仍34、apply0，不能登记乙阶段全完成。自写只读SQL传输参数长度与临时文件属主问题均修正，原ops和门禁不变；公网检查STOP独立留证，待Owner裁定后续。[乙阶段记录](releases/plotnovel-b47-republish-and-preview-34-2026-10-16.md)。
 
 
+**Owner裁定后乙阶段收官（JST 2026-10-17）**：Owner明确首次book_upstream_code_leak为6位数字纯子串匹配误报，依据2035码均6位数字、96窗口约17.8%偶合/32动态推荐窗口变化及书页无取码路径，完整写运维记录。仅修辅助检查器，数字边界/长数字串偶合计数/位置脱敏与HTML全码替换，7测试通过；原3样本9项全PASS，新增HTTP9/累计12、禁止独立码0、偶然重合18，另1次TLS握手失败无HTTP。沿用甲阶段原组/sourceItemIds/requestId一次apply34本，13成功写21章、21个upstream_preview_chapter_list_null跳过、失败0；B-46自动关联刷新27.221秒完成，四语种34书页+21有效章0缺失，无手刷。58补发及173章覆盖保持，原1977/635摘要、env/容器不变、六服务error/permission denied0、IndexNow和试读积压0。业务全部验收PASS，旧STOP与原始证据保留，以Owner裁定关闭，不重发58篇。唯一发版日志仍为本条，治理最终同步回读随收官留证。
+
+
 ### 2026-10-14 16:51 - codex（GPT-6，正式发版执行；JST）
 
 **变更类型**：海阅v0.6.0 MINOR正式站部署，仅haiyue-vps。Owner明确授权Final `493eb23b034b0410780228535b3e293e4ee91f9a`；原RELEASE=PASS/EXIT=0，A～F PASS。代码已部署，PlotNovel尚未开通，前台行为不变。

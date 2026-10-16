@@ -1,0 +1,11 @@
+{
+  "name": "05-account",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b-resume/account-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792169995.698387,
+  "finishedAt": 1792170003.801653
+}

@@ -19,21 +19,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.1 —— 已部署正式站，58本补发完成；公网验收异常停手，34本apply未执行（JST 2026-10-17）
+### v0.6.1 —— 已部署，58本补发及34本定向试读全部验收PASS（JST 2026-10-17）
 
-- **PATCH**，Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f` / tree `34d2fcbc052762544cefec1f97466b2d1e786762`。来源 `fix/v061-cover-preview-sitemap`，已合入 `integration/v0.6.1-2026-10-16@3704cc028692510acc60fbc27187817535f97b23`，发布 `release/v0.6.1-2026-10-16`。
-- B-47正文封面非英文编码、B-42空正文跳过、B-46试读写入后刷新sitemap，均已部署。公开网址及数据库/sitemap/og/书页图片封面原值冻结。27迁移/58表，字典1349/active1279；grants/依赖/环境变量集合不变，无回填。
-- 第一阶段37运行器、完整发布门禁和归档镜像E2E PASS；ops真实库29/29、skipped0，两组变异被抓到并还原。ops HEAD `c3578aa6f8c18bc0ee39bcd14da95703aaad3098` 独立留档，不合入集成线。
-- Owner批准部署后仅haiyue-vps原RELEASE=PASS/exit0，维护48.926646秒。env仅版本两行、cmp PASS，在线备份763037272字节/restore-list PASS；health0.6.1/Final/metadataConsistency passed、五应用healthy、postgres CID不变。
-- 27finished/0rolledback/checksum与授权读回PASS、投影0/0/0、IndexNow无熔断/429/死信/积压；四应用Next16.3.8/无vitest和tinypool；六服务error/permission denied0，写闸、白名单、nginx摘要不变、备份定时器运行。4/6代理公网抽查全PASS、口令码匹配0；原1977发布和635复核摘要保持。
-- annotated v0.6.1固定Final；CHANGELOG已用原生成器core.abbrev=7生成；PATCH台账、唯一正式日志、发布证据已完成，Notion五处已同步并回读PASS（2026-10-16T14:17:38.721Z），历史282397字符保持。**Owner已批准乙阶段；58本补发完成，34本apply因公网检查STOP未执行。** B-46实际触发和覆盖已在58本上验收通过。
-- Owner10-16四决定：只编码正文、批准定向34本重跑（执行待乙阶段）、null按空正文、旧章保留导致总试读超过3章的限制以后遇到再处理（preservedCount>0 && materializedCount+preservedCount>3）。[发布记录](releases/v0.6.1-preproduction.md)。回滚v0.6.0 Final493eb23b…，兼容标志须Owner另批。
-
-- 第三阶段甲PASS：58/58预渲染，候选58精确相等，manifest SHA256 `ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639`。34本当前MoboReader一组、published34/可读章0/在途0，survey candidate34，固定requestId preview-b42-34-2026-10-16-moboreader；原1977/635摘要保持，业务调用0。[运维记录](releases/plotnovel-b47-republish-and-preview-34-2026-10-16.md)。
-
-- 第三阶段乙Owner已批准；58生成/发布/试读成功，失败0、总2035/草稿0/IndexNow58accepted；B-46自动关联刷新终态后21.883秒完成，58书页+173有效章全覆盖，无手刷。公网首篇口令码检查未通过，两次只读复核未复现但原因未裁定；GET3/10，34本候选仍34、apply0，当前STOP。原1977/635摘要不变、六服务error/permission denied0。[乙阶段运维记录](releases/plotnovel-b47-republish-and-preview-34-2026-10-16.md)。
-
-- 乙阶段治理已写PATCH台账、唯一日志补记、发布/运维记录与STOP原证据；CHANGELOG原生成器core.abbrev=7，tag不变。Notion五处已同步并回读PASS（2026-10-16T15:11:34.874Z），[乙回读收据](releases/evidence/v061-release/phase3b/notion-readback.json)。业务阶段仍为STOP，34本未执行。
+- **PATCH**，Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f` / tree `34d2fcbc052762544cefec1f97466b2d1e786762`，来源fix/v061-cover-preview-sitemap、integration/v0.6.1-2026-10-16@3704cc0，发布分支release/v0.6.1-2026-10-16。B-47正文封面编码/B-42空正文跳过/B-46试读后sitemap均已生效；公开网址、数据库/sitemap/og/书页封面原值冻结。
+- 27迁移/58表、字典1349/active1279，grants/依赖/环境变量集合不变，无回填。第一阶段37运行器与镜像归档全门禁PASS；第二阶段原RELEASE=PASS、维护48.926646秒、备份及授权/投影/运行态PASS。
+- 固定58生成/发布/试读全成功，失败0、跳过0；总2035/目标草稿0/IndexNow58accepted。新58书页+173有效章及原1977篇/5871有效章全部覆盖，B-46来源关联自动刷新21.883秒完成。
+- Owner裁定首次公网检查为6位数字纯子串匹配误报，三项依据完整留档。仅修检查器，数字边界匹配、偶然重合计数、独立命中位置分类与脱敏HTML取证，7测试PASS。原3样本9项全PASS，新增HTTP9/累计12、禁止独立码0、偶然重合18；另1次未发出HTTP的TLS握手失败保留。原STOP不删除，由Owner裁定明确关闭。
+- 34本按甲阶段原MoboReader组/sourceItemIds/requestId preview-b42-34-2026-10-16-moboreader，一次apply：13成功写21章、21个upstream_preview_chapter_list_null跳过、失败0。B-46自动来源关联刷新27.221秒完成，en/de/fr/pt-BR共34书页+21有效章节0缺失，无手刷。主worker/IndexNow积压0，原1977/635摘要、env/容器保持、六服务error/permission denied0。
+- annotated v0.6.1仍固定Final；CHANGELOG原生成器core.abbrev=7、PATCH台账、唯一日志补记、完整发布与运维证据已更新，Notion本轮五处已同步并回读PASS（2026-10-16T17:06:33.574Z），[最终收据](releases/evidence/v061-release/phase3b-resume/notion-readback.json)。ops HEAD c3578aa6f8c18bc0ee39bcd14da95703aaad3098独立留档不合入。回滚仅v0.6.0 Final493eb23b034b0410780228535b3e293e4ee91f9a，兼容标志须Owner另批。**全部业务验收已完成。** [发布记录](releases/v0.6.1-preproduction.md) · [运维收官](releases/plotnovel-b47-republish-and-preview-34-2026-10-16.md)。
 
 ### v0.6.0 —— 已部署正式站（2026-10-14 16:51:08 JST / 15:51:08 +0800）
 
@@ -517,7 +510,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发完成，公网检查STOP，34apply未执行 |
+| `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |
 | `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |

@@ -1,0 +1,11 @@
+{
+  "name": "08-coverage",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b-resume/coverage-v3-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792170069.367745,
+  "finishedAt": 1792170094.8356411
+}

@@ -1,0 +1,2 @@
+{"sequence": 1, "at": "2026-10-16T16:59:09.687155+00:00", "method": "GET", "url": "https://pulsenovels.com/go/r2y1duq8sl", "kind": "go", "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8", "proxy": "http://127.0.0.1:7899", "followRedirects": false}
+{"sequence": 2, "at": "2026-10-16T16:59:11.934700+00:00", "method": "GET", "url": "https://pulsenovels.com/go/r2y1duq8sl/app", "kind": "interstitial", "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8", "proxy": "http://127.0.0.1:7899", "followRedirects": false}

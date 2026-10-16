@@ -1,0 +1,12 @@
+test_all_digit_boundaries_not_word_boundaries (__main__.BoundaryChecks.test_all_digit_boundaries_not_word_boundaries) ... ok
+test_attributes_and_json_keys_are_redacted (__main__.BoundaryChecks.test_attributes_and_json_keys_are_redacted) ... ok
+test_location_is_scanned (__main__.BoundaryChecks.test_location_is_scanned) ... ok
+test_other_code_on_interstitial_stops_and_snapshot_redacts_all (__main__.BoundaryChecks.test_other_code_on_interstitial_stops_and_snapshot_redacts_all) ... ok
+test_own_interstitial_policy_unchanged (__main__.BoundaryChecks.test_own_interstitial_policy_unchanged) ... ok
+test_timestamp_is_accidental (__main__.BoundaryChecks.test_timestamp_is_accidental) ... ok
+test_unicode_escape_is_scanned (__main__.BoundaryChecks.test_unicode_escape_is_scanned) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.000s
+
+OK
