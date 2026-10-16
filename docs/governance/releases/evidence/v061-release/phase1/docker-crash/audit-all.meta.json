@@ -1,0 +1,14 @@
+{
+  "name": "audit-all",
+  "command": [
+    "npm",
+    "audit",
+    "--json",
+    "--proxy",
+    "http://127.0.0.1:7899"
+  ],
+  "startedAt": 1792133767.6864178,
+  "finishedAt": 1792133774.526803,
+  "exitCode": 1,
+  "durationSeconds": 6.84038519859314
+}

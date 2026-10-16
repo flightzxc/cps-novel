@@ -1,0 +1,11 @@
+{
+  "name": "run-sitemap-refresh-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-sitemap-refresh-postgres-verification.sh"
+  ],
+  "startedAt": 1792133390.9999459,
+  "finishedAt": 1792133427.978923,
+  "exitCode": 0,
+  "durationSeconds": 36.97897720336914
+}

@@ -1,0 +1,11 @@
+{
+  "name": "brand-image",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-brand-image.sh"
+  ],
+  "startedAt": 1792133775.250379,
+  "finishedAt": 1792136158.9184692,
+  "exitCode": 1,
+  "durationSeconds": 2383.6680901050568
+}

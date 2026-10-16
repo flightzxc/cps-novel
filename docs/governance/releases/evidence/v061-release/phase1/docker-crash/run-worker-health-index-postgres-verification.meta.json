@@ -1,0 +1,11 @@
+{
+  "name": "run-worker-health-index-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-worker-health-index-postgres-verification.sh"
+  ],
+  "startedAt": 1792133515.247694,
+  "finishedAt": 1792133524.748554,
+  "exitCode": 0,
+  "durationSeconds": 9.50085997581482
+}

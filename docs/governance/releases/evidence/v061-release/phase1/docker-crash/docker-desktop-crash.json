@@ -1,0 +1,9 @@
+{
+  "dockerDesktopError": "panic invalid memory address or nil pointer dereference; SIGSEGV",
+  "cliError": "Docker Desktop is unable to start",
+  "terminatedOwnBuildClientPids": [
+    58759
+  ],
+  "reason": "backend crashed; build command no longer making progress",
+  "dockerOrSystemConfigurationChanged": false
+}

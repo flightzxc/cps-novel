@@ -1,0 +1,11 @@
+{
+  "name": "run-worker-light-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-worker-light-postgres-verification.sh"
+  ],
+  "startedAt": 1792133524.78765,
+  "finishedAt": 1792133529.478357,
+  "exitCode": 0,
+  "durationSeconds": 4.690706968307495
+}

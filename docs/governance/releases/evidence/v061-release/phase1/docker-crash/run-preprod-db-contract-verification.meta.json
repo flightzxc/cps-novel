@@ -1,0 +1,11 @@
+{
+  "name": "run-preprod-db-contract-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-preprod-db-contract-verification.sh"
+  ],
+  "startedAt": 1792133233.99755,
+  "finishedAt": 1792133241.847868,
+  "exitCode": 0,
+  "durationSeconds": 7.85031795501709
+}

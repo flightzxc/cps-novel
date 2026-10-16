@@ -1,0 +1,11 @@
+{
+  "name": "run-article-template-version-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-article-template-version-postgres-verification.sh"
+  ],
+  "startedAt": 1792129365.49369,
+  "finishedAt": 1792129370.8896132,
+  "exitCode": 0,
+  "durationSeconds": 5.395923137664795
+}

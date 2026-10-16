@@ -1,0 +1,30 @@
+{
+  "status": "stopped_docker_desktop_backend_crash",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "tree": "34d2fcbc052762544cefec1f97466b2d1e786762",
+  "runnersPassed": 37,
+  "p105bNetworkRetryUsed": 1,
+  "p105bAdditionalRetriesUsed": 0,
+  "extrasPassed": [
+    "compose",
+    "b21",
+    "nginx-matrix",
+    "public-cutover-mutations"
+  ],
+  "auditProduction": {
+    "critical": 0,
+    "high": 4
+  },
+  "auditAll": {
+    "critical": 0,
+    "high": 11
+  },
+  "brandGate": "failed_backend_unavailable_own_client_terminated",
+  "imageE2e": "not_run",
+  "pushed": false,
+  "archiveBuilt": false,
+  "productionConnected": false,
+  "heavyLockReleased": true,
+  "referenceRepositoriesUnchanged": true,
+  "npmEconnresetRetryUsed": 0
+}

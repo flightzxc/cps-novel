@@ -1,0 +1,11 @@
+{
+  "name": "run-novel-article-decouple-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-novel-article-decouple-postgres-verification.sh"
+  ],
+  "startedAt": 1792129438.788033,
+  "finishedAt": 1792129444.288053,
+  "exitCode": 0,
+  "durationSeconds": 5.5000200271606445
+}

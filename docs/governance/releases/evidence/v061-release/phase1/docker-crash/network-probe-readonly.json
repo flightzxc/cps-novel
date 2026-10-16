@@ -1,0 +1,6 @@
+{
+  "proxy": "http://127.0.0.1:7899",
+  "npmRegistryHeadStatus": 200,
+  "prismaRootHeadStatus": 404,
+  "networkConfigurationChanged": false
+}

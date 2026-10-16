@@ -1,0 +1,11 @@
+{
+  "name": "run-x6-site-setting-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-x6-site-setting-postgres-verification.sh"
+  ],
+  "startedAt": 1792133531.657846,
+  "finishedAt": 1792133541.0352871,
+  "exitCode": 0,
+  "durationSeconds": 9.377441167831421
+}
