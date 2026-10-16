@@ -195,11 +195,11 @@ function persisted(outcome: { error?: unknown }) {
 // ---------------------------------------------------------------------------
 
 describe("试读读取失败：条目 error.detail 带类别（B-36）", () => {
-  it("getchapterinfo 解析失败（第 1 章正文为 null）：类别 + 位置，顶层 code/message 不变", async () => {
-    // B-42 之后空串正文不再是失败（见文末 B-42 一段）；null 正文仍是上游形态错误。
+  it("getchapterinfo 解析失败（第 1 章正文缺失）：类别 + 位置，顶层 code/message 不变", async () => {
+    // B-42 之后空串 / 空白 / null 正文都不再是失败（见文末 B-42 一段）；正文缺失仍是上游形态错误。
     const { outcome, adapter, events } = await run({
       fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([
-        chapterRow({ chapterContent: null }),
+        chapterRow({ chapterContent: undefined }),
         chapterRow({ i: 2, chapterID: "c-2" }),
         chapterRow({ i: 3, chapterID: "c-3" }),
       ]))),
@@ -215,7 +215,7 @@ describe("试读读取失败：条目 error.detail 带类别（B-36）", () => {
       stage: "getchapterinfo",
       errorClass: "MoboreaderAdapterError",
       adapterCode: "malformed_payload",
-      receivedType: "null",
+      receivedType: "undefined",
       chapterIndex: 0,
       chapterOrdinal: 1,
       chapterCount: 3,
@@ -288,7 +288,7 @@ describe("试读读取失败：条目 error.detail 带类别（B-36）", () => {
     ["i 为 0", chapterBody([chapterRow({ i: 0 })]), { kind: "chapter_ordinal_below_one", chapterOrdinal: 0 }],
     ["chapterID 为 null", chapterBody([chapterRow({ chapterID: null })]), { kind: "chapter_id_invalid", receivedType: "null", chapterOrdinal: 1 }],
     ["正文缺失", chapterBody([chapterRow({ chapterContent: undefined })]), { kind: "chapter_content_invalid", receivedType: "undefined" }],
-    ["正文为 null", chapterBody([chapterRow({ chapterContent: null })]), { kind: "chapter_content_invalid", receivedType: "null" }],
+    ["正文是对象", chapterBody([chapterRow({ chapterContent: { text: BODY } })]), { kind: "chapter_content_invalid", receivedType: "object" }],
     ["正文是数字", chapterBody([chapterRow({ chapterContent: 7 })]), { kind: "chapter_content_invalid", receivedType: "integer" }],
     ["章节身份重复", chapterBody([chapterRow(), chapterRow()]), { kind: "chapter_identity_duplicate", chapterIndex: 1, chapterOrdinal: 1 }],
     ["bookId 为 null", { data: { bookId: null, currentLanguage: 1, chapterList: [chapterRow()] } }, { kind: "book_id_invalid", receivedType: "null" }],
@@ -450,9 +450,9 @@ describe("试读读取失败：记录内容不含正文（B-36 脱敏）", () =>
 
   it("真实解析器报的错：位置信息是数字，章节 id 是 id，正文只在上游响应里、不在任何记录里", async () => {
     const { outcome, events } = await run({
-      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow(), chapterRow({ i: 2, chapterID: "c-2", chapterContent: null })]))),
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow(), chapterRow({ i: 2, chapterID: "c-2", chapterContent: undefined })]))),
     });
-    expect(detailOf(outcome)).toMatchObject({ kind: "chapter_content_invalid", receivedType: "null", chapterIndex: 1, chapterOrdinal: 2 });
+    expect(detailOf(outcome)).toMatchObject({ kind: "chapter_content_invalid", receivedType: "undefined", chapterIndex: 1, chapterOrdinal: 2 });
     expect(events[0]).toMatchObject({ chapterId: "c-2", chapterCount: 2 });
     expect(everythingRecorded(outcome, events)).not.toContain(BODY);
   });
@@ -465,7 +465,7 @@ describe("试读读取失败：记录内容不含正文（B-36 脱敏）", () =>
 describe("试读读取失败：对外兼容（B-36）", () => {
   it("后台任务页的展示不变：detail 不会被投影出来，文案与没有 detail 时逐字相同", async () => {
     const { outcome } = await run({
-      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow({ chapterContent: null })]))),
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow({ chapterContent: undefined })]))),
     });
     const withDetail = projectSafeTaskFailure(persisted(outcome));
     const legacyShape = projectSafeTaskFailure({ code: "upstream_preview_read_failed", message: "MoboReader Preview read failed" });
@@ -490,7 +490,7 @@ describe("试读读取失败：对外兼容（B-36）", () => {
     const lines: string[] = [];
     vi.spyOn(console, "error").mockImplementation((line?: unknown) => { lines.push(String(line)); });
     await run({
-      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow({ chapterContent: null })]))),
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([chapterRow({ chapterContent: undefined })]))),
     }, { sink: null });
     expect(lines).toHaveLength(1);
     const parsed = JSON.parse(lines[0]!);
@@ -575,6 +575,38 @@ describe("B-42：空正文与 null 章节列表不再算失败", () => {
     expect(outcome.protectedWrite).toBeUndefined();
     expect(outcome.error).toBeUndefined();
     expect(calls).toHaveLength(0);
+  });
+
+  it("正文为 null（Owner 2026-10-16：按空正文处理）：跳过这一章，条目成功；全部为 null 记为无试读", async () => {
+    const { calls, sink } = sinkCollector();
+    const partial = await run({
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([
+        chapterRow(),
+        chapterRow({ i: 2, chapterID: "c-2", chapterContent: null }),
+        chapterRow({ i: 3, chapterID: "c-3" }),
+      ]))),
+    }, { sink });
+    expect(partial.outcome.status).toBe("success");
+    expect(partial.outcome.result).toEqual({ materialTypeSource: expect.any(String), upstreamCount: 3, emptyChapterNumbers: [2] });
+    const allNull = await run({
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([
+        chapterRow({ chapterContent: null }),
+        chapterRow({ i: 2, chapterID: "c-2", chapterContent: "" }),
+      ]))),
+    }, { sink });
+    expect(allNull.outcome).toMatchObject({ status: "skipped", result: { reason: "upstream_preview_all_chapters_empty", emptyChapterNumbers: [1, 2] } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("🔴 只放宽 null：正文缺失（字段不存在 / undefined）仍是失败", async () => {
+    const { outcome } = await run({
+      fetchPreviewChapters: vi.fn(async () => parsePreviewChaptersResponse(chapterBody([
+        chapterRow(),
+        chapterRow({ i: 2, chapterID: "c-2", chapterContent: undefined }),
+      ]))),
+    });
+    expect(outcome.status).toBe("failed");
+    expect(detailOf(outcome)).toMatchObject({ kind: "chapter_content_invalid", receivedType: "undefined", chapterIndex: 1 });
   });
 
   it("🔴 只认 null：chapterList 缺失 / 是字符串 / 是对象仍是失败", async () => {
