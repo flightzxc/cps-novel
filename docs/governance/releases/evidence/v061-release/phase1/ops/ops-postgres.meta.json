@@ -1,0 +1,11 @@
+{
+  "name": "ops-postgres",
+  "command": [
+    "/bin/bash",
+    "scripts/run-plotnovel-bulk-ops-postgres-verification.sh"
+  ],
+  "startedAt": 1792129265.9045582,
+  "finishedAt": 1792129272.31824,
+  "exitCode": 0,
+  "durationSeconds": 6.413681745529175
+}

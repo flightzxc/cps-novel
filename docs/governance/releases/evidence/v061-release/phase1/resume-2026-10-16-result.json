@@ -1,0 +1,41 @@
+{
+  "status": "stopped_runner_infrastructure_failure",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "tree": "34d2fcbc052762544cefec1f97466b2d1e786762",
+  "opsHead": "c3578aa6f8c18bc0ee39bcd14da95703aaad3098",
+  "fixtureCorrected": true,
+  "opsUnit": {
+    "passed": 19,
+    "failed": 0
+  },
+  "opsPostgres": {
+    "files": 2,
+    "passed": 29,
+    "skipped": 0
+  },
+  "opsMutations": {
+    "identityVersion": "caught_positive_case",
+    "generationFailurePolicy": "caught",
+    "restoredClean": true
+  },
+  "build": "passed",
+  "dictionary": "passed",
+  "runnersPassed": [
+    "run-add-admin-identity-postgres-verification",
+    "run-article-blog-rebind-postgres-verification",
+    "run-article-publish-batch-postgres-verification",
+    "run-article-template-version-postgres-verification",
+    "run-catalog-batch-postgres-verification",
+    "run-effective-tag-projection-postgres-verification",
+    "run-indexnow-sweep-postgres-verification",
+    "run-next-proxy-probe-verification",
+    "run-novel-article-decouple-postgres-verification"
+  ],
+  "runnerFailed": "run-p1-05b-postgres-verification",
+  "failureCause": "docker pull postgres:16: Docker Hub /v2/ EOF before database setup",
+  "pushed": false,
+  "archiveBuilt": false,
+  "productionConnected": false,
+  "referenceRepositoriesUnchanged": true,
+  "heavyLockReleased": true
+}

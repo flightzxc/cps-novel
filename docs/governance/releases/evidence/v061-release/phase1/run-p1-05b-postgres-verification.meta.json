@@ -1,0 +1,11 @@
+{
+  "name": "run-p1-05b-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-p1-05b-postgres-verification.sh"
+  ],
+  "startedAt": 1792129444.321815,
+  "finishedAt": 1792129506.257566,
+  "exitCode": 1,
+  "durationSeconds": 61.93575096130371
+}

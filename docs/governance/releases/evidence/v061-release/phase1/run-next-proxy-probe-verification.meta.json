@@ -1,0 +1,11 @@
+{
+  "name": "run-next-proxy-probe-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-next-proxy-probe-verification.sh"
+  ],
+  "startedAt": 1792129427.028975,
+  "finishedAt": 1792129438.756768,
+  "exitCode": 0,
+  "durationSeconds": 11.727792978286743
+}

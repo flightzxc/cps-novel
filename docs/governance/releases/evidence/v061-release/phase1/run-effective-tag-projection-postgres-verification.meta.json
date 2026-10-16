@@ -1,0 +1,11 @@
+{
+  "name": "run-effective-tag-projection-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-effective-tag-projection-postgres-verification.sh"
+  ],
+  "startedAt": 1792129392.078051,
+  "finishedAt": 1792129403.1356978,
+  "exitCode": 0,
+  "durationSeconds": 11.057646751403809
+}

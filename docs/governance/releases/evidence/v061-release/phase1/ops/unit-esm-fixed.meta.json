@@ -1,0 +1,16 @@
+{
+  "name": "unit-esm-fixed",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "--project",
+    "node",
+    "tests/backend/ops/plotnovel-bulk-generate-publish.test.ts"
+  ],
+  "startedAt": 1792129240.667687,
+  "finishedAt": 1792129242.052949,
+  "exitCode": 0,
+  "durationSeconds": 1.3852620124816895
+}

@@ -1,0 +1,65 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/plotnovel-b47-ops
+
+ ❯ |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts (19 tests | 2 failed) 11ms
+     ✓ 1989 unique IDs produce frozen 500/500/500/489 waves and <=200 blocks 3ms
+     ✓ pins full file bytes using an external digest, not an embedded checksum 2ms
+     ✓ rejects wrong confirmations, duplicate arguments and fractional wave numbers 1ms
+     ✓ rejects reordered blocks and an altered operation date 0ms
+     ✓ rejects every template failure, including a single failure among the 58 target books 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% null threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% {} threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed', message: 'Item finalize failed: Error' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed', message: 'Item finalize failed: 42501' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'other_failure', message: 'Item finalize failed: TemplateRenderError' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed', message: 'Item finalize failed: TemplateRenderError extra' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed', message: 'prefix Item finalize failed: TemplateRenderError' } threshold: undefined 0ms
+     ✓ stops on any unknown/missing/non-exact failure even below the old 2% { code: 'finalize_failed', detail: { errorName: 'TemplateRenderError' } } threshold: undefined 0ms
+     ✓ allows no failures and fails closed on an invalid denominator 0ms
+     × checks production identity before business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.1","expected":"owner_admin_refused"} 3ms
+     × checks production identity before business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.0","expected":"production_identity_mismatch"} 0ms
+     ✓ checks production identity before business access: {"cwd":"/app","commit":"0000000000000000000000000000000000000000","version":"0.6.1","expected":"production_identity_mismatch"} 0ms
+     ✓ checks production identity before business access: {"cwd":"/tmp","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.1","expected":"production_identity_mismatch"} 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts > PlotNovel production identity remains fail closed through the command entrypoint > checks production identity before business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.1","expected":"owner_admin_refused"}
+AssertionError: expected [Function] to throw error including 'owner_admin_refused' but got 'production_identity_mismatch'
+
+Expected: "owner_admin_refused"
+Received: "production_identity_mismatch"
+
+ ❯ tests/backend/ops/plotnovel-bulk-generate-publish.test.ts:100:131
+     98|     const cwd = vi.spyOn(process, "cwd").mockReturnValue(identity.cwd);
+     99|     restoreCwd = () => cwd.mockRestore();
+    100|     await expect(runCommand(parseArgs(["plan", "--actor-id", actor, "-…
+       |                                                                                                                                   ^
+    101|     expect(read).toHaveBeenCalledWith("/app/.build-metadata.json", "ut…
+    102|     expect(execute).toHaveBeenCalledExactlyOnceWith("SET TRANSACTION R…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts > PlotNovel production identity remains fail closed through the command entrypoint > checks production identity before business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.0","expected":"production_identity_mismatch"}
+AssertionError: expected [Function] to throw error including 'production_identity_mismatch' but got 'owner_admin_refused'
+
+Expected: "production_identity_mismatch"
+Received: "owner_admin_refused"
+
+ ❯ tests/backend/ops/plotnovel-bulk-generate-publish.test.ts:100:131
+     98|     const cwd = vi.spyOn(process, "cwd").mockReturnValue(identity.cwd);
+     99|     restoreCwd = () => cwd.mockRestore();
+    100|     await expect(runCommand(parseArgs(["plan", "--actor-id", actor, "-…
+       |                                                                                                                                   ^
+    101|     expect(read).toHaveBeenCalledWith("/app/.build-metadata.json", "ut…
+    102|     expect(execute).toHaveBeenCalledExactlyOnceWith("SET TRANSACTION R…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 17 passed (19)
+   Start at  14:41:25
+   Duration  126ms (transform 26ms, setup 0ms, import 38ms, tests 11ms, environment 0ms)
+
+JSON report written to /Users/chenweifeng/Documents/cps海阅/plotnovel-b47-ops/.tmp/v061-release/phase1/identity-version-mutation.json

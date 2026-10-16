@@ -1,0 +1,12 @@
+{
+  "name": "lint-esm-fixed",
+  "command": [
+    "npm",
+    "run",
+    "lint"
+  ],
+  "startedAt": 1792129244.296381,
+  "finishedAt": 1792129256.856763,
+  "exitCode": 0,
+  "durationSeconds": 12.560381889343262
+}

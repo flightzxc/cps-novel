@@ -1,0 +1,16 @@
+{
+  "name": "unit-after-mutations",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "--project",
+    "node",
+    "tests/backend/ops/plotnovel-bulk-generate-publish.test.ts"
+  ],
+  "startedAt": 1792129286.445782,
+  "finishedAt": 1792129286.912274,
+  "exitCode": 0,
+  "durationSeconds": 0.4664919376373291
+}

@@ -1,0 +1,12 @@
+RESUME_PHASE1=STOPPED reason=p1_05b_docker_hub_eof
+OPS_UNIT=PASS passed=19 failed=0
+PLOTNOVEL_INTEGRATION=PASS files=2 passed=29 skipped=0
+OPS_MUTATIONS=PASS groups=2 restored_clean=yes
+BUILD=PASS
+DICTIONARY_STATIC=PASS models=58 records=1349 active=1279
+NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0
+RUNNERS_PASSED=9_OF_37
+RUNNER_STOP=run-p1-05b-postgres-verification exit=1 before_database_setup
+PUSHED=no ARCHIVE_BUILT=no PRODUCTION_CONNECTED=no
+CPS_REFERENCE_UNCHANGED=PASS
+HEAVY_LOCK_RELEASED=yes
