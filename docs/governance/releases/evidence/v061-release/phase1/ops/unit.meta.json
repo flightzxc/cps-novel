@@ -1,0 +1,16 @@
+{
+  "name": "unit",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "--project",
+    "node",
+    "tests/backend/ops/plotnovel-bulk-generate-publish.test.ts"
+  ],
+  "startedAt": 1792127645.0152278,
+  "finishedAt": 1792127646.902417,
+  "exitCode": 1,
+  "durationSeconds": 1.8871891498565674
+}

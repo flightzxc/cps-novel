@@ -1,0 +1,27 @@
+{
+  "status": "stopped_gate_failure",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "tree": "34d2fcbc052762544cefec1f97466b2d1e786762",
+  "opsCodeHead": "3a7c948ef9151524bda348a34dcfa695e62d7a65",
+  "fullTestInitial": {
+    "numTotalTests": 12297,
+    "numPassedTests": 11423,
+    "numFailedTests": 1,
+    "numPendingTests": 873
+  },
+  "allowedTimeoutRetry": {
+    "numTotalTests": 68,
+    "numPassedTests": 68,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "opsUnit": {
+    "passed": 15,
+    "failed": 3,
+    "cause": "ESM namespace readFileSync cannot be spied on; new test harness fails before production identity check"
+  },
+  "pushed": false,
+  "archiveBuilt": false,
+  "productionConnected": false,
+  "heavyLockReleased": true
+}

@@ -1,0 +1,24 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.1
+
+ ✓ |node| tests/backend/runtime/admin-login-turnstile-config-contract.test.ts (68 tests) 17644ms
+     ✓ no committed file carries a real-looking Turnstile key (only the published dummy ones)  593ms
+     ✓ switch off / unset / TRUE: the file is not even looked at (it may not exist) and the boot log is quiet  3275ms
+     ✓ switch true + readable one-line file: the value reaches node (without being printed) and preflights run in order  790ms
+     ✓ switch true + missing file: warns on stderr and keeps booting with NO secret (admin login then refuses; the public site stays up)  761ms
+     ✓ switch true + /dev/null (the off-state mount): warns on stderr and keeps booting with NO secret (admin login then refuses; the public site stays up)  723ms
+     ✓ switch true + empty file: warns on stderr and keeps booting with NO secret (admin login then refuses; the public site stays up)  735ms
+     ✓ switch true + multi-line file: warns on stderr and keeps booting with NO secret (admin login then refuses; the public site stays up)  748ms
+     ✓ switch true + relative path: warns on stderr and keeps booting with NO secret (admin login then refuses; the public site stays up)  785ms
+     ✓ switch true with BOTH a direct value and a file is refused as ambiguous (the file is not silently preferred)  725ms
+       ✓ switch true + a correct file: PASS, probed as the app uid (readable) and the postgres uid (not readable)  1609ms
+       ✓ switch off: PASS and the Turnstile file is never probed  1546ms
+       ✓ switch true: a postgres-readable file FAILs the negative probe  1692ms
+       ✓ switch true: a wrong named-ACL permission FAILs consumer_acl  655ms
+
+ Test Files  1 passed (1)
+      Tests  68 passed (68)
+   Start at  14:14:17
+   Duration  17.86s (transform 41ms, setup 0ms, import 134ms, tests 17.64s, environment 0ms)
+
+JSON report written to /Users/chenweifeng/Documents/cps海阅/release-v0.6.1/.tmp/v061-release/phase1/test-turnstile-retry.json

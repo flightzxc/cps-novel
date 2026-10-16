@@ -1,0 +1,20 @@
+{
+  "name": "test-turnstile-retry",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "--project",
+    "node",
+    "--maxWorkers=1",
+    "tests/backend/runtime/admin-login-turnstile-config-contract.test.ts",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=.tmp/v061-release/phase1/test-turnstile-retry.json"
+  ],
+  "startedAt": 1792127657.120728,
+  "finishedAt": 1792127675.428849,
+  "exitCode": 0,
+  "durationSeconds": 18.30812096595764
+}

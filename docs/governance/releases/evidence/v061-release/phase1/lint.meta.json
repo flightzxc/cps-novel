@@ -1,0 +1,12 @@
+{
+  "name": "lint",
+  "command": [
+    "npm",
+    "run",
+    "lint"
+  ],
+  "startedAt": 1792127474.258432,
+  "finishedAt": 1792127487.474271,
+  "exitCode": 0,
+  "durationSeconds": 13.215839147567749
+}

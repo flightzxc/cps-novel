@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/plotnovel-b47-ops
+
+ ❯ |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts (18 tests | 3 failed) 8ms
+     × rejects mismatched production identity before any business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.0"} 2ms
+     × rejects mismatched production identity before any business access: {"cwd":"/app","commit":"0000000000000000000000000000000000000000","version":"0.6.1"} 0ms
+     × rejects mismatched production identity before any business access: {"cwd":"/tmp","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.1"} 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts > PlotNovel production identity remains fail closed through the command entrypoint > rejects mismatched production identity before any business access: {"cwd":"/app","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.0"}
+ FAIL  |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts > PlotNovel production identity remains fail closed through the command entrypoint > rejects mismatched production identity before any business access: {"cwd":"/app","commit":"0000000000000000000000000000000000000000","version":"0.6.1"}
+ FAIL  |node| tests/backend/ops/plotnovel-bulk-generate-publish.test.ts > PlotNovel production identity remains fail closed through the command entrypoint > rejects mismatched production identity before any business access: {"cwd":"/tmp","commit":"cb255e0f1c93041eda6aefeefbb541d7eddfc15f","version":"0.6.1"}
+TypeError: Cannot spy on export "readFileSync". Module namespace is not configurable in ESM. See: https://vitest.dev/guide/browser/#limitations
+ ❯ tests/backend/ops/plotnovel-bulk-generate-publish.test.ts:81:21
+     79|     const tx = { $executeRawUnsafe: execute, $queryRaw: query, adminId…
+     80|     const db = { $transaction: async (callback: (transaction: typeof t…
+     81|     const read = vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.str…
+       |                     ^
+     82|     const cwd = vi.spyOn(process, "cwd").mockReturnValue(identity.cwd);
+     83|     try {
+
+Caused by: TypeError: Cannot redefine property: readFileSync
+ ❯ tests/backend/ops/plotnovel-bulk-generate-publish.test.ts:81:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 15 passed (18)
+   Start at  14:14:06
+   Duration  110ms (transform 18ms, setup 0ms, import 26ms, tests 8ms, environment 0ms)
+
