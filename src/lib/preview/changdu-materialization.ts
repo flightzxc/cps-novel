@@ -20,8 +20,8 @@ export interface ChangduPreviewPlan {
 }
 
 /**
- * B-42：正文是否为空（空串或纯空白）。与此前适配器拒绝空正文用的是同一个判定
- * （`!content.trim()`），只是从"整本失败"改成"跳过这一章"。
+ * B-42：正文是否为空（空串或纯空白；上游 null 正文已由适配器规范化成空串）。与此前适配器
+ * 拒绝空正文用的是同一个判定（`!content.trim()`），只是从"整本失败"改成"跳过这一章"。
  */
 export function isBlankPreviewContent(content: string): boolean {
   return content.trim() === "";

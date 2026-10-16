@@ -288,6 +288,17 @@ describe.skipIf(!enabled).sequential("publication preview real roles", () => {
     expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 3 });
   });
 
+  it("B-42 正文为 null 按空正文处理（Owner 10-16）：跳过该章，其余章节照常物化", async () => {
+    const row = await seed(0, foundation.account, true);
+    const task = await previewTask([row.source.id]);
+    expect(await previewCycles([previewRow(1, null), previewRow(2, "two"), previewRow(3, "three")])).toBe(1);
+    expect(await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task.id } })).toMatchObject({ status: "success", error: null, result: {
+      upstreamCount: 3, emptyChapterNumbers: [1], materializedCount: 2, contentWrites: 2, staleCount: 0, preservedCount: 0,
+    } });
+    expect((await chaptersOf(row.novel.id)).map((c) => [c.canonicalChapterNumber, c.status, c.content?.body])).toEqual([[2, "preview", "two"], [3, "preview", "three"]]);
+    expect(await owner.novelPreviewPolicy.findUniqueOrThrow({ where: { novelId: row.novel.id } })).toMatchObject({ materializedChapterCount: 2 });
+  });
+
   it("B-42 保留只限空章节号：不在本次计划里、也不是空章号的旧章节照常置 stale", async () => {
     const row = await seed(0, foundation.account, true);
     await previewTask([row.source.id]);
