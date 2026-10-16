@@ -1,0 +1,11 @@
+{
+  "name": "phase1-validation",
+  "command": [
+    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+    ".tmp/v061-release/phase1/validate-phase1.py"
+  ],
+  "startedAt": 1792152751.09653,
+  "finishedAt": 1792152751.2370272,
+  "exitCode": 0,
+  "durationSeconds": 0.14049720764160156
+}

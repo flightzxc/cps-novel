@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-brand-owner-resume-econnreset-1",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1792138163.795156,
+  "finishedAt": 1792138164.3163562,
+  "exitCode": 0,
+  "durationSeconds": 0.5212001800537109
+}

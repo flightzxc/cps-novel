@@ -1,0 +1,11 @@
+{
+  "name": "run-tagging-public-auto-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-tagging-public-auto-postgres-verification.sh"
+  ],
+  "startedAt": 1792133458.291307,
+  "finishedAt": 1792133505.3580642,
+  "exitCode": 0,
+  "durationSeconds": 47.06675720214844
+}

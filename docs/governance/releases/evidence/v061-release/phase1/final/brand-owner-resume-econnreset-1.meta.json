@@ -1,0 +1,11 @@
+{
+  "name": "brand-owner-resume-econnreset-1",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-brand-image.sh"
+  ],
+  "startedAt": 1792138164.3455539,
+  "finishedAt": 1792138226.0587919,
+  "exitCode": 130,
+  "durationSeconds": 61.71323800086975
+}

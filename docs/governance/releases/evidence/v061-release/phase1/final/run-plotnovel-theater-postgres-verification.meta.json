@@ -1,0 +1,11 @@
+{
+  "name": "run-plotnovel-theater-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-plotnovel-theater-postgres-verification.sh"
+  ],
+  "startedAt": 1792133222.0715148,
+  "finishedAt": 1792133233.956944,
+  "exitCode": 0,
+  "durationSeconds": 11.88542914390564
+}

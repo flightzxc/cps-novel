@@ -1,0 +1,12 @@
+{
+  "name": "typecheck-esm-fixed",
+  "command": [
+    "npm",
+    "run",
+    "typecheck"
+  ],
+  "startedAt": 1792129242.079853,
+  "finishedAt": 1792129244.2722938,
+  "exitCode": 0,
+  "durationSeconds": 2.1924407482147217
+}

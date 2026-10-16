@@ -1,0 +1,9 @@
+START identity-version-mutation
+END identity-version-mutation exit=1 seconds=0.5
+MUTATION_CAUGHT=PASS name=identity-version-mutation failures=2
+START failure-policy-mutation
+END failure-policy-mutation exit=1 seconds=0.4
+MUTATION_CAUGHT=PASS name=failure-policy-mutation failures=1
+START unit-after-mutations
+END unit-after-mutations exit=0 seconds=0.5
+OPS_MUTATIONS=PASS groups=2 restored_clean=yes

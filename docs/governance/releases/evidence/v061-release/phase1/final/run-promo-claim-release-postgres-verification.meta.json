@@ -1,0 +1,11 @@
+{
+  "name": "run-promo-claim-release-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-promo-claim-release-postgres-verification.sh"
+  ],
+  "startedAt": 1792133256.967645,
+  "finishedAt": 1792133262.745517,
+  "exitCode": 0,
+  "durationSeconds": 5.777872085571289
+}

@@ -1,0 +1,11 @@
+{
+  "name": "run-revenue-dashboard-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-revenue-dashboard-postgres-verification.sh"
+  ],
+  "startedAt": 1792133378.304184,
+  "finishedAt": 1792133385.6974988,
+  "exitCode": 0,
+  "durationSeconds": 7.393314838409424
+}

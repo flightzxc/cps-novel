@@ -1,0 +1,19 @@
+{
+  "name": "identity-version-mutation",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "--project",
+    "node",
+    "tests/backend/ops/plotnovel-bulk-generate-publish.test.ts",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=.tmp/v061-release/phase1/identity-version-mutation.json"
+  ],
+  "startedAt": 1792129285.3887942,
+  "finishedAt": 1792129285.879074,
+  "exitCode": 1,
+  "durationSeconds": 0.4902799129486084
+}

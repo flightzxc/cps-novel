@@ -1,0 +1,11 @@
+{
+  "name": "git-push-final",
+  "command": [
+    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+    ".tmp/v061-release/phase1/push-phase1.py"
+  ],
+  "startedAt": 1792152714.9141812,
+  "finishedAt": 1792152732.815867,
+  "exitCode": 0,
+  "durationSeconds": 17.90168571472168
+}

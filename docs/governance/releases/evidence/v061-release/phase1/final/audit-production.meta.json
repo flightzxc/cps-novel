@@ -1,0 +1,15 @@
+{
+  "name": "audit-production",
+  "command": [
+    "npm",
+    "audit",
+    "--omit=dev",
+    "--json",
+    "--proxy",
+    "http://127.0.0.1:7899"
+  ],
+  "startedAt": 1792133761.5325708,
+  "finishedAt": 1792133767.66169,
+  "exitCode": 1,
+  "durationSeconds": 6.129119157791138
+}

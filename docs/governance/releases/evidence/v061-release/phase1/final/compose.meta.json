@@ -1,0 +1,11 @@
+{
+  "name": "compose",
+  "command": [
+    "/bin/bash",
+    ".tmp/v061-release/phase1/compose-check.sh"
+  ],
+  "startedAt": 1792133554.217816,
+  "finishedAt": 1792133554.873297,
+  "exitCode": 0,
+  "durationSeconds": 0.6554808616638184
+}

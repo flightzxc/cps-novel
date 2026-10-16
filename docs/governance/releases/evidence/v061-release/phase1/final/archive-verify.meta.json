@@ -1,0 +1,20 @@
+{
+  "name": "archive-verify",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-release-archive.sh",
+    "--manifest",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.1/.tmp/preproduction-archive/cb255e0f1c93041eda6aefeefbb541d7eddfc15f.json",
+    "--dir",
+    "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.1/.tmp/preproduction-archive",
+    "--expected-archive-sha256",
+    "fd28086213f154430d302024840a154824d394cecfe4af24a12966e3636bee13",
+    "--approved-commit",
+    "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+    "--load"
+  ],
+  "startedAt": 1792152743.229776,
+  "finishedAt": 1792152749.633404,
+  "exitCode": 0,
+  "durationSeconds": 6.40362811088562
+}

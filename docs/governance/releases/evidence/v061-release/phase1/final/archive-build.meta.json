@@ -1,0 +1,14 @@
+{
+  "name": "archive-build",
+  "command": [
+    "env",
+    "APPROVED_GIT_COMMIT=cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+    "RELEASE_TARGET_PLATFORM=linux/amd64",
+    "/bin/bash",
+    "scripts/preproduction/build-release-archive.sh"
+  ],
+  "startedAt": 1792152733.2379892,
+  "finishedAt": 1792152743.105183,
+  "exitCode": 0,
+  "durationSeconds": 9.867193698883057
+}

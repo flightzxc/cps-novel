@@ -1,0 +1,11 @@
+{
+  "name": "brand-econnreset-retry-home-resume",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-brand-image.sh"
+  ],
+  "startedAt": 1792152448.313767,
+  "finishedAt": 1792152675.706788,
+  "exitCode": 0,
+  "durationSeconds": 227.39302110671997
+}

@@ -1,0 +1,11 @@
+{
+  "name": "run-p2-02b-article-template-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-p2-02b-article-template-postgres-verification.sh"
+  ],
+  "startedAt": 1792133178.165691,
+  "finishedAt": 1792133185.6953988,
+  "exitCode": 0,
+  "durationSeconds": 7.529707908630371
+}

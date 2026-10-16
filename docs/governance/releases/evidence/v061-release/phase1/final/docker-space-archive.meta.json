@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-archive",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1792152732.855854,
+  "finishedAt": 1792152733.21518,
+  "exitCode": 0,
+  "durationSeconds": 0.3593258857727051
+}

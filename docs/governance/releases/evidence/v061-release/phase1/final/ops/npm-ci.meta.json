@@ -1,0 +1,14 @@
+{
+  "name": "npm-ci",
+  "command": [
+    "npm",
+    "ci",
+    "--proxy",
+    "http://127.0.0.1:7899",
+    "--no-audit"
+  ],
+  "startedAt": 1792127612.000708,
+  "finishedAt": 1792127618.659905,
+  "exitCode": 0,
+  "durationSeconds": 6.659196853637695
+}

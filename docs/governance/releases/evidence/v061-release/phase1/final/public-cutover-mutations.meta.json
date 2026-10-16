@@ -1,0 +1,11 @@
+{
+  "name": "public-cutover-mutations",
+  "command": [
+    "node",
+    "scripts/preproduction/verify-public-cutover-mutations.mjs"
+  ],
+  "startedAt": 1792133696.723066,
+  "finishedAt": 1792133744.211779,
+  "exitCode": 0,
+  "durationSeconds": 47.48871302604675
+}

@@ -19,8 +19,9 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.1 —— 第一阶段准备中，尚未部署（2026-10-16 JST）
+### v0.6.1 —— 第一阶段完成，待 Owner 授权部署（2026-10-16 JST）
 
+- 第一阶段全门禁、release/ops推送及linux/amd64不可变归档核对完成。Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`，tree `34d2fcbc052762544cefec1f97466b2d1e786762`；37个运行器全PASS，全量0failed，无Unhandled；ops真实库29/29、skipped0，两组变异被抓到并还原。部署及58本补发/34本重跑尚未执行；交付身份和完整证据见 [发布记录](releases/v0.6.1-preproduction.md)。
 - 版本类型 **PATCH**。基线 `3704cc028692510acc60fbc27187817535f97b23`（tree `097f86b16eb007685b67b5a50917118dc0eacb51`），集成线 `integration/v0.6.1-2026-10-16`，发布分支 `release/v0.6.1-2026-10-16`；来源 `fix/v061-cover-preview-sitemap`，已 no-ff 合入。
 - B-47：只在文章正文渲染时编码 absolute_url 中非英文字符，保持原校验约束；数据库、站点地图、og、书页图片封面原值不改。B-42：跳过空串、空白及 null 正文，保留旧试读章节；chapterList null 与全空正文记 skipped，缺失或非字符串正文仍按 B-36 失败。B-46：有章节写入、恢复或置 stale 时按试读任务入队一次站点地图刷新，沿用现有开关。
 - 迁移仍 **27 条**、业务表 **58 张**、字典 **1349 条 / active 1279 条**；零新增迁移、grants 不变、依赖不变、无新环境变量、无回填。公开网址继续冻结。
@@ -509,7 +510,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | `release/v0.6.1-2026-10-16`；基线 `3704cc02` | 第一阶段准备中，尚未部署 |
+| `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 第一阶段完成，待Owner授权部署 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |
 | `v0.5.14` | 2026-10-09 23:14:32 +0800 | PATCH | B-1/B-9 修复、nanoid 3.3.18、Vitest 4.1.11、网址冻结、PN-15 搜索默认关闭及文案修正；迁移 25、表 58 | Final `bf61b5ea276a0981870cdfa63578a822a65836f3`；annotated `v0.5.14`；`release/v0.5.14-2026-10-09` | 已部署正式站；A–E/自动 F PASS；搜索已合入、开关关闭；Owner 登录/2FA 待反馈 |

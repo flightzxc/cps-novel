@@ -1,0 +1,11 @@
+{
+  "name": "run-preview-account-hold-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-preview-account-hold-postgres-verification.sh"
+  ],
+  "startedAt": 1792133241.874963,
+  "finishedAt": 1792133245.7258298,
+  "exitCode": 0,
+  "durationSeconds": 3.8508667945861816
+}

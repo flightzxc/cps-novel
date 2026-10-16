@@ -1,0 +1,11 @@
+{
+  "name": "run-add-admin-identity-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-add-admin-identity-postgres-verification.sh"
+  ],
+  "startedAt": 1792129324.69819,
+  "finishedAt": 1792129328.929327,
+  "exitCode": 0,
+  "durationSeconds": 4.231137037277222
+}

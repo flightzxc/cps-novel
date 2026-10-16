@@ -1,0 +1,15 @@
+{
+  "name": "test-full",
+  "command": [
+    "npm",
+    "test",
+    "--",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=.tmp/v061-release/phase1/test-full.json"
+  ],
+  "startedAt": 1792127502.5086179,
+  "finishedAt": 1792127578.18902,
+  "exitCode": 1,
+  "durationSeconds": 75.68040204048157
+}

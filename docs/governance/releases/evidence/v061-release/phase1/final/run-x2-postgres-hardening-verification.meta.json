@@ -1,0 +1,11 @@
+{
+  "name": "run-x2-postgres-hardening-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-x2-postgres-hardening-verification.sh"
+  ],
+  "startedAt": 1792133529.509078,
+  "finishedAt": 1792133531.620688,
+  "exitCode": 0,
+  "durationSeconds": 2.111609935760498
+}

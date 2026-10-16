@@ -1,0 +1,12 @@
+{
+  "name": "docker-space-home-resume",
+  "command": [
+    "docker",
+    "system",
+    "df"
+  ],
+  "startedAt": 1792152447.427653,
+  "finishedAt": 1792152447.9297001,
+  "exitCode": 0,
+  "durationSeconds": 0.502047061920166
+}

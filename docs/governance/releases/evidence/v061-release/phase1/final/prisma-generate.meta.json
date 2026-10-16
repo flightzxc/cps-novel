@@ -1,0 +1,13 @@
+{
+  "name": "prisma-generate",
+  "command": [
+    "npx",
+    "--no-install",
+    "prisma",
+    "generate"
+  ],
+  "startedAt": 1792127458.741963,
+  "finishedAt": 1792127459.872313,
+  "exitCode": 0,
+  "durationSeconds": 1.130350112915039
+}

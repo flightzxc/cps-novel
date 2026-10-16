@@ -1,0 +1,12 @@
+{
+  "HTTPProxy": {
+    "configured": true,
+    "host": "http.docker.internal",
+    "port": 3128
+  },
+  "HTTPSProxy": {
+    "configured": true,
+    "host": "http.docker.internal",
+    "port": 3128
+  }
+}

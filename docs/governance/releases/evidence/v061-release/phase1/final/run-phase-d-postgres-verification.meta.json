@@ -1,0 +1,11 @@
+{
+  "name": "run-phase-d-postgres-verification",
+  "command": [
+    "/bin/bash",
+    "scripts/run-phase-d-postgres-verification.sh"
+  ],
+  "startedAt": 1792133195.611839,
+  "finishedAt": 1792133217.234144,
+  "exitCode": 0,
+  "durationSeconds": 21.622304916381836
+}
