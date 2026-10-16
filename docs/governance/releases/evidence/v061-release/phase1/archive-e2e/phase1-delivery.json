@@ -1,0 +1,51 @@
+{
+  "status": "phase1_complete_not_deployed",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "tree": "34d2fcbc052762544cefec1f97466b2d1e786762",
+  "archive": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.1/.tmp/preproduction-archive/cps-novel-0.6.1-cb255e0.tar.zst",
+  "archiveSha256": "fd28086213f154430d302024840a154824d394cecfe4af24a12966e3636bee13",
+  "manifest": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.1/.tmp/preproduction-archive/cb255e0f1c93041eda6aefeefbb541d7eddfc15f.json",
+  "ociTarget": "sha256:099626b13c3ead53079a118b0933af5bcbd871abf8846cc7008bf7a7b9637e58",
+  "ociPlatformManifest": "sha256:099626b13c3ead53079a118b0933af5bcbd871abf8846cc7008bf7a7b9637e58",
+  "ociConfig": "sha256:75f352a67db855c6b76a20f42c3d60ffa1a6421935e890ab60fab3f0f9fa521d",
+  "platform": "linux/amd64",
+  "opsHead": "c3578aa6f8c18bc0ee39bcd14da95703aaad3098",
+  "runnersPassed": 37,
+  "productionConnected": false,
+  "deploymentRequires": "Owner says 批准部署",
+  "generationRequires": "Owner reviews dry-run and says 批准补发",
+  "archiveBytes": 253465122,
+  "imageTag": "cps-novel:0.6.1-cb255e0",
+  "opsUnitPassed": 19,
+  "opsPostgresPassed": 29,
+  "opsPostgresSkipped": 0,
+  "opsMutationsCaught": 2,
+  "fullRegressionPassed": 11424,
+  "fullRegressionSkipped": 873,
+  "fullRegressionFailed": 0,
+  "unhandled": 0,
+  "typecheckErrors": 0,
+  "lintErrors": 0,
+  "lintWarnings": 16,
+  "dictionaryTotal": 1349,
+  "dictionaryActive": 1279,
+  "migrationCount": 27,
+  "auditProduction": {
+    "critical": 0,
+    "high": 4
+  },
+  "auditAll": {
+    "critical": 0,
+    "high": 11
+  },
+  "referenceRepositoriesUnchanged": true,
+  "heavyLockReleased": true,
+  "archiveImageE2ePassed": true,
+  "archiveImageE2eSeconds": 11.9,
+  "testedArchiveImageBuild": {
+    "version": "0.6.1",
+    "commit": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+    "builtAt": "2026-10-16T06:52:34Z"
+  },
+  "supplementalCheckCorrection": "Brand and archive builds have different time/Compose metadata; an own wrapper incorrectly assumed identical image identity. Original identity check correctly refused the brand tag against the archive manifest. Ran the complete E2E suite on the actual verified archive image; all passed without relaxing any repository gate."
+}

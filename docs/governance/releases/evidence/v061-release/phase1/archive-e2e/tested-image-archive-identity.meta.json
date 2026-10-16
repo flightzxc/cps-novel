@@ -1,0 +1,11 @@
+{
+  "name": "tested-image-archive-identity",
+  "command": [
+    "/bin/bash",
+    ".tmp/v061-release/phase1/tested-image-archive-identity.sh"
+  ],
+  "startedAt": 1792153013.666765,
+  "finishedAt": 1792153013.7365289,
+  "exitCode": 65,
+  "durationSeconds": 0.0697638988494873
+}
