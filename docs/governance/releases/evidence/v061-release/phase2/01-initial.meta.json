@@ -1,0 +1,11 @@
+{
+  "name": "01-initial",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase2/remote-initial.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792159277.773896,
+  "finishedAt": 1792159315.0091891
+}

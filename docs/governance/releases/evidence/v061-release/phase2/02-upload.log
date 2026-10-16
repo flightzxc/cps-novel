@@ -1,0 +1,15 @@
+Number of files: 5
+Number of files transferred: 5
+Total file size: 276452029 B
+Total transferred file size: 276452029 B
+Unmatched data: 276452029 B
+Matched data: 0 B
+File list size: 317 B
+File list generation time: 0.003 seconds
+File list transfer time: 0.003 seconds
+Total sent: 276486336 B
+Total received: 130 B
+
+sent 276486336 bytes  received 130 bytes  3878220 bytes/sec
+total size is 276452029  speedup is 1.00
+UPLOAD=PASS

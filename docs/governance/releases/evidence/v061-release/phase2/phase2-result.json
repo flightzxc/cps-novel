@@ -1,0 +1,349 @@
+{
+  "status": "PASS",
+  "stage": 2,
+  "authorizedBy": "Owner 批准部署，执行第二阶段与第三阶段甲；甲回报后停止",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "tree": "34d2fcbc052762544cefec1f97466b2d1e786762",
+  "host": "haiyue-vps",
+  "releaseExit": 0,
+  "maintenance": {
+    "on": "2026-10-16T14:08:13.209745+00:00",
+    "off": "2026-10-16T14:09:02.136391+00:00",
+    "seconds": 48.926646
+  },
+  "timeline": [
+    {
+      "event": "DEPLOY_STARTED",
+      "at": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "event": "MAINTENANCE=ON",
+      "at": "2026-10-16T14:08:13.209745+00:00"
+    },
+    {
+      "event": "DATABASE_MIGRATION=PASS",
+      "at": "2026-10-16T14:08:18.586472+00:00"
+    },
+    {
+      "event": "MAINTENANCE=OFF",
+      "at": "2026-10-16T14:09:02.136391+00:00"
+    },
+    {
+      "event": "RELEASE=PASS",
+      "at": "2026-10-16T14:09:04.016071+00:00"
+    },
+    {
+      "event": "DEPLOY_FINISHED",
+      "at": "2026-10-16T14:09:04.016419+00:00",
+      "exit": 0
+    }
+  ],
+  "env": {
+    "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v061-20261016T140753Z",
+    "beforeSha256": "f37561c7710c886d547e9add4377ca4009e63381e0eb10a74a154984e1221369",
+    "afterSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509",
+    "otherBytesCmp": "PASS",
+    "allowlists": "UNCHANGED"
+  },
+  "backup": {
+    "path": "/var/lib/cps-novel/backups/logical/cps-novel-v061-20261016T140451Z.dump",
+    "bytes": 763037272,
+    "sha256": "1ce6fd86c0098bfdbdfe947110409df03d58accfad28a97af5784f0065e6e591",
+    "pgRestoreList": "PASS"
+  },
+  "health": {
+    "ok": true,
+    "status": "healthy",
+    "build": {
+      "version": "0.6.1",
+      "commit": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+      "builtAt": "2026-10-16T06:52:34Z"
+    },
+    "featureFlags": {},
+    "metadataConsistency": {
+      "status": "passed",
+      "runtimeClaims": {
+        "version": "0.6.1",
+        "commit": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f"
+      }
+    },
+    "database": {
+      "status": "passed",
+      "reason": null,
+      "durationMs": 3
+    },
+    "reasons": []
+  },
+  "services": [
+    {
+      "service": "web",
+      "id": "a5627da5f0a7ea63534a8e4a3eb6ecbf743198697a86dddeae558b2810c57d02",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "service": "worker",
+      "id": "f3d1c98f6b00c5d694319ebfa7acaf0ccccc45a05e9a24db5abd45d48968d9fa",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "service": "worker-light",
+      "id": "510e1f0e9749970162fca5c10b69d628b9238e2c9e03d6748879a5679a88a46b",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "service": "scheduler",
+      "id": "5eb67ebb8083fd9c603817ffe9d10ccc9ecb065335583a4afcb1075455d16837",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "service": "backup-timer",
+      "id": "4d1729480da8c50695959ce97a7ecf0f3e26ddb6985d2a09d47caa000f9c5426",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-16T14:08:03.925223+00:00"
+    }
+  ],
+  "postgresContainerUnchanged": true,
+  "migrations": 27,
+  "businessTables": 58,
+  "migrationChecksumsMatch": true,
+  "grantsReadback": "PASS",
+  "effectiveTagProjection": {
+    "missing": 0,
+    "extra": 0,
+    "changed": 0
+  },
+  "indexnow": {
+    "generatedAt": "2026-10-16T14:10:38.510Z",
+    "control": {
+      "dbNow": "2026-10-16T14:10:38.508Z",
+      "breaker": {
+        "open": false
+      },
+      "rateLimit": {
+        "waiting": false
+      },
+      "lastResume": null,
+      "lastBisect": null
+    },
+    "keyValidation": {
+      "state": "verified",
+      "lastAccepted": {
+        "httpStatus": 200,
+        "at": "2026-10-16T05:48:04.252Z",
+        "requestBatchId": "69a61043-419a-4a15-b68d-12f2b7b945b9"
+      },
+      "accepted": {
+        "all": {
+          "status200": {
+            "urls": 33718,
+            "httpRequests": 78
+          },
+          "status202": {
+            "urls": 1,
+            "httpRequests": 1
+          }
+        },
+        "last24h": {
+          "status200": {
+            "urls": 188,
+            "httpRequests": 3
+          },
+          "status202": {
+            "urls": 0,
+            "httpRequests": 0
+          }
+        }
+      }
+    },
+    "outbox": {
+      "urlsByStatusAndSource": [
+        {
+          "status": "accepted",
+          "source": "admin.article.publish",
+          "urls": 2918
+        },
+        {
+          "status": "accepted",
+          "source": "backfill",
+          "urls": 30801
+        }
+      ],
+      "dueUrls": 0,
+      "cancelledUrlsByErrorKind": [],
+      "invalidUrls": [],
+      "deadLetters": []
+    },
+    "attempts": {
+      "all": [
+        {
+          "httpStatus": "200",
+          "urls": 33718,
+          "httpRequests": 78
+        },
+        {
+          "httpStatus": "202",
+          "urls": 1,
+          "httpRequests": 1
+        }
+      ],
+      "last24h": [
+        {
+          "httpStatus": "200",
+          "urls": 188,
+          "httpRequests": 3
+        }
+      ]
+    },
+    "tasks": {
+      "deliveryTaskItemsByStatus": {
+        "success": 79
+      },
+      "scanTaskItemsByStatus": {
+        "success": 9126
+      },
+      "inFlightBatchTasks": []
+    }
+  },
+  "sitemapAutoRefresh": true,
+  "preflightWriteGatesUnchanged": true,
+  "nginxHashesUnchanged": true,
+  "runtimeImageDeps": "PASS four apps no vitest/tinypool Next 16.3.8",
+  "publicProbes": {
+    "status": "PASS",
+    "requests": 4,
+    "results": [
+      {
+        "sequence": 1,
+        "kind": "plotnovel-book",
+        "path": "/novel/obsidian-buddha-three-million-dollars-debt-p6wthipyg",
+        "at": "2026-10-16T14:11:51.082863+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "followRedirects": false,
+        "status": 200,
+        "bodySha256": "323f701b44c05a6dde55412436bf24a7923224d16ed060d4c3b00083ebafea2f",
+        "locationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "codeCheck": {
+          "checkedCodes": 2039,
+          "matchingLines": 0
+        }
+      },
+      {
+        "sequence": 2,
+        "kind": "moboreader-book",
+        "path": "/novel/contract-baby-and-billionaire-pg15q11wz",
+        "at": "2026-10-16T14:11:55.183382+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "followRedirects": false,
+        "status": 200,
+        "bodySha256": "a1efd238caa53b9372cdbb8b1d38db6cd595477f9e7e03c93a159fe312f37a6f",
+        "locationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "codeCheck": {
+          "checkedCodes": 2039,
+          "matchingLines": 0
+        }
+      },
+      {
+        "sequence": 3,
+        "kind": "sitemap-index",
+        "path": "/sitemap.xml",
+        "at": "2026-10-16T14:11:57.919030+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "followRedirects": false,
+        "status": 200,
+        "bodySha256": "829821ac2c5a76afb4538e6234ecd68b72217ed2f63edbefd3c7569d900749b2",
+        "locationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "codeCheck": {
+          "checkedCodes": 2039,
+          "matchingLines": 0
+        }
+      },
+      {
+        "sequence": 4,
+        "kind": "plotnovel-go",
+        "path": "/go/8kmwrgnlh7",
+        "at": "2026-10-16T14:12:00.384585+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "followRedirects": false,
+        "status": 302,
+        "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "locationSha256": "05b6420bc88e06341ec431b95bdab9f7cf348175214e2a93a7c0ff73db7c618e",
+        "codeCheck": {
+          "checkedCodes": 2039,
+          "matchingLines": 0
+        }
+      }
+    ],
+    "rawBodiesSaved": false,
+    "rawCodesSaved": false
+  },
+  "protectedAfter": {
+    "at": "2026-10-16T14:11:14.207086+00:00",
+    "manualCount": 635,
+    "manualDigest": "ac2b4b10e414ef8c7520d718c72439140b5a3c1f7a34a1d9bbca44b6640a386f",
+    "publishedCount": 1977,
+    "publishedDigest": "42499c6f369bbf44008e62715da659b0f68248e1b8d80c3ecc29a108c95d3f6c"
+  },
+  "protectedIdentical": true,
+  "generationCalls": 0,
+  "publishCalls": 0,
+  "previewApplyCalls": 0,
+  "deviations": [
+    {
+      "scope": "own read-only external checker",
+      "cause": "PostgreSQL nested JSON spans multiple lines; line parser failed before any HTTP request",
+      "attempts": [
+        "11-external exit1",
+        "11b-external exit1 diagnostic",
+        "11c-external exit0 fixed JSONDecoder.raw_decode"
+      ],
+      "productChanges": false,
+      "externalRequestsBeforeFix": 0
+    }
+  ]
+}

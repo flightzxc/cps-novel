@@ -1,0 +1,6 @@
+CHECKER_START_FAILED={"exit": 1, "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 5, in <module>\n  File \"<string>\", line 5, in <genexpr>\n  File \"/usr/lib/python3.12/json/__init__.py\", line 346, in loads\n    return _default_decoder.decode(s)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/json/decoder.py\", line 337, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/json/decoder.py\", line 355, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 202 (char 201)\n"}
+Traceback (most recent call last):
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.6.1/.tmp/v061-release/phase2/external.py", line 25, in <module>
+    err=checker.stderr.read();print('CHECKER_START_FAILED='+json.dumps({'exit':checker.wait(),'stderr':err[-2000:]}));raise RuntimeError('checker_start_failed')
+                                                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: checker_start_failed

@@ -1,0 +1,11 @@
+{
+  "name": "08-pull-deploy",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase2/pull-deploy.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792159780.2448719,
+  "finishedAt": 1792159785.1562932
+}

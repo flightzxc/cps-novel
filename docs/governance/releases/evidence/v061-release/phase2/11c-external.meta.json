@@ -1,0 +1,10 @@
+{
+  "name": "11c-external",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/external.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792159905.8689432,
+  "finishedAt": 1792159923.065763
+}

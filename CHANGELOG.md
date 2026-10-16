@@ -3,7 +3,27 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-15 · 共 1337 个 commit
+生成时间：2026-10-16 · 共 1354 个 commit
+- `f13dd15` 2026-10-16 发布：补齐最终归档镜像端到端验收证据  — _codex · GPT-6_
+- `01dee99` 2026-10-16 发布：完成v0.6.1第一阶段门禁推送与不可变归档交付  — _codex · GPT-6_
+- `2e0bed0` 2026-10-16 发布：记录Owner回家前暂停及镜像网络重试中断  — _codex · GPT-6_
+- `de2f183` 2026-10-16 发布：记录37个运行器全过及Docker后端崩溃停手  — _codex · GPT-6_
+- `14f06cb` 2026-10-16 发布：记录ESM夹具修正与p1-05b镜像拉取EOF停手  — _codex · GPT-6_
+- `0017b50` 2026-10-16 发布：记录v0.6.1第一阶段ops单测门禁失败并停手  — _codex · GPT-6_
+
+## v0.6.1
+
+- `cb255e0` 2026-10-16 发布：准备海阅 v0.6.1 PATCH 六文件版本身份  — _codex · GPT-6_
+- `3704cc0` 2026-10-16 合并：v0.6.1 追加——章节正文为 null 按空正文处理（Owner 10-16 拍板），只放宽 null，缺失/非字符串仍按 B-36 失败  — _claude-code · claude-opus-5-5_
+- `06cee69` 2026-10-16 修复(B-42)：章节正文为 null 时按空正文处理，跳过该章  — _claude-code · claude-opus-5-5_
+- `31402df` 2026-10-16 合并：v0.6.1 三项修复——B-47 封面网址非 ASCII 渲染期编码、B-42 空正文章节跳过与 null 章节列表记无试读、B-46 试读写入后按任务再刷站点地图；更正 PlotNovel 开通手册 grants 重放角色  — _claude-code · claude-opus-5-5_
+- `98a61be` 2026-10-16 测试(B-42/B-46)：补两条真实库用例，钉住保留边界与"只置 stale 也刷新"  — _claude-code · claude-opus-5-5_
+- `ca102a4` 2026-10-16 修复(B-42)：空章节号由试读模块计算，编排层不直接读章节正文  — _claude-code · claude-opus-5-5_
+- `5ca6dde` 2026-10-16 文档：更正 PlotNovel 开通手册里 grants.sql 的重放角色  — _claude-code · claude-opus-5-5_
+- `f72e4eb` 2026-10-16 功能(B-46)：试读任务写入章节后再入队一次站点地图刷新  — _claude-code · claude-opus-5-5_
+- `7c0fe82` 2026-10-16 修复(B-42)：试读遇到空正文章节不再整本失败，null 章节列表记为无试读  — _claude-code · claude-opus-5-5_
+- `4827690` 2026-10-16 修复(B-47)：封面网址含非 ASCII 字符时文章生成不再失败  — _claude-code · claude-opus-5-5_
+- `a3cd964` 2026-10-15 运维：完成 PlotNovel 存量1927篇发布最终验收与治理收官  — _codex · GPT-6_
 - `bff0915` 2026-10-15 运维：完成 PlotNovel 第四波471篇发布与14本模板失败留档  — _codex · GPT-6_
 - `af65345` 2026-10-15 运维：完成 PlotNovel 第三波485篇收尾并记录暂停恢复核验  — _codex · GPT-6_
 - `b5e12ef` 2026-10-15 运维：完成 PlotNovel 第二波483篇发布与17本失败留档  — _codex · GPT-6_

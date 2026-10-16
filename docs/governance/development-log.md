@@ -39,6 +39,15 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-16 22:09 - codex（GPT-6，正式发版执行；时间 +0800 / JST 23:09）
+
+**变更类型**：海阅 v0.6.1 PATCH 正式站部署，仅 haiyue-vps。Owner 明确批准第二阶段和第三阶段甲；14:09:04Z 原 RELEASE=PASS / exit0，维护OFF。补发与定向试读 apply 仍须 Owner 看过只读预演后说“批准补发”。
+**背景**：10-15 PlotNovel放量因封面非英文地址留下58本生成失败；B-42空正文导致整本试读失败；B-46试读写入后sitemap收录延迟。来源 fix/v061-cover-preview-sitemap，经 integration/v0.6.1-2026-10-16@3704cc0 合入，本轮只发已集成修复及运维工具，固定Final cb255e0f1c93041eda6aefeefbb541d7eddfc15f。
+**变更内容与Owner四决定**：B-47仅文章正文渲染时编码；数据库封面原值、sitemap、og和书页图片保持原值（公开网址继续冻结）。B-42空串/空白/null正文跳过、保留已有章节；Owner批准定向34本重跑，但执行等待第三阶段乙。null按空正文处理；旧章保留引致总试读超过3章问题以后遇到再处理，触发判据 preservedCount>0 && materializedCount+preservedCount>3。B-46写入/恢复/置stale后按来源试读任务入队刷新，沿用开关true，实际业务触发验收待乙阶段。
+**影响范围**：三项修复已部署；27迁移/58表，字典1349/active1279、grants和依赖不变、无新环境变量/回填。env仅两个版本字段、其余cmp一致，Turnstile、写闸和白名单不变；未改nginx/证书/DNS、claimPromo能力或635人工复核。未生成、发布、重跑试读。
+**验证方式**：第一阶段全门禁及37运行器PASS、全量0failed/无Unhandled、proxy1742、ops19单测+10真实库/skip0，非英文封面plan→generate→publish正文编码/DB原值保持。主控六组独立变异中两组首轮存活，补承重用例后全部被捕获；本轮ops旧版本身份与失败策略两组变异亦捕获、还原干净。服务器原SHA/OCI/Final/tree/--load PASS，在线逻辑备份763037272字节/SHA1ce6fd86…e6e591/pg_restore清单通过。维护14:08:13.209745Z–14:09:02.136391Z共48.926646秒；原migration_owner检查无待迁移、postgres单事务grants重放通过。health/五应用健康、postgres CID保持、27迁移checksum/授权函数触发器读回PASS、投影0/0/0；IndexNow熔断关闭、无429等待/死信/积压，Next16.3.8/四应用无vitest和tinypool、六服务error/permissiondenied0、备份定时器运行。4/6公网代理GET通过，HTML和Location口令码匹配0，原1977篇/635人工复核摘要一致。自写公网检查器多行JSON解析问题已修正，修正前HTTP0次，原产品门禁不变。
+**后续待办与治理**：第三阶段甲只读预演完成后回报并停下；58补发/34apply待Owner另批，B-46覆盖在有章节写入后验收。annotated v0.6.1固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账、唯一发版日志和第二阶段证据完成；Notion本轮同步回读随后留收据。回滚仅v0.6.0 Final493eb23b034b0410780228535b3e293e4ee91f9a，SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES须Owner回滚时明确批准。完整[发布记录](releases/v0.6.1-preproduction.md)。
+
 ### 2026-10-14 16:51 - codex（GPT-6，正式发版执行；JST）
 
 **变更类型**：海阅v0.6.0 MINOR正式站部署，仅haiyue-vps。Owner明确授权Final `493eb23b034b0410780228535b3e293e4ee91f9a`；原RELEASE=PASS/EXIT=0，A～F PASS。代码已部署，PlotNovel尚未开通，前台行为不变。
