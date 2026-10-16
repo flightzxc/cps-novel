@@ -1,0 +1,24 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "title": "🏷️ 海阅 版本管理与发版手账",
+  "result": "PASS",
+  "readbackAt": "2026-10-16T14:17:38.721Z",
+  "sourceStage2Commit": "7af55802ec1741017f3ae8f13938e22fcee94e94",
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "checks": {
+    "snapshot": true,
+    "table": true,
+    "formal": true,
+    "uniqueLog": true,
+    "ops": true,
+    "final": true,
+    "manifest": true,
+    "syncStatus": true,
+    "historyPreserved": true,
+    "noTurnstile": true
+  },
+  "historyComparedCharacters": 282397,
+  "manifestSha256": "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+  "approvedScope": "stage2 and stage3a only; stage3b awaits Owner approval"
+}

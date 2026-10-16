@@ -1,0 +1,11 @@
+{
+  "name": "03-final-observe",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3a/final-observe.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792160084.3338182,
+  "finishedAt": 1792160093.1577332
+}
