@@ -1,10 +1,15 @@
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import type { PrismaClient } from "@prisma/client";
 import { BASELINE, FINAL, OPERATION, runCommand, type Api, chunksFor, generationFailurePolicy, loadManifest, parseArgs, sha256, validateManifest, type Manifest } from "../../../scripts/ops/plotnovel-bulk-generate-publish";
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+});
+const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
 const actor = "71f0e655-0640-4f07-bcbb-041f027fa7cb";
 const id = (n: number) => `06000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const manifest = (n: number): Manifest => ({ schema: 1, operation: OPERATION, baseline: BASELINE, createdAt: new Date().toISOString(), actorId: actor, appId: id(9999), locale: "en", manualReviewBaseline: 635, publishedBaseline: 50, existingPreviewNovelIds: [], eligibleCount: n, blockedReasons: {}, waves: chunksFor(Array.from({ length: n }, (_, i) => id(i))) });
@@ -68,23 +73,33 @@ describe("PlotNovel bulk generation failure policy", () => {
 
 
 describe("PlotNovel production identity remains fail closed through the command entrypoint", () => {
+  const read = vi.mocked(fs.readFileSync);
+  let restoreCwd: (() => void) | undefined;
+  afterEach(() => {
+    read.mockReset().mockImplementation(actualFs.readFileSync);
+    restoreCwd?.();
+    restoreCwd = undefined;
+  });
   it.each([
-    { cwd: "/app", commit: FINAL, version: "0.6.0" },
-    { cwd: "/app", commit: "0".repeat(40), version: "0.6.1" },
-    { cwd: "/tmp", commit: FINAL, version: "0.6.1" },
-  ])("rejects mismatched production identity before any business access: %j", async (identity) => {
+    { cwd: "/app", commit: FINAL, version: "0.6.1", expected: "owner_admin_refused" },
+    { cwd: "/app", commit: FINAL, version: "0.6.0", expected: "production_identity_mismatch" },
+    { cwd: "/app", commit: "0".repeat(40), version: "0.6.1", expected: "production_identity_mismatch" },
+    { cwd: "/tmp", commit: FINAL, version: "0.6.1", expected: "production_identity_mismatch" },
+  ])("checks production identity before business access: %j", async (identity) => {
     const execute = vi.fn().mockResolvedValue(0);
     const query = vi.fn().mockResolvedValue([{ role: "web_app", db: "cps_novel", readonly: "on" }]);
-    const businessAccess = vi.fn(() => { throw new Error("unexpected_business_access"); });
+    const businessAccess = vi.fn().mockResolvedValue(null);
     const tx = { $executeRawUnsafe: execute, $queryRaw: query, adminIdentity: { findUnique: businessAccess } };
     const db = { $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx) } as unknown as PrismaClient;
-    const read = vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify({ commit: identity.commit, version: identity.version }));
+    read.mockImplementation(((...args: Parameters<typeof fs.readFileSync>) => {
+      if (args[0] === "/app/.build-metadata.json") return JSON.stringify({ commit: identity.commit, version: identity.version });
+      return actualFs.readFileSync(...args);
+    }) as typeof fs.readFileSync);
     const cwd = vi.spyOn(process, "cwd").mockReturnValue(identity.cwd);
-    try {
-      await expect(runCommand(parseArgs(["plan", "--actor-id", actor, "--output", "unused-manifest.json"]), db, {} as Api, () => {})).rejects.toThrow("production_identity_mismatch");
-      expect(read).toHaveBeenCalledWith("/app/.build-metadata.json", "utf8");
-      expect(execute).toHaveBeenCalledExactlyOnceWith("SET TRANSACTION READ ONLY");
-      expect(businessAccess).not.toHaveBeenCalled();
-    } finally { read.mockRestore(); cwd.mockRestore(); }
+    restoreCwd = () => cwd.mockRestore();
+    await expect(runCommand(parseArgs(["plan", "--actor-id", actor, "--output", "unused-manifest.json"]), db, {} as Api, () => {})).rejects.toThrow(identity.expected);
+    expect(read).toHaveBeenCalledWith("/app/.build-metadata.json", "utf8");
+    expect(execute).toHaveBeenCalledExactlyOnceWith("SET TRANSACTION READ ONLY");
+    expect(businessAccess).toHaveBeenCalledTimes(identity.expected === "owner_admin_refused" ? 1 : 0);
   });
 });
