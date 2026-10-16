@@ -1,0 +1,93 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.94kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 167B done
+#3 DONE 0.0s
+
+#4 [production-dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 9.44MB 0.1s done
+#5 DONE 0.1s
+
+#6 [production-dependencies 2/8] WORKDIR /app
+#6 CACHED
+
+#7 [production-dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#7 CACHED
+
+#8 [production-dependencies 4/8] RUN npm install --global npm@11.6.2
+#8 CACHED
+
+#9 [production-dependencies 5/8] COPY package.json package-lock.json ./
+#9 CACHED
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#11 [dependencies 6/8] RUN npm ci
+#11 5.817 npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+#11 ...
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 1482.2 npm error code 1
+#10 1482.2 npm error path /app/node_modules/@prisma/engines
+#10 1482.2 npm error command failed
+#10 1482.2 npm error command sh -c node scripts/postinstall.js
+#10 1482.2 npm error node:internal/process/promises:391
+#10 1482.2 npm error     triggerUncaughtException(err, true /* fromPromise */);
+#10 1482.2 npm error     ^
+#10 1482.2 npm error
+#10 1482.2 npm error Error: aborted
+#10 1482.2 npm error     at TLSSocket.socketCloseListener (node:_http_client:464:19)
+#10 1482.2 npm error     at TLSSocket.emit (node:events:536:35)
+#10 1482.2 npm error     at node:net:343:12
+#10 1482.2 npm error     at TCP.done (node:_tls_wrap:669:7) {
+#10 1482.2 npm error   code: 'ECONNRESET',
+#10 1482.2 npm error   attemptNumber: 1,
+#10 1482.2 npm error   retriesLeft: 2
+#10 1482.2 npm error }
+#10 1482.2 npm error
+#10 1482.2 npm error Node.js v20.20.2
+#10 1482.2 npm notice
+#10 1482.2 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
+#10 1482.2 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.1
+#10 1482.2 npm notice To update run: npm install -g npm@11.21.1
+#10 1482.2 npm notice
+#10 1482.2 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-16T07_44_41_627Z-debug-0.log
+#10 ERROR: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+
+#11 [dependencies 6/8] RUN npm ci
+#11 CANCELED
+------
+ > [production-dependencies 6/8] RUN npm ci --omit=dev:
+1482.2 npm error   retriesLeft: 2
+1482.2 npm error }
+1482.2 npm error
+1482.2 npm error Node.js v20.20.2
+1482.2 npm notice
+1482.2 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
+1482.2 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.1
+1482.2 npm notice To update run: npm install -g npm@11.21.1
+1482.2 npm notice
+1482.2 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-16T07_44_41_627Z-debug-0.log
+------
+Dockerfile:28
+--------------------
+  26 |     
+  27 |     COPY package.json package-lock.json ./
+  28 | >>> RUN npm ci --omit=dev
+  29 |     
+  30 |     COPY prisma ./prisma
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/lkaf3rf7rmn1vdminbie5to22

@@ -1,0 +1,11 @@
+{
+  "name": "brand-owner-resume-1",
+  "command": [
+    "/bin/bash",
+    "scripts/preproduction/verify-brand-image.sh"
+  ],
+  "startedAt": 1792136680.749829,
+  "finishedAt": 1792138163.73492,
+  "exitCode": 1,
+  "durationSeconds": 1482.985090970993
+}

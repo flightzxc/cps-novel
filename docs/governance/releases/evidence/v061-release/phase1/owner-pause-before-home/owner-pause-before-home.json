@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-16T08:10:25.829813+00:00",
+  "status": "paused_at_owner_request",
+  "reason": "Owner changed network, then requested waiting until returning home",
+  "terminatedOwnBuildClientPids": [
+    88625
+  ],
+  "networkConfigurationChangedByAgent": false,
+  "resumeFrom": "brand image build",
+  "passedRunnersRetained": 37,
+  "productionConnected": false
+}
