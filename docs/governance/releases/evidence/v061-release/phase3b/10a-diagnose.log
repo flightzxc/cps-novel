@@ -1,0 +1,8 @@
+{"container": "cps-novel-web-1", "user": "1001:1001"}
+600 1000 1000 /tmp/v061-account-input.json
+600 1000 1000 /tmp/plotnovel-b47-20261016-manifest.json
+644 1000 1000 /tmp/v061-coverage.ts
+
+{"container": "cps-novel-worker-1", "user": "1001:1001"}
+{"container": "cps-novel-web-1", "permissionDenied": 0, "error": 0}
+{"container": "cps-novel-postgres-1", "permissionDenied": 0, "error": 0}

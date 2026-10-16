@@ -1,0 +1,11 @@
+{
+  "name": "05-publish",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b/publish-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792162657.396641,
+  "finishedAt": 1792162670.24132
+}

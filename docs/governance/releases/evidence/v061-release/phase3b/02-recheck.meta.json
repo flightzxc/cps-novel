@@ -1,0 +1,11 @@
+{
+  "name": "02-recheck",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b/recheck-remote.py"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792162515.331341,
+  "finishedAt": 1792162521.93957
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-16T15:06:52.250343+00:00",
+  "status": "STOP",
+  "reason": "public_book_upstream_code_check_failed",
+  "stage": "before_preview_34_apply",
+  "newPublished": 58,
+  "preview34ApplyCalls": 0,
+  "readOnlyCodeRechecks": [
+    0,
+    0
+  ],
+  "firstExposureConclusion": "unresolved",
+  "externalHttp": 3,
+  "ownerDecisionRequiredBeforeResume": true
+}

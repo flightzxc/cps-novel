@@ -1,0 +1,152 @@
+{
+  "startedAt": "2026-10-16T14:56:20.775154+00:00",
+  "finishedAt": "2026-10-16T14:56:23.903325+00:00",
+  "command": [
+    "docker",
+    "exec",
+    "-w",
+    "/app",
+    "cps-novel-web-1",
+    "tsx",
+    "--tsconfig",
+    "/app/tsconfig.json",
+    "/tmp/plotnovel-bulk-generate-publish.ts",
+    "generate",
+    "--manifest",
+    "/tmp/plotnovel-b47-20261016-manifest.json",
+    "--manifest-sha256",
+    "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+    "--actor-id",
+    "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+    "--wave",
+    "1",
+    "--confirm",
+    "PLOTNOVEL_BULK_GENERATE"
+  ],
+  "exit": 0,
+  "events": [
+    {
+      "at": "2026-10-16T14:56:22.132Z",
+      "manifestSha256": "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+      "event": "generate",
+      "wave": 1,
+      "chunk": 1,
+      "requestId": "plotnovel-b47-republish-2026-10-16-w1-c1",
+      "taskId": "e9b60199-1bbc-48a0-bb73-bc6555490c91",
+      "duplicate": false,
+      "taskStatus": "pending",
+      "admission": {
+        "selectedCount": 58,
+        "submittedCount": 58,
+        "blockedCount": 0,
+        "blockedReasonCounts": {}
+      }
+    }
+  ],
+  "unexpectedOutputLines": 0,
+  "unexpectedOutputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "status": {
+    "wave": 1,
+    "generation": {
+      "expected": 58,
+      "notSubmitted": 0,
+      "pending": 35,
+      "success": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "generationFailurePolicy": {
+      "knownTemplateFailures": 0,
+      "otherFailures": 0,
+      "allowed": true
+    },
+    "generationTasks": [
+      {
+        "id": "e9b60199-1bbc-48a0-bb73-bc6555490c91",
+        "status": "processing",
+        "total": 58
+      }
+    ],
+    "drafts": 23,
+    "published": 0,
+    "indexnow": {
+      "accepted": 0,
+      "pending": 0,
+      "missing": 0,
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "deadLetters": 0,
+      "blockedUrls": 0
+    },
+    "preview": {
+      "expected": 0,
+      "alreadyValid": 0,
+      "completed": 0,
+      "failed": 0,
+      "pending": 0,
+      "missing": 0,
+      "taskIds": []
+    },
+    "mainPreviewBacklog": {
+      "failed": 339,
+      "skipped": 80006,
+      "success": 33689
+    },
+    "sitemap": {
+      "enabled": true,
+      "task": {
+        "id": "012d6b45-4fcb-4cf0-9d3d-59378243b400",
+        "status": "completed",
+        "createdAt": "2026-10-16T05:47:31.563Z",
+        "completedAt": "2026-10-16T05:47:53.784Z"
+      },
+      "lastGeneration": {
+        "status": "success",
+        "finishedAt": "2026-10-16T05:47:53.765Z"
+      },
+      "published": {
+        "generatedAt": "2026-10-16T05:47:53.763Z",
+        "urlCount": 138618
+      }
+    },
+    "stopReasons": [],
+    "readyForNextWave": false
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  },
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509",
+    "containersIdentical": true
+  }
+}

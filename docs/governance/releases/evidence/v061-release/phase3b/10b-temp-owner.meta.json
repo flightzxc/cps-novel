@@ -1,0 +1,11 @@
+{
+  "name": "10b-temp-owner",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b/restore-temp-ownership.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792162864.986897,
+  "finishedAt": 1792162869.13335
+}

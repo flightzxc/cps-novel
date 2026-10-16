@@ -1,0 +1,211 @@
+{
+  "startedAt": "2026-10-16T14:57:44.597751+00:00",
+  "finishedAt": "2026-10-16T14:57:49.742675+00:00",
+  "command": [
+    "docker",
+    "exec",
+    "-w",
+    "/app",
+    "cps-novel-web-1",
+    "tsx",
+    "--tsconfig",
+    "/app/tsconfig.json",
+    "/tmp/plotnovel-bulk-generate-publish.ts",
+    "publish",
+    "--manifest",
+    "/tmp/plotnovel-b47-20261016-manifest.json",
+    "--manifest-sha256",
+    "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+    "--actor-id",
+    "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+    "--wave",
+    "1",
+    "--confirm",
+    "PLOTNOVEL_BULK_PUBLISH"
+  ],
+  "exit": 0,
+  "events": [
+    {
+      "at": "2026-10-16T14:57:47.354Z",
+      "manifestSha256": "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+      "event": "publish",
+      "wave": 1,
+      "chunk": 1,
+      "requestId": "plotnovel-b47-republish-publish-2026-10-16-w1-c1",
+      "published": 58,
+      "rejected": 0,
+      "conflict": 0,
+      "not_found": 0,
+      "unexpectedRepublications": 0,
+      "aborted": false,
+      "notProcessed": 0
+    }
+  ],
+  "unexpectedOutputLines": 0,
+  "unexpectedOutputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "status": {
+    "wave": 1,
+    "generation": {
+      "expected": 58,
+      "notSubmitted": 0,
+      "pending": 0,
+      "success": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "generationFailurePolicy": {
+      "knownTemplateFailures": 0,
+      "otherFailures": 0,
+      "allowed": true
+    },
+    "generationTasks": [
+      {
+        "id": "e9b60199-1bbc-48a0-bb73-bc6555490c91",
+        "status": "completed",
+        "total": 58
+      }
+    ],
+    "drafts": 0,
+    "published": 58,
+    "indexnow": {
+      "accepted": 0,
+      "pending": 58,
+      "missing": 0,
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "deadLetters": 0,
+      "blockedUrls": 0
+    },
+    "preview": {
+      "expected": 58,
+      "alreadyValid": 0,
+      "completed": 0,
+      "failed": 0,
+      "pending": 58,
+      "missing": 0,
+      "taskIds": [
+        "29c70278-aa65-4787-9c46-8a3400c3fe6c",
+        "4f068ba5-673b-400f-bcca-6f356e9ce08c",
+        "dce44f12-3010-49be-b4e0-5bbf41c28adb",
+        "ced785ea-52f8-430c-9861-3fe72bd7b92a",
+        "37449046-4949-45c8-8f5b-f762fb5032ae",
+        "8bd12fb6-691e-4706-b477-340001cf31b1",
+        "685c7477-354b-4e7a-afc4-cbc52b388027",
+        "95f4f288-81d2-4f02-9a5f-264ca9f40405",
+        "65e57cc3-2345-4a76-8948-4dd85be00bb9",
+        "c416e90d-37c4-413a-a701-0f3f7b5e3c16",
+        "82143076-3511-4d96-8a09-7398860ee092",
+        "742ff3f5-b3e8-4273-a0d9-ace7e20c6829",
+        "82eebafe-e251-4716-9f17-49219d3899d8",
+        "49fd2e17-bc40-4c5c-b2c3-91cbb90be8da",
+        "c00542c1-91ef-401e-a03f-278000e3c721",
+        "2df3b901-44f9-4cdd-946a-68d270a29bd1",
+        "46100cbe-4512-493f-aa4f-3c26c81a8802",
+        "fb1c63d0-a648-4887-977c-a297d36086f4",
+        "e91f463c-aca8-4730-b0d4-b50474f9815c",
+        "0038a9ad-210f-4fde-ab52-fb78f9d19834",
+        "88f9539c-9638-4a64-8ec4-bbd29c1b880c",
+        "2ee6d134-a0b7-4db2-a311-23f926d02729",
+        "b91e860d-2a88-4430-9e04-d0ba9e09f4e3",
+        "7e4f24ab-9c6c-4406-af47-13ac17e2a5d3",
+        "86b37831-cc97-4e8d-a788-c434b2d0c1a6",
+        "ac10227a-b61b-48e6-9f2a-a4b73f3277df",
+        "edd49af5-c7ac-4377-9906-243667558179",
+        "2482ab5c-324a-4dd5-b437-25aee2baf82b",
+        "3655fd89-ad79-4bef-af8b-e726bef2be6a",
+        "a7093cc8-8bf2-4b4b-a3b5-f484414f34b2",
+        "f1bfbc30-9280-483b-8d1c-3c5d3c8648b2",
+        "6927d88e-1493-4f85-af33-cd8d2353a481",
+        "b4373800-c39f-4578-9ac8-c454f9ae12e8",
+        "72e047e2-eaef-47fb-be67-f4afdb4de503",
+        "6440bb08-af80-4fa2-9304-78d93a722280",
+        "54153a0a-70cc-4f6b-99c4-31003bf8ff39",
+        "c4d3a30b-4b56-4f85-930b-5977e61371b5",
+        "e96cff7a-e5ae-4a93-88b9-c4dad634a1b1",
+        "b29411a9-3ad1-463d-8b14-59152b2aaf05",
+        "ea780499-d50b-42be-945b-a86ed6a6439a",
+        "1dfee4f5-03ad-4635-ae4c-956b4c90b282",
+        "f3cf1c3f-418d-44f2-b34d-eacf45f00fac",
+        "b245a885-d427-47a4-bab2-bc06f991a9eb",
+        "5e82f76d-0c3d-416c-bba6-8fd3734ee383",
+        "358a42fd-ccfc-40c0-896a-3ffab1092636",
+        "5d4f558b-409a-43db-b971-b0affd5c14dd",
+        "f183d49e-c51b-44a0-8731-498d6f01f0f6",
+        "6f90b18f-513e-46c4-965b-cbc85b09c4fc",
+        "da87a171-2240-47ad-b5fd-3f9ea427c127",
+        "1259c57b-3df7-4a86-9ff7-83e6d014adad",
+        "e77b571c-0632-40bd-b1f3-e48160d5ddf4",
+        "18ce35d0-d9d7-494e-9059-08fd9139c3a7",
+        "c5eec542-470d-4cdc-b485-bc64af33449c",
+        "f1b0b0ef-1416-4a9f-9ec5-cb255b56e6ae",
+        "cce93b4f-cfc3-4d07-970a-8361e2bb2047",
+        "b4745910-a543-4dee-a43b-60b25304e2eb",
+        "5490b3b9-ea15-4a74-9894-bb21daffafd7",
+        "2252aed4-906d-43f1-b79a-3120a8c38583"
+      ]
+    },
+    "mainPreviewBacklog": {
+      "failed": 339,
+      "pending": 57,
+      "processing": 1,
+      "skipped": 80006,
+      "success": 33689
+    },
+    "sitemap": {
+      "enabled": true,
+      "task": {
+        "id": "b16b83fb-9402-4baf-bbd5-556f936a1996",
+        "status": "processing",
+        "createdAt": "2026-10-16T14:57:45.764Z",
+        "completedAt": null
+      },
+      "lastGeneration": {
+        "status": "running",
+        "finishedAt": null
+      },
+      "published": {
+        "generatedAt": "2026-10-16T05:47:53.763Z",
+        "urlCount": 138618
+      }
+    },
+    "stopReasons": [],
+    "readyForNextWave": false
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 2
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 2
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 118
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  },
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509",
+    "containersIdentical": true
+  }
+}

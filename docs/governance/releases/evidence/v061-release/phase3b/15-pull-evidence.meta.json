@@ -1,0 +1,11 @@
+{
+  "name": "15-pull-evidence",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b/pull-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792163235.888907,
+  "finishedAt": 1792163265.094421
+}

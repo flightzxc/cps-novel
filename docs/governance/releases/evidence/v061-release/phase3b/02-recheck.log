@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<stdin>", line 54, in <module>
+  File "<stdin>", line 45, in protect
+  File "<stdin>", line 34, in snapshot
+  File "<stdin>", line 30, in sql
+  File "<stdin>", line 6, in run
+  File "/usr/lib/python3.12/subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+OSError: [Errno 7] Argument list too long: 'docker'

@@ -1,0 +1,15 @@
+{
+  "checkedCodes": 2035,
+  "matchedCodes": 0,
+  "ownCodeMatched": 0,
+  "otherCodesMatched": 0,
+  "codeLengthCounts": {},
+  "matchContexts": {},
+  "boundedTokenMatches": 0,
+  "embeddedInLongerTokenMatches": 0,
+  "rawCodeValuesPrinted": 0,
+  "rawBodySaved": false,
+  "httpStatus": 200,
+  "requests": 2,
+  "bodySha256": "a0843f324c6e76fcbdfa0392fe73ea20b6eb3be843e994fcc00c76def355e44c"
+}

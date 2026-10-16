@@ -1,8 +1,10 @@
 # PlotNovel B-47 补发与34本试读定向重跑运维记录（2026-10-16）
 
-## 当前状态：第三阶段甲只读预演 PASS，已停手等待“批准补发”
+## 当前状态：58本补发已完成；公网验收未通过，34本apply未执行
 
-Owner 已批准部署及第三阶段甲。第二阶段已部署验收通过；本轮只执行内存预渲染、ops plan 与 worker survey。生成0次、发布0次、试读apply0次、第三阶段甲公网HTTP0次。乙阶段不在本次执行范围内，必须由Owner看过本回报后明确说“批准补发”。
+Owner已批准第三阶段乙。58本生成/发布/试读、IndexNow与B-46覆盖验收完成；随机公网检查在第一篇book_upstream_code_leak断言停下，随后两次只读复核未复现，尚不能裁定首轮原因。按停手条件保留全部已发布内容，34本固定分组和requestId保留、apply0次，等待Owner裁定。
+
+甲阶段历史预演结果保留如下，乙阶段执行、停点与逐本结果见文末。
 
 ## 固定身份与保护
 
@@ -77,12 +79,109 @@ source-item源文件SHA256 `fd467de40f3d72a89f960bea21cd5f1a34c8b6d37e2c1b393861
 | `537aab35-9d84-4f4f-a02a-d48c2a1234a7` | `901d3e0f-f9fb-42f0-b75c-cdab86ce9d22` | published | 0 | 0 |
 | `6681979c-cfed-459d-8669-1f1d5f5d20e8` | `9cb66af3-18fa-427f-bd6e-d4ddcf0e95de` | published | 0 | 0 |
 
-## 乙阶段：未授权、未执行
+## 乙阶段既定执行规则（方案历史，实际结果见下方）
 
-等Owner“批准补发”后，58本wave1生成任何失败立即停；发布拒绝/冲突立即停且不重试。目标总2035、目标草稿0、IndexNow58/58accepted，逐本报告试读成功/跳过/失败。B-46必须核对preview_chapters_written刷新与来源试读任务关联成功，既有builder只读校验书页及有效章节覆盖；开关false或全部试读结束30分钟仍未覆盖，按原手册只手动刷新一次并明确报告B-46未生效与原因。随机3篇合计最多10次代理请求，不跟随上游跳转。
+既定规则：58本wave1生成任何失败立即停；发布拒绝/冲突立即停且不重试。目标总2035、目标草稿0、IndexNow58/58accepted，逐本报告试读成功/跳过/失败。B-46必须核对preview_chapters_written刷新与来源试读任务关联成功，既有builder只读校验书页及有效章节覆盖；开关false或全部试读结束30分钟仍未覆盖，按原手册只手动刷新一次并明确报告B-46未生效与原因。随机3篇合计最多10次代理请求，不跟随上游跳转。
 
 34本先重新调查，不变才按固定组/requestId apply；预期13本写入非空章节、21本chapterList null跳过、失败0，实际按上游分布报告。有章节写入同样核对sitemap。IndexNow熔断/429/死信/非accepted、permission denied、主worker积压持续增长、原635或1977摘要变化立即停止，不自行修复。回滚需Owner另批兼容标志，固定目标v0.6.0 Final493eb23b034b0410780228535b3e293e4ee91f9a，保留已发布58篇。
 
 ## 证据与治理
 
 [甲阶段完整证据](evidence/v061-release/phase3a/phase3a-result.json)，包含58本逐条原失败字段/预渲染状态、plan、精确清单SHA、34本分组与原survey命令、保护摘要。原日志、退出码与脚本保留；Notion五处已同步并回读PASS（2026-10-16T14:17:38.721Z），历史282397字符保持；[回读收据](evidence/v061-release/phase3a/notion-readback-final.json)已保存。发版级开发日志只保留v0.6.1唯一条目，运维不重复新增发版条目。
+
+
+## 第三阶段乙：58本补发完成，公网检查未通过后停手（JST 2026-10-17）
+
+Owner已明确“批准补发”，授权固定58本及甲阶段34本分组/requestId。已完成58本生成与发布及试读、IndexNow和B-46覆盖验收；公网首篇书页口令码检查未通过，立即停止后续业务提交。34本只读重查仍candidateCount34、分组未变，**apply=0次**。后续两次只读复核未复现，但原首次命中计数/上下文未保存，不能判定已通过，也不能确认是真实暴露还是误命中；未放宽原检查、未换样本绕过、未自行修业务数据。
+
+| 58本验收项 | 结果 |
+| --- | --- |
+| 生成 | success58 / failed0 / skipped0；任务e9b60199-1bbc-48a0-bb73-bc6555490c91 completed |
+| 发布 | 58；rejected0 / conflict0 / not_found0 / aborted=false；总2035，目标草稿0 |
+| IndexNow | 58/58 accepted；无熔断/429等待/死信/blockedUrls |
+| 试读 | success58 / skipped0 / failed0；写入非空章节173，积压0 |
+| B-46 | preview_chapters_written自动刷新completed；来源任务关联成功，coveredItemCount58、triggerCount1 |
+| sitemap | 新58书页+173有效章节全覆盖；全PlotNovel2035书页/6044有效章节，缺失0、意外章节0、go URLs0 |
+| 手动刷新 | 0次，B-46已生效 |
+| 保护 | 原1977篇、635人工复核摘要不变；env/六容器ID不变，六服务error/permission denied0 |
+
+试读任务 `29c70278-aa65-4787-9c46-8a3400c3fe6c` 于14:59:23.669Z完成，自动sitemap任务 `92554c1b-f02f-4ae1-aa3f-43f5f15677db` 于14:59:45.552Z完成，间隔21.883秒；params.triggeredBy为moboreader.preview_refresh.v1#来源任务ID。静态release ID等于自动任务ID，既有builder在web_app/RepeatableRead/READ ONLY下核对，无手动刷新。
+
+### 公网检查停点
+
+随机选定3篇，计划9/10代理GET。首次书页200，CTA/hint/canonical检查越过后在book_upstream_code_leak断言停止；随后仅两次同页脱敏只读定位，分别扫描2035个受保护口令码，最新使用与原检查器相同的规范化规则，两次匹配均0，自己/其它书命中均0。**本阶段总请求3/10次，不跟随上游，未保存原始正文、封面原值或口令码。** 首次检查器未保存具体命中计数/上下文，因此公网验收仍未通过，三篇书页/跳转/中间页整套矩阵未完成，不能把复核0写成整套通过。
+
+首篇articleId `7728ebb3-699a-4048-9e2d-7ebb377fd75e`；路径 `/novel/the-adoptive-father-was-critically-ill-and-his-wife-personally-destroyed-his-last-will-pgmatps3g`。原检查和两次复核结果分别见public-result.json、public-diagnostic.json、public-diagnostic-exact-normalization.json。远端停手文件 `/opt/cps-novel/shared/operations/plotnovel-b47-republish-2026-10-16/phase3b/STOP.json` 已保存；不删除停手证据，不自行恢复业务提交。
+
+### 34本未执行与后续承接
+
+34本已在补发前及停手后用原入口只读重查，均为甲阶段同一MoboReader组、published34、可读章0、在途0、candidateCount34、credential usable。固定requestId `preview-b42-34-2026-10-16-moboreader` 与甲阶段sourceItemIds完整保留；未带apply，没有新34本任务，13写入/21null跳过仍只是预期。**当前停点是公网验收异常，须Owner裁定后续处理；不得自行越过原门禁执行34本。** 保留58篇和全部旧章节，后续恢复不重生成或重发已完成58本。
+
+### 58本逐本试读结果
+
+| novelId | sourceItemId | 写入非空章 | status | skipped reason | failure kind |
+| --- | --- | ---: | --- | --- | --- |
+| `8ab64dc5-2634-4dcf-b72a-c841ba39f15c` | `001c8f37-1a3d-434b-b1de-3e8d393a499d` | 3 | success | — | — |
+| `72c15194-679a-4a7e-8942-3ba5cbe6e618` | `032d7794-d3d4-4d88-8f29-613bc5b51667` | 3 | success | — | — |
+| `7580b19e-fc84-408f-8ddd-c49bbda9d6d4` | `03a5f8a0-b07a-481e-9f7c-abe998975748` | 3 | success | — | — |
+| `1fca788e-88c7-4fc1-86d8-99f1abf06dcd` | `06c59f35-0bfd-493d-97ac-161e959da29d` | 3 | success | — | — |
+| `f7f84c54-1ddd-410b-b0b3-b81bff2534df` | `070aeeb7-7c29-44bb-a0b4-d415f84da5ed` | 3 | success | — | — |
+| `12a6c73b-f700-416d-8595-86d9779113c5` | `0c6e4fd0-0d6a-4ece-9dd7-3174d7f834f6` | 3 | success | — | — |
+| `c4d82857-3c28-464d-afe6-6bbaff7215e7` | `0d103fb2-322a-4ea4-bda0-eb63a30156ab` | 3 | success | — | — |
+| `4b6a3c3d-88ce-4533-bcdc-353e7c285b0d` | `0dec0fff-cb33-446c-854d-4464fbdf2aea` | 3 | success | — | — |
+| `47ba9c6f-054e-4c94-8d3e-421a550da060` | `117dd956-8108-4e25-afc9-243e6cf3e84f` | 3 | success | — | — |
+| `40cee355-5e76-481a-bf91-00bc369d1514` | `1251c062-2dc9-4789-92f4-617dda03a515` | 3 | success | — | — |
+| `ecb9ab94-cf60-417c-99f1-86a6ecfd8160` | `12aac5fd-bab5-467d-b89f-7ec5b8d1f865` | 3 | success | — | — |
+| `fe45dcb3-90e8-4837-b379-b95a9c0610a0` | `14cb444c-ef0c-4e7e-b07a-03a000f042fa` | 3 | success | — | — |
+| `410d0cdf-8dbe-4bbb-ada8-94491834840c` | `19599802-d30f-40f6-a198-c0b02ea61d04` | 3 | success | — | — |
+| `0c5b3037-73f9-48d6-8e88-097c17ab5503` | `2188d995-10f2-45a8-bf32-1f56e43e4f57` | 3 | success | — | — |
+| `8153b554-f04d-41e7-82cc-ef77e9b3b832` | `26045a50-ae19-495d-ade7-afc94648e2e5` | 3 | success | — | — |
+| `263b2b6c-3189-4d04-9183-1bac7b042483` | `26dfbb75-94a5-4cf3-a076-298cf3891a0d` | 3 | success | — | — |
+| `c074f114-40ef-4eab-8126-6450ae10c883` | `28210a04-67c9-432f-bcdd-375eb9f486db` | 3 | success | — | — |
+| `8d02b946-85d1-497d-b6f6-5c44292f9ee3` | `29ef315e-0423-4a5e-a365-72cee54efcd8` | 3 | success | — | — |
+| `f7892692-4271-4668-a317-2368aeaf1ab0` | `2b87e95c-9f0c-4f13-a7a9-cb93b2ede439` | 3 | success | — | — |
+| `f2913f03-390c-4a7e-877e-e80782962a16` | `2d74e088-e8e8-4555-8b96-6652923cf5e4` | 3 | success | — | — |
+| `94aa50b9-023c-405d-9db7-320c84d5ad94` | `2dec16d5-505f-4994-91c8-e61623418f6a` | 3 | success | — | — |
+| `21cc69f0-eb6a-4abc-bfd9-f5774fbe5b6d` | `2ef63d7b-9344-45f6-b559-58c3660f91a0` | 3 | success | — | — |
+| `ece1d680-f62a-4715-ab88-3b9ee18aa511` | `2fa33c4e-c8c9-46cb-bf2d-a86c810f9403` | 3 | success | — | — |
+| `d0fc635e-71fa-4dbc-a8a0-72fb5fa0a695` | `32983211-0db1-4a79-a294-e2a4d194aad0` | 3 | success | — | — |
+| `77bbead2-9989-4277-a0f2-4a4cd9900d5b` | `334b69f9-ee2c-4b80-8818-494ca6134cb4` | 3 | success | — | — |
+| `eb7a743f-051b-4335-a470-74a60862b7ff` | `3383b622-7239-4cb2-904c-d7391dae3339` | 3 | success | — | — |
+| `c631b659-4f79-4768-80ce-4c61f2966c6e` | `33c56a21-4a69-44b5-bb51-8c33436c035a` | 3 | success | — | — |
+| `d930fbdc-02ed-4285-a00c-b55925c120f9` | `345fe7da-78c1-46d1-ad8c-ea5bea649587` | 3 | success | — | — |
+| `85585c6c-a5be-4a9b-bf18-b94666106bf5` | `363ca41b-bc02-4a20-8f12-177276eb3212` | 3 | success | — | — |
+| `5fe258f5-d752-4b32-95e7-00f0ad600439` | `370c3a03-7fda-46da-bec7-23449a9533d5` | 3 | success | — | — |
+| `952e719f-6bc5-4e28-a3ff-ce09dbab085b` | `37f066e1-605e-44ba-8a25-2239fc5a1107` | 3 | success | — | — |
+| `668ad359-6ec1-45c8-b588-575e2c76c9ae` | `3c2a5b58-3a64-42c5-a158-0b9719d418be` | 3 | success | — | — |
+| `57b18a9b-37f6-4f57-911b-58a4591e730a` | `3e7c4fcd-37b9-4b00-af89-507b0bfd67f5` | 3 | success | — | — |
+| `00d9bd97-fe97-429e-9d1b-39ee466f5f05` | `3e8b9b5b-1689-4d39-a15d-98730e7a8bfd` | 3 | success | — | — |
+| `77ad1197-8ae7-4a8d-9777-e7cb991d8c6e` | `3f9fb5ab-767a-428b-ad3b-72c8dffc99cb` | 3 | success | — | — |
+| `2bd00daa-1d89-4191-868e-47cea348bc87` | `44eacb04-aa51-43c0-9578-5e6430ed1f5a` | 3 | success | — | — |
+| `4d3a5068-7a50-46c4-9a88-810e6970c139` | `45c55b6f-d45f-4c2f-ab8d-21c16cd6c821` | 3 | success | — | — |
+| `2b98da7d-898a-4a01-954a-a0a928dcb2a7` | `46635b8c-a7b9-428b-9da8-7c30e7c2ff9d` | 3 | success | — | — |
+| `3fefed63-17e5-419c-8745-12184ec43b01` | `489eaca7-bc7f-459f-9178-cabcbc952d22` | 3 | success | — | — |
+| `dfd67f4a-a014-42f0-9ce7-e1f5b630d58a` | `4a0cbcca-8ca8-48f4-b4eb-d4d2a25c2d10` | 3 | success | — | — |
+| `a8d242e9-c7f7-44bd-85a0-b925e0619cd8` | `4b2dfc34-d989-4d30-bf60-f4ba8fde824e` | 3 | success | — | — |
+| `977ce050-54da-4f0b-8445-9e5752c70c8f` | `4b840aa4-5ace-4ec3-94af-f821764d41ab` | 3 | success | — | — |
+| `346954a7-c6e7-494d-8918-ceccff8b2340` | `4c6a4088-18a5-4eaf-a9ba-0add0baed86c` | 3 | success | — | — |
+| `716128d5-ebd1-4eb6-8631-386249a76027` | `4cb59103-8ca3-4ece-8409-c546bba76be2` | 3 | success | — | — |
+| `798613b2-0810-4abd-be32-81b9dc23311d` | `4cc8935d-4305-4d29-a1fd-0e74aa68bdf3` | 3 | success | — | — |
+| `ae9d3c01-36be-467d-8bc6-a32f28b163d7` | `4ccf0bf1-6f10-4f62-a3e4-483bbd36b65e` | 3 | success | — | — |
+| `b1db18a4-828b-4c5e-bcc9-b7669511927f` | `4f85a18b-efe6-4290-80ca-3431d19f6d00` | 3 | success | — | — |
+| `da0ece41-6216-4cf4-849d-c75029cadf0e` | `518c01c0-c2af-48e0-aa72-83f468c86158` | 3 | success | — | — |
+| `a36df145-db67-4cb8-a995-0fd945f4ce85` | `51b64da3-0de6-451a-b837-23fb9da2c354` | 3 | success | — | — |
+| `6ece0a4d-9f4a-405c-b4aa-78e10df25628` | `52b76cbb-0c9b-4016-8128-fb739eb98896` | 3 | success | — | — |
+| `da373ead-ae9f-4fb2-a319-6041e33649d8` | `5393c43f-6a70-42d2-a118-22b9b2cffedf` | 3 | success | — | — |
+| `9e7319d7-dbb7-474b-8676-d6a5131f1afa` | `8613a2ef-ec6e-4d8d-bf50-c4ba5332d057` | 3 | success | — | — |
+| `e1cff180-c9d7-402b-9c3b-b24122b52310` | `8e511a2c-c532-4179-b09f-25f30bb259d6` | 3 | success | — | — |
+| `a3d42871-135a-4681-a897-bc3bbbcbc23a` | `b6c7f512-1105-4e04-a723-62f9089c9d6d` | 3 | success | — | — |
+| `2d0ae15d-6734-4840-b8c3-88c6e7bdb719` | `b83a5d13-bf30-488e-9bca-b4420171bef9` | 3 | success | — | — |
+| `22e4be9a-3936-43dc-8c09-1751a9c8b052` | `bc06d97c-3987-42e0-86c2-38c680ca2b59` | 3 | success | — | — |
+| `b95462c5-9bcb-4ab9-be95-73c54b7ee4d8` | `d3b095d8-2dc4-44ee-b846-88b7771c4589` | 3 | success | — | — |
+| `1734d288-229c-439b-8d02-2e759fa4da6e` | `e8f94e3b-9a54-4627-a3d4-12d3b0634487` | 2 | success | — | — |
+
+### 执行偏差与证据
+
+只读监督器的1977-ID保护过滤最初超出单命令参数长度，改用stdin传psql，原查询口径不变。覆盖辅助程序复制临时文件时保留host uid1000，导致应用uid1001读不到；恢复manifest属主1001:1001、模式0600并复核原SHA不变，检查夹具另用0644输入和甲阶段已知novelIds过滤；没有执行不可授权的source-item查询。全过程服务permission denied0；原ops脚本、编排和门禁未改。原失败日志保留。公网检查异常独立保留为STOP，不作为已修复夹具问题处理。
+
+[乙阶段完整结果与逐条证据](evidence/v061-release/phase3b/phase3b-result.json)，[远端停手快照](evidence/v061-release/phase3b/remote/STOP.json)。技术状态为“58本完成，公网验收未通过，34本待处理”，不登记为乙阶段全完成。Notion五处已同步并回读PASS（2026-10-16T15:11:34.874Z），原历史293077字符在还原本轮指定更新后逐字一致；[乙阶段回读收据](evidence/v061-release/phase3b/notion-readback.json)。发版日志仍只有原v0.6.1唯一条目。

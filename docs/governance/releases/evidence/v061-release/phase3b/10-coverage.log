@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<stdin>", line 61, in <module>
+  File "<stdin>", line 7, in run
+RuntimeError: command_failed_exit_1_stderrsha_f022b02f1ad37b33746cff127ac199737d498151bfc0c84113dbccb978c7c911

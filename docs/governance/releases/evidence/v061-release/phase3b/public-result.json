@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-16T15:02:25.276770+00:00",
+  "status": "STOP",
+  "reason": "book_upstream_code_leak",
+  "samples": [
+    {
+      "articleId": "7728ebb3-699a-4048-9e2d-7ebb377fd75e",
+      "novelId": "00d9bd97-fe97-429e-9d1b-39ee466f5f05",
+      "bookPath": "/novel/the-adoptive-father-was-critically-ill-and-his-wife-personally-destroyed-his-last-will-pgmatps3g",
+      "goCode": "mi5bhsrdm6"
+    },
+    {
+      "articleId": "053fc95e-86cc-4e83-af54-bfbb65dfddb7",
+      "novelId": "b95462c5-9bcb-4ab9-be95-73c54b7ee4d8",
+      "bookPath": "/novel/dog-and-trash-divorce-finalized-p8maadfzg",
+      "goCode": "c4a5ehs9wk"
+    },
+    {
+      "articleId": "f5c469fe-3683-484e-9865-696dc3ba63d8",
+      "novelId": "21cc69f0-eb6a-4abc-bfd9-f5774fbe5b6d",
+      "bookPath": "/novel/because-i-am-infertile-my-wife-turned-to-a-car-mechanic-p17xhvk0n",
+      "goCode": "r2y1duq8sl"
+    }
+  ],
+  "results": [
+    {
+      "sequence": 1,
+      "at": "2026-10-16T15:02:21.011129+00:00",
+      "method": "GET",
+      "url": "https://pulsenovels.com/novel/the-adoptive-father-was-critically-ill-and-his-wife-personally-destroyed-his-last-will-pgmatps3g",
+      "kind": "book",
+      "articleId": "7728ebb3-699a-4048-9e2d-7ebb377fd75e",
+      "proxy": "http://127.0.0.1:7899",
+      "followRedirects": false,
+      "status": 200,
+      "checks": {}
+    }
+  ],
+  "requests": 1,
+  "rawBodiesSaved": false,
+  "upstreamCodesSaved": false,
+  "redirectsFollowed": false,
+  "retries": 0
+}

@@ -1,0 +1,10 @@
+{
+  "name": "12-public",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase3b/public-check.py"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792162934.411432,
+  "finishedAt": 1792162945.6140501
+}

@@ -48,6 +48,9 @@
 **验证方式**：第一阶段全门禁及37运行器PASS、全量0failed/无Unhandled、proxy1742、ops19单测+10真实库/skip0，非英文封面plan→generate→publish正文编码/DB原值保持。主控六组独立变异中两组首轮存活，补承重用例后全部被捕获；本轮ops旧版本身份与失败策略两组变异亦捕获、还原干净。服务器原SHA/OCI/Final/tree/--load PASS，在线逻辑备份763037272字节/SHA1ce6fd86…e6e591/pg_restore清单通过。维护14:08:13.209745Z–14:09:02.136391Z共48.926646秒；原migration_owner检查无待迁移、postgres单事务grants重放通过。health/五应用健康、postgres CID保持、27迁移checksum/授权函数触发器读回PASS、投影0/0/0；IndexNow熔断关闭、无429等待/死信/积压，Next16.3.8/四应用无vitest和tinypool、六服务error/permissiondenied0、备份定时器运行。4/6公网代理GET通过，HTML和Location口令码匹配0，原1977篇/635人工复核摘要一致。自写公网检查器多行JSON解析问题已修正，修正前HTTP0次，原产品门禁不变。
 **后续待办与治理**：第三阶段甲58/58预渲染与固定58候选PASS，34本当前MoboReader一组survey candidate34、可读章0/在途0，原1977/635摘要保持；已停手，58补发/34apply待Owner另批，B-46覆盖在有章节写入后验收。annotated v0.6.1固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账、唯一发版日志和第二阶段证据完成；Notion五处已同步并回读PASS（2026-10-16T14:17:38.721Z），历史282397字符保持，收据见甲阶段证据。回滚仅v0.6.0 Final493eb23b034b0410780228535b3e293e4ee91f9a，SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES须Owner回滚时明确批准。完整[发布记录](releases/v0.6.1-preproduction.md)。
 
+**乙阶段运维补记（JST 2026-10-17）**：Owner已批准补发。58本生成/发布/试读全成功（失败0、跳过0）、总2035/目标草稿0/IndexNow58accepted；173非空章节，B-46自动刷新与来源任务关联并在终态后21.883秒完成，58书页+173有效章及原1977篇对应页面覆盖全PASS，无手刷。随机公网首篇book_upstream_code_leak检查未通过后停手，两次只读复核0命中、首轮原因未裁定；累计GET3/10，原1977/635摘要、env/容器保持、六服务error/permission denied0。34本原组/requestId候选仍34、apply0，不能登记乙阶段全完成。自写只读SQL传输参数长度与临时文件属主问题均修正，原ops和门禁不变；公网检查STOP独立留证，待Owner裁定后续。[乙阶段记录](releases/plotnovel-b47-republish-and-preview-34-2026-10-16.md)。
+
+
 ### 2026-10-14 16:51 - codex（GPT-6，正式发版执行；JST）
 
 **变更类型**：海阅v0.6.0 MINOR正式站部署，仅haiyue-vps。Owner明确授权Final `493eb23b034b0410780228535b3e293e4ee91f9a`；原RELEASE=PASS/EXIT=0，A～F PASS。代码已部署，PlotNovel尚未开通，前台行为不变。

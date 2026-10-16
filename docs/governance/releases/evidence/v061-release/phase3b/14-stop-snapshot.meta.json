@@ -1,0 +1,11 @@
+{
+  "name": "14-stop-snapshot",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase2/remote-client.py",
+    ".tmp/v061-release/phase3b/stop-remote.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792163204.551115,
+  "finishedAt": 1792163213.1788192
+}

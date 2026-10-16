@@ -1,0 +1,28 @@
+{
+  "pageId": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "title": "🏷️ 海阅 版本管理与发版手账",
+  "result": "PASS",
+  "operationStatus": "STOP - partial stage3b complete; public gate failed; preview34 not applied",
+  "firstReadbackAt": "2026-10-16T15:10:47.805Z",
+  "finalReadbackAt": "2026-10-16T15:11:34.874Z",
+  "checks": {
+    "snapshot": true,
+    "table": true,
+    "formal": true,
+    "log": true,
+    "ops": true,
+    "preserve34NotApplied": true,
+    "b46": true,
+    "noRawTurnstile": true,
+    "unrelatedHistoryPreserved": true,
+    "finalSyncStatus": true
+  },
+  "oldContentCharactersCompared": 293077,
+  "final": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "manifestSha256": "ac7c225d28200fc6d1d56bf8046b9d324a7d7223666c9127e20566fea460e639",
+  "publishedNew": 58,
+  "publishedTotal": 2035,
+  "preview34ApplyCalls": 0,
+  "externalHttpTotal": 3
+}

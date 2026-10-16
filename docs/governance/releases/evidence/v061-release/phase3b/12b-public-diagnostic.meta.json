@@ -1,0 +1,10 @@
+{
+  "name": "12b-public-diagnostic",
+  "command": [
+    "python3",
+    ".tmp/v061-release/phase3b/diagnose-public-exact.py"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792163106.543139,
+  "finishedAt": 1792163115.988532
+}

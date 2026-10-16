@@ -1,0 +1,622 @@
+{
+  "at": "2026-10-16T15:06:52.250604+00:00",
+  "status": "STOP",
+  "stop": {
+    "at": "2026-10-16T15:06:52.250343+00:00",
+    "status": "STOP",
+    "reason": "public_book_upstream_code_check_failed",
+    "stage": "before_preview_34_apply",
+    "newPublished": 58,
+    "preview34ApplyCalls": 0,
+    "readOnlyCodeRechecks": [
+      0,
+      0
+    ],
+    "firstExposureConclusion": "unresolved",
+    "externalHttp": 3,
+    "ownerDecisionRequiredBeforeResume": true
+  },
+  "waveStatus": {
+    "wave": 1,
+    "generation": {
+      "expected": 58,
+      "notSubmitted": 0,
+      "pending": 0,
+      "success": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "generationFailurePolicy": {
+      "knownTemplateFailures": 0,
+      "otherFailures": 0,
+      "allowed": true
+    },
+    "generationTasks": [
+      {
+        "id": "e9b60199-1bbc-48a0-bb73-bc6555490c91",
+        "status": "completed",
+        "total": 58
+      }
+    ],
+    "drafts": 0,
+    "published": 58,
+    "indexnow": {
+      "accepted": 58,
+      "pending": 0,
+      "missing": 0,
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "deadLetters": 0,
+      "blockedUrls": 0
+    },
+    "preview": {
+      "expected": 58,
+      "alreadyValid": 0,
+      "completed": 58,
+      "failed": 0,
+      "pending": 0,
+      "missing": 0,
+      "taskIds": [
+        "29c70278-aa65-4787-9c46-8a3400c3fe6c",
+        "4f068ba5-673b-400f-bcca-6f356e9ce08c",
+        "dce44f12-3010-49be-b4e0-5bbf41c28adb",
+        "ced785ea-52f8-430c-9861-3fe72bd7b92a",
+        "37449046-4949-45c8-8f5b-f762fb5032ae",
+        "8bd12fb6-691e-4706-b477-340001cf31b1",
+        "685c7477-354b-4e7a-afc4-cbc52b388027",
+        "95f4f288-81d2-4f02-9a5f-264ca9f40405",
+        "65e57cc3-2345-4a76-8948-4dd85be00bb9",
+        "c416e90d-37c4-413a-a701-0f3f7b5e3c16",
+        "82143076-3511-4d96-8a09-7398860ee092",
+        "742ff3f5-b3e8-4273-a0d9-ace7e20c6829",
+        "82eebafe-e251-4716-9f17-49219d3899d8",
+        "49fd2e17-bc40-4c5c-b2c3-91cbb90be8da",
+        "c00542c1-91ef-401e-a03f-278000e3c721",
+        "2df3b901-44f9-4cdd-946a-68d270a29bd1",
+        "46100cbe-4512-493f-aa4f-3c26c81a8802",
+        "fb1c63d0-a648-4887-977c-a297d36086f4",
+        "e91f463c-aca8-4730-b0d4-b50474f9815c",
+        "0038a9ad-210f-4fde-ab52-fb78f9d19834",
+        "88f9539c-9638-4a64-8ec4-bbd29c1b880c",
+        "2ee6d134-a0b7-4db2-a311-23f926d02729",
+        "b91e860d-2a88-4430-9e04-d0ba9e09f4e3",
+        "7e4f24ab-9c6c-4406-af47-13ac17e2a5d3",
+        "86b37831-cc97-4e8d-a788-c434b2d0c1a6",
+        "ac10227a-b61b-48e6-9f2a-a4b73f3277df",
+        "edd49af5-c7ac-4377-9906-243667558179",
+        "2482ab5c-324a-4dd5-b437-25aee2baf82b",
+        "3655fd89-ad79-4bef-af8b-e726bef2be6a",
+        "a7093cc8-8bf2-4b4b-a3b5-f484414f34b2",
+        "f1bfbc30-9280-483b-8d1c-3c5d3c8648b2",
+        "6927d88e-1493-4f85-af33-cd8d2353a481",
+        "b4373800-c39f-4578-9ac8-c454f9ae12e8",
+        "72e047e2-eaef-47fb-be67-f4afdb4de503",
+        "6440bb08-af80-4fa2-9304-78d93a722280",
+        "54153a0a-70cc-4f6b-99c4-31003bf8ff39",
+        "c4d3a30b-4b56-4f85-930b-5977e61371b5",
+        "e96cff7a-e5ae-4a93-88b9-c4dad634a1b1",
+        "b29411a9-3ad1-463d-8b14-59152b2aaf05",
+        "ea780499-d50b-42be-945b-a86ed6a6439a",
+        "1dfee4f5-03ad-4635-ae4c-956b4c90b282",
+        "f3cf1c3f-418d-44f2-b34d-eacf45f00fac",
+        "b245a885-d427-47a4-bab2-bc06f991a9eb",
+        "5e82f76d-0c3d-416c-bba6-8fd3734ee383",
+        "358a42fd-ccfc-40c0-896a-3ffab1092636",
+        "5d4f558b-409a-43db-b971-b0affd5c14dd",
+        "f183d49e-c51b-44a0-8731-498d6f01f0f6",
+        "6f90b18f-513e-46c4-965b-cbc85b09c4fc",
+        "da87a171-2240-47ad-b5fd-3f9ea427c127",
+        "1259c57b-3df7-4a86-9ff7-83e6d014adad",
+        "e77b571c-0632-40bd-b1f3-e48160d5ddf4",
+        "18ce35d0-d9d7-494e-9059-08fd9139c3a7",
+        "c5eec542-470d-4cdc-b485-bc64af33449c",
+        "f1b0b0ef-1416-4a9f-9ec5-cb255b56e6ae",
+        "cce93b4f-cfc3-4d07-970a-8361e2bb2047",
+        "b4745910-a543-4dee-a43b-60b25304e2eb",
+        "5490b3b9-ea15-4a74-9894-bb21daffafd7",
+        "2252aed4-906d-43f1-b79a-3120a8c38583"
+      ]
+    },
+    "mainPreviewBacklog": {
+      "failed": 339,
+      "skipped": 80006,
+      "success": 33747
+    },
+    "sitemap": {
+      "enabled": true,
+      "task": {
+        "id": "92554c1b-f02f-4ae1-aa3f-43f5f15677db",
+        "status": "completed",
+        "createdAt": "2026-10-16T14:59:23.724Z",
+        "completedAt": "2026-10-16T14:59:45.552Z"
+      },
+      "lastGeneration": {
+        "status": "success",
+        "finishedAt": "2026-10-16T14:59:45.536Z"
+      },
+      "published": {
+        "generatedAt": "2026-10-16T14:59:45.534Z",
+        "urlCount": 138851
+      }
+    },
+    "stopReasons": [],
+    "readyForNextWave": true
+  },
+  "preview34Grouping": {
+    "at": "2026-10-16T15:06:51.334Z",
+    "databaseRole": "worker_app",
+    "transactionReadOnly": "on",
+    "rows": [
+      {
+        "sourceItemId": "02b6dff3-d973-4922-ad43-d4ab61a895b5",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "7781e177-99e1-4cd2-ad05-51eb6cf9d6a8",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "031216f8-1a1b-463b-856a-74b4712c889b",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "581501ea-da86-4be2-88d5-8a6a4a73e40b",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "0325c057-214b-46d1-a1f5-5f481e03d7b1",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "02a68b43-375c-4d23-9b45-703a7fe464e1",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "056374b0-ec90-4b5d-9543-aef5b081aeaf",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "47a40ac4-eeb5-4ccb-b7cb-0767b2de3d78",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "0dd6a38a-e438-4654-b608-3bc60743c304",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "62729dc9-647f-490f-9b34-74561f68bb36",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "0faed754-957d-461f-abe6-00c1b1e9e32b",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "cc9d20ab-1809-4864-b57e-d62c64dc0170",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "1044615d-8566-4134-910e-b5220166b0a9",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "44d30de5-8739-4b92-a11c-53b0d561d0c5",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "11e79e01-415e-4c38-9429-3b2bb3157cd6",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "3ae09229-d70c-49f1-a50b-b4e923ff5707",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "14006896-96c5-4acd-b833-9d830e2f3101",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "ba912bad-c42f-417b-80dd-7455691bae9e",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "175c6473-dbbd-41a7-9b5a-e720f1ada72c",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "46590824-8755-43b4-a76f-b6d4b02419ce",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "182ae182-d5c2-4ab3-a45e-c312051fd04c",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "21721548-0e10-43b1-8f49-0a7d15cbfdb2",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "185d2e13-e620-483d-8fde-21441afb372e",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "1421bed3-2a1e-4ebb-96fa-7e46c687e090",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "1df34abe-29f9-4b4f-a897-ebb5101ae8fc",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "75ca466a-03a4-430c-862c-8c759f309b48",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "1f0df82e-498b-44cb-b66e-06c57d6d1890",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "95d89a43-9b6d-4b18-b30d-c2bd98f0bede",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "1f9c9b7b-d58a-4557-8f1a-ed2c441569cb",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "1600b837-a99d-42b8-acfa-105e0d6f4a12",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "217e972c-1b14-43f9-86e9-c40606e9f7bb",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "eb05f5d6-767f-4e58-bf93-d969f9c40a52",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "234abdc6-224c-4dab-b73b-565bebf51302",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "87593459-f52d-42d5-aac1-f91677ff9ce4",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "24c306c7-1fd0-4700-baa4-3a484cd46837",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "63f6ccbc-7060-4b59-b50d-755436f9f22a",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "2cb5ec08-7a37-4ec3-8258-52cd10ea1d73",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "655ff0c8-308c-406c-ad08-c7282f75784e",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3236281e-8892-422f-8f46-f23e916ae834",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "bb38cdd8-3e4a-4c0b-93d2-97277fe6795d",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "35980fa4-b3f3-4057-adcd-28cb74b02523",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "42f4f206-af4b-49b4-94c3-d6ac207010cb",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "366461bb-fbe3-418a-ab65-04b184cf0140",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "5dea56d0-88e8-4c1a-a786-53fda5bca603",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "38c5670b-242e-403d-b921-0c2bbe1b2e66",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "319bf8e0-cc25-43f5-9dc8-5bf23a655044",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3b2987f7-1ff4-48ba-9b55-8363a5783d53",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "89675844-f5f6-4114-8a1b-03065e4343ff",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3cda0227-f309-40ea-989a-0411a8fa5460",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "058ee325-ed77-4b4c-8755-558e68c7ab75",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3d427bac-d7cc-440a-829c-cc5c319ccc74",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "65666038-7463-49c0-bfad-9526b91d0d8f",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3d5c16dd-44ed-44b7-af61-26dfe50d794a",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "2e8d4495-f966-4471-9241-c1bd0c17a8b2",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "3e858f0f-c235-4224-9783-d4dddbdf77a9",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "1583d476-069b-4928-9932-42607ceebb40",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "48652907-0196-4ec7-a3ad-c9ad3e1df6fa",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "e7f3856d-e196-4f53-9ab7-5bc9189a6983",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "4b87f14c-e188-4205-b612-a7cdfd634e7f",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "e1a7352d-a077-4372-8bc8-5f3afb5f7ceb",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "4cc30b02-93c4-4fac-a5d1-754a79222a35",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "15ceba58-e558-4bf4-868b-7fc5f6ed6533",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "4d46f103-1780-4000-9ecd-86b6dafb9ccf",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "858bbc2f-1437-4406-b1d5-07e21f2c1688",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "537aab35-9d84-4f4f-a02a-d48c2a1234a7",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "901d3e0f-f9fb-42f0-b75c-cdab86ce9d22",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      },
+      {
+        "sourceItemId": "6681979c-cfed-459d-8669-1f1d5f5d20e8",
+        "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+        "appCode": "moboreader",
+        "sourceStatus": "linked",
+        "novelId": "9cb66af3-18fa-427f-bd6e-d4ddcf0e95de",
+        "novelStatus": "published",
+        "readableChapters": 0,
+        "inflightPreview": 0
+      }
+    ]
+  },
+  "preview34FinalSurvey": [
+    {
+      "mode": "survey",
+      "preflight": {
+        "status": "usable",
+        "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+        "credentialId": "dbcd20e8-e5b3-4216-9115-8aae8ddaeaff"
+      },
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "requestId": "preview-b42-34-2026-10-16-moboreader",
+      "limit": 34,
+      "batchSize": 200,
+      "onlySourceItemIds": [
+        "02b6dff3-d973-4922-ad43-d4ab61a895b5",
+        "031216f8-1a1b-463b-856a-74b4712c889b",
+        "0325c057-214b-46d1-a1f5-5f481e03d7b1",
+        "056374b0-ec90-4b5d-9543-aef5b081aeaf",
+        "0dd6a38a-e438-4654-b608-3bc60743c304",
+        "0faed754-957d-461f-abe6-00c1b1e9e32b",
+        "1044615d-8566-4134-910e-b5220166b0a9",
+        "11e79e01-415e-4c38-9429-3b2bb3157cd6",
+        "14006896-96c5-4acd-b833-9d830e2f3101",
+        "175c6473-dbbd-41a7-9b5a-e720f1ada72c",
+        "182ae182-d5c2-4ab3-a45e-c312051fd04c",
+        "185d2e13-e620-483d-8fde-21441afb372e",
+        "1df34abe-29f9-4b4f-a897-ebb5101ae8fc",
+        "1f0df82e-498b-44cb-b66e-06c57d6d1890",
+        "1f9c9b7b-d58a-4557-8f1a-ed2c441569cb",
+        "217e972c-1b14-43f9-86e9-c40606e9f7bb",
+        "234abdc6-224c-4dab-b73b-565bebf51302",
+        "24c306c7-1fd0-4700-baa4-3a484cd46837",
+        "2cb5ec08-7a37-4ec3-8258-52cd10ea1d73",
+        "3236281e-8892-422f-8f46-f23e916ae834",
+        "35980fa4-b3f3-4057-adcd-28cb74b02523",
+        "366461bb-fbe3-418a-ab65-04b184cf0140",
+        "38c5670b-242e-403d-b921-0c2bbe1b2e66",
+        "3b2987f7-1ff4-48ba-9b55-8363a5783d53",
+        "3cda0227-f309-40ea-989a-0411a8fa5460",
+        "3d427bac-d7cc-440a-829c-cc5c319ccc74",
+        "3d5c16dd-44ed-44b7-af61-26dfe50d794a",
+        "3e858f0f-c235-4224-9783-d4dddbdf77a9",
+        "48652907-0196-4ec7-a3ad-c9ad3e1df6fa",
+        "4b87f14c-e188-4205-b612-a7cdfd634e7f",
+        "4cc30b02-93c4-4fac-a5d1-754a79222a35",
+        "4d46f103-1780-4000-9ecd-86b6dafb9ccf",
+        "537aab35-9d84-4f4f-a02a-d48c2a1234a7",
+        "6681979c-cfed-459d-8669-1f1d5f5d20e8"
+      ],
+      "candidateCount": 34,
+      "truncated": false,
+      "failureBreakdown": {
+        "MoboReader Preview read failed": 34
+      },
+      "sampleCandidates": [
+        {
+          "novelSourceItemId": "6681979c-cfed-459d-8669-1f1d5f5d20e8",
+          "novelId": "9cb66af3-18fa-427f-bd6e-d4ddcf0e95de",
+          "novelTitle": "Mit dem Alpha-Stiefbruder verbunden",
+          "lastPreviewItemStatus": "failed",
+          "lastPreviewFailureMessage": "MoboReader Preview read failed"
+        },
+        {
+          "novelSourceItemId": "1f9c9b7b-d58a-4557-8f1a-ed2c441569cb",
+          "novelId": "1600b837-a99d-42b8-acfa-105e0d6f4a12",
+          "novelTitle": "HIS MAFIA HEIR SHE HID FOR SEVEN YEARS ",
+          "lastPreviewItemStatus": "failed",
+          "lastPreviewFailureMessage": "MoboReader Preview read failed"
+        },
+        {
+          "novelSourceItemId": "2cb5ec08-7a37-4ec3-8258-52cd10ea1d73",
+          "novelId": "655ff0c8-308c-406c-ad08-c7282f75784e",
+          "novelTitle": "A Fuga da Garota da Gaiola Dourada",
+          "lastPreviewItemStatus": "failed",
+          "lastPreviewFailureMessage": "MoboReader Preview read failed"
+        },
+        {
+          "novelSourceItemId": "537aab35-9d84-4f4f-a02a-d48c2a1234a7",
+          "novelId": "901d3e0f-f9fb-42f0-b75c-cdab86ce9d22",
+          "novelTitle": "The Yellow Book",
+          "lastPreviewItemStatus": "failed",
+          "lastPreviewFailureMessage": "MoboReader Preview read failed"
+        },
+        {
+          "novelSourceItemId": "11e79e01-415e-4c38-9429-3b2bb3157cd6",
+          "novelId": "3ae09229-d70c-49f1-a50b-b4e923ff5707",
+          "novelTitle": "U.S. Copyright Renewals, 1952 July - December",
+          "lastPreviewItemStatus": "failed",
+          "lastPreviewFailureMessage": "MoboReader Preview read failed"
+        }
+      ],
+      "batches": []
+    }
+  ],
+  "protection": {
+    "protectedIdentical": true,
+    "envSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509",
+    "containersIdentical": true
+  },
+  "logs": {
+    "web": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "worker": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 117
+    },
+    "worker-light": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 7
+    },
+    "scheduler": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    },
+    "postgres": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 360
+    },
+    "backup-timer": {
+      "error": 0,
+      "permissionDenied": 0,
+      "lines": 1
+    }
+  }
+}

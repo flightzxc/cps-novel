@@ -1,0 +1,2 @@
+import pathlib,json,subprocess
+r=pathlib.Path('/opt/cps-novel/shared/operations/plotnovel-b47-republish-2026-10-16/phase3b');assert (r/'STOP.json').exists();files={p.name:json.loads(p.read_text()) for p in sorted(r.glob('*.json'))};journal=subprocess.check_output(['docker','exec','cps-novel-web-1','cat','/tmp/plotnovel-b47-20261016-manifest.json.execution.jsonl'],text=True);print(json.dumps({'files':files,'journal':[json.loads(l) for l in journal.splitlines()]}))
