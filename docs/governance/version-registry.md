@@ -19,6 +19,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.6.2 —— 第一阶段准备中，尚未部署（2026-10-17 JST）
+
+- 版本类型 **PATCH**（沿用 v0.5.11 收入看板与 v0.5.14 站内搜索含迁移的先例）。基线 `004c81c07e09868f695e4d5486d29dd602738be7`（tree `be3f7dbcb49d72256a02f29a1dff91976aaf1f5f`），集成线 `integration/v0.6.2-2026-10-17`，发布分支 `release/v0.6.2-2026-10-17`；来源 `feat/v062-revenue-book-country`，两次 no-ff 合并 `2114062c`、`004c81c0`。
+- 后台 `/revenue` 新增按书统计（新用户、分成收入、区间汇总、单书按日、剧场列与筛选）和国家分布（新用户／激活、区间排行、国家 × 日期）；沿用 `changdu.revenue_sync.v1`，缺失覆盖不记为 0。本期不做收入按国家或书 × 国家。
+- 只新增迁移 `20261017120000_revenue_book_country_breakdown` 与 `20261017180000_revenue_country_active_users`：迁移 **29 条**、业务表 **60 张**、字典 **1401 条 / active 1331 条**；两张新表 worker_app 读写删，web_app / analyst_ro 只读。原迁移逐字节不动；无新环境变量、任务类型或依赖变化，无回填。
+- 顺带 B-48：p1-05b 固定 postgres:16.14，本机已有镜像不再拉取；v0.6.1 八个证据脚本改为 `.ts.txt`，恢复末端 tsc。公开网址冻结，白名单、nginx、公开页面和路由不变。
+- 第一阶段仅本地升版、完整门禁、GitHub 推送及 linux/amd64 不可变归档；第二阶段须 Owner 明确说“批准部署”，仅限 haiyue-vps。收入同步由 Owner 在后台手动触发；annotated tag、生成 CHANGELOG、唯一正式开发日志与 Notion 同步回读在部署验收后完成。
+
 ### v0.6.1 —— 已部署，58本补发及34本定向试读全部验收PASS（JST 2026-10-17）
 
 - **PATCH**，Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f` / tree `34d2fcbc052762544cefec1f97466b2d1e786762`，来源fix/v061-cover-preview-sitemap、integration/v0.6.1-2026-10-16@3704cc0，发布分支release/v0.6.1-2026-10-16。B-47正文封面编码/B-42空正文跳过/B-46试读后sitemap均已生效；公开网址、数据库/sitemap/og/书页封面原值冻结。
@@ -510,6 +518,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 第一阶段准备中，尚未部署 |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |
