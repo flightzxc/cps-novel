@@ -330,8 +330,9 @@ describe("限速闸与端点白名单", () => {
     expect(observed).toEqual([{ endpoint: "getreport", status: 200 }, { endpoint: "getreport", status: 200 }]);
   });
 
-  it("只放行 https://kocserver-cn.cdreader.com/api/Report/GetReport", () => {
+  it("只放行 https://kocserver-cn.cdreader.com 下的 GetReport 与（v0.6.2）GetCountryReport", () => {
     expect(() => assertAllowedNovelRevenueEndpoint(NOVEL_REVENUE_ENDPOINT)).not.toThrow();
+    expect(() => assertAllowedNovelRevenueEndpoint("https://kocserver-cn.cdreader.com/api/Report/GetCountryReport")).not.toThrow();
     for (const bad of [
       "http://kocserver-cn.cdreader.com/api/Report/GetReport",
       "https://mobotreeserver-cn.cdreader.com/api/Report/GetReport",
@@ -343,6 +344,9 @@ describe("限速闸与端点白名单", () => {
       "https://kocserver-cn.cdreader.com/api/Report/GetMDetailsReport",
       "https://kocserver-cn.cdreader.com/api/Report/GetReport/Export",
       "https://kocserver-cn.cdreader.com/api/report/getreport",
+      "https://kocserver-cn.cdreader.com/api/Report/GetCountryReport?countryReportType=1",
+      "https://kocserver-cn.cdreader.com/api/Report/GetSelectItems",
+      "https://kocserver-cn.cdreader.com/api/Report/GetMToTalReport",
       "not a url",
       "",
     ]) {

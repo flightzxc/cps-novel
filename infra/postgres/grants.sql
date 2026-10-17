@@ -104,6 +104,11 @@ GRANT SELECT ON TABLE
   revenue_sync_batch,
   revenue_raw_snapshot,
   revenue_daily_stat,
+  -- v0.6.2 按书归因 + 新增用户国家（迁移 20261017120000_revenue_book_country_breakdown）。同口径：
+  -- web 只读（/revenue 页按书、国家两节），写入只有 worker。两表只有上游统计值与本站外键，
+  -- 不含推广码、口令码、链接或凭证（口令维度从不请求）。
+  revenue_book_daily_stat,
+  revenue_country_daily_stat,
   _prisma_migrations
 TO web_app, analyst_ro;
 
@@ -436,6 +441,13 @@ GRANT SELECT, INSERT, UPDATE ON TABLE channel_account_hold TO worker_app;
 -- web_app 对四表只有上面的 SELECT；入队用的是 generic_task / operation_audit 既有权限，不新增。
 GRANT SELECT, INSERT, UPDATE ON TABLE
   revenue_sync_scope, revenue_sync_batch, revenue_raw_snapshot, revenue_daily_stat
+TO worker_app;
+-- v0.6.2 按书 / 国家两张统计表（迁移 20261017120000_revenue_book_country_breakdown）：同一个
+-- `changdu.revenue_sync.v1` 任务在 finalize 事务里把批次区间内的旧行整段删掉再 createMany（上游回补后
+-- 消失的书 / 国家不残留），所以比上面四表多一个 DELETE；deleteMany 的 WHERE 需要 SELECT。
+-- 匹配书用的 `novel_source_item.raw_payload` 由下面既有的 worker 全表 SELECT 覆盖，不新增。
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+  revenue_book_daily_stat, revenue_country_daily_stat
 TO worker_app;
 GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,

@@ -29,7 +29,9 @@ describe("P1-05B static database contracts", () => {
     // 收益看板 (20261008120000_revenue_account_level_dashboard) adds four
     // (RevenueSyncScope/Batch/RawSnapshot/DailyStat), bringing it to 57.
     // B-38 (20261009120000_b38_novel_effective_tag) adds NovelEffectiveTag, bringing it to 58.
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 58 });
+    // v0.6.2 (20261017120000_revenue_book_country_breakdown) adds RevenueBookDailyStat /
+    // RevenueCountryDailyStat, bringing it to 60.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 60 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {

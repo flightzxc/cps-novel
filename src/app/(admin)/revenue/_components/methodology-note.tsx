@@ -7,6 +7,9 @@
  * 账号级：上游收益接口不区分应用，数字是该畅读账号下**全部网文应用**的合计。`novelAppCount` 是
  * 读服务给出的、该账号所在 channel 下 active 的网文应用数；没有可用 / 唯一账号时为 `null`，
  * 此时不写“当前 N 个应用”（不编一个数字）。
+ *
+ * v0.6.2：按书（上游维度 8，书与本站来源条目按 seriesId 匹配）与新增用户国家（逐日国家下钻）已接入，
+ * 口径说明补一句来源；推广码 / 口令维度仍然不拆（口令码不得落库）。
  */
 export function revenueMethodologyText(novelAppCount: number | null): string {
   const head = novelAppCount === null
@@ -15,7 +18,8 @@ export function revenueMethodologyText(novelAppCount: number | null): string {
   return (
     `${head}仅网文（projectType=1）· 达人凭证 · 北京时间日期。`
     + "上游次日可查，近几天会被上游回补，建议每次同步至少覆盖最近 7 天。"
-    + "暂不支持按书、按推广码拆分。"
+    + "按书数据来自上游按书维度（书与本站按 seriesId 匹配，匹配不上标“未匹配”）；"
+    + "国家分布来自对每个有新用户的日期逐日下钻，只统计新用户。不按推广码 / 口令拆分。"
   );
 }
 

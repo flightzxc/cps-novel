@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 收益看板（账号级每日汇总）的真实库验收运行器。
+# 收益看板（账号级每日汇总；v0.6.2 起含按书归因与新增用户国家）的真实库验收运行器。
 #
 # 一次性 postgres:16.14 + 真实迁移 + `infra/postgres/grants.sql` + 真实角色：
 #   - worker_app 跑 handler 的 protectedWrite 全链路（scope / 批次 / 原始行 / 日统计 / 审计 upsert，含重复同步幂等）
@@ -145,7 +145,7 @@ fi
 # 用 if ! ...; then ...; exit 1; fi 书写，不依赖 set -e 对单独成行断言的行为
 # （macOS bash 3.2 下单独成行的 [[ ]] 不触发 set -e）。
 if ! node scripts/lib/assert-vitest-no-skipped-files.mjs REVENUE_DASHBOARD "$secret_dir/integration-result.json" \
-  tests/integration/revenue/revenue-dashboard-postgres.test.ts=24
+  tests/integration/revenue/revenue-dashboard-postgres.test.ts=30
 then
   echo "REVENUE_DASHBOARD_POSTGRES_VERIFICATION=FAIL (whole-file skip or not-executed assertion failed)" >&2
   exit 1

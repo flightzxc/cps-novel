@@ -74,3 +74,32 @@ export function jsonResponse(body: unknown, init: { status?: number; headers?: R
     headers: { "content-type": "application/json", ...(init.headers ?? {}) },
   });
 }
+
+/** v0.6.2 按书口径的书行（日期行 `subItems` 里的一项）：dimension 8、dimensionValue `1_<seriesId>`。 */
+export function bookRow(seriesId: string, name: string, overrides: Record<string, unknown> = {}) {
+  return {
+    dimension: 8,
+    dimensionKey: name,
+    dimensionValue: `1_${seriesId}`,
+    isTotal: 0,
+    realDevNum: 1,
+    newRealDevNum: 1,
+    realDevNumRate: "100%",
+    realIncome: "0",
+    subItems: null,
+    ...overrides,
+  };
+}
+
+/** v0.6.2 按书口径的日期行：数值字段同 `detailRow`，书行挂在 `subItems`。 */
+export function dateRowWithBooks(date: string, books: unknown[], overrides: Record<string, unknown> = {}) {
+  return { ...detailRow(date, overrides), dimension: 1, subItems: books };
+}
+
+/** v0.6.2 国家下钻响应的 `data`。 */
+export function countryData(list: Array<[string, number]>, total?: number) {
+  return {
+    total: total ?? list.reduce((sum, [, value]) => sum + value, 0),
+    list: list.map(([name, value]) => ({ name, value })),
+  };
+}

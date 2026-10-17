@@ -20,7 +20,8 @@ describe("P2-06.5 static database governance", () => {
     // Owner 2026-09-18 决策 2 added ChannelAccountHold (52 -> 53).
     // 收益看板 (20261008120000_revenue_account_level_dashboard) added four revenue_* models (53 -> 57).
     // B-38 (20261009120000_b38_novel_effective_tag) added NovelEffectiveTag (57 -> 58).
-    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(58);
+    // v0.6.2 (20261017120000_revenue_book_country_breakdown) added RevenueBookDailyStat / RevenueCountryDailyStat (58 -> 60).
+    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(60);
   });
 
   it("keeps the migration structural and exact", () => {

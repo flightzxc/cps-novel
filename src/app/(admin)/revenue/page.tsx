@@ -1,5 +1,11 @@
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
-import { defaultRevenueRange, loadRevenueDashboard, type RevenueDashboardView } from "@/server/revenue";
+import {
+  defaultRevenueRange,
+  loadRevenueBreakdowns,
+  loadRevenueDashboard,
+  type RevenueBreakdownView,
+  type RevenueDashboardView,
+} from "@/server/revenue";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
@@ -7,12 +13,15 @@ import { sessionView } from "../_lib/page-guard";
 import { ContentCapabilityDenied } from "../novels/_components/content-states";
 import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { BatchTable } from "./_components/batch-table";
+import { BookTable } from "./_components/book-table";
+import { CountrySection } from "./_components/country-section";
 import { DailyTable } from "./_components/daily-table";
 import { MethodologyNote } from "./_components/methodology-note";
 import { RangeFilter } from "./_components/range-filter";
 import { SummaryCards } from "./_components/summary-cards";
 import { SyncOverview } from "./_components/sync-overview";
 import { SyncPanel } from "./_components/sync-panel";
+import { resolveBreakdownParams, type RevenueBreakdownParams } from "./_lib/breakdown-params";
 import { resolveRevenueRange, type RevenueRangeParams } from "./_lib/range";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +37,14 @@ export const dynamic = "force-dynamic";
  *
  * 区间：`?from=&to=`（YYYY-MM-DD，北京时间）。读服务对非法区间会抛错，所以先在
  * `./_lib/range.ts` 校验，非法一律回落默认区间（最近 30 天）并把原因提示出来。
+ *
+ * v0.6.2：按书统计（`?theater=&bookPage=&book=`）与新增用户国家分布两个区块，读 `loadRevenueBreakdowns`
+ * （同一区间，与账号级视图并行取数）。
  */
 export default async function RevenuePage({
   searchParams,
 }: {
-  searchParams: Promise<RevenueRangeParams>;
+  searchParams: Promise<RevenueRangeParams & RevenueBreakdownParams>;
 }) {
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/revenue", "revenue:view");
@@ -56,10 +68,11 @@ export default async function RevenuePage({
   const today = fallback.dateTo;
   const range = resolveRevenueRange(params, today, fallback);
 
-  const view: RevenueDashboardView = await loadRevenueDashboard(prisma, {
-    dateFrom: range.dateFrom,
-    dateTo: range.dateTo,
-  });
+  const breakdownParams = resolveBreakdownParams(params);
+  const [view, breakdowns]: [RevenueDashboardView, RevenueBreakdownView] = await Promise.all([
+    loadRevenueDashboard(prisma, { dateFrom: range.dateFrom, dateTo: range.dateTo }),
+    loadRevenueBreakdowns(prisma, { dateFrom: range.dateFrom, dateTo: range.dateTo, ...breakdownParams }),
+  ]);
 
   return (
     <AdminShell
@@ -92,6 +105,8 @@ export default async function RevenuePage({
         />
         <SummaryCards summary={view.summary} novelAppCount={view.account?.novelAppCount ?? null} />
         <DailyTable days={view.days} />
+        <BookTable section={breakdowns.books} range={{ dateFrom: view.range.dateFrom, dateTo: view.range.dateTo }} />
+        <CountrySection section={breakdowns.countries} />
         <BatchTable batches={view.batches} />
       </div>
     </AdminShell>

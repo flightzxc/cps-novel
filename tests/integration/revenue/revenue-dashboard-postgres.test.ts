@@ -17,18 +17,18 @@ import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fetchNovelDailyReport } from "@/lib/adapters/moboreader-revenue";
+import { fetchNovelCountryReport, fetchNovelDailyReport } from "@/lib/adapters/moboreader-revenue";
 import { buildWorkerAllowlist, createHandlerRegistry, type TaskLease } from "@/lib/tasks";
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { REVENUE_SYNC_TARGET_TYPE, REVENUE_SYNC_TASK_TYPE, addDaysToDate, shanghaiToday } from "@/lib/tasks/revenue-sync";
-import { enqueueRevenueSync, loadRevenueDashboard } from "@/server/revenue";
+import { enqueueRevenueSync, loadRevenueBreakdowns, loadRevenueDashboard } from "@/server/revenue";
 import { abortTask, getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
 import type { AdminAuthContext } from "@/lib/auth/types";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createRevenueSyncHandler, createRevenueSyncWorkerHandlers } from "../../../worker/handlers/revenue-sync";
 import { processOneWorkerCycle } from "../../../worker/runtime/worker";
 
-import { detailRow, envelope, fakeAggregateJwt, fakeStarJwt, jsonResponse, totalRow } from "../../backend/revenue/support";
+import { bookRow, countryData, dateRowWithBooks, detailRow, envelope, fakeAggregateJwt, fakeStarJwt, jsonResponse, totalRow } from "../../backend/revenue/support";
 import { issueTaskAuthorization, newStores, NOW as ADMIN_NOW, seedTaskAdmin } from "../../backend/task-admin/test-support";
 
 const enabled = process.env.REVENUE_DASHBOARD_DATABASE_TEST === "1";
@@ -91,20 +91,57 @@ async function setCredential(accountId: string, jwt: string, fingerprintPrefix =
   return id;
 }
 
-/** 上游桩：真实适配器（分页、信封校验、对账前的解析）跑真实代码，只有网络层被替换。 */
-function upstream(rows: unknown[] | (() => Response | Promise<Response>)) {
+type UpstreamOptions = {
+  /** v0.6.2 按书请求（维度 ["1","8"]）的响应；缺省 = 与按日相同的行（没有 subItems → 0 本书）。 */
+  bookRows?: unknown[] | (() => Response | Promise<Response>);
+  /** v0.6.2 国家下钻：按日期给 `data` 或整个 Response；缺省 = 当天新用户全记在巴西。 */
+  country?: (date: string) => Record<string, unknown> | Response | undefined;
+};
+
+/**
+ * 上游桩：真实适配器（分页、信封校验、对账前的解析、国家下钻）跑真实代码，只有网络层被替换。
+ * `calls` 只记按日请求（v0.5.11 起的断言口径不变），按书 / 国家请求分别记在 `bookCalls` / `countryCalls`。
+ * 国家下钻的适配器挂在 `fetchReport.fetchCountryReport` 上，`registryWith` / `runHandlerDirect` 一起注入——
+ * 任何用例都不会走到真实网络。
+ */
+function upstream(rows: unknown[] | (() => Response | Promise<Response>), options: UpstreamOptions = {}) {
   const calls: Array<Record<string, unknown>> = [];
-  const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
-    calls.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
-    return typeof rows === "function" ? rows() : jsonResponse(envelope(rows));
+  const bookCalls: Array<Record<string, unknown>> = [];
+  const countryCalls: Array<Record<string, unknown>> = [];
+  const defaultCountry = (date: string) => {
+    const day = Array.isArray(rows) ? (rows.find((row) => (row as Record<string, unknown>).dimensionValue === date) as Record<string, unknown> | undefined) : undefined;
+    const newUsers = Number(day?.newRealDevNum ?? 0);
+    return countryData(newUsers > 0 ? [["巴西(BR)", newUsers]] : []);
+  };
+  const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    if (String(url).endsWith("/GetCountryReport")) {
+      countryCalls.push(body);
+      const date = String((body.list as Array<{ dimensionValue: string }>)[0]!.dimensionValue);
+      const custom = options.country?.(date);
+      if (custom instanceof Response) return custom;
+      return jsonResponse({ status: true, code: 200, message: "ok", data: custom ?? defaultCountry(date) });
+    }
+    const isBook = Array.isArray(body.dimensions) && body.dimensions.join(",") === "1,8";
+    (isBook ? bookCalls : calls).push(body);
+    const source = isBook && options.bookRows !== undefined ? options.bookRows : rows;
+    return typeof source === "function" ? source() : jsonResponse(envelope(source));
   }) as unknown as typeof fetch;
-  const fetchReport = vi.fn((input: Parameters<typeof fetchNovelDailyReport>[0]) =>
-    fetchNovelDailyReport({ ...input, rateGate: undefined, onUpstreamObservation: undefined, fetchImpl }));
-  return { fetchImpl, fetchReport, calls };
+  const fetchCountryReport = vi.fn((input: Parameters<typeof fetchNovelCountryReport>[0]) =>
+    fetchNovelCountryReport({ ...input, rateGate: undefined, onUpstreamObservation: undefined, fetchImpl }));
+  const fetchReport = Object.assign(
+    vi.fn((input: Parameters<typeof fetchNovelDailyReport>[0]) =>
+      fetchNovelDailyReport({ ...input, rateGate: undefined, onUpstreamObservation: undefined, fetchImpl })),
+    { fetchCountryReport },
+  );
+  return { fetchImpl, fetchReport, fetchCountryReport, calls, bookCalls, countryCalls };
 }
 
 function registryWith(fetchReport: ReturnType<typeof upstream>["fetchReport"]) {
-  return createRevenueSyncWorkerHandlers(worker, { fetchReport: fetchReport as never });
+  return createRevenueSyncWorkerHandlers(worker, {
+    fetchReport: fetchReport as never,
+    fetchCountryReport: fetchReport.fetchCountryReport as never,
+  });
 }
 
 async function cycle(types: string, registry: ReturnType<typeof createHandlerRegistry>): Promise<boolean> {
@@ -134,7 +171,10 @@ async function runHandlerDirect(
   options: { applyTwice?: boolean } = {},
 ) {
   const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId } });
-  const handler = createRevenueSyncHandler(worker, { fetchReport: fetchReport as never });
+  const handler = createRevenueSyncHandler(worker, {
+    fetchReport: fetchReport as never,
+    fetchCountryReport: fetchReport.fetchCountryReport as never,
+  });
   const lease: TaskLease = {
     family: "generic",
     taskType: REVENUE_SYNC_TASK_TYPE,
@@ -198,7 +238,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const registry = registryWith(fetchReport);
       expect(await cycle(REVENUE_SYNC_TASK_TYPE, registry)).toBe(true);
 
-      // 上游请求只发了一次，且带 projectType:1。
+      // 按日请求只发了一次，且带 projectType:1；v0.6.2 起再追加按书一次、国家两次（两天都有新用户）。
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({ projectType: 1, dimensions: ["1"], pageSize: 999, pageIndex: 1, beginTime: BEGIN, endTime: END });
 
@@ -216,7 +256,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(batches).toHaveLength(1);
       const batch = batches[0]!;
       expect(batch).toMatchObject({
-        revenueSyncScopeId: scope.id, genericTaskId: taskId, status: "completed", requestCount: 1, detailRowCount: 2, totalRowCount: 1,
+        revenueSyncScopeId: scope.id, genericTaskId: taskId, status: "completed", requestCount: 4, detailRowCount: 2, totalRowCount: 1,
         reconciliationStatus: "matched", credentialFingerprintPrefix: "abc123def456", upstreamStarId: "335788",
         errorCode: null, errorMessage: null, requestedBy: ADMIN,
       });
@@ -225,7 +265,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(batch.beginDate.toISOString().slice(0, 10)).toBe(BEGIN);
       expect(batch.endDate.toISOString().slice(0, 10)).toBe(END);
 
-      const raws = await owner.revenueRawSnapshot.findMany({ orderBy: { isTotal: "asc" } });
+      const raws = await owner.revenueRawSnapshot.findMany({ where: { dimension: "1" }, orderBy: { isTotal: "asc" } });
       expect(raws).toHaveLength(3);
       expect(raws.filter((row) => row.isTotal)).toHaveLength(1);
       expect(raws.every((row) => row.syncBatchId === batch.id && row.projectType === 1 && row.dimension === "1")).toBe(true);
@@ -280,7 +320,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(await count("revenue_sync_scope")).toBe(1);
       expect(await count("revenue_sync_batch")).toBe(2);
       expect(await count("revenue_daily_stat")).toBe(2);
-      expect(await count("revenue_raw_snapshot")).toBe(3);
+      expect(await count("revenue_raw_snapshot WHERE dimension = '1'")).toBe(3);
       const batches = await owner.revenueSyncBatch.findMany({ orderBy: { createdAt: "asc" } });
       const latest = batches[1]!;
       const d1 = await owner.revenueDailyStat.findFirstOrThrow({ where: { statDate: new Date(`${D1}T00:00:00.000Z`) } });
@@ -299,7 +339,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(outcome.status).toBe("success");
       expect(await count("revenue_sync_scope")).toBe(1);
       expect(await count("revenue_sync_batch")).toBe(1);
-      expect(await count("revenue_raw_snapshot")).toBe(3);
+      expect(await count("revenue_raw_snapshot WHERE dimension = '1'")).toBe(3);
       expect(await count("revenue_daily_stat")).toBe(2);
     });
 
@@ -310,7 +350,8 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const outcome = await runHandlerDirect(taskId, fetchReport);
       expect(outcome.status).toBe("success");
       const batch = await owner.revenueSyncBatch.findFirstOrThrow();
-      expect(batch).toMatchObject({ status: "completed", detailRowCount: 0, totalRowCount: 0, reconciliationStatus: "not_applicable", requestCount: 1 });
+      // 请求数 = 按日 1 + 按书 1；没有新用户的日子不发国家请求。
+      expect(batch).toMatchObject({ status: "completed", detailRowCount: 0, totalRowCount: 0, reconciliationStatus: "not_applicable", requestCount: 2 });
       expect(await count("revenue_daily_stat")).toBe(0);
       const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
       expect(view.days.every((day) => day.coverage === "no_upstream_row")).toBe(true);
@@ -458,7 +499,9 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const okUpstream = upstream([detailRow(D1, { realDevNum: 5, newRealDevNum: 2, realDevNumRate: "40%", realIncome: "28.88" }), totalRow({ realIncome: "28.88" })]);
       expect(await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(okUpstream.fetchReport))).toBe(true);
       expect((await owner.genericTask.findUniqueOrThrow({ where: { id: okTaskId } })).status).toBe("completed");
-      expect(okUpstream.fetchReport).toHaveBeenCalledTimes(1);
+      // v0.6.2：按日一次 + 按书一次（同一个 fetchReport），按日请求体仍只有一份。
+      expect(okUpstream.fetchReport).toHaveBeenCalledTimes(2);
+      expect(okUpstream.calls).toHaveLength(1);
       const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
       expect(view.account).toMatchObject({ novelAppCount: 2 });
       expect(view.summary.shareIncomeUsdTotal).toBe("28.8800");
@@ -741,6 +784,277 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(after.genericTaskId).toBeNull();
       expect(after.status).toBe("completed");
       expect(await count("revenue_daily_stat")).toBe(1);
+    });
+  });
+
+  describe("v0.6.2 按书归因与新增用户国家（真实角色）", () => {
+    const BOOK_TABLES = ["revenue_book_daily_stat", "revenue_country_daily_stat"] as const;
+    let plotApp: string;
+
+    /** 来源条目夹具：raw_payload 带 seriesId（匹配键），可挂本站书、可软删除。 */
+    async function seedSourceItem(input: { appId: string; seriesId: string; deleted?: boolean; novelTitle?: string; locale?: string }): Promise<string> {
+      const novel = input.novelTitle
+        ? await owner.novel.create({
+            data: {
+              businessId: randomUUID(), title: input.novelTitle, description: "d", locale: input.locale ?? "en",
+              slug: `n-${randomUUID().slice(0, 8)}`,
+            },
+          })
+        : null;
+      const item = await owner.novelSourceItem.create({
+        data: {
+          channelAppId: input.appId,
+          novelId: novel?.id ?? null,
+          externalBookId: `ext-${randomUUID().slice(0, 8)}`,
+          sourceLanguageCode: "1",
+          title: `upstream ${input.seriesId}`,
+          description: "d",
+          rawPayload: { seriesId: input.seriesId, bookId: "irrelevant" },
+          deletedAt: input.deleted ? new Date() : null,
+        },
+      });
+      return item.id;
+    }
+
+    /** 同账号下第二个剧场（PlotNovel）+ 另一渠道的同名 seriesId（不应被匹配）+ 各种匹配形态。 */
+    async function seedTheaters() {
+      await resetDatabase();
+      await owner.sourceApp.updateMany({ data: { name: "MoboReader" } });
+      const plotSource = await owner.sourceApp.create({ data: { code: "plotnovel", name: "PlotNovel" } });
+      plotApp = (await owner.channelApp.create({
+        data: { channelId: foundation.channel, sourceAppId: plotSource.id, externalAppId: "plot", projectType: 1, config: { promoMode: "code" } },
+      })).id;
+      const otherChannel = await owner.channel.create({ data: { code: "other", name: "other" } });
+      const otherSource = await owner.sourceApp.create({ data: { code: "other-app", name: "Other" } });
+      const otherApp = await owner.channelApp.create({ data: { channelId: otherChannel.id, sourceAppId: otherSource.id, externalAppId: "o", projectType: 1 } });
+      return {
+        mobo: await seedSourceItem({ appId: foundation.app, seriesId: "20125409", novelTitle: "O Retorno Genial", locale: "pt" }),
+        plot: await seedSourceItem({ appId: plotApp, seriesId: "30000001" }),
+        ambiguousA: await seedSourceItem({ appId: foundation.app, seriesId: "40000001" }),
+        ambiguousB: await seedSourceItem({ appId: foundation.app, seriesId: "40000001" }),
+        deletedTwin: await seedSourceItem({ appId: foundation.app, seriesId: "30000001", deleted: true }),
+        otherChannel: await seedSourceItem({ appId: otherApp.id, seriesId: "50000001" }),
+      };
+    }
+
+    const accountRows = [
+      detailRow(D1, { realDevNum: 6, newRealDevNum: 3, realIncome: "2.60" }),
+      detailRow(D2, { realDevNum: 1, newRealDevNum: 0, realIncome: "0.03" }),
+      totalRow({ realIncome: "2.63" }),
+    ];
+    const bookRows = [
+      totalRow({ dimension: 0, realIncome: "2.63" }),
+      dateRowWithBooks(D1, [
+        bookRow("20125409", "O Retorno Genial da Esposa Rejeitada", { realDevNum: 3, newRealDevNum: 1, realIncome: "2.00" }),
+        bookRow("30000001", "PlotNovel Book", { realDevNum: 1, newRealDevNum: 1, realIncome: "0.50" }),
+        bookRow("40000001", "Twin", { realDevNum: 1, newRealDevNum: 0, realIncome: "0.10" }),
+        bookRow("50000001", "Other channel", { realDevNum: 1, newRealDevNum: 1, realIncome: "0" }),
+      ], { realDevNum: 6, newRealDevNum: 3, realIncome: "2.60" }),
+      dateRowWithBooks(D2, [bookRow("20125409", "O Retorno Genial da Esposa Rejeitada", { realDevNum: 1, newRealDevNum: 0, realIncome: "0.03" })], {
+        realDevNum: 1, newRealDevNum: 0, realIncome: "0.03",
+      }),
+    ];
+    const country = (date: string) => (date === D1 ? countryData([["巴西(BR)", 1], ["俄罗斯(RU)", 2]]) : undefined);
+
+    it("全链路：worker_app 拉按书 + 国家、按 seriesId 匹配（只在本账号渠道的网文剧场里找、优先未删除）并写入；web_app 读出排行 / 剧场 / 单书按日 / 国家", async () => {
+      const items = await seedTheaters();
+      const taskId = await enqueueOk();
+      const up = upstream(accountRows, { bookRows, country });
+      expect(await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(up.fetchReport))).toBe(true);
+
+      expect(up.bookCalls).toHaveLength(1);
+      expect(up.bookCalls[0]).toMatchObject({ dimensions: ["1", "8"], projectType: 1, beginTime: BEGIN, endTime: END });
+      // 国家只下钻新用户 > 0 的日期（D2 没有新用户）。
+      expect(up.countryCalls.map((body) => body.list)).toEqual([[{ dimension: 1, dimensionValue: D1 }]]);
+      expect(up.countryCalls[0]).toMatchObject({ countryReportType: 1, projectType: 1, beginTime: D1, endTime: D1 });
+
+      const task = await owner.genericTask.findUniqueOrThrow({ where: { id: taskId }, include: { items: true } });
+      expect(task.status).toBe("completed");
+      expect(task.items[0]!.result).toMatchObject({
+        batchStatus: "completed", bookStatus: "completed", bookRowCount: 5, bookCount: 4,
+        unmatchedBookCount: 1, ambiguousBookCount: 1, countryStatus: "completed", countryDayCount: 1, countryRowCount: 2,
+      });
+      const batch = await owner.revenueSyncBatch.findFirstOrThrow();
+      expect(batch).toMatchObject({
+        status: "completed", requestCount: 3, bookStatus: "completed", bookRowCount: 5, countryStatus: "completed", countryRowCount: 2, errorCode: null,
+      });
+
+      const stats = await owner.revenueBookDailyStat.findMany({ orderBy: [{ statDate: "asc" }, { upstreamSeriesKey: "asc" }] });
+      expect(stats.map((row) => [row.statDate.toISOString().slice(0, 10), row.upstreamSeriesKey, row.matchStatus, row.novelSourceItemId, row.channelAppId])).toEqual([
+        [D2, "1_20125409", "matched", items.mobo, foundation.app],
+        [D1, "1_20125409", "matched", items.mobo, foundation.app],
+        [D1, "1_30000001", "matched", items.plot, plotApp],
+        [D1, "1_40000001", "ambiguous", null, foundation.app],
+        [D1, "1_50000001", "unmatched", null, null],
+      ]);
+      expect(stats.find((row) => row.upstreamSeriesKey === "1_20125409" && row.realIncome?.toFixed(4) === "2.0000")).toBeDefined();
+      const countries = await owner.revenueCountryDailyStat.findMany();
+      // 不依赖数据库排序规则：按国家码在 JS 里排。
+      expect(countries.map((row) => [row.countryLabel, row.countryCode, row.newRealDevNum]).sort((a, b) => String(a[1]).localeCompare(String(b[1]))))
+        .toEqual([["巴西(BR)", "BR", 1], ["俄罗斯(RU)", "RU", 2]]);
+      const raws = await owner.revenueRawSnapshot.findMany({ where: { dimension: { in: ["1,8", "country:1"] } }, orderBy: [{ dimension: "asc" }, { dimensionKey: "asc" }] });
+      expect(raws.map((row) => [row.dimension, row.dimensionKey, row.isTotal])).toEqual([
+        ["1,8", D2, false], ["1,8", D1, false], ["1,8", "总计", true], ["country:1", D1, false],
+      ]);
+      expect(((raws[1]!.rawPayload as { subItems: unknown[] }).subItems)).toHaveLength(4);
+
+      // web_app：按书排行（收入倒序）、剧场名、本站书、匹配形态；只用它有权限的列。
+      const view = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END });
+      expect(view.books).toMatchObject({ coveredDays: 7, uncoveredDays: 0, bookCount: 4, newUsersTotal: 3, shareIncomeUsdTotal: "2.6300", page: 1, pageCount: 1 });
+      expect(view.books.theaters.map((theater) => theater.label)).toEqual(["MoboReader", "PlotNovel"]);
+      expect(view.books.rows.map((row) => [row.seriesKey, row.matchStatus, row.theater?.label ?? null, row.novel?.title ?? null, row.newUsersTotal, row.shareIncomeUsdTotal, row.dayCount])).toEqual([
+        ["1_20125409", "matched", "MoboReader", "O Retorno Genial", 1, "2.0300", 2],
+        ["1_30000001", "matched", "PlotNovel", null, 1, "0.5000", 1],
+        ["1_40000001", "ambiguous", "MoboReader", null, 0, "0.1000", 1],
+        ["1_50000001", "unmatched", null, null, 1, "0.0000", 1],
+      ]);
+      expect(view.books.rows[3]!.upstreamBookName).toBe("Other channel");
+
+      const plotOnly = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, theater: plotApp });
+      expect(plotOnly.books.rows.map((row) => row.seriesKey)).toEqual(["1_30000001"]);
+      const unmatchedOnly = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, theater: "unmatched" });
+      expect(unmatchedOnly.books.rows.map((row) => row.seriesKey)).toEqual(["1_50000001"]);
+      const bogus = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, theater: randomUUID() });
+      expect(bogus.books).toMatchObject({ filter: null, filterNotice: "剧场筛选无效，已显示全部剧场。", bookCount: 4 });
+
+      const detail = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, book: "1_20125409" });
+      expect(detail.books.detail?.days).toEqual([
+        { date: D1, activeUsers: 3, newUsers: 1, newUserRatio: "1", shareIncomeUsd: "2.0000" },
+        { date: D2, activeUsers: 1, newUsers: 0, newUserRatio: "1", shareIncomeUsd: "0.0300" },
+      ]);
+
+      expect(view.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 0, newUsersTotal: 3 });
+      expect(view.countries.ranking.map((row) => [row.code, row.newUsers, row.share])).toEqual([["RU", 2, "0.6667"], ["BR", 1, "0.3333"]]);
+      expect(view.countries.matrix.rows).toEqual([{ date: D1, values: [2, 1], other: 0, total: 3 }]);
+
+      // 区间更早的日子没有被“按书已同步”的批次覆盖：不当 0，计入未覆盖。
+      const wider = await loadRevenueBreakdowns(web, { dateFrom: addDaysToDate(BEGIN, -3), dateTo: END });
+      expect(wider.books).toMatchObject({ coveredDays: 7, uncoveredDays: 3 });
+      expect(wider.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 3 });
+    });
+
+    it("重新同步整段替换（worker_app 的 DELETE 生效）：区间内消失的书 / 国家不残留；区间外的行不动", async () => {
+      await seedTheaters();
+      await enqueueOk();
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows, country }).fetchReport));
+      // 区间外的一行（模拟更早的批次留下的数据），重同步不能碰它。
+      const scope = await owner.revenueSyncScope.findFirstOrThrow();
+      const firstBatch = await owner.revenueSyncBatch.findFirstOrThrow();
+      const OUTSIDE = addDaysToDate(BEGIN, -1);
+      await owner.revenueBookDailyStat.create({
+        data: {
+          revenueSyncScopeId: scope.id, statDate: new Date(`${OUTSIDE}T00:00:00Z`), upstreamSeriesKey: "1_1", upstreamSeriesId: "1",
+          upstreamBookName: "old", matchStatus: "unmatched", sourceBatchId: firstBatch.id,
+        },
+      });
+
+      await enqueueOk();
+      const shrunk = [dateRowWithBooks(D1, [bookRow("20125409", "O Retorno Genial", { newRealDevNum: 3, realIncome: "2.60" })], { newRealDevNum: 3, realIncome: "2.60" })];
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows: shrunk, country: () => countryData([["巴西(BR)", 3]]) }).fetchReport));
+
+      const latest = (await owner.revenueSyncBatch.findMany({ orderBy: { createdAt: "asc" } }))[1]!;
+      const rows = await owner.revenueBookDailyStat.findMany({ orderBy: { statDate: "asc" } });
+      expect(rows.map((row) => [row.statDate.toISOString().slice(0, 10), row.upstreamSeriesKey, row.sourceBatchId === latest.id])).toEqual([
+        [OUTSIDE, "1_1", false],
+        [D1, "1_20125409", true],
+      ]);
+      const countries = await owner.revenueCountryDailyStat.findMany();
+      expect(countries.map((row) => [row.countryLabel, row.newRealDevNum])).toEqual([["巴西(BR)", 3]]);
+    });
+
+    it("按书请求失败 → partial_failed + book_report_failed，按日与国家照常写入，区间内已有的按书行不被删；这些天不算按书已覆盖", async () => {
+      await seedTheaters();
+      await enqueueOk();
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows, country }).fetchReport));
+      expect(await count("revenue_book_daily_stat")).toBe(5);
+
+      const taskId = await enqueueOk();
+      const up = upstream(accountRows, { bookRows: () => jsonResponse({}, { status: 500 }), country });
+      await runHandlerDirect(taskId, up.fetchReport);
+      const failed = await owner.revenueSyncBatch.findFirstOrThrow({ where: { genericTaskId: taskId } });
+      expect(failed).toMatchObject({ status: "partial_failed", errorCode: "book_report_failed", bookStatus: "failed", bookRowCount: 0, countryStatus: "completed" });
+      expect(failed.errorMessage).toContain("Book breakdown failed (upstream_http_error)");
+      expect(await count("revenue_book_daily_stat")).toBe(5);
+      expect(await count("revenue_country_daily_stat")).toBe(2);
+
+      // 只看这一批：把第一批改成按书未拉取，区间就不再被“按书已同步”覆盖。
+      await owner.revenueSyncBatch.updateMany({ where: { NOT: { genericTaskId: taskId } }, data: { bookStatus: null } });
+      const view = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END });
+      expect(view.books).toMatchObject({ coveredDays: 0, uncoveredDays: 7 });
+      expect(view.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 0 });
+    });
+
+    it("国家下钻失败 → 整段 failed、一行国家数据都不写（不留半段）；按书照常写入", async () => {
+      await seedTheaters();
+      const taskId = await enqueueOk();
+      const rows = [...accountRows.slice(0, 2), detailRow(D3, { newRealDevNum: 2 })];
+      const up = upstream(rows, { bookRows, country: (date) => (date === D1 ? jsonResponse({}, { status: 429 }) : countryData([["巴西(BR)", 2]])) });
+      await runHandlerDirect(taskId, up.fetchReport);
+      // D3 < D1，升序先查 D3 成功，再查 D1 失败。
+      expect(up.countryCalls.map((body) => (body.list as Array<{ dimensionValue: string }>)[0]!.dimensionValue)).toEqual([D3, D1]);
+      const batch = await owner.revenueSyncBatch.findFirstOrThrow();
+      expect(batch).toMatchObject({ status: "partial_failed", errorCode: "country_report_failed", countryStatus: "failed", countryRowCount: 0, bookStatus: "completed" });
+      expect(await count("revenue_country_daily_stat")).toBe(0);
+      expect(await count("revenue_raw_snapshot WHERE dimension = 'country:1'")).toBe(0);
+      expect(await count("revenue_book_daily_stat")).toBe(5);
+    });
+
+    it("授权：web_app 两表只读；worker_app 两表 SELECT / INSERT / UPDATE / DELETE；analyst_ro 只读；scheduler_app 无权限", async () => {
+      await seedTheaters();
+      await enqueueOk();
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows, country }).fetchReport));
+      for (const table of BOOK_TABLES) {
+        await expect(web.$queryRawUnsafe(`SELECT count(*) FROM ${table}`)).resolves.toBeDefined();
+        await expectDbError(web.$executeRawUnsafe(`DELETE FROM ${table}`), /42501|permission denied/i);
+        await expectDbError(web.$executeRawUnsafe(`UPDATE ${table} SET updated_at = now()`), /42501|permission denied/i);
+        await expect(analyst.$queryRawUnsafe(`SELECT count(*) FROM ${table}`)).resolves.toBeDefined();
+        await expectDbError(analyst.$executeRawUnsafe(`DELETE FROM ${table}`), /42501|permission denied|read-only/i);
+        await expectDbError(scheduler.$queryRawUnsafe(`SELECT count(*) FROM ${table}`), /42501|permission denied/i);
+        await expect(worker.$executeRawUnsafe(`UPDATE ${table} SET updated_at = now()`)).resolves.toBeGreaterThan(0);
+      }
+      const scope = await owner.revenueSyncScope.findFirstOrThrow();
+      const batch = await owner.revenueSyncBatch.findFirstOrThrow();
+      await expectDbError(
+        web.$executeRawUnsafe(
+          `INSERT INTO revenue_country_daily_stat (id, revenue_sync_scope_id, stat_date, country_label, new_real_dev_num, source_batch_id, updated_at) VALUES (gen_random_uuid(), '${scope.id}', '${D3}', 'x', 1, '${batch.id}', now())`,
+        ),
+        /42501|permission denied/i,
+      );
+      // web 依旧读不到来源条目的 raw_payload（匹配只能在 worker 做）。
+      await expectDbError(web.$queryRawUnsafe(`SELECT raw_payload FROM novel_source_item`), /42501|permission denied/i);
+      await expect(worker.$executeRawUnsafe(`DELETE FROM revenue_country_daily_stat`)).resolves.toBe(2);
+    });
+
+    it("约束：匹配三值 / 匹配形状 / 新用户非负 / 两段状态取值 / 身份唯一 / 来源条目删不掉（RESTRICT）", async () => {
+      const items = await seedTheaters();
+      const scope = await owner.revenueSyncScope.create({ data: { channelAccountId: foundation.account, projectType: 1 } });
+      const batch = await owner.revenueSyncBatch.create({
+        data: {
+          revenueSyncScopeId: scope.id, beginDate: new Date(`${BEGIN}T00:00:00Z`), endDate: new Date(`${END}T00:00:00Z`),
+          requestFingerprint: randomUUID(), status: "completed", finishedAt: new Date(), requestedBy: ADMIN,
+        },
+      });
+      const book = (overrides: Record<string, unknown>) => ({
+        revenueSyncScopeId: scope.id, statDate: new Date(`${D1}T00:00:00Z`), upstreamSeriesKey: `1_${randomUUID().slice(0, 6)}`,
+        upstreamSeriesId: "1", upstreamBookName: "b", matchStatus: "unmatched", sourceBatchId: batch.id, ...overrides,
+      }) as Prisma.RevenueBookDailyStatUncheckedCreateInput;
+      await expectDbError(owner.revenueBookDailyStat.create({ data: book({ matchStatus: "maybe" }) }) as unknown as Promise<unknown>, /revenue_book_daily_stat_match_status_check/);
+      await expectDbError(owner.revenueBookDailyStat.create({ data: book({ matchStatus: "matched" }) }) as unknown as Promise<unknown>, /revenue_book_daily_stat_match_shape_check/);
+      await expectDbError(owner.revenueBookDailyStat.create({ data: book({ novelSourceItemId: items.mobo }) }) as unknown as Promise<unknown>, /revenue_book_daily_stat_match_shape_check/);
+      await expectDbError(owner.revenueBookDailyStat.create({ data: book({ channelAppId: foundation.app }) }) as unknown as Promise<unknown>, /revenue_book_daily_stat_match_shape_check/);
+      await expect(owner.revenueBookDailyStat.create({ data: book({ matchStatus: "ambiguous", channelAppId: foundation.app }) })).resolves.toBeDefined();
+      await owner.revenueBookDailyStat.create({ data: book({ upstreamSeriesKey: "1_7", matchStatus: "matched", novelSourceItemId: items.mobo, channelAppId: foundation.app }) });
+      await expect(owner.revenueBookDailyStat.create({ data: book({ upstreamSeriesKey: "1_7" }) })).rejects.toSatisfy(isUniqueConstraintViolation);
+      await expectDbError(owner.$executeRawUnsafe(`DELETE FROM novel_source_item WHERE id = '${items.mobo}'`), /violates foreign key constraint/i);
+
+      const countryRow = { revenueSyncScopeId: scope.id, statDate: new Date(`${D1}T00:00:00Z`), countryLabel: "巴西(BR)", countryCode: "BR", newRealDevNum: 1, sourceBatchId: batch.id };
+      await owner.revenueCountryDailyStat.create({ data: countryRow });
+      await expect(owner.revenueCountryDailyStat.create({ data: countryRow })).rejects.toSatisfy(isUniqueConstraintViolation);
+      await expectDbError(owner.revenueCountryDailyStat.create({ data: { ...countryRow, countryLabel: "x", newRealDevNum: -1 } }) as unknown as Promise<unknown>, /revenue_country_daily_stat_new_users_check/);
+
+      await expectDbError(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { bookStatus: "partial" } }) as unknown as Promise<unknown>, /revenue_sync_batch_breakdown_status_check/);
+      await expectDbError(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { countryRowCount: -1 } }) as unknown as Promise<unknown>, /revenue_sync_batch_breakdown_counts_check/);
+      await expect(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { bookStatus: "failed", countryStatus: null } })).resolves.toBeDefined();
     });
   });
 });

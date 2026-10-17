@@ -13,7 +13,7 @@ import {
 } from "@/lib/tasks/revenue-sync";
 import { createRevenueSyncHandler, createRevenueSyncWorkerHandlers } from "../../../worker/handlers/revenue-sync";
 
-import { detailRow, fakeAggregateJwt, fakeStarJwt, totalRow } from "./support";
+import { bookRow, countryData, dateRowWithBooks, detailRow, fakeAggregateJwt, fakeStarJwt, totalRow } from "./support";
 
 const ACCOUNT_ID = "11111111-1111-4111-8111-111111111111";
 const TASK_ID = "22222222-2222-4222-8222-222222222222";
@@ -77,6 +77,14 @@ function makeTx() {
     revenueSyncBatch: { upsert: record("batch", "upsert", { id: BATCH_ID }) },
     revenueRawSnapshot: { upsert: record("raw", "upsert", {}) },
     revenueDailyStat: { upsert: record("daily", "upsert", {}) },
+    revenueBookDailyStat: {
+      deleteMany: record("book", "deleteMany", { count: 0 }),
+      createMany: record("book", "createMany", (args: { data: unknown[] }) => ({ count: args.data.length })),
+    },
+    revenueCountryDailyStat: {
+      deleteMany: record("country", "deleteMany", { count: 0 }),
+      createMany: record("country", "createMany", (args: { data: unknown[] }) => ({ count: args.data.length })),
+    },
     operationAudit: { create: record("audit", "create", {}) },
   };
   return { tx, calls };
@@ -90,17 +98,41 @@ const readyCredential = () => vi.fn(async () => ({
   expiringSoon: false,
 }));
 
+/** 默认国家下钻桩：把该日的新用户全部记在巴西，total 与之一致（对账不出提示）。 */
+function defaultCountryData(rows: readonly unknown[], date: string): Record<string, unknown> {
+  const day = rows.find((row) => (row as Record<string, unknown>).dimensionValue === date) as Record<string, unknown> | undefined;
+  const newUsers = Number(day?.newRealDevNum ?? 0);
+  return { total: newUsers, list: [{ name: "巴西(BR)", value: newUsers }] };
+}
+
 function build(options: {
   rows?: unknown[];
   requestCount?: number;
+  /** v0.6.2：按书请求（breakdown: "book"）返回的行；缺省为空列表。 */
+  bookRows?: unknown[];
   fetchReport?: ReturnType<typeof vi.fn>;
+  fetchCountryReport?: ReturnType<typeof vi.fn>;
+  countryData?: Record<string, Record<string, unknown>>;
+  resolveBookMatches?: ReturnType<typeof vi.fn>;
   secret?: string;
   db?: ReturnType<typeof makeDb>;
   resolveCredential?: ReturnType<typeof vi.fn>;
 }) {
   const db = options.db ?? makeDb();
   const fetchReport = options.fetchReport
-    ?? vi.fn(async () => ({ rows: options.rows ?? [], requestCount: options.requestCount ?? 1 }));
+    ?? vi.fn(async (input: { breakdown?: string }) =>
+      input.breakdown === "book"
+        ? { rows: options.bookRows ?? [], requestCount: 1 }
+        : { rows: options.rows ?? [], requestCount: options.requestCount ?? 1 });
+  const fetchCountryReport = options.fetchCountryReport
+    ?? vi.fn(async (input: { date: string }) => ({
+      date: input.date,
+      data: options.countryData?.[input.date] ?? defaultCountryData(options.rows ?? [], input.date),
+      requestCount: 1,
+    }));
+  const resolveBookMatches = options.resolveBookMatches
+    ?? vi.fn(async (_db: unknown, _account: string, seriesIds: string[]) =>
+      new Map(seriesIds.map((id) => [id, { status: "unmatched", novelSourceItemId: null, channelAppId: null }])));
   const resolveCredential = options.resolveCredential
     ?? (options.secret
       ? vi.fn(async () => ({ status: "ready" as const, credentialId: CREDENTIAL_ID, secret: options.secret!, expiresAt: null, expiringSoon: false }))
@@ -109,9 +141,11 @@ function build(options: {
     now: () => NOW,
     env: {} as NodeJS.ProcessEnv,
     fetchReport: fetchReport as never,
+    fetchCountryReport: fetchCountryReport as never,
+    resolveBookMatches: resolveBookMatches as never,
     resolveCredential: resolveCredential as never,
   });
-  return { db, fetchReport, resolveCredential, handler };
+  return { db, fetchReport, fetchCountryReport, resolveBookMatches, resolveCredential, handler };
 }
 
 async function run(handler: ReturnType<typeof createRevenueSyncHandler>, theLease: TaskLease = lease()) {
@@ -144,17 +178,21 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     const outcome = await run(handler);
 
     expect(outcome.status).toBe("success");
+    // 请求数 = 按日 1 + 按书 1 + 国家 2（两天都有新用户）。
     expect(outcome.result).toMatchObject({
       batchStatus: "completed",
       reconciliationStatus: "matched",
-      requestCount: 1,
+      requestCount: 4,
       detailRowCount: 2,
       totalRowCount: 1,
       beginDate: "2026-09-20",
       endDate: "2026-10-07",
+      bookStatus: "completed",
+      countryStatus: "completed",
+      countryDayCount: 2,
     });
     // 读取点：数据库里没有产生任何写入，写入全部延后到 protectedWrite。
-    expect(fetchReport).toHaveBeenCalledTimes(1);
+    expect(fetchReport).toHaveBeenCalledTimes(2);
 
     const { calls } = await persist(outcome);
     expect(calls.map((call) => `${call.model}.${call.method}`)).toEqual([
@@ -164,6 +202,11 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
       "daily.upsert",
       "raw.upsert",
       "daily.upsert",
+      "raw.upsert",
+      "book.deleteMany",
+      "country.deleteMany",
+      "country.createMany",
+      "raw.upsert",
       "raw.upsert",
       "audit.create",
     ]);
@@ -184,7 +227,7 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
       endDate: new Date("2026-10-07T00:00:00.000Z"),
       requestFingerprint: fingerprint,
       status: "completed",
-      requestCount: 1,
+      requestCount: 4,
       detailRowCount: 2,
       totalRowCount: 1,
       reconciliationStatus: "matched",
@@ -199,7 +242,7 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     expect(batch.update.status).toBe("completed");
 
     const rawCalls = calls.filter((call) => call.model === "raw").map((call) => call.args);
-    expect(rawCalls).toHaveLength(3);
+    expect(rawCalls).toHaveLength(5); // 按日 2 明细 + 1 总计；国家下钻 2 天
     expect(rawCalls[0]!.create).toMatchObject({
       syncBatchId: BATCH_ID, projectType: 1, dimension: "1", dimensionKey: "2026-09-26", isTotal: false,
       realDevNum: 1, newRealDevNum: 1, realDevNumRate: "1", realIncome: "28.88",
@@ -249,6 +292,7 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     );
     const argument = fetchReport.mock.calls[0]![0] as Record<string, unknown>;
     expect(argument).not.toHaveProperty("projectType");
+    expect(argument).not.toHaveProperty("breakdown"); // 第一次就是 v0.5.11 起的按日请求，一个字段没变
   });
 
   it("重复同步幂等：同一个任务两次 protectedWrite 得到完全相同的 where 键（upsert 身份不漂移）", async () => {
@@ -265,9 +309,13 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     expect(outcome.status).toBe("success");
     expect(outcome.result).toMatchObject({ batchStatus: "completed", detailRowCount: 0, totalRowCount: 0, reconciliationStatus: "not_applicable" });
     const { calls } = await persist(outcome);
-    expect(calls.map((call) => `${call.model}.${call.method}`)).toEqual(["scope.upsert", "batch.upsert", "audit.create"]);
+    // 按书 / 国家两段也是 completed（空），所以仍会整段清掉区间内的旧行，但不插入、不发国家请求。
+    expect(calls.map((call) => `${call.model}.${call.method}`)).toEqual([
+      "scope.upsert", "batch.upsert", "book.deleteMany", "country.deleteMany", "audit.create",
+    ]);
     expect(calls[1]!.args.create).toMatchObject({
       status: "completed", detailRowCount: 0, totalRowCount: 0, reconciliationStatus: "not_applicable", errorCode: null,
+      bookStatus: "completed", bookRowCount: 0, countryStatus: "completed", countryRowCount: 0,
     });
   });
 
@@ -481,3 +529,212 @@ describe("注册", () => {
     expect(REVENUE_SYNC_TASK_TYPE).toBe("changdu.revenue_sync.v1");
   });
 });
+
+describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段独立成败", () => {
+  const accountRows = [
+    detailRow("2026-09-26", { realDevNum: 3, newRealDevNum: 2, realIncome: "1.50" }),
+    detailRow("2026-09-27", { realDevNum: 1, newRealDevNum: 0, realIncome: "0.20" }),
+    detailRow("2026-09-28", { realDevNum: 2, newRealDevNum: 1, realIncome: "0" }),
+    totalRow({ realIncome: "1.70" }),
+  ];
+  const bookRows = [
+    totalRow({ realIncome: "1.70" }),
+    dateRowWithBooks("2026-09-26", [
+      bookRow("20125409", "O Retorno Genial", { newRealDevNum: 1, realIncome: "1.00" }),
+      bookRow("25710418", "Книга", { newRealDevNum: 1, realIncome: "0.50" }),
+    ], { newRealDevNum: 2, realIncome: "1.50" }),
+    dateRowWithBooks("2026-09-27", [bookRow("20125409", "O Retorno Genial", { newRealDevNum: 0, realIncome: "0.20" })], {
+      newRealDevNum: 0,
+      realIncome: "0.20",
+    }),
+    dateRowWithBooks("2026-09-28", [], { newRealDevNum: 1, realIncome: "0" }),
+  ];
+  const SOURCE_ITEM = "77777777-7777-4777-8777-777777777777";
+  const THEATER = "88888888-8888-4888-8888-888888888888";
+  const matches = () => vi.fn(async () => new Map([
+    ["20125409", { status: "matched", novelSourceItemId: SOURCE_ITEM, channelAppId: THEATER }],
+    ["25710418", { status: "unmatched", novelSourceItemId: null, channelAppId: null }],
+  ]));
+
+  it("按书请求用 breakdown: \"book\"（同一 token、同一区间），书与本站按 seriesId 匹配后整段替换写入", async () => {
+    const resolveBookMatches = matches();
+    const { handler, fetchReport, fetchCountryReport } = build({ rows: accountRows, bookRows, resolveBookMatches });
+    const outcome = await run(handler);
+
+    expect(fetchReport).toHaveBeenCalledTimes(2);
+    expect(fetchReport.mock.calls[1]![0]).toMatchObject({ token: TOKEN, beginDate: "2026-09-20", endDate: "2026-10-07", breakdown: "book" });
+    expect(resolveBookMatches).toHaveBeenCalledWith(expect.anything(), ACCOUNT_ID, ["20125409", "25710418", "20125409"]);
+    // 国家只下钻新用户 > 0 的日期（09-27 没有新用户，不发请求），升序。
+    expect(fetchCountryReport.mock.calls.map((call) => (call[0] as { date: string }).date)).toEqual(["2026-09-26", "2026-09-28"]);
+    expect(outcome.result).toMatchObject({
+      batchStatus: "completed",
+      requestCount: 1 + 1 + 2,
+      bookStatus: "completed",
+      bookRowCount: 3,
+      bookCount: 2,
+      unmatchedBookCount: 1,
+      ambiguousBookCount: 0,
+      countryStatus: "completed",
+      countryDayCount: 2,
+      countryRowCount: 2,
+    });
+    expect(outcome.transactionTimeoutMs).toBe(60_000);
+
+    const { calls } = await persist(outcome);
+    const batch = calls.find((call) => call.model === "batch")!.args;
+    expect(batch.create).toMatchObject({
+      status: "completed", errorCode: null, errorMessage: null,
+      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 2,
+    });
+
+    const bookDelete = calls.find((call) => call.model === "book" && call.method === "deleteMany")!.args;
+    expect(bookDelete.where).toEqual({
+      revenueSyncScopeId: SCOPE_ID,
+      statDate: { gte: new Date("2026-09-20T00:00:00.000Z"), lte: new Date("2026-10-07T00:00:00.000Z") },
+    });
+    const bookCreate = calls.find((call) => call.model === "book" && call.method === "createMany")!.args;
+    expect(bookCreate.data).toEqual([
+      expect.objectContaining({
+        revenueSyncScopeId: SCOPE_ID, statDate: new Date("2026-09-26T00:00:00.000Z"),
+        upstreamSeriesKey: "1_20125409", upstreamSeriesId: "20125409", upstreamBookName: "O Retorno Genial",
+        matchStatus: "matched", novelSourceItemId: SOURCE_ITEM, channelAppId: THEATER,
+        newRealDevNum: 1, realIncome: "1", sourceBatchId: BATCH_ID,
+      }),
+      expect.objectContaining({
+        upstreamSeriesKey: "1_25710418", matchStatus: "unmatched", novelSourceItemId: null, channelAppId: null, realIncome: "0.5",
+      }),
+      expect.objectContaining({ statDate: new Date("2026-09-27T00:00:00.000Z"), upstreamSeriesKey: "1_20125409", realIncome: "0.2" }),
+    ]);
+
+    // 原始行：按书请求一天一行（dimension "1,8"，连同 subItems）+ 一条总计行；国家一天一行（"country:1"）。
+    const raws = calls.filter((call) => call.model === "raw").map((call) => call.args.create);
+    const bookRaws = raws.filter((raw) => raw.dimension === "1,8");
+    expect(bookRaws.map((raw) => [raw.dimensionKey, raw.isTotal])).toEqual([
+      ["2026-09-26", false], ["2026-09-27", false], ["2026-09-28", false], ["总计", true],
+    ]);
+    expect((bookRaws[0]!.rawPayload as { subItems: unknown[] }).subItems).toHaveLength(2);
+    expect(calls.find((call) => call.model === "raw" && call.args.create.dimension === "1,8")!.args.where.dedupeKey).toBe(
+      revenueRawDedupeKey({ kind: "detail", scopeId: SCOPE_ID, projectType: 1, dimension: "1,8", date: "2026-09-26" }),
+    );
+    const countryRaws = raws.filter((raw) => raw.dimension === "country:1");
+    expect(countryRaws.map((raw) => [raw.dimensionKey, raw.newRealDevNum])).toEqual([["2026-09-26", 2], ["2026-09-28", 1]]);
+
+    const countryCreate = calls.find((call) => call.model === "country" && call.method === "createMany")!.args;
+    expect(countryCreate.data).toEqual([
+      { revenueSyncScopeId: SCOPE_ID, statDate: new Date("2026-09-26T00:00:00.000Z"), countryLabel: "巴西(BR)", countryCode: "BR", newRealDevNum: 2, sourceBatchId: BATCH_ID },
+      { revenueSyncScopeId: SCOPE_ID, statDate: new Date("2026-09-28T00:00:00.000Z"), countryLabel: "巴西(BR)", countryCode: "BR", newRealDevNum: 1, sourceBatchId: BATCH_ID },
+    ]);
+    expect(calls.at(-1)!.args.data.afterSnapshot).toMatchObject({
+      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 2,
+    });
+    noToken(calls);
+  });
+
+  it("按书请求失败 → 这一段 failed、不写任何按书行；按日照常写入，国家照常拉取；批次 partial_failed + book_report_failed", async () => {
+    const error = new NovelRevenueAdapterError("upstream_rate_limited", 429);
+    error.requestCount = 2;
+    const fetchReport = vi.fn(async (input: { breakdown?: string }) => {
+      if (input.breakdown === "book") throw error;
+      return { rows: accountRows, requestCount: 1 };
+    });
+    const { handler, fetchCountryReport, resolveBookMatches } = build({ fetchReport });
+    const outcome = await run(handler);
+    expect(outcome.status).toBe("success");
+    expect(resolveBookMatches).not.toHaveBeenCalled();
+    expect(fetchCountryReport).toHaveBeenCalledTimes(2);
+    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 2 + 2, bookStatus: "failed", countryStatus: "completed" });
+
+    const { calls } = await persist(outcome);
+    expect(calls.filter((call) => call.model === "book")).toEqual([]);
+    expect(calls.filter((call) => call.model === "daily")).toHaveLength(3);
+    expect(calls.filter((call) => call.model === "country").map((call) => call.method)).toEqual(["deleteMany", "createMany"]);
+    const batch = calls[1]!.args.create;
+    expect(batch).toMatchObject({ status: "partial_failed", errorCode: "book_report_failed", bookStatus: "failed", bookRowCount: 0 });
+    expect(batch.errorMessage).toContain("Book breakdown failed (upstream_rate_limited)");
+  });
+
+  it("国家下钻第二天失败 → 立即停止后续请求，这一段整段 failed（第一天的结果也不写）；批次 partial_failed + country_report_failed", async () => {
+    const error = new NovelRevenueAdapterError("upstream_http_error", 500);
+    error.requestCount = 1;
+    const fetchCountryReport = vi.fn(async (input: { date: string }) => {
+      if (input.date === "2026-09-28") throw error;
+      return { date: input.date, data: countryData([["巴西(BR)", 2]]), requestCount: 1 };
+    });
+    const rows = [...accountRows.slice(0, 3), detailRow("2026-09-29", { newRealDevNum: 4 })];
+    const { handler } = build({ rows, bookRows: [], fetchCountryReport });
+    const outcome = await run(handler);
+    expect(fetchCountryReport.mock.calls.map((call) => (call[0] as { date: string }).date)).toEqual(["2026-09-26", "2026-09-28"]);
+    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 1 + 2, countryStatus: "failed", countryRowCount: 0 });
+
+    const { calls } = await persist(outcome);
+    expect(calls.filter((call) => call.model === "country")).toEqual([]);
+    expect(calls.filter((call) => call.model === "raw" && call.args.create.dimension === "country:1")).toEqual([]);
+    const batch = calls[1]!.args.create;
+    expect(batch).toMatchObject({ errorCode: "country_report_failed", countryStatus: "failed", bookStatus: "completed" });
+    expect(batch.errorMessage).toContain("Country breakdown failed on 2026-09-28 (upstream_http_error)");
+  });
+
+  it("错误码优先级：总计对不上 > 按书失败 > 国家失败；备注里各段原因都在", async () => {
+    const fetchReport = vi.fn(async (input: { breakdown?: string }) => {
+      if (input.breakdown === "book") throw new NovelRevenueAdapterError("upstream_envelope_error");
+      return { rows: [detailRow("2026-09-26", { realIncome: "10.00", newRealDevNum: 0 }), totalRow({ realIncome: "12.50" })], requestCount: 1 };
+    });
+    const { handler } = build({ fetchReport });
+    const outcome = await run(handler);
+    const { calls } = await persist(outcome);
+    const batch = calls[1]!.args.create;
+    expect(batch).toMatchObject({ status: "partial_failed", errorCode: "total_row_mismatch", bookStatus: "failed" });
+    expect(batch.errorMessage).toContain("Detail income sum");
+    expect(batch.errorMessage).toContain("Book breakdown failed");
+  });
+
+  it("对账只作提示：书行合计 ≠ 当日合计、国家合计 ≠ 当日新用户 → 批次仍 completed，备注写明天数", async () => {
+    const mismatchedBooks = [
+      dateRowWithBooks("2026-09-26", [bookRow("20125409", "A", { newRealDevNum: 1, realIncome: "0.10" })], { newRealDevNum: 2, realIncome: "1.50" }),
+    ];
+    const { handler } = build({
+      rows: accountRows.slice(0, 3),
+      bookRows: mismatchedBooks,
+      countryData: { "2026-09-26": countryData([["巴西(BR)", 1]], 2), "2026-09-28": countryData([["俄罗斯(RU)", 1]]) },
+    });
+    const outcome = await run(handler);
+    const { calls } = await persist(outcome);
+    const batch = calls[1]!.args.create;
+    expect(batch).toMatchObject({ status: "completed", errorCode: null, bookStatus: "completed", countryStatus: "completed" });
+    expect(batch.errorMessage).toContain("Per-book sums differ from the day totals on 1 day(s)");
+    expect(batch.errorMessage).toContain("Country sums differ from the day's new users on 1 day(s)");
+  });
+
+  it("上游书行里不是网文 seriesKey 的（例如 2_ 前缀的短剧、维度不是 8）一律丢弃并计入备注，不写进按书表", async () => {
+    const { handler } = build({
+      rows: accountRows.slice(0, 1),
+      bookRows: [
+        dateRowWithBooks("2026-09-26", [
+          bookRow("20125409", "Novel"),
+          { ...bookRow("999", "Drama"), dimensionValue: "2_999" },
+          { ...bookRow("123", "Wrong dimension"), dimension: 7 },
+        ], { newRealDevNum: 1, realIncome: "0" }),
+      ],
+    });
+    const outcome = await run(handler);
+    const { calls } = await persist(outcome);
+    const created = calls.find((call) => call.model === "book" && call.method === "createMany")!.args.data as Array<{ upstreamSeriesKey: string }>;
+    expect(created.map((row) => row.upstreamSeriesKey)).toEqual(["1_20125409"]);
+    expect(calls[1]!.args.create.errorMessage).toContain("2 upstream book rows were dropped");
+  });
+
+  it("按日请求失败时根本不发按书 / 国家请求，批次两段都是 NULL（未拉取）", async () => {
+    const error = new NovelRevenueAdapterError("upstream_http_error", 401);
+    error.requestCount = 1;
+    const fetchReport = vi.fn(async () => { throw error; });
+    const { handler, fetchCountryReport } = build({ fetchReport });
+    const outcome = await run(handler);
+    expect(fetchReport).toHaveBeenCalledTimes(1);
+    expect(fetchCountryReport).not.toHaveBeenCalled();
+    const { calls } = await persist(outcome);
+    expect(calls[1]!.args.create).toMatchObject({ status: "failed", bookStatus: null, countryStatus: null, bookRowCount: 0, countryRowCount: 0 });
+    expect(calls.map((call) => call.model)).not.toContain("book");
+    expect(calls.map((call) => call.model)).not.toContain("country");
+  });
+});
+

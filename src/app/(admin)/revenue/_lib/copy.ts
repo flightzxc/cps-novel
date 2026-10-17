@@ -98,3 +98,35 @@ const ENQUEUE_FAILURE_COPY: Readonly<Record<string, string>> = Object.freeze({
 export function enqueueFailureCopy(code: string): string {
   return ENQUEUE_FAILURE_COPY[code] ?? `同步未能发起（错误码：${code}）`;
 }
+
+/** v0.6.2 按书匹配结果 → 中文 + 徽标色（matched 时页面直接显示剧场名，不显示徽标）。 */
+const BOOK_MATCH: Readonly<Record<string, { label: string; tone: BadgeTone }>> = Object.freeze({
+  matched: { label: "已匹配", tone: "success" },
+  ambiguous: { label: "多本匹配", tone: "warning" },
+  unmatched: { label: "未匹配", tone: "neutral" },
+});
+
+export function bookMatchView(status: string): { label: string; tone: BadgeTone } {
+  return BOOK_MATCH[status] ?? { label: status, tone: "neutral" };
+}
+
+/**
+ * v0.6.2 按书 / 国家区块的“未覆盖”提示。早于 v0.6.2 的同步批次没有拉过这两段，按书 / 国家拉取失败的批次也不算，
+ * 所以这些日期不是 0，而是还没有数据——重新同步覆盖它们即可补齐。
+ */
+export function breakdownUncoveredNotice(section: "按书" | "国家", uncoveredDays: number): string {
+  return `所选区间内有 ${uncoveredDays} 天还没有${section}数据（那几天的同步早于 v0.6.2，或${section}拉取失败），`
+    + "这些日期不计入下面的数字；在上方重新发起同步覆盖它们即可补齐。";
+}
+
+const BREAKDOWN_STATUS: Readonly<Record<string, { label: string; tone: BadgeTone }>> = Object.freeze({
+  completed: { label: "完成", tone: "success" },
+  failed: { label: "失败", tone: "danger" },
+});
+
+/** 批次表里按书 / 国家两段的状态；null（未拉取）→ null，由调用方显示 `—`。 */
+export function breakdownStatusView(status: string | null): { label: string; tone: BadgeTone } | null {
+  if (status === null) return null;
+  return BREAKDOWN_STATUS[status] ?? { label: status, tone: "neutral" };
+}
+

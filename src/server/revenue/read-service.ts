@@ -84,6 +84,11 @@ export type RevenueBatchRow = {
   errorCode: string | null;
   errorMessage: string | null;
   genericTaskId: string | null;
+  /** v0.6.2 按书 / 国家两段：null = 本批次没有拉取（早于 v0.6.2，或按日请求先失败）。 */
+  bookStatus: "completed" | "failed" | null;
+  bookRowCount: number;
+  countryStatus: "completed" | "failed" | null;
+  countryRowCount: number;
 };
 
 export type RevenueDashboardView = {
@@ -282,6 +287,7 @@ export async function loadRevenueDashboard(
             id: true, createdAt: true, finishedAt: true, beginDate: true, endDate: true, status: true,
             detailRowCount: true, totalRowCount: true, reconciliationStatus: true, upstreamStarId: true,
             credentialFingerprintPrefix: true, errorCode: true, errorMessage: true, genericTaskId: true,
+            bookStatus: true, bookRowCount: true, countryStatus: true, countryRowCount: true,
           },
         })
       : Promise.resolve([]),
@@ -337,6 +343,10 @@ export async function loadRevenueDashboard(
       errorCode: batch.errorCode,
       errorMessage: batch.errorMessage,
       genericTaskId: batch.genericTaskId,
+      bookStatus: batch.bookStatus as RevenueBatchRow["bookStatus"],
+      bookRowCount: batch.bookRowCount,
+      countryStatus: batch.countryStatus as RevenueBatchRow["countryStatus"],
+      countryRowCount: batch.countryRowCount,
     })),
     activeTask: activeTask
       ? { id: activeTask.id, status: activeTask.status, createdAt: activeTask.createdAt.toISOString() }

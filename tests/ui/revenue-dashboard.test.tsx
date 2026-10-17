@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminSessionView } from "@/contracts";
 import { addDays } from "@/app/(admin)/revenue/_lib/dates";
-import type { RevenueBatchRow, RevenueDashboardView, RevenueDayRow } from "@/server/revenue";
+import type { RevenueBatchRow, RevenueBreakdownView, RevenueDashboardView, RevenueDayRow } from "@/server/revenue";
 
 /**
  * `/revenue` 页面（server component）：按 `tests/ui/admin-task-detail-page.test.tsx` 的做法直接
@@ -48,9 +48,10 @@ vi.mock("@/app/(admin)/_lib/page-guard", () => ({
 }));
 
 const loadRevenueDashboard = vi.hoisted(() => vi.fn());
+const loadRevenueBreakdowns = vi.hoisted(() => vi.fn());
 vi.mock("@/server/revenue", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/server/revenue")>();
-  return { ...actual, loadRevenueDashboard };
+  return { ...actual, loadRevenueDashboard, loadRevenueBreakdowns };
 });
 
 const { default: RevenuePage } = await import("@/app/(admin)/revenue/page");
@@ -111,7 +112,39 @@ function batch(overrides: Partial<RevenueBatchRow> = {}): RevenueBatchRow {
     errorCode: null,
     errorMessage: null,
     genericTaskId: TASK_ID,
+    bookStatus: "completed",
+    bookRowCount: 4,
+    countryStatus: "completed",
+    countryRowCount: 3,
     ...overrides,
+  };
+}
+
+/** v0.6.2 按书 / 国家区块：本文件只管账号级部分，给一个“已覆盖、没有数据”的空视图；区块本身见 `revenue-breakdown.test.tsx`。 */
+function emptyBreakdowns(): RevenueBreakdownView {
+  return {
+    books: {
+      coveredDays: 3,
+      uncoveredDays: 0,
+      theaters: [],
+      filter: null,
+      filterNotice: null,
+      page: 1,
+      pageSize: 50,
+      pageCount: 1,
+      bookCount: 0,
+      newUsersTotal: 0,
+      shareIncomeUsdTotal: "0.0000",
+      rows: [],
+      detail: null,
+    },
+    countries: {
+      coveredDays: 3,
+      uncoveredDays: 0,
+      newUsersTotal: 0,
+      ranking: [],
+      matrix: { columns: [], hasOther: false, rows: [] },
+    },
   };
 }
 
@@ -149,6 +182,8 @@ function syncSubmit(): HTMLButtonElement {
 beforeEach(() => {
   loadRevenueDashboard.mockReset();
   loadRevenueDashboard.mockResolvedValue(view());
+  loadRevenueBreakdowns.mockReset();
+  loadRevenueBreakdowns.mockResolvedValue(emptyBreakdowns());
   requireContentPage.mockReset();
   requireContentPage.mockResolvedValue({ context: {}, granted: true });
   routerRefresh.mockClear();
@@ -166,10 +201,11 @@ describe("/revenue · 守卫与口径说明", () => {
     expect(note.textContent).toBe(
       "账号级 · 该畅读账号下全部网文应用合计（当前 1 个应用）· 仅网文（projectType=1）· 达人凭证 · 北京时间日期。"
         + "上游次日可查，近几天会被上游回补，建议每次同步至少覆盖最近 7 天。"
-        + "暂不支持按书、按推广码拆分。",
+        + "按书数据来自上游按书维度（书与本站按 seriesId 匹配，匹配不上标“未匹配”）；"
+        + "国家分布来自对每个有新用户的日期逐日下钻，只统计新用户。不按推广码 / 口令拆分。",
     );
     expect(revenueMethodologyText(1)).toBe(note.textContent);
-    // 页面上没有按书 / 按推广码的占位图表或假数据
+    // 页面上没有按推广码的占位图表或假数据（按书 / 国家是真实表格，不画图）
     expect(document.querySelector("svg")).toBeNull();
     expect(document.querySelector("canvas")).toBeNull();
   });
@@ -198,6 +234,7 @@ describe("/revenue · 守卫与口径说明", () => {
     const denied = screen.getByTestId("content-capability-denied");
     expect(denied.textContent).toContain("revenue:view");
     expect(loadRevenueDashboard).not.toHaveBeenCalled();
+    expect(loadRevenueBreakdowns).not.toHaveBeenCalled();
     expect(screen.queryByTestId("revenue-summary")).toBeNull();
     expect(screen.queryByTestId("revenue-daily")).toBeNull();
     expect(screen.queryByTestId("revenue-sync-form")).toBeNull();
@@ -585,7 +622,8 @@ describe("/revenue · 同步记录", () => {
 
   it("completed 批次带提示信息时不当失败渲染（只按批次状态着色）", async () => {
     loadRevenueDashboard.mockResolvedValue(
-      view({ batches: [batch({ id: "b-note", status: "completed", errorMessage: "丢弃 2 行坏日期" })] }),
+      // 早于 v0.6.2 的批次：按书 / 国家两段没有拉取（null），整行只有批次状态一个「完成」。
+      view({ batches: [batch({ id: "b-note", status: "completed", errorMessage: "丢弃 2 行坏日期", bookStatus: null, countryStatus: null })] }),
     );
     await renderPage();
     const row = screen.getByTestId("revenue-batch-b-note");
@@ -595,6 +633,34 @@ describe("/revenue · 同步记录", () => {
     expect(message.parentElement?.className).toContain("text-gray-500");
     expect(message.parentElement?.className).not.toContain("text-red");
     expect(within(row).getByText("完成")).toBeTruthy();
+    expect(within(row).queryByTestId("revenue-batch-book")).toBeNull();
+    expect(within(row).queryByTestId("revenue-batch-country")).toBeNull();
+  });
+
+  it("v0.6.2 按书 / 国家两段：完成显示行数，失败显示失败徽标，未拉取显示 —", async () => {
+    loadRevenueDashboard.mockResolvedValue(
+      view({
+        batches: [
+          batch({ id: "b-both", bookStatus: "completed", bookRowCount: 1234, countryStatus: "completed", countryRowCount: 9 }),
+          batch({
+            id: "b-country-failed",
+            status: "partial_failed",
+            errorCode: "country_report_failed",
+            bookStatus: "completed",
+            bookRowCount: 2,
+            countryStatus: "failed",
+            countryRowCount: 0,
+          }),
+        ],
+      }),
+    );
+    await renderPage();
+    const both = screen.getByTestId("revenue-batch-b-both");
+    expect(within(both).getByTestId("revenue-batch-book").textContent).toBe("完成1,234 行");
+    expect(within(both).getByTestId("revenue-batch-country").textContent).toBe("完成9 行");
+    const failed = screen.getByTestId("revenue-batch-b-country-failed");
+    expect(within(failed).getByTestId("revenue-batch-country").textContent).toBe("失败");
+    expect(failed.textContent).toContain("country_report_failed");
   });
 
   it("错误信息过长会截断，完整内容放 title", async () => {
@@ -649,3 +715,38 @@ describe("/revenue · 多网文应用的合计提示（账号级口径）", () =
     expect(screen.queryByTestId("revenue-multi-app-hint")).toBeNull();
   });
 });
+
+describe("/revenue · v0.6.2 按书与国家区块接线", () => {
+  it("按书筛选 / 翻页 / 单书参数原样交给读服务（与账号级视图同一区间），两个区块都渲染在每日明细之后", async () => {
+    const range = defaultRevenueRange();
+    await renderPage({ from: range.dateFrom, to: range.dateTo, theater: "unmatched", bookPage: "2", book: "1_20125409" });
+    expect(loadRevenueBreakdowns).toHaveBeenCalledWith(expect.anything(), {
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      theater: "unmatched",
+      bookPage: 2,
+      book: "1_20125409",
+    });
+    const daily = screen.getByTestId("revenue-daily");
+    const books = screen.getByTestId("revenue-books");
+    const countries = screen.getByTestId("revenue-countries");
+    const batches = screen.getByTestId("revenue-batches");
+    const order = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(order(daily, books)).toBeTruthy();
+    expect(order(books, countries)).toBeTruthy();
+    expect(order(countries, batches)).toBeTruthy();
+  });
+
+  it("区间非法回落默认时，按书 / 国家也用回落后的同一个区间", async () => {
+    await renderPage({ from: "2026-10-09", to: "2026-10-01" });
+    const fallback = defaultRevenueRange();
+    expect(loadRevenueBreakdowns).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      dateFrom: fallback.dateFrom,
+      dateTo: fallback.dateTo,
+      theater: null,
+      bookPage: null,
+      book: null,
+    }));
+  });
+});
+

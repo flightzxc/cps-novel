@@ -206,8 +206,10 @@ describe("P1-06 database operations static contracts", () => {
     // v0.6.0 复核 MAJOR-1: the live-catalog function reverse check found two trigger functions from the initial
     // migration that were never registered (reject_promo_public_redirect_code_change, reject_operation_audit_mutation);
     // both are now registered -- 1347 + 2 = 1349 (no new migration, no new database object).
-    expect(records).toHaveLength(1349);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1349);
+    // v0.6.2 收益看板按书 / 国家 (20261017120000_revenue_book_country_breakdown) adds 48 records:
+    // 2 tables + 29 fields (incl. 4 new revenue_sync_batch columns) + 17 constraints -- 1349 + 48 = 1397.
+    expect(records).toHaveLength(1397);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1397);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
