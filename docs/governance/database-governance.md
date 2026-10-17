@@ -298,6 +298,29 @@ SELECT，新列自动可读；`web_app` 的 UPDATE 是列级授权，该列已�
   `raw_payload` 是上游汇总统计行（不含推广码、链接或凭证），四张表整体按 `S1_INTERNAL` 登记。
 - **后台能力位**：`/revenue` 数据看板及其手动同步由 `revenue:view` 把关（`src/lib/auth/capabilities.ts`）——Owner 2026-10-08 决定**默认授予 `super_admin`**（团队两人，不逐人授权），**仍要求 2FA**；`REVENUE_VIEW_ROLES`（非空时取代默认角色集）/ `REVENUE_VIEW_USER_IDS`（按身份追加）可在部署时覆盖，仅透传给 web，不进 worker / worker-light / scheduler。这是应用层授权，与上一条的数据库角色授权相互独立。
 
+#### v0.6.2 按书归因与新增用户国家（迁移 `20261017120000_revenue_book_country_breakdown`）
+
+上面“按书/按推广码的拆分上游暂不支持”的结论只对 `GetMDetailsReport` / `GetMToTalReport` 成立（两者是短剧专用）。
+10-17 主控在生产 worker 内只读实测（6 次请求）：网文的书级数据走**同一个 `GetReport`**，维度改成 `["1","8"]`
+（`GetSelectItems` 实测维度编码：1 日期、2 月份、3 业务类型、4 授权产品、5 机构名称、7 口令、8 网文|短剧、9 业务模式、12 国内/海外），
+书行在日期行的 `subItems` 里；新增用户国家走 `GetCountryReport` 对日期行逐日下钻。本期只新增两张表、给批次表加 4 列，不改旧列与数据。
+
+| 表 | 分类 | 字段责任 | 关键约束 | DROP |
+| --- | --- | --- | --- | --- |
+| `revenue_book_daily_stat` | CPS_PARITY_ADAPTED | 按书每日汇总（激活、新用户、新用户比例、分成收入 US$）+ 与本站来源条目的匹配结果（`match_status` / `novel_source_item_id` / `channel_app_id`）；同一区间重新同步时整段替换 | `(revenue_sync_scope_id, stat_date, upstream_series_key)` 唯一；匹配三值 CHECK；匹配形状 CHECK（matched ⇔ 有来源条目；unmatched 无剧场）；四个 FK 均 `ON DELETE RESTRICT` | CPS 剧级明细的 `GetMDetailsReport` 数据源（短剧专用）与 `promoCode` 维度 |
+| `revenue_country_daily_stat` | CPS_PARITY_ADAPTED | 新增用户国家每日分布（上游国家名原文 + 拆出的 ISO 二字码 + 新用户数）；同一区间重新同步时整段替换 | `(revenue_sync_scope_id, stat_date, country_label)` 唯一；`new_real_dev_num >= 0`；两个 FK 均 `ON DELETE RESTRICT` | — （CPS 没有国家维度） |
+| `revenue_sync_batch`（加列） | CPS_PARITY_ADAPTED | `book_status` / `country_status`（NULL = 本批次未拉取这一段；`completed` / `failed`）与 `book_row_count` / `country_row_count` | 两段状态 CHECK（各自可空）；两个计数非负 | — |
+
+要点：
+
+- **不新增任务类型**：仍是 `changdu.revenue_sync.v1`，在按日请求成功之后，依次追加按书请求与国家下钻（只对新用户 > 0 的日期请求，每天 1 次），经同一个共享限速闸。生产主通道白名单不用改。
+- **两段独立成败**：某一段失败 → 该段 `failed`、不写任何该段统计行，批次 `partial_failed`（`book_report_failed` / `country_report_failed`），按日数据照常写入；错误码优先级 `total_row_mismatch` > `book_report_failed` > `country_report_failed`，各段原因都写进 `error_message`。国家下钻任何一天失败即停止后续请求，整段失败（不留半段）。
+- **覆盖口径**：读服务把“被 `completed` / `partial_failed` 且该段 `completed` 的批次区间覆盖”的天算作已同步；早于 v0.6.2 的存量批次两列是 NULL，不算——页面提示“有 N 天还没有按书 / 国家数据，重新同步即可补齐”，不当 0。
+- **书的匹配**：键是 `novel_source_item.raw_payload->>'seriesId'`（**不是** `external_book_id`；生产 99,470 个来源条目里 99,465 个不同 seriesId）。`web_app` 读不到 `raw_payload`，所以匹配在 worker 同步时做（`worker/revenue/book-match.ts`；范围限该账号所在 channel 下 `project_type = 1` 的剧场），结果连同剧场写进统计行，页面只按外键读。没有表达式索引：一次全表扫描，只在后台手动同步时跑一次。
+- **整段替换**：两张统计表在 finalize 事务里先删批次区间内的旧行再 `createMany`（上游回补后消失的书 / 国家不残留），所以 `worker_app` 对这两张表多一个 `DELETE`（`deleteMany` 的 WHERE 需要 `SELECT`）。成功路径的 finalize 事务超时设为 60 秒。
+- **原始行仍存 `revenue_raw_snapshot`**（不新建原始表）：`dimension` 区分——`"1,8"` = 按书请求的日期行**连同 `subItems` 全部书行**（一天一行）与总计行；`"country:1"` = 国家下钻的 `data` 整体（一天一行，`dimension_key` = 日期，`new_real_dev_num` = 上游 total）。书行不逐行存档，把 upsert 数量压在“天数”量级。原始 JSON 逐层遮蔽 token / 口令类键。
+- **口令维度（7）永不请求**：请求体只能由两组冻结的维度组合构造，PlotNovel 的 6 位口令码不会落库。
+
 ## 4. 状态 CHECK 真源
 
 正式 CHECK 值必须与 `src/domain/database-statuses.ts` 一致：
@@ -344,6 +367,10 @@ SELECT，新列自动可读；`web_app` 的 UPDATE 是列级授权，该列已�
   `pending | running | completed | partial_failed | failed`（当前实现一次写成终态；`pending`/`running` 为分阶段写入预留）
 - RevenueReconciliation（`revenue_sync_batch.reconciliation_status`，可空，机器真源 `REVENUE_RECONCILIATION_STATUSES`）：
   `matched | mismatched | not_applicable`
+- RevenueBreakdown（v0.6.2，`revenue_sync_batch.book_status` / `country_status`，各自可空 = 未拉取，机器真源 `REVENUE_BREAKDOWN_STATUSES`）：
+  `completed | failed`
+- RevenueBookMatch（v0.6.2，`revenue_book_daily_stat.match_status`，机器真源 `REVENUE_BOOK_MATCH_STATUSES`）：
+  `matched | ambiguous | unmatched`
 - ScheduleRun：`due | enqueued | misfired | skipped | failed`
 - CronRun：`created | task_created | failed`
 - Carousel batch：`pending | processing | completed | failed`
@@ -599,6 +626,18 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
       同事务一次算好全部归属，上线第一个请求起表就是满的。真实库运行器 `scripts/run-effective-tag-projection-postgres-verification.sh` 把这一段单独执行一遍，与 `reconcileAllEffectiveTags` 的结果逐行（含 `rank`、`score`）比对。
     - 规则 SQL 的形状（不要"简化"）：CTE 没有列统计，规划器对它们的行数全靠猜，"直观"写法在 8 万本规模上实测要跑 10 分钟以上。所以映射支路先物化 `item_label` 与很小的 `active_edge`（生产约 200 行）再做三列等值连接，`public_membership` 用 `DISTINCT ON` 去重而不是 `NOT EXISTS`，差异比对用 `FULL JOIN`（只能哈希 / 归并，没有嵌套循环退路）；语义与改造前现场计算逐行等价（真实库用例证明）。合成 8 万本 / 21.5 万行归属实测（PG16.14）：首建约 2 秒（含索引）、无变化的全量对账 / 只读检查约 0.6 秒、有大量变化的对账约 0.8 秒、一页 50 本重算 9 毫秒、2000 本一块 73 毫秒。
     - 授权见 §7：`web_app`、`worker_app` 各 `SELECT, INSERT, UPDATE, DELETE`，`analyst_ro` 只 `SELECT`，`scheduler_app` 无；`infra/postgres/grants.sql` 已同步。
+26. `20261017120000_revenue_book_country_breakdown`（v0.6.2 收益看板按书归因 + 新增用户国家：两张新表 + 批次表加 4 列，不改旧列与数据）：
+    - 加列：`revenue_sync_batch.book_status` / `country_status`（`VARCHAR(32)`，可空）、`book_row_count` / `country_row_count`（`INTEGER NOT NULL DEFAULT 0`）；PG16 加带常量默认值的列不重写表。
+    - 命名 CHECK：`db:public:revenue_sync_batch:revenue_sync_batch_breakdown_status_check`（两列各自 `IS NULL OR IN ('completed','failed')`）、
+      `…:revenue_sync_batch_breakdown_counts_check`（两个计数非负）；
+      `db:public:revenue_book_daily_stat:revenue_book_daily_stat_match_status_check`（`matched | ambiguous | unmatched`）、
+      `…:revenue_book_daily_stat_match_shape_check`（`(match_status = 'matched') = (novel_source_item_id IS NOT NULL) AND (match_status <> 'unmatched' OR channel_app_id IS NULL)`）；
+      `db:public:revenue_country_daily_stat:revenue_country_daily_stat_new_users_check`（`new_real_dev_num >= 0`）。
+    - 唯一索引：`revenue_book_daily_stat_scope_date_series_key` = `UNIQUE(revenue_sync_scope_id, stat_date, upstream_series_key)`、
+      `revenue_country_daily_stat_scope_date_label_key` = `UNIQUE(revenue_sync_scope_id, stat_date, country_label)`；
+      普通索引 `revenue_book_daily_stat_scope_series_idx`（单书按日明细）、`revenue_book_daily_stat_source_item_idx`（FK 列）。
+    - 外键删除策略：全部 `ON DELETE RESTRICT`（含指向 `novel_source_item` / `channel_app` 的两条：来源条目只软删除，统计行长期保留）。
+    - 授权见 §7：`worker_app` 两张新表 `SELECT, INSERT, UPDATE, DELETE`（整段替换），`web_app` / `analyst_ro` 只 `SELECT`；`infra/postgres/grants.sql` 已同步。
 
 ### P1-05B Migration 注意事项
 
@@ -632,6 +671,7 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
 | `article.body` | S0（published 时） | `web_app` 公开页面渲染可读 | 可生成/更新 | 不读 | 可读公开版本；不是章节版权正文 |
 | `site_setting.indexnow_key` | S2 | `settings:manage` + 当前会话 2FA 的受控 API 可读/写 | IndexNow 任务可读 | 禁止 | 禁止 |
 | `revenue_sync_scope` / `revenue_sync_batch` / `revenue_raw_snapshot` / `revenue_daily_stat` | S1（账号级汇总统计；`raw_payload` 为上游汇总行，不含推广码/链接/凭证） | 只读（后台 `/revenue` 读服务）；不读取、不解密凭证密文 | `SELECT, INSERT, UPDATE`（无 DELETE），`changdu.revenue_sync.v1` 在 `protectedWrite` 里写入 | 禁止 | 只读 |
+| `revenue_book_daily_stat` / `revenue_country_daily_stat`（v0.6.2） | S1（按书 / 国家汇总统计与本站外键；不含推广码、口令码、链接或凭证） | 只读（后台 `/revenue` 按书、国家区块） | `SELECT, INSERT, UPDATE, DELETE`（finalize 事务里整段替换批次区间内的旧行），`changdu.revenue_sync.v1` 写入 | 禁止 | 只读 |
 | `novel_effective_tag` | S0（小说与分类的归属关系，公开页本来就展示；无商业敏感列） | `SELECT, INSERT, UPDATE, DELETE`：后台保存人工标签 / 退出人工 / 改映射 / 分类启停 / 创建小说，在改动真源的同一事务里重算（B-38） | `SELECT, INSERT, UPDATE, DELETE`：自动打标写入、批量创建小说、目录同步每页、站点地图刷新前的兜底全量对账（`worker` 与 `worker-light` 同用 `worker_app`）、运维命令 | 禁止 | 只读 |
 
 ### P1-06 已实施权限矩阵
@@ -766,6 +806,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-10-10 | v0.5.15 首页题材导航运营勾选（方案 `方案_首页题材导航运营勾选_v0.5.15_2026-10-10.md`，Owner 2026-10-10「全部按推荐」拍板；CPS 对应物是 `Category.isHomepageVisible`，CPS_PARITY_ADAPTED；工作树 `cps海阅/home-nav-curation-v0515`，分支 `feat/home-nav-curation-v0515`） | 一条新迁移 `20261010160000_canonical_tag_homepage_visible`：`canonical_tag` 追加 `is_homepage_visible BOOLEAN NOT NULL DEFAULT true` 一列（默认 true，上线当天全部分类仍显示、首页与上线前逐字一致），不改任何已有迁移。**`infra/postgres/grants.sql` 不改**：`web_app` 对 `canonical_tag` 是表级 SELECT（第 56～108 行块）与表级 INSERT/UPDATE（第 198～206 行块），`worker_app` 是表级 SELECT（第 427～432 行块，另有表级 INSERT/UPDATE，第 333～346 行块），新列自动覆盖；`scheduler_app` 没有这张表的权限。字典新增一条 `canonical_tag` 字段记录 `db:public:canonical_tag:is_homepage_visible`（`source: CPS_PARITY_ADAPTED`，`read_roles` 与同表其它字段一致，`write_roles: [migration_owner, web_app]`），recordCount 1342 → 1343，activeCount 1272 → 1273，58 张表不变，迁移数 25 → 26。保存走新接口 `PUT /api/admin/canonical-tags/homepage-nav`：`tag:manage` + 当前会话 2FA，不受 `FEATURE_P2_06_5_TAG_ADMIN_WRITE` 约束（只要求读开关），事务内先请求号咨询锁、再命名空间锁 `v0515:homepage-nav`，行锁用 `FOR NO KEY UPDATE`（不用 `FOR UPDATE`：与归属表重算时外键检查要拿的 KEY SHARE 锁冲突，可能死锁），原生 SQL 只更新本列且**不更新 `updated_at`**（分类页站点地图 lastmod 取自它），同事务写一条 `operation_audit`（动作 `tag.canonical.homepage_nav.replace`、`entityType: CanonicalTag`、`entityId: homepage-nav`，前后快照为按 slug 升序的可见名单 + added/removed），不触发 `reconcileAllEffectiveTags`、不拿投影锁。前台读取侧：`loadPublicCategoryTags` 的 SELECT 多读本列、不新增查询；只有首页 `HomeBody` 在交给 `HomeScreen` 前按它过滤，页脚与详情页可链接集合仍用未过滤的那一份。 | Claude Sonnet 5.5（施工） | 见本分支提交说明与回报：`node scripts/check-database-dictionary-drift.mjs --static` → `{"status":"ok","models":58,"recordCount":1343,"activeCount":1273}`；其余门禁随后续提交补记。已实现，待复核与发布 |
 | 2026-10-14 | v0.6.0 接入畅读 PlotNovel 剧场（口令码模式；`开发单_v0.6.0_PlotNovel口令码剧场_2026-10-14.md`，Owner 2026-10-14 六项拍板；工作树 `cps海阅/plotnovel-v060`，分支 `feat/plotnovel-code-theater-v060`，基线 `3ee7a9ff`） | **零新环境变量；`channel_app.config` 键契约本身不需要迁移（但见下一行"数据库层收紧"：同版本含 1 个迁移）。** (1) `channel_app.config` 新增键契约（`promoMode`、`agencyIds`、`codeModeLocales`、`appDisplayName`、`appStoreUrl`、`googlePlayUrl`，`json_schema_version` 仍为 1，只增键）；字典 `channel_app.config` 的 business_meaning / llm_constraints / read_roles 同步，详见 §3.1 新小节。(2) `infra/postgres/grants.sql`：（`web_app` 的 `upstream_code` 授权已在同版本后续改为数据库层收紧，见下一行，最终**没有**这个授权）`scheduler_app` 增加 `promo_link.channel_app_id` 与 `channel_app(id, config)` 列级 SELECT（`queryActiveLocales` 口令码模式粗预筛，**不含 `upstream_code`**）；`worker_app` / `analyst_ro` 不变。字典 `promo_link.channel_app_id` 与 `channel_app.id` / `channel_app.config` 增加 `scheduler_app`；顺带补登 2026-09-01 起已生效却漏记的 `promo_link.web_url` / `app_url` 的 `web_app` 读权限。(3) 真实角色验证：`scripts/run-plotnovel-theater-postgres-verification.sh`（web_app 读不到口令码、scheduler_app `queryActiveLocales` 不被拒、worker_app 目录分流 / 改挂 / 领取批次挑书，全程无 permission denied；重放 grants 后字典漂移为 0）。(4) 一次性生产数据操作（改挂机构 1351 的书目与推广链接，P3 级）由 `scripts/rehome-plotnovel-source-items.ts` 执行，按运维手册 `docs/operations/PLOTNOVEL_THEATER_OPENING_2026-10-14.md` 在发版后进行，**本版代码不自动执行**；执行时 `operation_audit` 动作 `plotnovel.rehome.apply`，登记动作前缀 `plotnovel.theater.`。 | Claude Sonnet 5.5（施工）；复核待主控 | 待复核与发布；改挂未执行 |
 | 2026-10-14 | v0.6.0 PlotNovel 口令码剧场·数据库层收紧（Owner 2026-10-14 "按数据库层收紧"；同分支 `feat/plotnovel-code-theater-v060`，ADR-V060 D8） | 一条新迁移 `20261014120000_code_mode_upstream_code_guard`（迁移数 26 → 27）：(1) `promo_link` 加列 `upstream_code_present BOOLEAN NOT NULL DEFAULT false`（加列不重写表）+ 触发器 `promo_link_upstream_code_present_sync`（`BEFORE INSERT OR UPDATE`，触发器函数 `promo_link_sync_upstream_code_present()`，SECURITY INVOKER；按 `upstream_code` 重算，`coalesce(btrim(upstream_code, <JS trim 的 25 个字符>), '') <> ''`，写入方改不了），迁移末尾对有口令码的行做一次"原值写回"的空更新回填（不碰 `updated_at`）；(2) 新函数 `public.code_mode_upstream_code(p_public_redirect_code text) RETURNS text`：`LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public`，属主是执行迁移的 `migration_owner`，`REVOKE ALL ... FROM PUBLIC`；按站内码精确查一条，**仅当**未删除 ∧ `status = 'fetched'` ∧ 剧场 `config->>'promoMode' = 'code'` ∧ `upstream_code_present` ∧ 书的语种非空且在 `config->'codeModeLocales'` 里才返回口令码，否则 `NULL`；标量函数，不可枚举。**`infra/postgres/grants.sql`**：`web_app` 的 `promo_link` 列授权 `(web_url, app_url, upstream_code)` → `(web_url, app_url, upstream_code_present)`（**`web_app` 对 `upstream_code` 没有任何读权限**，直接读 `permission denied`），`GRANT EXECUTE ON FUNCTION public.code_mode_upstream_code(text) TO web_app`（只授 `web_app`；`worker_app` / `scheduler_app` / `analyst_ro` / `backup_role` / PUBLIC 无）；`scheduler_app` / `analyst_ro` 对两列都无权限。字典 +4 条（字段 `promo_link.upstream_code_present`、触发器 `promo_link_upstream_code_present_sync`、函数 `promo_link_sync_upstream_code_present` 与 `code_mode_upstream_code`；1343 → 1347，active 1273 → 1277），另补登 2 条初始迁移里就存在却从未登记的触发器函数（`reject_promo_public_redirect_code_change`、`reject_operation_audit_mutation`；被新加固的活库函数反向核对发现；无新迁移、无新数据库对象；1347 → 1349，active 1277 → 1279），`promo_link.upstream_code` 的 read_roles 撤回 `web_app`；`check-database-dictionary-drift.mjs` 的函数合同改为"触发器函数 + 一个明确白名单的 DEFINER 函数"，并加固为活库双向核对（每个函数都要登记；任何不在白名单的 `prosecdef = true` 函数无论登记与否都失败；复核 MAJOR-1）。Prisma：`PromoLink.upstreamCodePresent`。真实角色验证：`scripts/run-plotnovel-theater-postgres-verification.sh`（`code-function-postgres.test.ts`：`web_app` 直接读 `upstream_code` 的 13 种形态全部 `permission denied`；函数返回 / 不返回逐项 + 与 `isPromoReady` 矩阵对照；属主 / DEFINER / 固定 `search_path` / `EXECUTE` 仅 `web_app`；触发器伪造不了；`worker_app` / `scheduler_app` 不变；中间页端到端；`grants.sql` 重放两次 ACL 摘要逐字相同；`prisma migrate diff` 两个方向为 0）。发版读回 SQL 见运维手册步骤 0。 | Claude Sonnet 5.5（施工）；复核待主控 | 待复核与发布 |
+| 2026-10-17 | v0.6.2 收益看板按书归因 + 新增用户国家（Owner 10-17 口径：按书看新增用户与收入、区间汇总 + 单书按日、PlotNovel 同表加剧场列；国家看区间排行 + 国家 × 日期；上游合同由主控 10-17 在生产 worker 内只读实测；工作树 `cps海阅/v062-revenue-book-country`，分支 `feat/v062-revenue-book-country`，基线 `integration/v0.6.2-2026-10-17@66c2e7b`） | 一条新迁移 `20261017120000_revenue_book_country_breakdown`（迁移数 27 → 28）：新表 `revenue_book_daily_stat`、`revenue_country_daily_stat`，`revenue_sync_batch` 加 `book_status` / `book_row_count` / `country_status` / `country_row_count`（实体目录见 §3.7 v0.6.2 小节，物理约束见 §5 第 26 条，状态真源见 §4）。`grants.sql`：`worker_app` 两张新表 `SELECT, INSERT, UPDATE, DELETE`，`web_app` / `analyst_ro` 两张新表 `SELECT`。字典 +48 条（2 表 + 29 字段 + 17 约束；1349 → 1397，active 1279 → 1327）；`check-database-dictionary-drift.mjs` 模型 / 活库表数 58 → 60。Prisma：`RevenueBookDailyStat`、`RevenueCountryDailyStat`，`RevenueSyncBatch` 四个新字段，`ChannelApp` / `NovelSourceItem` / `RevenueSyncScope` 反向关系。不新增任务类型（仍 `changdu.revenue_sync.v1`），生产白名单不变。真实角色验证：`scripts/run-revenue-dashboard-postgres-verification.sh`。 | claude-code（claude-opus-5-5）；复核待主控 | 待复核与发布 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

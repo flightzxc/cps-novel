@@ -163,8 +163,10 @@ export function assertStaticConsistency(schemaTables, records, { allowedDefinerF
   // revenue_sync_scope / revenue_sync_batch / revenue_raw_snapshot / revenue_daily_stat,
   // pushing 53 -> 57.
   // B-38 (20261009120000_b38_novel_effective_tag) adds novel_effective_tag: 57 -> 58.
-  if (schemaTables.size !== 58) {
-    problems.push(`expected 58 Prisma models, found ${schemaTables.size}`);
+  // v0.6.2 收益看板按书 / 国家 (20261017120000_revenue_book_country_breakdown) adds
+  // revenue_book_daily_stat / revenue_country_daily_stat: 58 -> 60.
+  if (schemaTables.size !== 60) {
+    problems.push(`expected 60 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -315,8 +317,9 @@ export async function assertCatalogConsistency(
     // assertStaticConsistency already carries above. Owner 2026-09-18 决策 2:
     // channel_account_hold pushes it to 53. 收益看板 (20261008120000_revenue_account_level_dashboard)
     // adds four revenue_* tables: 53 -> 57. B-38 (20261009120000_b38_novel_effective_tag)
-    // adds novel_effective_tag: 57 -> 58.
-    if (actualTables.size !== 58) problems.push(`expected 58 database tables, found ${actualTables.size}`);
+    // adds novel_effective_tag: 57 -> 58. v0.6.2 (20261017120000_revenue_book_country_breakdown)
+    // adds revenue_book_daily_stat / revenue_country_daily_stat: 58 -> 60.
+    if (actualTables.size !== 60) problems.push(`expected 60 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

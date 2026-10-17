@@ -76,7 +76,7 @@ describe.skipIf(!enabled).sequential("v0.6.0 字典漂移检查：看得见没�
   it("基线：仓库字典 + 干净的库 → 通过（取码函数是登记且在白名单内的唯一 DEFINER 函数）", async () => {
     expect([...ALLOWED_DEFINER_FUNCTIONS.keys()]).toEqual(["code_mode_upstream_code"]);
     expect(assertStaticConsistency(repo.schemaTables, repo.records)).toMatchObject({ recordCount: repo.records.length });
-    expect(await check()).toMatchObject({ tableCount: 58, triggerCount: 4 });
+    expect(await check()).toMatchObject({ tableCount: 60, triggerCount: 4 });
     const definers = await owner.$queryRaw<Array<{ name: string }>>`
       SELECT p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.prosecdef`;
@@ -155,7 +155,7 @@ describe.skipIf(!enabled).sequential("v0.6.0 字典漂移检查：看得见没�
     await owner.$executeRawUnsafe(`CREATE FUNCTION public.zz_registered_definer(p text) RETURNS text LANGUAGE sql SECURITY DEFINER
       SET search_path = pg_catalog, public AS 'SELECT p'`);
     expect(() => assertStaticConsistency(repo.schemaTables, records, { allowedDefinerFunctions: allowlist })).not.toThrow();
-    expect(await check(records, { allowedDefinerFunctions: allowlist })).toMatchObject({ tableCount: 58 });
+    expect(await check(records, { allowedDefinerFunctions: allowlist })).toMatchObject({ tableCount: 60 });
     // 白名单条目与活库不一致（参数 / 返回类型对不上）也失败
     const wrongShape = new Map(allowlist);
     wrongShape.set("zz_registered_definer", { schema: "public", identityArguments: "p text", returnType: "integer" });
@@ -170,7 +170,7 @@ describe.skipIf(!enabled).sequential("v0.6.0 字典漂移检查：看得见没�
       SELECT count(*)::bigint AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.proname = 'digest'`;
     expect(Number(extensionFunctions[0]!.n)).toBeGreaterThan(0); // 确实在 public 里放了扩展函数
-    expect(await check()).toMatchObject({ tableCount: 58 });
+    expect(await check()).toMatchObject({ tableCount: 60 });
   });
 
   it("整支 CLI 当子进程跑：干净库退出 0；有没登记的 DEFINER 函数退出非 0 并在 stderr 点名", async () => {

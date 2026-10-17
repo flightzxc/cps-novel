@@ -33,7 +33,12 @@ prisma_version="$(npx prisma --version)"
 echo "$prisma_version" | grep -F "prisma                  : 6.19.2" >/dev/null
 echo "$prisma_version" | grep -F "@prisma/client          : 6.19.2" >/dev/null
 
-docker pull postgres:16 >/dev/null
+# B-48：原先每次都 `docker pull postgres:16`（浮动标签），v0.6.1 发版时公司网络下
+# Docker Hub 返回 EOF，门禁因此停下。改为与其它运行器一致的固定 postgres:16.14，
+# 本机已有镜像就不再联网拉取。
+if ! docker image inspect postgres:16.14 >/dev/null 2>&1; then
+  docker pull postgres:16.14 >/dev/null
+fi
 docker volume create "$volume_name" >/dev/null
 docker run -d \
   --name "$container_name" \
@@ -42,7 +47,7 @@ docker run -d \
   -e "POSTGRES_PASSWORD=${database_password}" \
   -e "POSTGRES_DB=${database_name}" \
   -p 127.0.0.1::5432 \
-  postgres:16 >/dev/null
+  postgres:16.14 >/dev/null
 
 for _ in $(seq 1 60); do
   if docker exec "$container_name" pg_isready -U "$database_user" -d "$database_name" >/dev/null 2>&1; then

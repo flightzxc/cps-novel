@@ -173,17 +173,34 @@ export function revenueBatchFingerprint(input: {
 }
 
 /**
+ * `revenue_raw_snapshot.dimension` 的取值（v0.6.2 起一张原始行表存三类行，靠它区分）：
+ *   - "1"         按日请求（`NOVEL_REVENUE_DIMENSIONS`）的明细行与总计行（v0.5.11 起）；
+ *   - "1,8"       按书请求（维度 ["1","8"]）的日期行**连同 `subItems` 里的全部书行**（一天一行）与总计行；
+ *   - "country:1" 国家下钻（countryReportType=1 新用户）的 `data` 整体，一天一行（dimension_key = 下钻的日期）。
+ * 去重键沿用 `detail` / `total` 两种形状（身份 = 日期），书行不逐行存档——按书统计表里已是解析后的值，
+ * 原始行一天一行把 finalize 事务里的 upsert 数量压在「天数」量级，而不是「天数 × 书数」。
+ */
+export const REVENUE_RAW_DIMENSION_BOOK = "1,8";
+export const REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS = "country:1";
+
+/**
  * `revenue_raw_snapshot.dedupe_key`：明细行 = sha256(scopeId|projectType|dimension|<日期>|detail)；
- * 总计行 = sha256(scopeId|projectType|dimension|<dimensionKey>|total:<begin>~<end>)。
+ * 总计行 = sha256(scopeId|projectType|dimension|<dimensionKey>|total:<begin>~<end>)；
+ * 国家下钻（v0.6.2）= sha256(scopeId|projectType|dimension|<日期>|country)。按书请求的日期行 / 总计行
+ * 用 `detail` / `total` 形状，dimension 不同（"1,8"）所以不会与按日请求的行撞键。
  *
  * 明细行的身份取**解析出的日期**，而不是上游的 `dimensionKey` 原文：两者在已实证的形态里相同，
  * 但如果上游哪天把 `dimensionKey` 换成与日期无关的值（例如维度编号），按它去重会把整个区间塌缩成一行。
  */
 export function revenueRawDedupeKey(input:
   | { kind: "detail"; scopeId: string; projectType: number; dimension: string; date: string }
-  | { kind: "total"; scopeId: string; projectType: number; dimension: string; dimensionKey: string; beginDate: string; endDate: string }): string {
+  | { kind: "total"; scopeId: string; projectType: number; dimension: string; dimensionKey: string; beginDate: string; endDate: string }
+  | { kind: "country"; scopeId: string; projectType: number; dimension: string; date: string }): string {
   if (input.kind === "detail") {
     return digest([input.scopeId, input.projectType, input.dimension, input.date, "detail"]);
+  }
+  if (input.kind === "country") {
+    return digest([input.scopeId, input.projectType, input.dimension, input.date, "country"]);
   }
   return digest([input.scopeId, input.projectType, input.dimension, input.dimensionKey, `total:${input.beginDate}~${input.endDate}`]);
 }

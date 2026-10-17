@@ -132,6 +132,15 @@ export const TAG_CLASSIFICATION_METHODS = ["deterministic_text", "offline_llm"] 
 export const REVENUE_SCOPE_STATUSES = ["active", "disabled"] as const;
 export const REVENUE_BATCH_STATUSES = ["pending", "running", "completed", "partial_failed", "failed"] as const;
 export const REVENUE_RECONCILIATION_STATUSES = ["matched", "mismatched", "not_applicable"] as const;
+/**
+ * v0.6.2 收益看板按书 / 国家（迁移 `20261017120000_revenue_book_country_breakdown`）：
+ *   - `revenue_sync_batch.book_status` / `country_status` 共用一组取值（可空 = 本批次未拉取这一段），
+ *     CHECK `revenue_sync_batch_breakdown_status_check`；
+ *   - `revenue_book_daily_stat.match_status`，CHECK `revenue_book_daily_stat_match_status_check`。
+ * `tests/backend/revenue/revenue-breakdown-migration-static.test.ts` 逐值比对。
+ */
+export const REVENUE_BREAKDOWN_STATUSES = ["completed", "failed"] as const;
+export const REVENUE_BOOK_MATCH_STATUSES = ["matched", "ambiguous", "unmatched"] as const;
 
 const REGISTRY_STATUS_SEMANTICS = {
   active: "Registered and available for normal use.",
@@ -322,7 +331,7 @@ export const DATABASE_STATUS_SEMANTICS = {
     pending: "批次已登记，尚未开始向上游取数（当前实现不会停留在此状态）。",
     running: "批次正在向上游取数（当前实现不会停留在此状态）。",
     completed: "取数成功并已落库；上游没有活动数据的空列表也是 completed（明细行数为 0），不是失败。",
-    partial_failed: "取数成功且数据已落库，但明细合计与上游总计行对不上（total_row_mismatch），需要人工核对。",
+    partial_failed: "按日数据已落库，但明细合计与上游总计行对不上（total_row_mismatch），或按书 / 国家某一段取数失败（book_report_failed / country_report_failed），需要人工核对或重新同步。",
     failed: "批次失败，没有写入任何日统计；错误码与脱敏后的错误信息在批次行上。",
   },
   /** `revenue_sync_batch.reconciliation_status`（收益看板，可空：尚未对账时为 NULL）。 */
@@ -330,6 +339,17 @@ export const DATABASE_STATUS_SEMANTICS = {
     matched: "明细行分成收入合计与上游总计行一致（差不超过 0.01）。",
     mismatched: "明细行分成收入合计与上游总计行相差超过 0.01。",
     not_applicable: "上游没有返回总计行，无从对账。",
+  },
+  /** `revenue_sync_batch.book_status` / `country_status`（v0.6.2，可空：本批次没有拉取这一段时为 NULL）。 */
+  revenue_sync_batch_breakdown_status: {
+    completed: "这一段（按书 / 国家）取数成功并已整段替换落库；批次区间内的这一段数据以本批次为准。",
+    failed: "这一段取数失败，没有写入任何该段统计行；批次整体记 partial_failed（按日数据仍写入）。",
+  },
+  /** `revenue_book_daily_stat.match_status`（v0.6.2）：上游书行与本站来源条目的匹配结果。 */
+  revenue_book_daily_stat_match_status: {
+    matched: "seriesId 唯一命中一个本站来源条目（novel_source_item.raw_payload 里的 seriesId）。",
+    ambiguous: "seriesId 命中多个来源条目，不替运营挑选；候选同属一个剧场时仍记剧场。",
+    unmatched: "本站没有 seriesId 对应的来源条目；页面保留上游书名并标“未匹配”。",
   },
   /** `article_novel_rebind_batch.status` (C-30A). See `article_type` above for why this is a top-level entry rather than nested under `article`. */
   article_novel_rebind_batch: {
@@ -404,3 +424,5 @@ export type TagClassificationMethod = ValueOf<typeof TAG_CLASSIFICATION_METHODS>
 export type RevenueScopeStatus = ValueOf<typeof REVENUE_SCOPE_STATUSES>;
 export type RevenueBatchStatus = ValueOf<typeof REVENUE_BATCH_STATUSES>;
 export type RevenueReconciliationStatus = ValueOf<typeof REVENUE_RECONCILIATION_STATUSES>;
+export type RevenueBreakdownStatus = ValueOf<typeof REVENUE_BREAKDOWN_STATUSES>;
+export type RevenueBookMatchStatus = ValueOf<typeof REVENUE_BOOK_MATCH_STATUSES>;

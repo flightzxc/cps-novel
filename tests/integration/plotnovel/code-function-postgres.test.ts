@@ -329,7 +329,14 @@ describe.skipIf(!enabled).sequential("v0.6.0 数据库层收紧：code_mode_upst
       const [migrations] = await owner.$queryRawUnsafe<Array<{ applied: bigint; latest: string }>>(statements[0]!);
       const migrationDirs = readdirSync(path.resolve(import.meta.dirname, "../../../prisma/migrations"), { withFileTypes: true }).filter((entry) => entry.isDirectory());
       expect(Number(migrations!.applied)).toBe(migrationDirs.length);
-      expect(migrations!.latest).toBe("20261014120000_code_mode_upstream_code_guard");
+      // 手册写于 v0.6.0 发版时，“最新一条是 20261014120000_code_mode_upstream_code_guard”只在那次发版成立；
+      // 之后每加一条迁移（v0.6.2 起：20261017120000_revenue_book_country_breakdown）最新一条都会变。这里核对
+      // “最新一条 = 仓库里最新的迁移目录”，并单独确认 v0.6.0 那一条已经应用。手册是发版记录，不改。
+      expect(migrations!.latest).toBe(migrationDirs.map((entry) => entry.name).sort().at(-1));
+      const [guard] = await owner.$queryRawUnsafe<Array<{ n: bigint }>>(
+        "SELECT count(*) AS n FROM _prisma_migrations WHERE migration_name = '20261014120000_code_mode_upstream_code_guard' AND finished_at IS NOT NULL AND rolled_back_at IS NULL",
+      );
+      expect(Number(guard!.n)).toBe(1);
 
       const [columns] = await owner.$queryRawUnsafe<Array<Record<string, boolean>>>(statements[1]!);
       expect(columns).toEqual({

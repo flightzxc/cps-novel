@@ -6,7 +6,7 @@ import { formatDateTime } from "@/features/admin-ui/datetime";
 import type { RevenueBatchRow } from "@/server/revenue";
 
 import { shortTaskId } from "../_lib/active-task";
-import { batchStatusView, reconciliationView } from "../_lib/copy";
+import { batchStatusView, breakdownStatusView, reconciliationView } from "../_lib/copy";
 import { formatCount, truncate } from "../_lib/format";
 
 const MESSAGE_MAX_LENGTH = 80;
@@ -36,6 +36,18 @@ function ErrorCell({ batch }: { batch: RevenueBatchRow }) {
   );
 }
 
+/** v0.6.2 按书 / 国家两段：状态徽标 + 行数；null（这一段没拉取）显示 `—`。 */
+function BreakdownCell({ status, rowCount, testId }: { status: RevenueBatchRow["bookStatus"]; rowCount: number; testId: string }) {
+  const view = breakdownStatusView(status);
+  if (!view) return <span className="text-gray-400">—</span>;
+  return (
+    <div className="flex items-center gap-1.5" data-testid={testId}>
+      <StatusBadge tone={view.tone}>{view.label}</StatusBadge>
+      {status === "completed" && <span className="text-xs tabular-nums text-gray-500">{formatCount(rowCount)} 行</span>}
+    </div>
+  );
+}
+
 /** 最近 20 个同步批次。 */
 export function BatchTable({ batches }: { batches: readonly RevenueBatchRow[] }) {
   return (
@@ -52,6 +64,8 @@ export function BatchTable({ batches }: { batches: readonly RevenueBatchRow[] })
             <TH>状态</TH>
             <TH className="text-right">明细行数</TH>
             <TH>对账</TH>
+            <TH>按书</TH>
+            <TH>国家</TH>
             <TH>StarId</TH>
             <TH>错误码 / 信息</TH>
             <TH>任务</TH>
@@ -59,7 +73,7 @@ export function BatchTable({ batches }: { batches: readonly RevenueBatchRow[] })
         </THead>
         <TBody>
           {batches.length === 0 ? (
-            <EmptyRow colSpan={8}>还没有同步记录。点击上方「发起同步」拉取最近 7 天。</EmptyRow>
+            <EmptyRow colSpan={10}>还没有同步记录。点击上方「发起同步」拉取最近 7 天。</EmptyRow>
           ) : (
             batches.map((batch) => {
               const status = batchStatusView(batch.status);
@@ -80,6 +94,12 @@ export function BatchTable({ batches }: { batches: readonly RevenueBatchRow[] })
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}
+                  </TD>
+                  <TD>
+                    <BreakdownCell status={batch.bookStatus} rowCount={batch.bookRowCount} testId="revenue-batch-book" />
+                  </TD>
+                  <TD>
+                    <BreakdownCell status={batch.countryStatus} rowCount={batch.countryRowCount} testId="revenue-batch-country" />
                   </TD>
                   <TD className="font-mono text-xs">{batch.upstreamStarId ?? "—"}</TD>
                   <TD className="max-w-xs">
