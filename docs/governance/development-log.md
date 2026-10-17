@@ -48,6 +48,8 @@
 **验证方式**：全量11,492通过/0失败/无Unhandled，p1-05b真实库11,502通过、37运行器及全部附加门禁PASS；最终归档SHA256 8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96，运输/原--load/OCI/Final/tree PASS。维护JST21:47:57.357965–21:48:47.521232，共50.163267秒；新迁移76.389/7.815ms，29 finished/0 rolled_back、60表。新表权限、5个批次列及存量默认值、国家可空激活列与CHECK读回PASS；收入批次22/日统计9不变，新表0行。health0.6.2/Final/metadata passed，五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0，IndexNow及写闸/白名单/nginx/备份PASS，公网3/4全部200。env只改两版本行、脱敏diff/cmp PASS，在线逻辑备份和restore-list PASS。初次维护前采样2/2/4未满足窗口，等待后2/1/0按原阈值通过；自写只读SSH探针引号错误已修复。第一阶段Docker ECONNRESET一次授权重试成功，证据JSON脱敏包装修复记录保留。
 **后续待办**：Owner登录2FA后在/revenue手动同步最近30天，确认两块统计及国家×日期口径切换，再通知Codex作只读对账（批次状态、书匹配分布、国家逐日合计、请求数、耗时和worker错误）。未代触发收入同步。annotated v0.6.2固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账及本唯一日志完成；Notion四处同步并回读PASS，既有历史保持。回滚仅v0.6.1 Final cb255e0f1c93041eda6aefeefbb541d7eddfc15f，兼容标志须Owner回滚时明确批准，不down、不改nginx。完整[发布记录](releases/v0.6.2-preproduction.md)。
 
+**Owner同步后验收补记（2026-10-17 22:08 JST）**：Owner已确认手动同步完成；批次7fd26b71-6831-4d2b-bdb6-faddf702c4cc三段completed、激活覆盖true，24.255秒/17次请求。15本全部matched（32行），新用户22、US$6.88逐日与日统计一致；国家34行/19标签，新用户23对日统计22，激活人日63对56，4天逐日不守恒。六服务healthy、error/permission denied0，收入无在途。首轮国家对账断言失败原样留证；按原计划停止线上操作，未重跑同步、未调用上游或订正数据，原因待定位，不能登记全部业务验收PASS。已请求Owner允许后续仅用存量快照与现有日志只读排查，本条仍为唯一发版日志。
+
 ### 2026-10-16 22:09 - codex（GPT-6，正式发版执行；时间 +0800 / JST 23:09）
 
 **变更类型**：海阅 v0.6.1 PATCH 正式站部署，仅 haiyue-vps。Owner 明确批准第二阶段和第三阶段甲；14:09:04Z 原 RELEASE=PASS / exit0，维护OFF。补发与定向试读 apply 仍须 Owner 看过只读预演后说“批准补发”。

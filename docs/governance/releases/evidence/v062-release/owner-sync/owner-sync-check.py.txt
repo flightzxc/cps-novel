@@ -1,0 +1,70 @@
+import subprocess, json, collections, re, datetime
+
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+query=r"""
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout='15s';
+WITH latest AS (SELECT * FROM revenue_sync_batch ORDER BY created_at DESC LIMIT 1),
+d AS (SELECT s.* FROM revenue_daily_stat s,latest b WHERE s.revenue_sync_scope_id=b.revenue_sync_scope_id AND s.stat_date BETWEEN b.begin_date AND b.end_date),
+c AS (SELECT s.* FROM revenue_country_daily_stat s,latest b WHERE s.revenue_sync_scope_id=b.revenue_sync_scope_id AND s.stat_date BETWEEN b.begin_date AND b.end_date),
+k AS (SELECT s.* FROM revenue_book_daily_stat s,latest b WHERE s.revenue_sync_scope_id=b.revenue_sync_scope_id AND s.stat_date BETWEEN b.begin_date AND b.end_date),
+cg AS (SELECT stat_date,sum(new_real_dev_num) nu,sum(real_dev_num) au,count(*) rows,count(*) FILTER(WHERE real_dev_num IS NULL) null_active FROM c GROUP BY stat_date),
+kg AS (SELECT stat_date,sum(new_real_dev_num) nu,sum(real_income) income FROM k GROUP BY stat_date)
+SELECT jsonb_build_object(
+ 'checkedAt',clock_timestamp(),
+ 'batch',(SELECT jsonb_build_object('id',id,'taskId',generic_task_id,'beginDate',begin_date,'endDate',end_date,'status',status,'bookStatus',book_status,'bookRowCount',book_row_count,'countryStatus',country_status,'countryRowCount',country_row_count,'countryActiveIncluded',country_active_included,'requestCount',request_count,'detailRowCount',detail_row_count,'totalRowCount',total_row_count,'reconciliationStatus',reconciliation_status,'errorCode',error_code,'hasNote',error_message IS NOT NULL,'startedAt',started_at,'finishedAt',finished_at,'durationMs',extract(epoch from (finished_at-started_at))*1000) FROM latest),
+ 'task',(SELECT jsonb_build_object('status',t.status,'success',t.success_count,'failed',t.failed_count,'skipped',t.skipped_count) FROM generic_task t,latest b WHERE t.id=b.generic_task_id),
+ 'taskItems',(SELECT jsonb_agg(jsonb_build_object('status',i.status,'attemptCount',i.attempt_count,'startedAt',i.started_at,'finishedAt',i.finished_at)) FROM generic_task_item i,latest b WHERE i.task_id=b.generic_task_id),
+ 'tableRows',jsonb_build_object('batches',(SELECT count(*) FROM revenue_sync_batch),'daily',(SELECT count(*) FROM revenue_daily_stat),'book',(SELECT count(*) FROM revenue_book_daily_stat),'country',(SELECT count(*) FROM revenue_country_daily_stat)),
+ 'daily',(SELECT jsonb_agg(jsonb_build_object('date',d.stat_date,'newUsers',d.new_real_dev_num,'activeUsers',d.real_dev_num,'income',d.real_income,'countryNewUsers',coalesce(cg.nu,0),'countryActiveUsers',coalesce(cg.au,0),'countryNullActive',coalesce(cg.null_active,0),'bookNewUsers',coalesce(kg.nu,0),'bookIncome',coalesce(kg.income,0),'sourceIsLatest',d.source_batch_id=b.id) ORDER BY d.stat_date) FROM d JOIN latest b ON true LEFT JOIN cg USING(stat_date) LEFT JOIN kg USING(stat_date)),
+ 'bookSummary',(SELECT jsonb_build_object('rows',count(*),'books',count(DISTINCT upstream_series_key),'newUsers',sum(new_real_dev_num),'income',sum(real_income),'allSourceLatest',bool_and(source_batch_id=b.id)) FROM k JOIN latest b ON true),
+ 'matchDistribution',(SELECT jsonb_agg(to_jsonb(m)) FROM (SELECT match_status,count(*) rows,count(DISTINCT upstream_series_key) books FROM k GROUP BY match_status ORDER BY match_status) m),
+ 'theaterDistribution',(SELECT jsonb_agg(to_jsonb(m)) FROM (SELECT channel_app_id,count(*) rows,count(DISTINCT upstream_series_key) books FROM k GROUP BY channel_app_id) m),
+ 'countrySummary',(SELECT jsonb_build_object('rows',count(*),'countries',count(DISTINCT country_label),'newUsers',sum(new_real_dev_num),'activeUserDays',sum(real_dev_num),'nullActive',count(*) FILTER(WHERE real_dev_num IS NULL),'allSourceLatest',bool_and(source_batch_id=b.id)) FROM c JOIN latest b ON true),
+ 'rawDimensions',(SELECT jsonb_agg(to_jsonb(m)) FROM (SELECT r.dimension,r.is_total,count(*) rows FROM revenue_raw_snapshot r,latest b WHERE r.sync_batch_id=b.id GROUP BY r.dimension,r.is_total ORDER BY r.dimension,r.is_total) m),
+ 'inFlightRevenue',(SELECT count(*) FROM generic_task WHERE task_type='changdu.revenue_sync.v1' AND status IN ('pending','processing'))
+);
+COMMIT;
+"""
+r=subprocess.run(['docker','exec','-i','-e','PGOPTIONS=-c default_transaction_read_only=on','cps-novel-postgres-1','psql','-X','-v','ON_ERROR_STOP=1','-U','postgres','-d','cps_novel','-At'],input=query,text=True,capture_output=True)
+assert r.returncode==0,r.stderr
+data=json.JSONDecoder().raw_decode(r.stdout[r.stdout.index('{'):])[0]
+print('OWNER_SYNC_DATABASE='+json.dumps(data,ensure_ascii=False),flush=True)
+b=data['batch']
+timeline=json.loads(subprocess.check_output(['cat','/opt/cps-novel/logs/release-v0.6.2-fbc0016.timeline.json'],text=True))
+since=timeline[0]['at']
+log_summaries=[];observations=[]
+for service in ['web','worker','worker-light','scheduler','backup-timer','postgres']:
+    name='cps-novel-'+service+'-1'
+    info=json.loads(subprocess.check_output(['docker','inspect',name],text=True))[0]
+    logs=subprocess.run(['docker','logs','--timestamps','--since',since,name],text=True,capture_output=True,check=True)
+    errors=denied=0
+    for line in (logs.stdout+logs.stderr).splitlines():
+        timestamp,_,payload=line.partition(' ')
+        denied+=int('permission denied' in payload.lower())
+        try: event=json.loads(payload)
+        except ValueError:
+            errors+=int(bool(re.search(r'(^|\s)(?:ERROR|FATAL|PANIC|Error:|Unhandled)',payload)));continue
+        if not isinstance(event,dict):continue
+        errors+=int(event.get('level') in ('error','fatal') or event.get('severity') in ('ERROR','FATAL','PANIC'))
+        if event.get('event')=='upstream_call' and event.get('endpoint') in ('GetReport','GetCountryReport','/api/Report/GetReport','/api/Report/GetCountryReport','moboreader.GetReport','moboreader.GetCountryReport'):
+            observations.append(dict(service=service,at=timestamp,**{key:event.get(key) for key in ['endpoint','httpStatus','outcome','latencyMs','gateWaitMs']}))
+    log_summaries.append(dict(service=service,healthy=info['State'].get('Health',{}).get('Status')=='healthy',errorLines=errors,permissionDenied=denied,since=since))
+health=json.loads(subprocess.check_output(['docker','exec','cps-novel-web-1','wget','-qO-','http://127.0.0.1:3000/api/health'],text=True))
+print('OWNER_SYNC_RUNTIME='+json.dumps(dict(services=log_summaries,healthVersion=health['build']['version'],healthCommit=health['build']['commit'],healthOk=health['ok'])),flush=True)
+print('OWNER_SYNC_UPSTREAM_OBSERVATIONS='+json.dumps(observations),flush=True)
+assert b['status']==b['bookStatus']==b['countryStatus']=='completed'
+assert b['countryActiveIncluded'] and b['errorCode'] is None
+assert data['task']['failed']==0 and data['inFlightRevenue']==0
+assert data['bookSummary']['allSourceLatest'] and data['bookSummary']['rows']==b['bookRowCount']
+assert data['countrySummary']['allSourceLatest'] and data['countrySummary']['rows']==b['countryRowCount'] and data['countrySummary']['nullActive']==0
+assert all(d['sourceIsLatest'] and d['countryNewUsers']==d['newUsers'] and d['countryActiveUsers']==d['activeUsers'] and d['countryNullActive']==0 for d in data['daily'])
+book_days=next(x['rows'] for x in data['rawDimensions'] if x['dimension']=='1,8' and not x['is_total'])
+expected=1+(book_days//999+1)+sum(d['newUsers']>0 for d in data['daily'])+sum(d['activeUsers']>0 for d in data['daily'])
+assert expected==b['requestCount'],(expected,b['requestCount'])
+assert all(x['healthy'] and x['errorLines']==x['permissionDenied']==0 for x in log_summaries)
+assert health['ok'] and health['build']['version']=='0.6.2' and health['build']['commit']=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+print('OWNER_SYNC_ACCEPTANCE=PASS')
+print('COUNTRY_DAILY_RECONCILIATION=PASS')
+print('REQUEST_COUNT=PASS actual='+str(b['requestCount'])+' expected='+str(expected))
+print('BOOK_DAILY_DIFFERENCES_REPORT_ONLY='+json.dumps([d for d in data['daily'] if d['bookNewUsers']!=d['newUsers'] or d['bookIncome']!=d['income']]))

@@ -1,0 +1,153 @@
+{
+  "status": "sync_completed_country_reconciliation_failed_stopped",
+  "host": "haiyue-vps",
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "checkedAt": "2026-10-17T13:08:19.208384+00:00",
+  "ownerConfirmedSyncCompleted": true,
+  "codexTriggeredSync": false,
+  "additionalUpstreamRequests": 0,
+  "productionMutations": 0,
+  "batch": {
+    "id": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc",
+    "status": "completed",
+    "taskId": "eb9f5de6-d91b-4eb6-94c8-2e0b104624e7",
+    "endDate": "2026-10-17",
+    "hasNote": true,
+    "beginDate": "2026-09-17",
+    "errorCode": null,
+    "startedAt": "2026-10-17T13:04:53.148+00:00",
+    "bookStatus": "completed",
+    "durationMs": 24255.0,
+    "finishedAt": "2026-10-17T13:05:17.403+00:00",
+    "bookRowCount": 32,
+    "requestCount": 17,
+    "countryStatus": "completed",
+    "totalRowCount": 1,
+    "detailRowCount": 9,
+    "countryRowCount": 34,
+    "reconciliationStatus": "matched",
+    "countryActiveIncluded": true
+  },
+  "tableRows": {
+    "book": 32,
+    "daily": 9,
+    "batches": 23,
+    "country": 34
+  },
+  "bookSummary": {
+    "rows": 32,
+    "books": 15,
+    "income": 6.88,
+    "newUsers": 22,
+    "allSourceLatest": true
+  },
+  "matchDistribution": [
+    {
+      "rows": 32,
+      "books": 15,
+      "match_status": "matched"
+    }
+  ],
+  "countrySummary": {
+    "rows": 34,
+    "newUsers": 23,
+    "countries": 19,
+    "nullActive": 0,
+    "activeUserDays": 63,
+    "allSourceLatest": true
+  },
+  "dailyNewUsers": 22,
+  "dailyActiveUserDays": 56,
+  "countryDifferences": [
+    {
+      "date": "2026-10-11",
+      "dailyNewUsers": 0,
+      "countryNewUsers": 0,
+      "newUserDifference": 0,
+      "dailyActiveUsers": 1,
+      "countryActiveUsers": 2,
+      "activeDifference": 1
+    },
+    {
+      "date": "2026-10-12",
+      "dailyNewUsers": 4,
+      "countryNewUsers": 4,
+      "newUserDifference": 0,
+      "dailyActiveUsers": 5,
+      "countryActiveUsers": 6,
+      "activeDifference": 1
+    },
+    {
+      "date": "2026-10-14",
+      "dailyNewUsers": 0,
+      "countryNewUsers": 0,
+      "newUserDifference": 0,
+      "dailyActiveUsers": 2,
+      "countryActiveUsers": 3,
+      "activeDifference": 1
+    },
+    {
+      "date": "2026-10-17",
+      "dailyNewUsers": 8,
+      "countryNewUsers": 9,
+      "newUserDifference": 1,
+      "dailyActiveUsers": 24,
+      "countryActiveUsers": 28,
+      "activeDifference": 4
+    }
+  ],
+  "bookDailyDifferenceCount": 0,
+  "expectedRequestCount": 17,
+  "actualRequestCount": 17,
+  "runtime": {
+    "services": [
+      {
+        "service": "web",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      },
+      {
+        "service": "worker",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      },
+      {
+        "service": "worker-light",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      },
+      {
+        "service": "scheduler",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      },
+      {
+        "service": "backup-timer",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      },
+      {
+        "service": "postgres",
+        "healthy": true,
+        "errorLines": 0,
+        "permissionDenied": 0,
+        "since": "2026-10-17T12:47:47.954275+00:00"
+      }
+    ],
+    "healthVersion": "0.6.2",
+    "healthCommit": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+    "healthOk": true
+  },
+  "stopReason": "国家逐日合计与按日统计不一致，按原发布计划停止线上操作；未重跑同步、未订正数据、未部署或回滚。原因未裁定，不能登记全部业务验收PASS。",
+  "evidenceLimitation": "原探针upstream observation端点过滤误用了名称，输出空数组不能证明无请求；本次请求数以批次17与1按日+1按书页+9激活日+6新用户日=17交叉核对，未独立重数原日志。首轮国家对账断言失败原样保留，未放宽断言或重跑。"
+}
