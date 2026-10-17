@@ -1,0 +1,7 @@
+{
+  "files": 101,
+  "known_local_secrets": 11,
+  "redactions": 12,
+  "leaks": 0,
+  "upstream_requests": 0
+}

@@ -1,0 +1,1 @@
+[["npm-ci", ["npm", "ci"]], ["prisma-generate", ["npx", "prisma", "generate"]]]

@@ -1,0 +1,50 @@
+{
+  "status": "phase1_complete_not_deployed",
+  "version": "0.6.2",
+  "baseline": "004c81c07e09868f695e4d5486d29dd602738be7",
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "tree": "0b13b516b1f50df286f2775f281a83403669a790",
+  "branch": "release/v0.6.2-2026-10-17",
+  "phase2_authorized": false,
+  "temporary_volume_cleanup_authorized": true,
+  "archive": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/cps-novel-0.6.2-fbc0016.tar.zst",
+  "archiveSha256": "8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96",
+  "archiveBytes": 253639432,
+  "manifest": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/fbc00167f34cefde6d3f079f8573700ea9e86245.json",
+  "imageTag": "cps-novel:0.6.2-fbc0016",
+  "platform": "linux/amd64",
+  "ociTarget": "sha256:310f38e9921de09ba7d774a55d34e154dd4d0aaf6f845276ebc24ed0106d4b6e",
+  "ociPlatformManifest": "sha256:310f38e9921de09ba7d774a55d34e154dd4d0aaf6f845276ebc24ed0106d4b6e",
+  "ociConfig": "sha256:026302f2de2808eb2e385ee7848893fa48adf767c429619ed8373fc6481b60f6",
+  "runnersPassed": 37,
+  "fullRegressionPassed": 11492,
+  "fullRegressionSkipped": 880,
+  "fullRegressionFailed": 0,
+  "unhandled": 0,
+  "typecheckErrors": 0,
+  "lintErrors": 0,
+  "lintWarnings": 16,
+  "migrationCount": 29,
+  "tableCount": 60,
+  "dictionaryTotal": 1401,
+  "dictionaryActive": 1331,
+  "productionConnected": false,
+  "heavyLockReleased": true,
+  "networkRetriesUsed": 1,
+  "governance": {
+    "registry": "phase1_complete",
+    "release_record": "phase1_complete",
+    "tag": "after_deployment",
+    "changelog": "after_deployment",
+    "development_log": "after_deployment",
+    "notion": "after_deployment"
+  },
+  "auditProduction": {
+    "critical": 0,
+    "high": 4
+  },
+  "auditFull": {
+    "critical": 0,
+    "high": 11
+  }
+}

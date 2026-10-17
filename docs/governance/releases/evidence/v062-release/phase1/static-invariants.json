@@ -1,0 +1,10 @@
+{
+  "migrations": 29,
+  "tables": 60,
+  "dictionary_total": 1401,
+  "dictionary_active": 1331,
+  "public_source_changed": [],
+  "lockfile_dependencies_changed": false,
+  "runner_count": 37,
+  "old_migration_sql_byte_identical": 27
+}

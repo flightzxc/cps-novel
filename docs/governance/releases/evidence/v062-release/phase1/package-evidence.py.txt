@@ -1,0 +1,58 @@
+import hashlib, json, pathlib, re, shutil, subprocess
+
+root=pathlib.Path(__file__).resolve().parents[2]
+base=root/'.tmp/v062-release'
+dest=root/'docs/governance/releases/evidence/v062-release/phase1'
+assert not dest.exists(), 'refuse overwriting evidence'
+dest.mkdir(parents=True)
+secret_values=[]
+secret_dir=root/'.tmp/p1-12-runtime/secrets'
+if secret_dir.exists():
+    for p in secret_dir.iterdir():
+        if p.is_file() and p.suffix in ('.password','.key'):
+            value=p.read_text().strip()
+            if len(value)>=16: secret_values.append(value)
+redactions=0
+def redact(s):
+    global redactions
+    for secret in sorted(secret_values,key=len,reverse=True):
+        redactions+=s.count(secret)
+        s=s.replace(secret,'[LOCAL_SECRET_REDACTED]')
+    for pattern,label in [
+        (r'postgres(?:ql)?://[^\s"\x27<>]+','[DATABASE_URL_REDACTED]'),
+        (r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+','[JWT_REDACTED]'),
+        (r'0x4[A-Za-z0-9_-]+','[TURNSTILE_SITE_KEY_REDACTED]'),
+        (r'Bearer\s+[A-Za-z0-9._~-]+','Bearer [REDACTED]'),
+    ]:
+        s,n=re.subn(pattern,label,s);redactions+=n
+    return s
+
+exclude={'reference-baseline.json'}
+files=[]
+for p in sorted(base.iterdir()):
+    if not p.is_file() or p.name in exclude or '.private.' in p.name: continue
+    if p.suffix not in ('.json','.txt','.log'):continue
+    s=redact(p.read_text(errors='strict'))
+    out=dest/p.name
+    out.write_text(s)
+    files.append(out)
+refs=json.loads((base/'reference-baseline.json').read_text())
+reference_result=[]
+for path,before in refs.items():
+    head=subprocess.check_output(['git','-C',path,'rev-parse','HEAD'],text=True)
+    status=subprocess.check_output(['git','-C',path,'status','--porcelain=v1'],text=True)
+    assert head==before['head'] and status==before['status'], 'reference workspace drift'
+    reference_result.append({'path':path,'head':head.strip(),'status_sha256':hashlib.sha256(status.encode()).hexdigest(),'unchanged':True})
+(dest/'reference-isolation.json').write_text(json.dumps(reference_result,ensure_ascii=False,indent=2))
+for p in dest.iterdir():
+    if p.is_file():
+        s=p.read_text()
+        assert not re.search(r'0x4[A-Za-z0-9_-]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',s),p.name
+        assert not any(v in s for v in secret_values),p.name
+scan={'files':len(list(dest.iterdir())),'known_local_secrets':len(secret_values),'redactions':redactions,'leaks':0,'upstream_requests':0}
+(dest/'evidence-scan.json').write_text(json.dumps(scan,indent=2))
+entries=[]
+for p in sorted(dest.iterdir()):
+    if p.is_file():entries.append(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name)
+(dest/'SHA256SUMS').write_text('\n'.join(entries)+'\n')
+print('EVIDENCE_PACKAGE=PASS files=%s redactions=%s leaks=0'%(scan['files'],redactions))

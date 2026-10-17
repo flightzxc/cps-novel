@@ -1,0 +1,24 @@
+[
+  [
+    "docker-df-brand",
+    [
+      "docker",
+      "system",
+      "df"
+    ]
+  ],
+  [
+    "brand",
+    [
+      "/bin/bash",
+      "scripts/preproduction/verify-brand-image.sh"
+    ]
+  ],
+  [
+    "image-e2e-brand",
+    [
+      "/bin/bash",
+      ".tmp/v062-release/image-e2e-brand.sh.txt"
+    ]
+  ]
+]

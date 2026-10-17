@@ -1,0 +1,25 @@
+[
+  {
+    "name": "npm-ci",
+    "command": [
+      "npm",
+      "ci"
+    ],
+    "started_at": "2026-10-17T08:49:07.327220+00:00",
+    "exit": 0,
+    "seconds": 10.015,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/npm-ci.log"
+  },
+  {
+    "name": "prisma-generate",
+    "command": [
+      "npx",
+      "prisma",
+      "generate"
+    ],
+    "started_at": "2026-10-17T08:49:17.343489+00:00",
+    "exit": 0,
+    "seconds": 2.012,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/prisma-generate.log"
+  }
+]

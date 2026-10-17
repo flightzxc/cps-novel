@@ -1,0 +1,1 @@
+{"ok":true,"status":"healthy","build":{"version":"0.6.2","commit":"fbc00167f34cefde6d3f079f8573700ea9e86245","builtAt":"2026-10-17T09:32:31Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.6.2","commit":"fbc00167f34cefde6d3f079f8573700ea9e86245"}},"database":{"status":"passed","reason":null,"durationMs":153},"reasons":[]}

@@ -1,0 +1,37 @@
+[
+  [
+    "compose",
+    [
+      "/bin/bash",
+      ".tmp/v062-release/compose-check.sh.txt"
+    ]
+  ],
+  [
+    "audit",
+    [
+      "python3",
+      ".tmp/v062-release/audit-check.py.txt"
+    ]
+  ],
+  [
+    "b21",
+    [
+      "/bin/bash",
+      "scripts/measure-tagging-task-memory.sh"
+    ]
+  ],
+  [
+    "nginx-matrix",
+    [
+      "/bin/bash",
+      "scripts/preproduction/verify-nginx-matrix.sh"
+    ]
+  ],
+  [
+    "public-cutover-mutations",
+    [
+      "node",
+      "scripts/preproduction/verify-public-cutover-mutations.mjs"
+    ]
+  ]
+]

@@ -1,0 +1,9 @@
+{
+  "version": "0.6.2",
+  "baseline": "004c81c07e09868f695e4d5486d29dd602738be7",
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "tree": "0b13b516b1f50df286f2775f281a83403669a790",
+  "branch": "release/v0.6.2-2026-10-17",
+  "phase2_authorized": false,
+  "temporary_volume_cleanup_authorized": true
+}

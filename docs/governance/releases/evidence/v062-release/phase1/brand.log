@@ -1,0 +1,324 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.94kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 167B done
+#3 DONE 0.0s
+
+#4 [production-dependencies 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 9.56MB 0.1s done
+#5 DONE 0.1s
+
+#6 [production-dependencies 2/8] WORKDIR /app
+#6 CACHED
+
+#7 [production-dependencies 3/8] RUN apk add --no-cache libc6-compat openssl python3 make g++
+#7 CACHED
+
+#8 [production-dependencies 4/8] RUN npm install --global npm@11.6.2
+#8 CACHED
+
+#9 [production-dependencies 5/8] COPY package.json package-lock.json ./
+#9 DONE 0.1s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#11 [dependencies 6/8] RUN npm ci
+#11 4.569 npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+#11 453.4 
+#11 453.4 added 523 packages, and audited 524 packages in 8m
+#11 453.4 
+#11 453.4 174 packages are looking for funding
+#11 453.4   run `npm fund` for details
+#11 453.6 
+#11 453.6 11 high severity vulnerabilities
+#11 453.6 
+#11 453.6 To address issues that do not require attention, run:
+#11 453.6   npm audit fix
+#11 453.6 
+#11 453.6 To address all issues (including breaking changes), run:
+#11 453.6   npm audit fix --force
+#11 453.6 
+#11 453.6 Run `npm audit` for details.
+#11 453.6 npm notice
+#11 453.6 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
+#11 453.6 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.1
+#11 453.6 npm notice To update run: npm install -g npm@11.21.1
+#11 453.6 npm notice
+#11 DONE 453.7s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#12 [dependencies 7/8] COPY prisma ./prisma
+#12 DONE 0.0s
+
+#13 [dependencies 8/8] RUN npx --no-install prisma generate
+#13 1.986 Prisma schema loaded from prisma/schema.prisma
+#13 3.006 
+#13 3.006 ✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 478ms
+#13 3.006 
+#13 3.006 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#13 3.006 
+#13 3.006 Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+#13 3.006 
+#13 DONE 3.1s
+
+#14 [builder 1/3] COPY . .
+#14 DONE 0.1s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#15 [builder 2/3] RUN npm run build
+#15 0.624 
+#15 0.624 > cps-novel@0.6.2 build
+#15 0.624 > next build
+#15 0.624 
+#15 1.244 ▲ Next.js 16.3.8 (Turbopack)
+#15 1.488 ✓ Running next.config.ts took 242ms
+#15 1.501 
+#15 1.579   Creating an optimized production build ...
+#15 11.04 ✓ Compiled successfully in 9.3s
+#15 11.05   Running TypeScript ...
+#15 41.54   Finished TypeScript in 30.5s ...
+#15 41.54   Collecting page data using 17 workers ...
+#15 43.48   Generating static pages using 17 workers (0/22) ...
+#15 43.56   Generating static pages using 17 workers (5/22) 
+#15 43.70   Generating static pages using 17 workers (10/22) 
+#15 43.70   Generating static pages using 17 workers (16/22) 
+#15 44.07 ✓ Generating static pages using 17 workers (22/22) in 593ms
+#15 44.08 Turbopack build encountered 1 warning:
+#15 44.08 ./src/lib/credentials/keyring.ts:26:13
+#15 44.08 Warning: Dynamic filesystem access causes tracing of the whole project
+#15 44.08   [90m24 |[0m   [36mlet[0m value: string;
+#15 44.08   [90m25 |[0m   [36mtry[0m {
+#15 44.08 [33m[1m>[0m [90m26 |[0m     value = readFileSync(filePath, [32m"utf8"[0m).trim();
+#15 44.08   [90m   |[0m             [33m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+#15 44.08   [90m27 |[0m   } [36mcatch[0m {
+#15 44.08   [90m28 |[0m     [36mthrow[0m [36mnew[0m [33mError[0m([32m`[0m${fileVariable[32m} must reference a readable secret file`[0m);
+#15 44.08   [90m29 |[0m   }
+#15 44.08 
+#15 44.08 Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+#15 44.08 This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+#15 44.08 This can slow down deployments or lead to failures when size limits are exceeded.
+#15 44.08 To resolve this, you can
+#15 44.08 - make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+#15 44.08 - only use them in development, or
+#15 44.08 - opt out by adding an ignore comment to the highlighted call: fs.readFileSync(/*turbopackIgnore: true*/ ...), or
+#15 44.08 - remove them.
+#15 44.08 
+#15 44.08 Import traces:
+#15 44.08   #1 [App Route]:
+#15 44.08     ./src/lib/credentials/keyring.ts
+#15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
+#15 44.08     ./src/server/credentials/service.ts
+#15 44.08     ./src/app/api/admin/credentials/metadata/route.ts
+#15 44.08 
+#15 44.08   #2 [App Route]:
+#15 44.08     ./src/lib/credentials/keyring.ts
+#15 44.08     ./src/lib/credentials/keyring.ts
+#15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
+#15 44.08     ./src/server/credentials/service.ts
+#15 44.08     ./src/app/api/admin/credential-tasks/status/route.ts
+#15 44.08 
+#15 44.08   #3 [Server Component]:
+#15 44.08     ./src/lib/credentials/keyring.ts
+#15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
+#15 44.08     ./src/server/credentials/service.ts
+#15 44.08     ./src/server/credentials/index.ts
+#15 44.08     ./src/app/api/admin/_lib/registry.ts
+#15 44.08     ./src/app/api/admin/_lib/deps.ts
+#15 44.08     ./src/app/(admin)/articles/[articleId]/page.tsx
+#15 44.08 
+#15 44.08 
+#15 44.08   Finalizing page optimization ...
+#15 45.72 
+#15 45.72 Route (app)
+#15 45.72 ┌ ƒ /
+#15 45.72 ├ ƒ /_not-found
+#15 45.72 ├ ƒ /[locale]
+#15 45.72 ├ ƒ /[locale]/blog
+#15 45.72 ├ ƒ /[locale]/blog/[slug]
+#15 45.72 ├ ƒ /[locale]/browse
+#15 45.72 ├ ƒ /[locale]/category/[slug]
+#15 45.72 ├ ƒ /[locale]/novel/[slugParam]
+#15 45.72 ├ ƒ /[locale]/novel/[slugParam]/chapter/[chapterNumber]
+#15 45.72 ├ ƒ /[locale]/search
+#15 45.72 ├ ƒ /api/admin/canonical-tags
+#15 45.72 ├ ƒ /api/admin/canonical-tags/homepage-nav
+#15 45.72 ├ ƒ /api/admin/channel-accounts
+#15 45.72 ├ ƒ /api/admin/credential-tasks/status
+#15 45.72 ├ ƒ /api/admin/credentials/metadata
+#15 45.72 ├ ƒ /api/admin/novels
+#15 45.72 ├ ƒ /api/admin/novels/chapters
+#15 45.72 ├ ƒ /api/admin/novels/chapters/content
+#15 45.72 ├ ƒ /api/admin/novels/detail
+#15 45.72 ├ ƒ /api/admin/novels/tags
+#15 45.72 ├ ƒ /api/admin/promo-links
+#15 45.72 ├ ƒ /api/admin/site-settings
+#15 45.72 ├ ƒ /api/admin/sitemap
+#15 45.72 ├ ƒ /api/admin/tag-mappings
+#15 45.72 ├ ƒ /api/admin/tags
+#15 45.72 ├ ƒ /api/admin/tasks
+#15 45.72 ├ ƒ /api/admin/tasks/abort
+#15 45.72 ├ ƒ /api/admin/tasks/detail
+#15 45.72 ├ ƒ /api/admin/tasks/items
+#15 45.72 ├ ƒ /api/admin/tasks/manual-reviews
+#15 45.72 ├ ƒ /api/admin/tasks/manual-reviews/resolve
+#15 45.72 ├ ƒ /api/admin/tasks/pause
+#15 45.72 ├ ƒ /api/admin/tasks/progress
+#15 45.72 ├ ƒ /api/admin/tasks/promo-claim-batch/abort
+#15 45.72 ├ ƒ /api/admin/tasks/promo-claim-batch/pause
+#15 45.72 ├ ƒ /api/admin/tasks/promo-claim-batch/reapprove
+#15 45.72 ├ ƒ /api/admin/tasks/promo-claim-batch/resume
+#15 45.72 ├ ƒ /api/admin/tasks/resume
+#15 45.72 ├ ƒ /api/admin/tasks/retry-catalog-finalize
+#15 45.72 ├ ƒ /api/admin/tasks/retry-failed
+#15 45.72 ├ ƒ /api/health
+#15 45.72 ├ ƒ /api/health/backup
+#15 45.72 ├ ƒ /api/health/worker
+#15 45.72 ├ ƒ /api/novel-locale-check
+#15 45.72 ├ ○ /apple-icon
+#15 45.72 ├ ƒ /articles
+#15 45.72 ├ ƒ /articles/[articleId]
+#15 45.72 ├ ƒ /articles/batch-generate
+#15 45.72 ├ ƒ /articles/batch-novel-rebind
+#15 45.72 ├ ƒ /articles/generate
+#15 45.72 ├ ƒ /articles/new-blog
+#15 45.72 ├ ƒ /blog
+#15 45.72 ├ ƒ /blog/[slug]
+#15 45.72 ├ ƒ /browse
+#15 45.72 ├ ƒ /catalog-sync
+#15 45.72 ├ ƒ /categories
+#15 45.72 ├ ƒ /category/[slug]
+#15 45.72 ├ ƒ /channel-accounts
+#15 45.72 ├ ƒ /dev-preview
+#15 45.72 ├ ƒ /dev-preview/chapter/[chapterNumber]
+#15 45.72 ├ ƒ /dev-preview/collection
+#15 45.72 ├ ƒ /dev-preview/collection-empty
+#15 45.72 ├ ƒ /dev-preview/header
+#15 45.72 ├ ƒ /dev-preview/home
+#15 45.72 ├ ƒ /dev-preview/home-fallback
+#15 45.72 ├ ƒ /dev-preview/home-hero-plain
+#15 45.72 ├ ƒ /dev-preview/home-one
+#15 45.72 ├ ƒ /dev-preview/home-two
+#15 45.72 ├ ƒ /dev-preview/novel
+#15 45.72 ├ ƒ /dev-preview/novel-sparse
+#15 45.72 ├ ƒ /dev-preview/status/error
+#15 45.72 ├ ƒ /dev-preview/status/global-error
+#15 45.72 ├ ƒ /dev-preview/status/not-found
+#15 45.72 ├ ƒ /dev-preview/takedown
+#15 45.72 ├ ƒ /dev-preview/unavailable
+#15 45.72 ├ ƒ /go/[code]
+#15 45.72 ├ ƒ /go/[code]/app
+#15 45.72 ├ ƒ /home-carousel
+#15 45.72 ├ ○ /icon
+#15 45.72 ├ ƒ /indexnow-key.txt
+#15 45.72 ├ ƒ /login
+#15 45.72 ├ ƒ /novel/[slugParam]
+#15 45.72 ├ ƒ /novel/[slugParam]/chapter/[chapterNumber]
+#15 45.72 ├ ƒ /novels
+#15 45.72 ├ ƒ /novels/[novelId]
+#15 45.72 ├ ƒ /novels/[novelId]/chapters/[chapterId]
+#15 45.72 ├ ƒ /promo-links
+#15 45.72 ├ ƒ /revenue
+#15 45.72 ├ ƒ /robots.txt
+#15 45.72 ├ ƒ /search
+#15 45.72 ├ ƒ /settings
+#15 45.72 ├ ƒ /settings/security
+#15 45.72 ├ ƒ /sitemap.xml
+#15 45.72 ├ ƒ /sitemap/[fileName]
+#15 45.72 ├ ƒ /tags
+#15 45.72 ├ ƒ /tags/canonical
+#15 45.72 ├ ƒ /tags/mappings
+#15 45.72 ├ ƒ /tasks
+#15 45.72 ├ ƒ /tasks/[id]
+#15 45.72 ├ ƒ /templates
+#15 45.72 ├ ƒ /two-factor/challenge
+#15 45.72 └ ƒ /two-factor/setup
+#15 45.72 
+#15 45.72 
+#15 45.72 ƒ Proxy (Middleware)
+#15 45.72 
+#15 45.72 ○  (Static)   prerendered as static content
+#15 45.72 ƒ  (Dynamic)  server-rendered on demand
+#15 45.72 
+#15 DONE 45.9s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#16 [builder 3/3] RUN rm -rf .next/standalone/node_modules
+#16 DONE 0.3s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#17 [runner  3/17] RUN apk add --no-cache bash libc6-compat openssl     && npm install --global npm@11.6.2 tsx@4.21.0
+#17 CACHED
+
+#18 [runner  4/17] RUN addgroup --system --gid 1001 nodejs     && adduser --system --uid 1001 --ingroup nodejs nextjs     && mkdir -p /app/runtime/static-sitemaps     && chown -R nextjs:nodejs /app/runtime
+#18 CACHED
+
+#19 [runner  5/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#19 DONE 0.1s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 ...
+
+#20 [runner  6/17] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#20 DONE 0.0s
+
+#21 [runner  7/17] COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+#21 DONE 0.0s
+
+#10 [production-dependencies 6/8] RUN npm ci --omit=dev
+#10 930.4 npm error code ECONNRESET
+#10 930.4 npm error network aborted
+#10 930.4 npm error network This is a problem related to network connectivity.
+#10 930.4 npm error network In most cases you are behind a proxy or have bad network settings.
+#10 930.4 npm error network
+#10 930.4 npm error network If you are behind a proxy, please make sure that the
+#10 930.4 npm error network 'proxy' config is set properly.  See: 'npm help config'
+#10 930.4 npm notice
+#10 930.4 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
+#10 930.4 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.1
+#10 930.4 npm notice To update run: npm install -g npm@11.21.1
+#10 930.4 npm notice
+#10 930.4 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-17T09_16_17_532Z-debug-0.log
+#10 ERROR: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+------
+ > [production-dependencies 6/8] RUN npm ci --omit=dev:
+930.4 npm error network In most cases you are behind a proxy or have bad network settings.
+930.4 npm error network
+930.4 npm error network If you are behind a proxy, please make sure that the
+930.4 npm error network 'proxy' config is set properly.  See: 'npm help config'
+930.4 npm notice
+930.4 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
+930.4 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.1
+930.4 npm notice To update run: npm install -g npm@11.21.1
+930.4 npm notice
+930.4 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-17T09_16_17_532Z-debug-0.log
+------
+Dockerfile:28
+--------------------
+  26 |     
+  27 |     COPY package.json package-lock.json ./
+  28 | >>> RUN npm ci --omit=dev
+  29 |     
+  30 |     COPY prisma ./prisma
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/p9lq80ej7jtprgooanamd1hwj

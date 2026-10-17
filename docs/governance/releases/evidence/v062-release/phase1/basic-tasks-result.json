@@ -1,0 +1,66 @@
+[
+  {
+    "name": "typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-17T08:49:37.752139+00:00",
+    "exit": 0,
+    "seconds": 16.024,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/typecheck.log"
+  },
+  {
+    "name": "lint",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-17T08:49:53.778007+00:00",
+    "exit": 0,
+    "seconds": 14.041,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/lint.log"
+  },
+  {
+    "name": "full-test",
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=.tmp/v062-release/full-test.json"
+    ],
+    "started_at": "2026-10-17T08:50:07.819705+00:00",
+    "exit": 0,
+    "seconds": 160.203,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/full-test.log"
+  },
+  {
+    "name": "build",
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "started_at": "2026-10-17T08:52:48.024987+00:00",
+    "exit": 0,
+    "seconds": 26.046,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/build.log"
+  },
+  {
+    "name": "dictionary-static",
+    "command": [
+      "node",
+      "scripts/check-database-dictionary-drift.mjs",
+      "--static"
+    ],
+    "started_at": "2026-10-17T08:53:14.071855+00:00",
+    "exit": 0,
+    "seconds": 2.007,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/dictionary-static.log"
+  }
+]

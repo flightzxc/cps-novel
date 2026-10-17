@@ -1,0 +1,80 @@
+[
+  {
+    "name": "compose",
+    "command": [
+      "/bin/bash",
+      ".tmp/v062-release/compose-check.sh.txt"
+    ],
+    "started_at": "2026-10-17T09:13:28.252622+00:00",
+    "exit": 0,
+    "seconds": 2.003,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/compose.log"
+  },
+  {
+    "name": "audit",
+    "command": [
+      "python3",
+      ".tmp/v062-release/audit-check.py.txt"
+    ],
+    "started_at": "2026-10-17T09:13:30.256250+00:00",
+    "exit": 0,
+    "seconds": 8.014,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/audit.log"
+  },
+  {
+    "name": "b21",
+    "command": [
+      "/bin/bash",
+      "scripts/measure-tagging-task-memory.sh"
+    ],
+    "started_at": "2026-10-17T09:13:38.298963+00:00",
+    "exit": 0,
+    "seconds": 68.099,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/b21.log"
+  },
+  {
+    "name": "nginx-matrix",
+    "command": [
+      "/bin/bash",
+      "scripts/preproduction/verify-nginx-matrix.sh"
+    ],
+    "started_at": "2026-10-17T09:14:46.398961+00:00",
+    "exit": 0,
+    "seconds": 46.08,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/nginx-matrix.log"
+  },
+  {
+    "name": "public-cutover-mutations",
+    "command": [
+      "node",
+      "scripts/preproduction/verify-public-cutover-mutations.mjs"
+    ],
+    "started_at": "2026-10-17T09:15:32.480442+00:00",
+    "exit": 0,
+    "seconds": 42.065,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/public-cutover-mutations.log"
+  },
+  {
+    "name": "docker-df-brand",
+    "command": [
+      "docker",
+      "system",
+      "df"
+    ],
+    "started_at": "2026-10-17T09:16:14.530495+00:00",
+    "exit": 0,
+    "seconds": 2.008,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/docker-df-brand.log"
+  },
+  {
+    "name": "brand",
+    "command": [
+      "/bin/bash",
+      "scripts/preproduction/verify-brand-image.sh"
+    ],
+    "started_at": "2026-10-17T09:16:16.537195+00:00",
+    "exit": 1,
+    "seconds": 932.589,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/brand.log"
+  }
+]
