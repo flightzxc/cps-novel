@@ -64,17 +64,17 @@
 #20 CACHED
 
 #21 [production-dependencies 6/8] RUN npm ci --omit=dev
-#21 160.5 
+#21 160.5
 #21 160.5 added 99 packages, and audited 100 packages in 3m
-#21 160.5 
+#21 160.5
 #21 160.5 15 packages are looking for funding
 #21 160.5   run `npm fund` for details
-#21 160.6 
+#21 160.6
 #21 160.6 4 high severity vulnerabilities
-#21 160.6 
+#21 160.6
 #21 160.6 To address all issues (including breaking changes), run:
 #21 160.6   npm audit fix --force
-#21 160.6 
+#21 160.6
 #21 160.6 Run `npm audit` for details.
 #21 160.6 npm notice
 #21 160.6 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
@@ -88,13 +88,13 @@
 
 #23 [production-dependencies 8/8] RUN npx --no-install prisma generate
 #23 2.260 Prisma schema loaded from prisma/schema.prisma
-#23 3.259 
+#23 3.259
 #23 3.259 ✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 440ms
-#23 3.259 
+#23 3.259
 #23 3.259 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
-#23 3.259 
+#23 3.259
 #23 3.259 Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
-#23 3.259 
+#23 3.259
 #23 DONE 3.3s
 
 #24 [runner  8/17] COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules

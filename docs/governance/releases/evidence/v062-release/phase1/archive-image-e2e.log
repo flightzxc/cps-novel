@@ -94,7 +94,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 E2E_MIGRATIONS=PASS applied=29
 DO

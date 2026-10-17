@@ -17,9 +17,9 @@ https://nextjs.org/telemetry
   Finished TypeScript in 13.6s ...
   Collecting page data using 17 workers ...
   Generating static pages using 17 workers (0/22) ...
-  Generating static pages using 17 workers (5/22) 
-  Generating static pages using 17 workers (10/22) 
-  Generating static pages using 17 workers (16/22) 
+  Generating static pages using 17 workers (5/22)
+  Generating static pages using 17 workers (10/22)
+  Generating static pages using 17 workers (16/22)
 ✓ Generating static pages using 17 workers (22/22) in 1543ms
 Turbopack build encountered 1 warning:
 ./src/lib/credentials/keyring.ts:26:13
@@ -176,4 +176,3 @@ Route (app)
 
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
-

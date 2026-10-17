@@ -1,4 +1,4 @@
- Image cps-novel:0.6.2-fbc0016 Building 
+ Image cps-novel:0.6.2-fbc0016 Building
 #1 [internal] load local bake definitions
 #1 reading from stdin 950B done
 #1 DONE 0.0s
@@ -113,7 +113,7 @@
 
 #36 resolving provenance for metadata file
 #36 DONE 0.0s
- Image cps-novel:0.6.2-fbc0016 Built 
+ Image cps-novel:0.6.2-fbc0016 Built
 IMAGE=PASS anchor=config_id
 ARCHIVE_BUILD=PASS
 ARCHIVE_FILE=/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/cps-novel-0.6.2-fbc0016.tar.zst

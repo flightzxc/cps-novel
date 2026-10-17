@@ -1,1 +1,46 @@
-[["typecheck", ["npm", "run", "typecheck"]], ["lint", ["npm", "run", "lint"]], ["full-test", ["npm", "test", "--", "--maxWorkers=4", "--reporter=default", "--reporter=json", "--outputFile=.tmp/v062-release/full-test.json"]], ["build", ["npm", "run", "build"]], ["dictionary-static", ["node", "scripts/check-database-dictionary-drift.mjs", "--static"]]]
+[
+  [
+    "typecheck",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "lint",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ],
+  [
+    "full-test",
+    [
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=.tmp/v062-release/full-test.json"
+    ]
+  ],
+  [
+    "build",
+    [
+      "npm",
+      "run",
+      "build"
+    ]
+  ],
+  [
+    "dictionary-static",
+    [
+      "node",
+      "scripts/check-database-dictionary-drift.mjs",
+      "--static"
+    ]
+  ]
+]

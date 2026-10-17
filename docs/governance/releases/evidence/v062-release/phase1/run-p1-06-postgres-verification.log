@@ -120,7 +120,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 
  RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.2

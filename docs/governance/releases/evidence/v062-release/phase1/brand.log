@@ -35,20 +35,20 @@
 
 #11 [dependencies 6/8] RUN npm ci
 #11 4.569 npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
-#11 453.4 
+#11 453.4
 #11 453.4 added 523 packages, and audited 524 packages in 8m
-#11 453.4 
+#11 453.4
 #11 453.4 174 packages are looking for funding
 #11 453.4   run `npm fund` for details
-#11 453.6 
+#11 453.6
 #11 453.6 11 high severity vulnerabilities
-#11 453.6 
+#11 453.6
 #11 453.6 To address issues that do not require attention, run:
 #11 453.6   npm audit fix
-#11 453.6 
+#11 453.6
 #11 453.6 To address all issues (including breaking changes), run:
 #11 453.6   npm audit fix --force
-#11 453.6 
+#11 453.6
 #11 453.6 Run `npm audit` for details.
 #11 453.6 npm notice
 #11 453.6 npm notice New minor version of npm available! 11.6.2 -> 11.21.1
@@ -65,13 +65,13 @@
 
 #13 [dependencies 8/8] RUN npx --no-install prisma generate
 #13 1.986 Prisma schema loaded from prisma/schema.prisma
-#13 3.006 
+#13 3.006
 #13 3.006 ✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 478ms
-#13 3.006 
+#13 3.006
 #13 3.006 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
-#13 3.006 
+#13 3.006
 #13 3.006 Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
-#13 3.006 
+#13 3.006
 #13 DONE 3.1s
 
 #14 [builder 1/3] COPY . .
@@ -81,22 +81,22 @@
 #10 ...
 
 #15 [builder 2/3] RUN npm run build
-#15 0.624 
+#15 0.624
 #15 0.624 > cps-novel@0.6.2 build
 #15 0.624 > next build
-#15 0.624 
+#15 0.624
 #15 1.244 ▲ Next.js 16.3.8 (Turbopack)
 #15 1.488 ✓ Running next.config.ts took 242ms
-#15 1.501 
+#15 1.501
 #15 1.579   Creating an optimized production build ...
 #15 11.04 ✓ Compiled successfully in 9.3s
 #15 11.05   Running TypeScript ...
 #15 41.54   Finished TypeScript in 30.5s ...
 #15 41.54   Collecting page data using 17 workers ...
 #15 43.48   Generating static pages using 17 workers (0/22) ...
-#15 43.56   Generating static pages using 17 workers (5/22) 
-#15 43.70   Generating static pages using 17 workers (10/22) 
-#15 43.70   Generating static pages using 17 workers (16/22) 
+#15 43.56   Generating static pages using 17 workers (5/22)
+#15 43.70   Generating static pages using 17 workers (10/22)
+#15 43.70   Generating static pages using 17 workers (16/22)
 #15 44.07 ✓ Generating static pages using 17 workers (22/22) in 593ms
 #15 44.08 Turbopack build encountered 1 warning:
 #15 44.08 ./src/lib/credentials/keyring.ts:26:13
@@ -108,7 +108,7 @@
 #15 44.08   [90m27 |[0m   } [36mcatch[0m {
 #15 44.08   [90m28 |[0m     [36mthrow[0m [36mnew[0m [33mError[0m([32m`[0m${fileVariable[32m} must reference a readable secret file`[0m);
 #15 44.08   [90m29 |[0m   }
-#15 44.08 
+#15 44.08
 #15 44.08 Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
 #15 44.08 This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
 #15 44.08 This can slow down deployments or lead to failures when size limits are exceeded.
@@ -117,21 +117,21 @@
 #15 44.08 - only use them in development, or
 #15 44.08 - opt out by adding an ignore comment to the highlighted call: fs.readFileSync(/*turbopackIgnore: true*/ ...), or
 #15 44.08 - remove them.
-#15 44.08 
+#15 44.08
 #15 44.08 Import traces:
 #15 44.08   #1 [App Route]:
 #15 44.08     ./src/lib/credentials/keyring.ts
 #15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
 #15 44.08     ./src/server/credentials/service.ts
 #15 44.08     ./src/app/api/admin/credentials/metadata/route.ts
-#15 44.08 
+#15 44.08
 #15 44.08   #2 [App Route]:
 #15 44.08     ./src/lib/credentials/keyring.ts
 #15 44.08     ./src/lib/credentials/keyring.ts
 #15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
 #15 44.08     ./src/server/credentials/service.ts
 #15 44.08     ./src/app/api/admin/credential-tasks/status/route.ts
-#15 44.08 
+#15 44.08
 #15 44.08   #3 [Server Component]:
 #15 44.08     ./src/lib/credentials/keyring.ts
 #15 44.08     ./src/lib/credentials/web-ingress-crypto.ts
@@ -140,10 +140,10 @@
 #15 44.08     ./src/app/api/admin/_lib/registry.ts
 #15 44.08     ./src/app/api/admin/_lib/deps.ts
 #15 44.08     ./src/app/(admin)/articles/[articleId]/page.tsx
-#15 44.08 
-#15 44.08 
+#15 44.08
+#15 44.08
 #15 44.08   Finalizing page optimization ...
-#15 45.72 
+#15 45.72
 #15 45.72 Route (app)
 #15 45.72 ┌ ƒ /
 #15 45.72 ├ ƒ /_not-found
@@ -247,13 +247,13 @@
 #15 45.72 ├ ƒ /templates
 #15 45.72 ├ ƒ /two-factor/challenge
 #15 45.72 └ ƒ /two-factor/setup
-#15 45.72 
-#15 45.72 
+#15 45.72
+#15 45.72
 #15 45.72 ƒ Proxy (Middleware)
-#15 45.72 
+#15 45.72
 #15 45.72 ○  (Static)   prerendered as static content
 #15 45.72 ƒ  (Dynamic)  server-rendered on demand
-#15 45.72 
+#15 45.72
 #15 DONE 45.9s
 
 #10 [production-dependencies 6/8] RUN npm ci --omit=dev
@@ -313,10 +313,10 @@
 ------
 Dockerfile:28
 --------------------
-  26 |     
+  26 |
   27 |     COPY package.json package-lock.json ./
   28 | >>> RUN npm ci --omit=dev
-  29 |     
+  29 |
   30 |     COPY prisma ./prisma
 --------------------
 ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --omit=dev" did not complete successfully: exit code: 1

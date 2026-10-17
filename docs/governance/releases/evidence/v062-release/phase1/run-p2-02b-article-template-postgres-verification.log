@@ -104,7 +104,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 Prisma schema loaded from prisma/schema.prisma
 Datasource "db": PostgreSQL database "cps_novel_p2_02b_render_20261017180728_70176", schema "public" at "127.0.0.1:56649"
@@ -202,7 +202,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 
  RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.2

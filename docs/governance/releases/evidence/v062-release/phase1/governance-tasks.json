@@ -1,0 +1,18 @@
+[
+  [
+    "governance-postcommit-typecheck",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "governance-postcommit-lint",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ]
+]

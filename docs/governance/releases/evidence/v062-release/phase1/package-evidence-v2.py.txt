@@ -1,0 +1,70 @@
+import hashlib, json, pathlib, re, subprocess
+
+root=pathlib.Path(__file__).resolve().parents[2]
+base=root/'.tmp/v062-release'
+dest=root/'docs/governance/releases/evidence/v062-release/phase1'
+dest.mkdir(parents=True,exist_ok=True)
+secrets=[]
+for p in (root/'.tmp/p1-12-runtime/secrets').iterdir():
+    if p.is_file() and p.suffix in ('.password','.key'):
+        value=p.read_text().strip()
+        if len(value)>=16: secrets.append(value)
+redactions=0
+def redact(s):
+    global redactions
+    for value in sorted(secrets,key=len,reverse=True):
+        redactions+=s.count(value)
+        s=s.replace(value,'[LOCAL_SECRET_REDACTED]')
+    for pattern,label in [
+        (r'postgres(?:ql)?://[^\s"\x27<>]+','[DATABASE_URL_REDACTED]'),
+        (r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+','[JWT_REDACTED]'),
+        (r'0x4[A-Za-z0-9_-]+','[TURNSTILE_SITE_KEY_REDACTED]'),
+        (r'Bearer\s+[A-Za-z0-9._~-]+','Bearer [REDACTED]'),
+    ]:
+        s,n=re.subn(pattern,label,s);redactions+=n
+    return s
+def walk(value):
+    if isinstance(value,str):return redact(value)
+    if isinstance(value,list):return [walk(v) for v in value]
+    if isinstance(value,dict):return {k:walk(v) for k,v in value.items()}
+    return value
+normalized=0
+for p in sorted(base.iterdir()):
+    if not p.is_file() or p.name=='reference-baseline.json' or '.private.' in p.name:continue
+    if p.suffix not in ('.json','.txt','.log'):continue
+    if p.suffix=='.json':
+        data=walk(json.loads(p.read_text()))
+        text=json.dumps(data,ensure_ascii=False,indent=2)+'\n'
+        assert json.loads(text)==data
+    else:
+        text=redact(p.read_text())
+        text,n=re.subn(r'[ \t]+(?=\r?$)','',text,flags=re.MULTILINE)
+        normalized+=n
+    if text:
+        text=text.rstrip('\r\n')+'\n'
+    (dest/p.name).write_text(text)
+refs=json.loads((base/'reference-baseline.json').read_text())
+rows=[]
+for path,before in refs.items():
+    head=subprocess.check_output(['git','-C',path,'rev-parse','HEAD'],text=True)
+    status=subprocess.check_output(['git','-C',path,'status','--porcelain=v1'],text=True)
+    assert head==before['head'] and status==before['status'],'reference drift'
+    rows.append({'path':path,'head':head.strip(),'status_sha256':hashlib.sha256(status.encode()).hexdigest(),'unchanged':True})
+(dest/'reference-isolation.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2)+'\n')
+for p in dest.iterdir():
+    if p.is_file() and p.name!='SHA256SUMS':
+        s=p.read_text()
+        if p.suffix=='.json':json.loads(s)
+        assert not re.search(r'0x4[A-Za-z0-9_-]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',s),p.name
+        assert not any(v in s for v in secrets),p.name
+original=json.loads((base/'full-test.json').read_text())
+copied=json.loads((dest/'full-test.json').read_text())
+for key in ['numPassedTests','numFailedTests','numPendingTests','success']:
+    assert original[key]==copied[key],key
+scan={'format_version':2,'known_local_secrets':len(secrets),'redactions':redactions,'leaks':0,'upstream_requests':0,'all_json_parse':True,'full_test_summary_preserved':True,'trailing_whitespace_lines_normalized':normalized,'raw_originals_preserved_in':str(base)}
+(dest/'evidence-scan.json').write_text(json.dumps(scan,indent=2)+'\n')
+checks=[]
+for p in sorted(dest.iterdir()):
+    if p.is_file() and p.name!='SHA256SUMS':checks.append(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name)
+(dest/'SHA256SUMS').write_text('\n'.join(checks)+'\n')
+print('EVIDENCE_PACKAGE_V2=PASS files=%s json_parse=PASS full_test_summary=UNCHANGED redactions=%s leaks=0'%(len(checks),redactions))

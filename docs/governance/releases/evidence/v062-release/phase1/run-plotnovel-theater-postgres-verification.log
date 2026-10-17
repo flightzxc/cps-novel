@@ -94,7 +94,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 PLOTNOVEL_MIGRATION_COUNT=PASS applied=29
 PLOTNOVEL_GRANTS_REPLAY_IDEMPOTENT=PASS acl_digest=2a929a6e9c46b1c83bb537fb0a30f1bc

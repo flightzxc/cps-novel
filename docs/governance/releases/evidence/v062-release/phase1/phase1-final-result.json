@@ -46,5 +46,7 @@
   "auditFull": {
     "critical": 0,
     "high": 11
-  }
+  },
+  "wrapperRepairs": 1,
+  "wrapperRepair": "structured JSON redaction; outer shell fail-fast; evidence newline whitespace normalization; fixed before governance push"
 }

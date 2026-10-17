@@ -1,0 +1,26 @@
+[
+  {
+    "name": "governance-postcommit-typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-17T09:37:28.313722+00:00",
+    "exit": 0,
+    "seconds": 4.013,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/governance-postcommit-typecheck.log"
+  },
+  {
+    "name": "governance-postcommit-lint",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-17T09:37:32.328274+00:00",
+    "exit": 0,
+    "seconds": 14.051,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/v062-release/governance-postcommit-lint.log"
+  }
+]

@@ -104,7 +104,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 POSTGRES_VERSION=16.14 (Debian 16.14-1.pgdg13+1)
 TEST_DB_ISOLATION=UNIQUE_DATABASE_PER_RUN name=phase_b_entity_fix_20261017180740_70568_27241 port=56771

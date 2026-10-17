@@ -1,0 +1,12 @@
+{
+  "issue": "raw regex redaction broke JSON escaping in full-test.json; outer shell lacked set -e and continued a local governance commit",
+  "caught_before_governance_push": true,
+  "initial_local_commit": "1c1515210ed2e48c0a3f7b9b308d87434966799a",
+  "fix": "parse JSON, recursively redact string values, serialize and parse again; validate summary fields; enable set -e in outer shell; normalize log trailing whitespace",
+  "original_full_test_json_sha256": "49f9d0eaa017a8832beeceef2a1ed3b061139cf2fb90aaab647ebebf8fbe0c5a",
+  "final_unchanged": true,
+  "image_unchanged": true,
+  "repository_gates_failed": false,
+  "initial_governance_postcommit_typecheck_exit": 0,
+  "initial_governance_postcommit_lint_exit": 0
+}

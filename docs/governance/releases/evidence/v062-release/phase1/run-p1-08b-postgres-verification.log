@@ -104,7 +104,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 Prisma schema loaded from prisma/schema.prisma
 Datasource "db": PostgreSQL database "cps_novel_p1_06_p1_07_p1_08b_20261017180706_69773", schema "public" at "127.0.0.1:56387"

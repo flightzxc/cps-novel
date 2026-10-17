@@ -94,7 +94,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 X9_MIGRATION_empty=PASS migrations=29 tables=60
 
@@ -192,7 +192,7 @@ migrations/
     └─ migration.sql
   └─ 20260926150000_periodic_sweep_skip_reason/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 INSERT 0 5
 INSERT 0 1
@@ -235,7 +235,7 @@ migrations/
     └─ migration.sql
   └─ 20261017180000_revenue_country_active_users/
     └─ migration.sql
-      
+
 All migrations have been successfully applied.
 X9_UPGRADE_OLD_MIGRATIONS_AND_DATA=UNCHANGED
 X9_MIGRATION_upgrade=PASS migrations=29 tables=60
