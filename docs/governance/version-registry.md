@@ -19,7 +19,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.2 —— 已部署；只读定位完成，上游接口数据差异待确认（2026-10-17）
+### v0.6.2 —— 已部署，技术及业务验收PASS；Owner接受已知上游口径差异（2026-10-17）
 
 - 版本类型 **PATCH**（沿用 v0.5.11 收入看板与 v0.5.14 站内搜索含迁移的先例）。基线 `004c81c07e09868f695e4d5486d29dd602738be7`（tree `be3f7dbcb49d72256a02f29a1dff91976aaf1f5f`），集成线 `integration/v0.6.2-2026-10-17`，发布分支 `release/v0.6.2-2026-10-17`；来源 `feat/v062-revenue-book-country`，两次 no-ff 合并 `2114062c`、`004c81c0`。
 - 后台 `/revenue` 新增按书统计（新用户、分成收入、区间汇总、单书按日、剧场列与筛选）和国家分布（新用户／激活、区间排行、国家 × 日期）；沿用 `changdu.revenue_sync.v1`，缺失覆盖不记为 0。本期不做收入按国家或书 × 国家。
@@ -31,9 +31,11 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 - 第二阶段已完成：Owner明确批准，仅haiyue-vps；维护21:47:57–21:48:47 JST（50.163267秒），两条迁移76.389ms/7.815ms，29 finished/0 rolled_back、60表；新表24项授权及新增列/存量默认值PASS，收入批次22/日统计9保持、新表0行。health0.6.2/Final/metadata passed、五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429/积压、写闸/白名单/nginx/备份定时器PASS，外部3/4全部200；未触发收入同步。annotated v0.6.2固定Final，原生成CHANGELOG和唯一发版日志完成，Notion四处同步并回读PASS，历史保留。
 
-- Owner同步后只读核对（22:08 JST）：批次7fd26b71-6831-4d2b-bdb6-faddf702c4cc三段completed/激活覆盖true，24.255秒/17请求，15本全matched、32书行、新用户22/US$6.88逐日一致；国家34行/19标签，新用户23对按日22、激活人日63对56，10-11/12/14/17共4天不一致。六服务healthy/error0，未重跑同步或改数据，按计划停止线上操作，原因未裁定，不能登记全部验收PASS。[差异记录](releases/v0.6.2-preproduction.md#owner-同步后只读验收国家逐日对账差异停止线上操作)。
+- 历史停点（已由下方Owner最终裁定关闭）：Owner同步后只读核对（22:08 JST）：批次7fd26b71-6831-4d2b-bdb6-faddf702c4cc三段completed/激活覆盖true，24.255秒/17请求，15本全matched、32书行、新用户22/US$6.88逐日一致；国家34行/19标签，新用户23对按日22、激活人日63对56，10-11/12/14/17共4天不一致。六服务healthy/error0，未重跑同步或改数据，按计划停止线上操作，原因未裁定，不能登记全部验收PASS。[差异记录](releases/v0.6.2-preproduction.md#owner-同步后只读验收国家逐日对账差异停止线上操作)。
 
-- Owner授权继续只读排查后：固定批次15份国家原快照明细和均等于其自身total；原GetReport与GetCountryReport四天数值已不同。原解析器离线重放34国家行/9日报逐字段相等，无丢行/重复；既有日志独立重数17次全HTTP200，两worker错误0。定位到上游接口返回层，未发现本次本站解析落库引入差异；上游定义/去重/刷新原因未证实，国家守恒仍不通过，业务接受待确认。新增上游请求0/生产写0，Final/tag不变。
+- 历史定位（裁定前状态）：Owner授权继续只读排查后：固定批次15份国家原快照明细和均等于其自身total；原GetReport与GetCountryReport四天数值已不同。原解析器离线重放34国家行/9日报逐字段相等，无丢行/重复；既有日志独立重数17次全HTTP200，两worker错误0。定位到上游接口返回层，未发现本次本站解析落库引入差异；上游定义/去重/刷新原因未证实，国家守恒仍不通过，业务接受待确认。新增上游请求0/生产写0，Final/tag不变。
+
+- **Owner最终裁定 / 业务验收PASS**：Owner于2026-10-17明确裁定：国家逐日跨接口差异按“上游接口口径不同”接受，不再作为停点；国家分布验收改为“国家明细合计 = 国家接口 total”，15份快照全部满足，v0.6.2业务验收PASS。四天均为国家合计大于日报，无一天偏少（新用户+1、激活逐日累计+7人日）；Owner将10-11日报1、两国各1解释为与“国家分别去重、日报全局去重”一致。本站原解析器与入库逐字段一致。保留原失败与定位历史，不改数、不重跑、无上游调用或生产写入；Final/tag/工件保持。 [裁定ADR](../adr/ADR-V062-COUNTRY-RECONCILIATION-ACCEPTANCE.md)。
 
 ### v0.6.1 —— 已部署，58本补发及34本定向试读全部验收PASS（JST 2026-10-17）
 
@@ -526,7 +528,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；本站原样存储核验PASS，上游接口数据差异待确认 |
+| `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |

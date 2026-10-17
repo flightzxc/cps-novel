@@ -1,0 +1,19 @@
+{
+  "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "lastEdited": "2026-10-17T13:44:19.851Z",
+  "targets": [
+    "当前快照",
+    "版本表",
+    "正式手账",
+    "唯一开发日志镜像"
+  ],
+  "status": "technical_and_business_acceptance_pass",
+  "countryReconciliationStandard": "国家明细合计 = 国家接口 total",
+  "countryPass": "15/15",
+  "crossEndpointDifference": "Owner接受为已知上游接口口径差异，不再作为停点",
+  "readbackPass": true,
+  "historyPreserved": true,
+  "priorBodyChars": 309911,
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245"
+}

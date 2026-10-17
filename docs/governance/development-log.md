@@ -41,16 +41,18 @@
 
 ### 2026-10-17 21:48 - codex（GPT-6，正式发版执行；JST / +0800为20:48）
 
-**变更类型**：海阅 v0.6.2 **PATCH** 正式站部署，仅haiyue-vps；Owner本会话明确“批准部署”，原RELEASE=PASS/exit0，维护OFF。后台能力已部署，运营最近30天手动收入同步及页面验收待Owner操作。
+**变更类型**：海阅 v0.6.2 **PATCH** 正式站部署，仅haiyue-vps；Owner本会话明确“批准部署”，原RELEASE=PASS/exit0，维护OFF。后台能力已部署，Owner已完成同步并裁定业务验收PASS；国家明细合计=国家接口total（15/15），已知上游跨接口口径差异接受，原停点关闭。
 **背景**：Owner10-17要求运营看用户来自哪本书、畅读新增用户来自哪个国家，后追加“激活也看看吧”。来源feat/v062-revenue-book-country，经integration/v0.6.2-2026-10-17的2114062c、004c81c0两次no-ff合入；固定Final fbc00167f34cefde6d3f079f8573700ea9e86245，tree 0b13b516b1f50df286f2775f281a83403669a790。
 **变更内容**：按书看新用户和分成收入、区间汇总与单书按日，PlotNovel同表加剧场列及筛选；国家看新用户和激活、区间排行与国家×日期，本期不做收入按国家或书×国家。主控10-17原上游只读实测共7次，核对seriesId映射和countryReportType=0激活/1新用户；本发版会话未重复生产上游请求。Owner追加激活后另起20261017180000只新增迁移，已合入20261017120000逐字节不动；原27条亦不动。B-48将p1-05b固定postgres:16.14、已有镜像不拉取（本轮pull事件0）；v0.6.1八份证据脚本改.ts.txt，修复末端tsc。
 **影响范围**：仅后台/revenue，沿用changdu.revenue_sync.v1；迁移27→29、表58→60，字典1349→1401/active1279→1331。worker_app对两张新表四项权限，web_app/analyst_ro只读；无新环境变量、任务类型或依赖变化。公开网址冻结，任务白名单、nginx、证书、DNS、业务开关保持。
 **验证方式**：全量11,492通过/0失败/无Unhandled，p1-05b真实库11,502通过、37运行器及全部附加门禁PASS；最终归档SHA256 8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96，运输/原--load/OCI/Final/tree PASS。维护JST21:47:57.357965–21:48:47.521232，共50.163267秒；新迁移76.389/7.815ms，29 finished/0 rolled_back、60表。新表权限、5个批次列及存量默认值、国家可空激活列与CHECK读回PASS；收入批次22/日统计9不变，新表0行。health0.6.2/Final/metadata passed，五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0，IndexNow及写闸/白名单/nginx/备份PASS，公网3/4全部200。env只改两版本行、脱敏diff/cmp PASS，在线逻辑备份和restore-list PASS。初次维护前采样2/2/4未满足窗口，等待后2/1/0按原阈值通过；自写只读SSH探针引号错误已修复。第一阶段Docker ECONNRESET一次授权重试成功，证据JSON脱敏包装修复记录保留。
-**后续待办**：Owner登录2FA后在/revenue手动同步最近30天，确认两块统计及国家×日期口径切换，再通知Codex作只读对账（批次状态、书匹配分布、国家逐日合计、请求数、耗时和worker错误）。未代触发收入同步。annotated v0.6.2固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账及本唯一日志完成；Notion四处同步并回读PASS，既有历史保持。回滚仅v0.6.1 Final cb255e0f1c93041eda6aefeefbb541d7eddfc15f，兼容标志须Owner回滚时明确批准，不down、不改nginx。完整[发布记录](releases/v0.6.2-preproduction.md)。
+**部署时后续待办（历史，现已由Owner裁定关闭）**：Owner登录2FA后在/revenue手动同步最近30天，确认两块统计及国家×日期口径切换，再通知Codex作只读对账（批次状态、书匹配分布、国家逐日合计、请求数、耗时和worker错误）。未代触发收入同步。annotated v0.6.2固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账及本唯一日志完成；Notion四处同步并回读PASS，既有历史保持。回滚仅v0.6.1 Final cb255e0f1c93041eda6aefeefbb541d7eddfc15f，兼容标志须Owner回滚时明确批准，不down、不改nginx。完整[发布记录](releases/v0.6.2-preproduction.md)。
 
 **Owner同步后验收补记（2026-10-17 22:08 JST）**：Owner已确认手动同步完成；批次7fd26b71-6831-4d2b-bdb6-faddf702c4cc三段completed、激活覆盖true，24.255秒/17次请求。15本全部matched（32行），新用户22、US$6.88逐日与日统计一致；国家34行/19标签，新用户23对日统计22，激活人日63对56，4天逐日不守恒。六服务healthy、error/permission denied0，收入无在途。首轮国家对账断言失败原样留证；按原计划停止线上操作，未重跑同步、未调用上游或订正数据，原因待定位，不能登记全部业务验收PASS。已请求Owner允许后续仅用存量快照与现有日志只读排查，本条仍为唯一发版日志。
 
 **授权只读定位补记（2026-10-17 22:36 JST取证）**：Owner允许继续只读排查。确认差异已在上游GetReport与GetCountryReport原快照中；15份国家明细和均等于自身total，原生产解析器离线重放34国家行/9日报逐字段相等，丢行和重复0。现有日志独立确认17次请求全200、worker错误0；批次已有Country sums differ...4 day(s)提示。未发现本样本本站解析/合并/落库引入差异；上游口径/去重/缓存/时刻等深因未证实，国家守恒仍不通过，业务接受待确认。新增上游请求0、生产写0、重跑0，无功能开发或部署，Final及tag保持。本条仍为唯一发版日志。
+
+**Owner最终裁定与业务收官（2026-10-17）**：Owner于2026-10-17明确裁定：国家逐日跨接口差异按“上游接口口径不同”接受，不再作为停点；国家分布验收改为“国家明细合计 = 国家接口 total”，15份快照全部满足，v0.6.2业务验收PASS。四天均为国家合计大于日报，无一天偏少（新用户+1、激活逐日累计+7人日）；Owner将10-11日报1、两国各1解释为与“国家分别去重、日报全局去重”一致。本站原解析器与入库逐字段一致。保留原失败与定位历史，不改数、不重跑、无上游调用或生产写入；Final/tag/工件保持。 原始失败及定位证据保留，国家对账按新标准15/15 PASS，技术及业务验收均PASS。本条仍为v0.6.2唯一发版日志。[裁定ADR](../adr/ADR-V062-COUNTRY-RECONCILIATION-ACCEPTANCE.md)。
 
 ### 2026-10-16 22:09 - codex（GPT-6，正式发版执行；时间 +0800 / JST 23:09）
 

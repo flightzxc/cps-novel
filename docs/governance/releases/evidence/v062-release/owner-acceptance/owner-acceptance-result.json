@@ -1,0 +1,28 @@
+{
+  "status": "technical_and_business_acceptance_pass",
+  "ownerDecision": "国家逐日对账差异按上游接口口径不同接受，不再作为停点",
+  "recordedAtJst": "2026-10-17T22:42:57+09:00",
+  "standard": "同日同口径国家明细合计 = 国家接口 total",
+  "countrySnapshotsPassed": 15,
+  "countrySnapshotsChecked": 15,
+  "crossEndpointDifference": "known_upstream_metric_scope_accepted",
+  "newUserDifference": 1,
+  "activeUserDayDifference": 7,
+  "basis": "Owner于2026-10-17明确裁定：国家逐日跨接口差异按“上游接口口径不同”接受，不再作为停点；国家分布验收改为“国家明细合计 = 国家接口 total”，15份快照全部满足，v0.6.2业务验收PASS。四天均为国家合计大于日报，无一天偏少（新用户+1、激活逐日累计+7人日）；Owner将10-11日报1、两国各1解释为与“国家分别去重、日报全局去重”一致。本站原解析器与入库逐字段一致。保留原失败与定位历史，不改数、不重跑、无上游调用或生产写入；Final/tag/工件保持。",
+  "stopClosed": true,
+  "originalFailureEvidencePreserved": true,
+  "priorEvidence": "../owner-sync-investigation/investigation-result.json",
+  "adr": "../../../../../adr/ADR-V062-COUNTRY-RECONCILIATION-ACCEPTANCE.md",
+  "identity": {
+    "governanceHead": "23e3f514534f16528ea0edae832fa29d57889c99",
+    "tagObject": "391b6ea4404fbc2846dba8b1e2e524e41ff8c8da",
+    "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+    "finalTree": "0b13b516b1f50df286f2775f281a83403669a790",
+    "archiveSha256": "8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96",
+    "archiveBytes": 253639432,
+    "changelogSha256": "42a54697f90d783d1be636ac654d21e9744af1e737ec804269d94ea7e6ee3d18"
+  },
+  "upstreamRequestsThisTurn": 0,
+  "productionConnectionsThisTurn": 0,
+  "productionWritesThisTurn": 0
+}
