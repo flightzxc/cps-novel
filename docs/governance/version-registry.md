@@ -29,7 +29,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 - 第一阶段历史交付快照（当时尚未连接生产）：Final `fbc00167f34cefde6d3f079f8573700ea9e86245` / tree `0b13b516b1f50df286f2775f281a83403669a790`；全量11,492通过/0失败/无Unhandled，p1-05b真实库全量11,502通过；37运行器、迁移/字典、严格探针1742、B21、nginx矩阵、18组变异、Compose、audit及最终归档镜像端到端均PASS。归档 SHA256 `8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96`；GitHub已推送并回读。尚未连接生产，等待Owner“批准部署”。详见[发布记录](releases/v0.6.2-preproduction.md)。
 
-- 第二阶段已完成：Owner明确批准，仅haiyue-vps；维护21:47:57–21:48:47 JST（50.163267秒），两条迁移76.389ms/7.815ms，29 finished/0 rolled_back、60表；新表24项授权及新增列/存量默认值PASS，收入批次22/日统计9保持、新表0行。health0.6.2/Final/metadata passed、五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429/积压、写闸/白名单/nginx/备份定时器PASS，外部3/4全部200；未触发收入同步。annotated v0.6.2固定Final，原生成CHANGELOG和唯一发版日志完成，Notion同步回读待补。
+- 第二阶段已完成：Owner明确批准，仅haiyue-vps；维护21:47:57–21:48:47 JST（50.163267秒），两条迁移76.389ms/7.815ms，29 finished/0 rolled_back、60表；新表24项授权及新增列/存量默认值PASS，收入批次22/日统计9保持、新表0行。health0.6.2/Final/metadata passed、五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429/积压、写闸/白名单/nginx/备份定时器PASS，外部3/4全部200；未触发收入同步。annotated v0.6.2固定Final，原生成CHANGELOG和唯一发版日志完成，Notion四处同步并回读PASS，历史保留。
 
 ### v0.6.1 —— 已部署，58本补发及34本定向试读全部验收PASS（JST 2026-10-17）
 

@@ -1,0 +1,22 @@
+{
+  "page_id": "3e4601b5fd3481b5a39bcf48408015c2",
+  "page_last_edited_at": "2026-10-17T12:56:23.456Z",
+  "originalChars": 301248,
+  "newChars": 307704,
+  "history_preserved": true,
+  "snapshot": true,
+  "version_row": true,
+  "release_entry": true,
+  "unique_log_mirror": true,
+  "final_mentions": 4,
+  "owner_sync_pending": true,
+  "upstream_sync_triggered": false,
+  "final_note_readback": true,
+  "status": "PASS",
+  "sync_targets": [
+    "current_snapshot",
+    "version_table",
+    "formal_release_journal",
+    "unique_development_log_mirror"
+  ]
+}

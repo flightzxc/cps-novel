@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-17 · 共 1367 个 commit
+生成时间：2026-10-17 · 共 1368 个 commit
+- `b375af1` 2026-10-17 发布：完成海阅 v0.6.2 部署与第二阶段技术验收  — _codex · GPT-6_
 - `69cfc01` 2026-10-17 发布：修正 v0.6.2 证据JSON脱敏并完整校验  — _codex · GPT-6_
 - `1c15152` 2026-10-17 发布：归档海阅 v0.6.2 第一阶段门禁与不可变工件  — _codex · GPT-6_
 

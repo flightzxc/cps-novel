@@ -320,5 +320,110 @@
     "Login with 2FA and open /revenue; manually synchronize recent 30 days",
     "Verify book statistics and country rankings; switch country/date between new users and active users",
     "Tell Codex synchronization finished; then perform the specified read-only reconciliation"
-  ]
+  ],
+  "governance": {
+    "annotated_tag": "v0.6.2",
+    "tag_target": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+    "tag_remote_readback": "PASS",
+    "changelog": "original generator with core.abbrev=7",
+    "version_registry": "complete PATCH",
+    "unique_development_log": "complete",
+    "notion": {
+      "page_id": "3e4601b5fd3481b5a39bcf48408015c2",
+      "page_last_edited_at": "2026-10-17T12:56:23.456Z",
+      "originalChars": 301248,
+      "newChars": 307704,
+      "history_preserved": true,
+      "snapshot": true,
+      "version_row": true,
+      "release_entry": true,
+      "unique_log_mirror": true,
+      "final_mentions": 4,
+      "owner_sync_pending": true,
+      "upstream_sync_triggered": false,
+      "final_note_readback": true,
+      "status": "PASS",
+      "sync_targets": [
+        "current_snapshot",
+        "version_table",
+        "formal_release_journal",
+        "unique_development_log_mirror"
+      ]
+    }
+  },
+  "finalServices": [
+    {
+      "service": "web",
+      "id": "781797f39b574b304b966e4517e24673542e1455a9663b48d0ed72b361e5f74a",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "worker",
+      "id": "1e5b10fdd05087f306faa9eb75ba7949950bf723d01eb48b5547cc5deba579f7",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "worker-light",
+      "id": "9ef88ad585b116cf459cce336f1a28d4f156afcf0dd0ba10dec32b895b801e8b",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "scheduler",
+      "id": "152d3c390892ea6d5bafc6c93b807830b9a8e59a42319caf54c43234cb0025af",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "backup-timer",
+      "id": "c6276be95b900e394d10e60b85bc25aae9440da5ab3c43c6b2fe06074eba11b2",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    }
+  ],
+  "finalRuntimeRecheck": "PASS"
 }
