@@ -94,8 +94,8 @@ async function setCredential(accountId: string, jwt: string, fingerprintPrefix =
 type UpstreamOptions = {
   /** v0.6.2 按书请求（维度 ["1","8"]）的响应；缺省 = 与按日相同的行（没有 subItems → 0 本书）。 */
   bookRows?: unknown[] | (() => Response | Promise<Response>);
-  /** v0.6.2 国家下钻：按日期给 `data` 或整个 Response；缺省 = 当天新用户全记在巴西。 */
-  country?: (date: string) => Record<string, unknown> | Response | undefined;
+  /** v0.6.2 国家下钻：按日期与口径（countryReportType 0 激活 / 1 新用户）给 `data` 或整个 Response；缺省 = 当天该口径人数全记在巴西。 */
+  country?: (date: string, countryReportType: number) => Record<string, unknown> | Response | undefined;
 };
 
 /**
@@ -108,19 +108,20 @@ function upstream(rows: unknown[] | (() => Response | Promise<Response>), option
   const calls: Array<Record<string, unknown>> = [];
   const bookCalls: Array<Record<string, unknown>> = [];
   const countryCalls: Array<Record<string, unknown>> = [];
-  const defaultCountry = (date: string) => {
+  const defaultCountry = (date: string, countryReportType: number) => {
     const day = Array.isArray(rows) ? (rows.find((row) => (row as Record<string, unknown>).dimensionValue === date) as Record<string, unknown> | undefined) : undefined;
-    const newUsers = Number(day?.newRealDevNum ?? 0);
-    return countryData(newUsers > 0 ? [["巴西(BR)", newUsers]] : []);
+    const users = Number((countryReportType === 0 ? day?.realDevNum : day?.newRealDevNum) ?? 0);
+    return countryData(users > 0 ? [["巴西(BR)", users]] : []);
   };
   const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     if (String(url).endsWith("/GetCountryReport")) {
       countryCalls.push(body);
       const date = String((body.list as Array<{ dimensionValue: string }>)[0]!.dimensionValue);
-      const custom = options.country?.(date);
+      const type = Number(body.countryReportType);
+      const custom = options.country?.(date, type);
       if (custom instanceof Response) return custom;
-      return jsonResponse({ status: true, code: 200, message: "ok", data: custom ?? defaultCountry(date) });
+      return jsonResponse({ status: true, code: 200, message: "ok", data: custom ?? defaultCountry(date, type) });
     }
     const isBook = Array.isArray(body.dimensions) && body.dimensions.join(",") === "1,8";
     (isBook ? bookCalls : calls).push(body);
@@ -238,7 +239,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const registry = registryWith(fetchReport);
       expect(await cycle(REVENUE_SYNC_TASK_TYPE, registry)).toBe(true);
 
-      // 按日请求只发了一次，且带 projectType:1；v0.6.2 起再追加按书一次、国家两次（两天都有新用户）。
+      // 按日请求只发了一次，且带 projectType:1；v0.6.2 起再追加按书一次、国家四次（两天各查激活与新用户）。
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({ projectType: 1, dimensions: ["1"], pageSize: 999, pageIndex: 1, beginTime: BEGIN, endTime: END });
 
@@ -256,7 +257,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(batches).toHaveLength(1);
       const batch = batches[0]!;
       expect(batch).toMatchObject({
-        revenueSyncScopeId: scope.id, genericTaskId: taskId, status: "completed", requestCount: 4, detailRowCount: 2, totalRowCount: 1,
+        revenueSyncScopeId: scope.id, genericTaskId: taskId, status: "completed", requestCount: 6, detailRowCount: 2, totalRowCount: 1,
         reconciliationStatus: "matched", credentialFingerprintPrefix: "abc123def456", upstreamStarId: "335788",
         errorCode: null, errorMessage: null, requestedBy: ADMIN,
       });
@@ -350,7 +351,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       const outcome = await runHandlerDirect(taskId, fetchReport);
       expect(outcome.status).toBe("success");
       const batch = await owner.revenueSyncBatch.findFirstOrThrow();
-      // 请求数 = 按日 1 + 按书 1；没有新用户的日子不发国家请求。
+      // 请求数 = 按日 1 + 按书 1；没有激活也没有新用户的日子不发国家请求。
       expect(batch).toMatchObject({ status: "completed", detailRowCount: 0, totalRowCount: 0, reconciliationStatus: "not_applicable", requestCount: 2 });
       expect(await count("revenue_daily_stat")).toBe(0);
       const view = await loadRevenueDashboard(web, { dateFrom: BEGIN, dateTo: END });
@@ -854,7 +855,10 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
         realDevNum: 1, newRealDevNum: 0, realIncome: "0.03",
       }),
     ];
-    const country = (date: string) => (date === D1 ? countryData([["巴西(BR)", 1], ["俄罗斯(RU)", 2]]) : undefined);
+    // D1 的新用户口径给两个国家；其余（含所有激活口径）走缺省：当天人数全记在巴西。
+    const country = (date: string, type: number) => (date === D1 && type === 1 ? countryData([["巴西(BR)", 1], ["俄罗斯(RU)", 2]]) : undefined);
+    const countryCallKeys = (calls: Array<Record<string, unknown>>) =>
+      calls.map((body) => `${(body.list as Array<{ dimensionValue: string }>)[0]!.dimensionValue}:${String(body.countryReportType)}`);
 
     it("全链路：worker_app 拉按书 + 国家、按 seriesId 匹配（只在本账号渠道的网文剧场里找、优先未删除）并写入；web_app 读出排行 / 剧场 / 单书按日 / 国家", async () => {
       const items = await seedTheaters();
@@ -864,19 +868,20 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
 
       expect(up.bookCalls).toHaveLength(1);
       expect(up.bookCalls[0]).toMatchObject({ dimensions: ["1", "8"], projectType: 1, beginTime: BEGIN, endTime: END });
-      // 国家只下钻新用户 > 0 的日期（D2 没有新用户）。
-      expect(up.countryCalls.map((body) => body.list)).toEqual([[{ dimension: 1, dimensionValue: D1 }]]);
-      expect(up.countryCalls[0]).toMatchObject({ countryReportType: 1, projectType: 1, beginTime: D1, endTime: D1 });
+      // 国家：激活 > 0 的日期查激活（0）、新用户 > 0 的日期查新用户（1）；D2 只有激活。日期升序（D2 早于 D1）。
+      expect(countryCallKeys(up.countryCalls)).toEqual([`${D2}:0`, `${D1}:0`, `${D1}:1`]);
+      expect(up.countryCalls[2]).toMatchObject({ list: [{ dimension: 1, dimensionValue: D1 }], countryReportType: 1, projectType: 1, beginTime: D1, endTime: D1 });
 
       const task = await owner.genericTask.findUniqueOrThrow({ where: { id: taskId }, include: { items: true } });
       expect(task.status).toBe("completed");
       expect(task.items[0]!.result).toMatchObject({
         batchStatus: "completed", bookStatus: "completed", bookRowCount: 5, bookCount: 4,
-        unmatchedBookCount: 1, ambiguousBookCount: 1, countryStatus: "completed", countryDayCount: 1, countryRowCount: 2,
+        unmatchedBookCount: 1, ambiguousBookCount: 1, countryStatus: "completed", countryDayCount: 2, countryRowCount: 3,
       });
       const batch = await owner.revenueSyncBatch.findFirstOrThrow();
       expect(batch).toMatchObject({
-        status: "completed", requestCount: 3, bookStatus: "completed", bookRowCount: 5, countryStatus: "completed", countryRowCount: 2, errorCode: null,
+        status: "completed", requestCount: 5, bookStatus: "completed", bookRowCount: 5,
+        countryStatus: "completed", countryRowCount: 3, countryActiveIncluded: true, errorCode: null,
       });
 
       const stats = await owner.revenueBookDailyStat.findMany({ orderBy: [{ statDate: "asc" }, { upstreamSeriesKey: "asc" }] });
@@ -889,13 +894,14 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       ]);
       expect(stats.find((row) => row.upstreamSeriesKey === "1_20125409" && row.realIncome?.toFixed(4) === "2.0000")).toBeDefined();
       const countries = await owner.revenueCountryDailyStat.findMany();
-      // 不依赖数据库排序规则：按国家码在 JS 里排。
-      expect(countries.map((row) => [row.countryLabel, row.countryCode, row.newRealDevNum]).sort((a, b) => String(a[1]).localeCompare(String(b[1]))))
-        .toEqual([["巴西(BR)", "BR", 1], ["俄罗斯(RU)", "RU", 2]]);
-      const raws = await owner.revenueRawSnapshot.findMany({ where: { dimension: { in: ["1,8", "country:1"] } }, orderBy: [{ dimension: "asc" }, { dimensionKey: "asc" }] });
+      // 不依赖数据库排序规则：在 JS 里排。新用户与激活合并成一行；只有激活的国家 / 日子新用户记 0。
+      expect(countries.map((row) => [row.statDate.toISOString().slice(0, 10), row.countryCode, row.newRealDevNum, row.realDevNum]).sort((a, b) => `${a[0]}${a[1]}`.localeCompare(`${b[0]}${b[1]}`)))
+        .toEqual([[D2, "BR", 0, 1], [D1, "BR", 1, 6], [D1, "RU", 2, 0]].sort((a, b) => `${a[0]}${a[1]}`.localeCompare(`${b[0]}${b[1]}`)));
+      const raws = await owner.revenueRawSnapshot.findMany({ where: { dimension: { in: ["1,8", "country:0", "country:1"] } }, orderBy: [{ dimension: "asc" }, { dimensionKey: "asc" }] });
       expect(raws.map((row) => [row.dimension, row.dimensionKey, row.isTotal])).toEqual([
-        ["1,8", D2, false], ["1,8", D1, false], ["1,8", "总计", true], ["country:1", D1, false],
+        ["1,8", D2, false], ["1,8", D1, false], ["1,8", "总计", true], ["country:0", D2, false], ["country:0", D1, false], ["country:1", D1, false],
       ]);
+      expect(raws.find((row) => row.dimension === "country:0" && row.dimensionKey === D1)?.realDevNum).toBe(6);
       expect(((raws[1]!.rawPayload as { subItems: unknown[] }).subItems)).toHaveLength(4);
 
       // web_app：按书排行（收入倒序）、剧场名、本站书、匹配形态；只用它有权限的列。
@@ -923,14 +929,40 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
         { date: D2, activeUsers: 1, newUsers: 0, newUserRatio: "1", shareIncomeUsd: "0.0300" },
       ]);
 
-      expect(view.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 0, newUsersTotal: 3 });
-      expect(view.countries.ranking.map((row) => [row.code, row.newUsers, row.share])).toEqual([["RU", 2, "0.6667"], ["BR", 1, "0.3333"]]);
+      expect(view.countries).toMatchObject({
+        coveredDays: 7, uncoveredDays: 0, activeCoveredDays: 7, activeUncoveredDays: 0, newUsersTotal: 3, avgActiveUsersTotal: "1.00", metric: "new",
+      });
+      expect(view.countries.ranking.map((row) => [row.code, row.newUsers, row.share, row.avgActiveUsers])).toEqual([
+        ["RU", 2, "0.6667", "0.00"],
+        ["BR", 1, "0.3333", "1.00"],
+      ]);
       expect(view.countries.matrix.rows).toEqual([{ date: D1, values: [2, 1], other: 0, total: 3 }]);
+      const activeView = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, countryMetric: "active" });
+      expect(activeView.countries.matrix).toEqual({
+        columns: [{ label: "巴西(BR)", code: "BR" }],
+        hasOther: false,
+        rows: [{ date: D1, values: [6], other: 0, total: 6 }, { date: D2, values: [1], other: 0, total: 1 }],
+      });
 
       // 区间更早的日子没有被“按书已同步”的批次覆盖：不当 0，计入未覆盖。
       const wider = await loadRevenueBreakdowns(web, { dateFrom: addDaysToDate(BEGIN, -3), dateTo: END });
       expect(wider.books).toMatchObject({ coveredDays: 7, uncoveredDays: 3 });
-      expect(wider.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 3 });
+      expect(wider.countries).toMatchObject({ coveredDays: 7, uncoveredDays: 3, activeCoveredDays: 7, activeUncoveredDays: 3 });
+    });
+
+    it("存量批次（国家这一段没拉激活）：激活不算覆盖、行上激活为 NULL → 日均激活为 null，不当 0；新用户照常", async () => {
+      await seedTheaters();
+      await enqueueOk();
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows, country }).fetchReport));
+      // 模拟激活口径上线之前的批次：标记为 false、行上激活为 NULL（迁移前写下的行就是这个样子）。
+      await owner.revenueSyncBatch.updateMany({ data: { countryActiveIncluded: false } });
+      await owner.revenueCountryDailyStat.updateMany({ data: { realDevNum: null } });
+      const view = await loadRevenueBreakdowns(web, { dateFrom: BEGIN, dateTo: END, countryMetric: "active" });
+      expect(view.countries).toMatchObject({
+        coveredDays: 7, activeCoveredDays: 0, activeUncoveredDays: 7, newUsersTotal: 3, avgActiveUsersTotal: null,
+        matrix: { columns: [], hasOther: false, rows: [] },
+      });
+      expect(view.countries.ranking.map((row) => [row.code, row.newUsers, row.avgActiveUsers])).toEqual([["RU", 2, null], ["BR", 1, null]]);
     });
 
     it("重新同步整段替换（worker_app 的 DELETE 生效）：区间内消失的书 / 国家不残留；区间外的行不动", async () => {
@@ -950,7 +982,8 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
 
       await enqueueOk();
       const shrunk = [dateRowWithBooks(D1, [bookRow("20125409", "O Retorno Genial", { newRealDevNum: 3, realIncome: "2.60" })], { newRealDevNum: 3, realIncome: "2.60" })];
-      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows: shrunk, country: () => countryData([["巴西(BR)", 3]]) }).fetchReport));
+      // 第二次只有新用户口径换成单一国家（激活走缺省：当天激活全记在巴西）。
+      await cycle(REVENUE_SYNC_TASK_TYPE, registryWith(upstream(accountRows, { bookRows: shrunk, country: (_date, type) => (type === 1 ? countryData([["巴西(BR)", 3]]) : undefined) }).fetchReport));
 
       const latest = (await owner.revenueSyncBatch.findMany({ orderBy: { createdAt: "asc" } }))[1]!;
       const rows = await owner.revenueBookDailyStat.findMany({ orderBy: { statDate: "asc" } });
@@ -958,8 +991,12 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
         [OUTSIDE, "1_1", false],
         [D1, "1_20125409", true],
       ]);
-      const countries = await owner.revenueCountryDailyStat.findMany();
-      expect(countries.map((row) => [row.countryLabel, row.newRealDevNum])).toEqual([["巴西(BR)", 3]]);
+      // 第一次 D1 的俄罗斯（新用户 2）在区间内被整段替换掉，不残留。
+      const countries = await owner.revenueCountryDailyStat.findMany({ orderBy: { statDate: "asc" } });
+      expect(countries.map((row) => [row.statDate.toISOString().slice(0, 10), row.countryLabel, row.newRealDevNum, row.realDevNum, row.sourceBatchId === latest.id])).toEqual([
+        [D2, "巴西(BR)", 0, 1, true],
+        [D1, "巴西(BR)", 3, 6, true],
+      ]);
     });
 
     it("按书请求失败 → partial_failed + book_report_failed，按日与国家照常写入，区间内已有的按书行不被删；这些天不算按书已覆盖", async () => {
@@ -975,7 +1012,8 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       expect(failed).toMatchObject({ status: "partial_failed", errorCode: "book_report_failed", bookStatus: "failed", bookRowCount: 0, countryStatus: "completed" });
       expect(failed.errorMessage).toContain("Book breakdown failed (upstream_http_error)");
       expect(await count("revenue_book_daily_stat")).toBe(5);
-      expect(await count("revenue_country_daily_stat")).toBe(2);
+      // 国家照常写入：D1 巴西 / 俄罗斯 + D2 只有激活的巴西。
+      expect(await count("revenue_country_daily_stat")).toBe(3);
 
       // 只看这一批：把第一批改成按书未拉取，区间就不再被“按书已同步”覆盖。
       await owner.revenueSyncBatch.updateMany({ where: { NOT: { genericTaskId: taskId } }, data: { bookStatus: null } });
@@ -988,14 +1026,15 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       await seedTheaters();
       const taskId = await enqueueOk();
       const rows = [...accountRows.slice(0, 2), detailRow(D3, { newRealDevNum: 2 })];
-      const up = upstream(rows, { bookRows, country: (date) => (date === D1 ? jsonResponse({}, { status: 429 }) : countryData([["巴西(BR)", 2]])) });
+      const up = upstream(rows, { bookRows, country: (date) => (date === D1 ? jsonResponse({}, { status: 429 }) : undefined) });
       await runHandlerDirect(taskId, up.fetchReport);
-      // D3 < D1，升序先查 D3 成功，再查 D1 失败。
-      expect(up.countryCalls.map((body) => (body.list as Array<{ dimensionValue: string }>)[0]!.dimensionValue)).toEqual([D3, D1]);
+      // 日期升序 D3 < D2 < D1：D3 激活、D3 新用户、D2 激活都成功，D1 激活失败后不再请求。
+      expect(countryCallKeys(up.countryCalls)).toEqual([`${D3}:0`, `${D3}:1`, `${D2}:0`, `${D1}:0`]);
       const batch = await owner.revenueSyncBatch.findFirstOrThrow();
       expect(batch).toMatchObject({ status: "partial_failed", errorCode: "country_report_failed", countryStatus: "failed", countryRowCount: 0, bookStatus: "completed" });
+      expect(batch.errorMessage).toContain("(active_users, upstream_rate_limited)");
       expect(await count("revenue_country_daily_stat")).toBe(0);
-      expect(await count("revenue_raw_snapshot WHERE dimension = 'country:1'")).toBe(0);
+      expect(await count("revenue_raw_snapshot WHERE dimension LIKE 'country:%'")).toBe(0);
       expect(await count("revenue_book_daily_stat")).toBe(5);
     });
 
@@ -1022,7 +1061,7 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       );
       // web 依旧读不到来源条目的 raw_payload（匹配只能在 worker 做）。
       await expectDbError(web.$queryRawUnsafe(`SELECT raw_payload FROM novel_source_item`), /42501|permission denied/i);
-      await expect(worker.$executeRawUnsafe(`DELETE FROM revenue_country_daily_stat`)).resolves.toBe(2);
+      await expect(worker.$executeRawUnsafe(`DELETE FROM revenue_country_daily_stat`)).resolves.toBe(3);
     });
 
     it("约束：匹配三值 / 匹配形状 / 新用户非负 / 两段状态取值 / 身份唯一 / 来源条目删不掉（RESTRICT）", async () => {
@@ -1051,10 +1090,16 @@ describe.skipIf(!enabled)("收益看板 · 真实 PostgreSQL（worker_app 写、
       await owner.revenueCountryDailyStat.create({ data: countryRow });
       await expect(owner.revenueCountryDailyStat.create({ data: countryRow })).rejects.toSatisfy(isUniqueConstraintViolation);
       await expectDbError(owner.revenueCountryDailyStat.create({ data: { ...countryRow, countryLabel: "x", newRealDevNum: -1 } }) as unknown as Promise<unknown>, /revenue_country_daily_stat_new_users_check/);
+      // 追加迁移：激活可空（= 没拉激活），但不能为负。
+      await expectDbError(owner.revenueCountryDailyStat.create({ data: { ...countryRow, countryLabel: "y", realDevNum: -1 } }) as unknown as Promise<unknown>, /revenue_country_daily_stat_active_users_check/);
+      await expect(owner.revenueCountryDailyStat.create({ data: { ...countryRow, countryLabel: "z", realDevNum: null } })).resolves.toMatchObject({ realDevNum: null });
 
       await expectDbError(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { bookStatus: "partial" } }) as unknown as Promise<unknown>, /revenue_sync_batch_breakdown_status_check/);
       await expectDbError(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { countryRowCount: -1 } }) as unknown as Promise<unknown>, /revenue_sync_batch_breakdown_counts_check/);
       await expect(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { bookStatus: "failed", countryStatus: null } })).resolves.toBeDefined();
+      // 追加迁移：没跑国家这一段（country_status 为空）就不可能带激活。
+      await expectDbError(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { countryActiveIncluded: true } }) as unknown as Promise<unknown>, /revenue_sync_batch_country_active_shape_check/);
+      await expect(owner.revenueSyncBatch.update({ where: { id: batch.id }, data: { countryStatus: "completed", countryActiveIncluded: true } })).resolves.toBeDefined();
     });
   });
 });

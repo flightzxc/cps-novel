@@ -176,12 +176,15 @@ export function revenueBatchFingerprint(input: {
  * `revenue_raw_snapshot.dimension` 的取值（v0.6.2 起一张原始行表存三类行，靠它区分）：
  *   - "1"         按日请求（`NOVEL_REVENUE_DIMENSIONS`）的明细行与总计行（v0.5.11 起）；
  *   - "1,8"       按书请求（维度 ["1","8"]）的日期行**连同 `subItems` 里的全部书行**（一天一行）与总计行；
- *   - "country:1" 国家下钻（countryReportType=1 新用户）的 `data` 整体，一天一行（dimension_key = 下钻的日期）。
+ *   - "country:1" / "country:0" 国家下钻（countryReportType=1 新用户 / 0 激活）的 `data` 整体，一天一行
+ *                 （dimension_key = 下钻的日期）。
  * 去重键沿用 `detail` / `total` 两种形状（身份 = 日期），书行不逐行存档——按书统计表里已是解析后的值，
  * 原始行一天一行把 finalize 事务里的 upsert 数量压在「天数」量级，而不是「天数 × 书数」。
  */
 export const REVENUE_RAW_DIMENSION_BOOK = "1,8";
 export const REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS = "country:1";
+/** 国家下钻·激活口径（countryReportType=0）的 `data` 整体，一天一行（v0.6.2 追加）。 */
+export const REVENUE_RAW_DIMENSION_COUNTRY_ACTIVE_USERS = "country:0";
 
 /**
  * `revenue_raw_snapshot.dedupe_key`：明细行 = sha256(scopeId|projectType|dimension|<日期>|detail)；

@@ -208,8 +208,10 @@ describe("P1-06 database operations static contracts", () => {
     // both are now registered -- 1347 + 2 = 1349 (no new migration, no new database object).
     // v0.6.2 收益看板按书 / 国家 (20261017120000_revenue_book_country_breakdown) adds 48 records:
     // 2 tables + 29 fields (incl. 4 new revenue_sync_batch columns) + 17 constraints -- 1349 + 48 = 1397.
-    expect(records).toHaveLength(1397);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1397);
+    // v0.6.2 追加 (20261017180000_revenue_country_active_users) adds 4 records: 2 fields
+    // (revenue_sync_batch.country_active_included, revenue_country_daily_stat.real_dev_num) + 2 CHECKs -- 1397 + 4 = 1401.
+    expect(records).toHaveLength(1401);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1401);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

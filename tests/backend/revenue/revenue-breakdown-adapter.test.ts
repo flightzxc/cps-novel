@@ -57,8 +57,9 @@ describe("请求体：维度只能是两组冻结值，口令维度（7）无从
     }
   });
 
-  it("国家下钻请求体：同一天的日期行路径 + countryReportType=1（新用户）+ projectType=1", () => {
-    expect(buildNovelCountryReportBody({ date: "2026-10-16" })).toEqual({
+  it("国家下钻请求体：同一天的日期行路径 + countryReportType（新用户 1 / 激活 0）+ projectType=1", () => {
+    expect(buildNovelCountryReportBody({ date: "2026-10-16", reportType: "active_users" })).toMatchObject({ countryReportType: 0 });
+    expect(buildNovelCountryReportBody({ date: "2026-10-16", reportType: "new_users" })).toEqual({
       beginTime: "2026-10-16",
       endTime: "2026-10-16",
       dimensions: ["1"],
@@ -68,7 +69,11 @@ describe("请求体：维度只能是两组冻结值，口令维度（7）无从
       countryReportType: 1,
       list: [{ dimension: 1, dimensionValue: "2026-10-16" }],
     });
-    expect(() => buildNovelCountryReportBody({ date: "2026-02-30" })).toThrowError(NovelRevenueAdapterError);
+    expect(() => buildNovelCountryReportBody({ date: "2026-02-30", reportType: "new_users" })).toThrowError(NovelRevenueAdapterError);
+    // 收入口径（2）本期不取：没有入口能拼出来。
+    for (const bad of ["revenue", "income", "2"]) {
+      expect(() => buildNovelCountryReportBody({ date: "2026-10-16", reportType: bad as never }), bad).toThrowError(NovelRevenueAdapterError);
+    }
   });
 
   function rangeDates() {
@@ -98,11 +103,12 @@ describe("fetchNovelCountryReport", () => {
     const report = await fetchNovelCountryReport({
       token: TOKEN,
       date: "2026-10-16",
+      reportType: "new_users",
       fetchImpl,
       onUpstreamObservation: (event) => events.push(event),
       rateGate: { wait: vi.fn(async (endpoint?: string) => { waits.push(endpoint); }) },
     });
-    expect(report).toEqual({ date: "2026-10-16", data, requestCount: 1 });
+    expect(report).toEqual({ date: "2026-10-16", reportType: "new_users", data, requestCount: 1 });
     expect(calls[0]!.url).toBe(NOVEL_REVENUE_COUNTRY_ENDPOINT);
     expect(calls[0]!.headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(calls[0]!.body).toMatchObject({ countryReportType: 1, projectType: 1, list: [{ dimension: 1, dimensionValue: "2026-10-16" }] });
@@ -114,7 +120,8 @@ describe("fetchNovelCountryReport", () => {
 
   it("HTTP 429 → upstream_rate_limited，requestCount=1；业务失败 / data.list 缺失 → upstream_envelope_error；错误里没有 token", async () => {
     const limited = recordingFetch([new Response("", { status: 429 })]);
-    const error = await fetchNovelCountryReport({ token: TOKEN, date: "2026-10-16", fetchImpl: limited.fetchImpl }).catch((caught: unknown) => caught);
+    const error = await fetchNovelCountryReport({ token: TOKEN, date: "2026-10-16", reportType: "active_users", fetchImpl: limited.fetchImpl }).catch((caught: unknown) => caught);
+    expect(limited.calls[0]!.body.countryReportType).toBe(0);
     expect(error).toBeInstanceOf(NovelRevenueAdapterError);
     expect(error).toMatchObject({ code: "upstream_rate_limited", status: 429, requestCount: 1 });
 
@@ -124,7 +131,7 @@ describe("fetchNovelCountryReport", () => {
       { status: true, code: 200, data: null },
     ]) {
       const { fetchImpl } = recordingFetch([jsonResponse(body)]);
-      const caught = await fetchNovelCountryReport({ token: TOKEN, date: "2026-10-16", fetchImpl }).catch((value: unknown) => value);
+      const caught = await fetchNovelCountryReport({ token: TOKEN, date: "2026-10-16", reportType: "new_users", fetchImpl }).catch((value: unknown) => value);
       expect(caught).toMatchObject({ code: "upstream_envelope_error", requestCount: 1 });
       expect(String((caught as Error).message)).not.toContain(TOKEN);
     }
@@ -132,8 +139,8 @@ describe("fetchNovelCountryReport", () => {
 
   it("没有 token / 日期不合法 → invalid_request，零请求", async () => {
     const { fetchImpl, calls } = recordingFetch([jsonResponse(envelope([]))]);
-    await expect(fetchNovelCountryReport({ token: " ", date: "2026-10-16", fetchImpl })).rejects.toMatchObject({ code: "invalid_request" });
-    await expect(fetchNovelCountryReport({ token: TOKEN, date: "20261016", fetchImpl })).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(fetchNovelCountryReport({ token: " ", date: "2026-10-16", reportType: "new_users", fetchImpl })).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(fetchNovelCountryReport({ token: TOKEN, date: "20261016", reportType: "new_users", fetchImpl })).rejects.toMatchObject({ code: "invalid_request" });
     expect(calls).toHaveLength(0);
   });
 });
@@ -221,9 +228,9 @@ describe("parseNovelCountryReport", () => {
       ],
     });
     expect(parsed.countries).toEqual([
-      { label: "巴西(BR)", code: "BR", name: "巴西", newUsers: 4 },
-      { label: "俄罗斯 ( ru )", code: "RU", name: "俄罗斯", newUsers: 2 },
-      { label: "未知", code: null, name: "未知", newUsers: 1 },
+      { label: "巴西(BR)", code: "BR", name: "巴西", users: 4 },
+      { label: "俄罗斯 ( ru )", code: "RU", name: "俄罗斯", users: 2 },
+      { label: "未知", code: null, name: "未知", users: 1 },
     ]);
     expect(parsed).toMatchObject({ date: "2026-10-16", total: 9, countrySum: 7, droppedRowCount: 4, duplicateRowCount: 1 });
   });

@@ -119,6 +119,12 @@ export function breakdownUncoveredNotice(section: "按书" | "国家", uncovered
     + "这些日期不计入下面的数字；在上方重新发起同步覆盖它们即可补齐。";
 }
 
+/** v0.6.2 激活国家的“未覆盖”提示：早于激活口径的批次、或国家拉取失败的批次都不算。 */
+export function activeCountryUncoveredNotice(uncoveredDays: number): string {
+  return `所选区间内有 ${uncoveredDays} 天还没有激活国家数据（那几天的同步没有拉激活，或国家拉取失败），`
+    + "日均激活只按已同步的天计算；在上方重新发起同步覆盖它们即可补齐。";
+}
+
 const BREAKDOWN_STATUS: Readonly<Record<string, { label: string; tone: BadgeTone }>> = Object.freeze({
   completed: { label: "完成", tone: "success" },
   failed: { label: "失败", tone: "danger" },

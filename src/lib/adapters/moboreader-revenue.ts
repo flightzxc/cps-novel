@@ -39,6 +39,7 @@
  *   - 按书：同一个 `GetReport`，`breakdown: "book"` → 维度 `["1","8"]`。顶层仍是总计行 + 日期行，
  *     书行在日期行的 `subItems` 里（dimension 8，dimensionKey=书名原文，dimensionValue="1_<seriesId>"）。
  *   - 国家：`POST /api/Report/GetCountryReport`，对某一个日期行下钻（`fetchNovelCountryReport`），
+ *     `reportType` 取 `active_users`（countryReportType=0）或 `new_users`（=1），
  *     响应 `data: { total, list: [{ name: "巴西(BR)", value }] }`。观测名 "getcountryreport"。
  *   - 口令维度（7）永远不取，见 `./moboreader-revenue-constants` 的说明。
  */
@@ -55,6 +56,7 @@ import {
   NOVEL_REVENUE_BOOK_DIMENSIONS,
   NOVEL_REVENUE_COUNTRY_ENDPOINT,
   NOVEL_REVENUE_COUNTRY_REPORT_PATH,
+  NOVEL_REVENUE_COUNTRY_REPORT_TYPE_ACTIVE_USERS,
   NOVEL_REVENUE_COUNTRY_REPORT_TYPE_NEW_USERS,
   NOVEL_REVENUE_DIMENSION_DATE,
   NOVEL_REVENUE_DIMENSIONS,
@@ -70,6 +72,7 @@ export {
   NOVEL_REVENUE_BOOK_DIMENSIONS,
   NOVEL_REVENUE_COUNTRY_ENDPOINT,
   NOVEL_REVENUE_COUNTRY_REPORT_PATH,
+  NOVEL_REVENUE_COUNTRY_REPORT_TYPE_ACTIVE_USERS,
   NOVEL_REVENUE_COUNTRY_REPORT_TYPE_NEW_USERS,
   NOVEL_REVENUE_DIMENSIONS,
   NOVEL_REVENUE_ENDPOINT,
@@ -424,7 +427,16 @@ async function fetchAllPages(
   );
 }
 
-// ── v0.6.2：新增用户国家（GetCountryReport，对某一个日期行下钻）──────────────────────────────
+// ── v0.6.2：国家分布（GetCountryReport，对某一个日期行下钻；新用户 / 激活两种口径）────────────
+
+/** 国家下钻口径：`new_users` → countryReportType 1；`active_users` → 0。收入（2）不取，没有入口。 */
+export type NovelCountryReportType = "new_users" | "active_users";
+
+function countryReportTypeCode(reportType: NovelCountryReportType): 0 | 1 {
+  if (reportType === "new_users") return NOVEL_REVENUE_COUNTRY_REPORT_TYPE_NEW_USERS;
+  if (reportType === "active_users") return NOVEL_REVENUE_COUNTRY_REPORT_TYPE_ACTIVE_USERS;
+  throw new NovelRevenueAdapterError("invalid_request", null, "country_report_type_invalid");
+}
 
 export interface NovelCountryReportBody {
   readonly beginTime: string;
@@ -433,16 +445,16 @@ export interface NovelCountryReportBody {
   readonly pageIndex: 1;
   readonly pageSize: 999;
   readonly projectType: 1;
-  readonly countryReportType: 1;
+  readonly countryReportType: 0 | 1;
   readonly list: readonly [{ readonly dimension: 1; readonly dimensionValue: string }];
 }
 
 /**
  * 国家下钻的唯一请求体构造点：日报同一套筛选（`beginTime = endTime = 该日`、`dimensions: ["1"]`、
- * `projectType: 1`），再加 `countryReportType: 1`（新用户）与该日期行的维度路径。
+ * `projectType: 1`），再加 `countryReportType`（0 激活 / 1 新用户）与该日期行的维度路径。
  * 只能按「日期行」下钻：总计行（dimension 0）上游返回空列表，按书 / 口令的下钻本期不做。
  */
-export function buildNovelCountryReportBody(input: { date: string }): NovelCountryReportBody {
+export function buildNovelCountryReportBody(input: { date: string; reportType: NovelCountryReportType }): NovelCountryReportBody {
   if (!isValidCalendarDate(input.date)) {
     throw new NovelRevenueAdapterError("invalid_request", null, "date_invalid");
   }
@@ -453,7 +465,7 @@ export function buildNovelCountryReportBody(input: { date: string }): NovelCount
     pageIndex: 1,
     pageSize: NOVEL_REVENUE_PAGE_SIZE,
     projectType: NOVEL_REVENUE_PROJECT_TYPE,
-    countryReportType: NOVEL_REVENUE_COUNTRY_REPORT_TYPE_NEW_USERS,
+    countryReportType: countryReportTypeCode(input.reportType),
     list: [{ dimension: Number(NOVEL_REVENUE_DIMENSION_DATE) as 1, dimensionValue: input.date }],
   };
 }
@@ -472,21 +484,23 @@ export interface FetchNovelCountryReportInput
   extends Pick<FetchNovelDailyReportInput, "token" | "fetchImpl" | "signal" | "timeoutMs" | "rateGate" | "onUpstreamObservation" | "now"> {
   /** 要下钻的日期行（北京时间 YYYY-MM-DD）。 */
   readonly date: string;
+  readonly reportType: NovelCountryReportType;
 }
 
 export interface NovelCountryReport {
   readonly date: string;
+  readonly reportType: NovelCountryReportType;
   /** 上游 `data` 原样（`total` + `list`），交给解析器。 */
   readonly data: Readonly<Record<string, unknown>>;
   readonly requestCount: number;
 }
 
-/** 取某一天的「新用户国家分布」。单次请求、没有重试（同 `fetchNovelDailyReport`）。 */
+/** 取某一天的国家分布（新用户或激活）。单次请求、没有重试（同 `fetchNovelDailyReport`）。 */
 export async function fetchNovelCountryReport(input: FetchNovelCountryReportInput): Promise<NovelCountryReport> {
   assertAllowedNovelRevenueEndpoint(NOVEL_REVENUE_COUNTRY_ENDPOINT);
   const token = input.token?.trim();
   if (!token) throw new NovelRevenueAdapterError("invalid_request", null, "credential_required");
-  const body = buildNovelCountryReportBody({ date: input.date });
+  const body = buildNovelCountryReportBody({ date: input.date, reportType: input.reportType });
   const timeoutMs = input.timeoutMs ?? NOVEL_REVENUE_DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new NovelRevenueAdapterError("invalid_request", null, "timeout_invalid");
@@ -500,7 +514,7 @@ export async function fetchNovelCountryReport(input: FetchNovelCountryReportInpu
       { url: NOVEL_REVENUE_COUNTRY_ENDPOINT, observationEndpoint: NOVEL_REVENUE_COUNTRY_OBSERVATION_ENDPOINT },
       body,
     );
-    return { date: input.date, data: extractNovelCountryReportData(json, token), requestCount: progress.requestCount };
+    return { date: input.date, reportType: input.reportType, data: extractNovelCountryReportData(json, token), requestCount: progress.requestCount };
   } catch (error) {
     if (error instanceof NovelRevenueAdapterError) error.requestCount = progress.requestCount;
     throw error;

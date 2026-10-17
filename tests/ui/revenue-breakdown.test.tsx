@@ -152,16 +152,22 @@ describe("按书统计", () => {
   });
 });
 
-describe("新增用户国家分布", () => {
+describe("国家分布（新用户 + 激活）", () => {
+  const LINKS = { dateFrom: "2026-10-10", dateTo: "2026-10-16", theater: "unmatched", bookPage: 2, book: null };
+
   function countries(overrides: Partial<RevenueCountrySection> = {}): RevenueCountrySection {
     return {
       coveredDays: 7,
       uncoveredDays: 0,
+      activeCoveredDays: 7,
+      activeUncoveredDays: 0,
       newUsersTotal: 9,
+      avgActiveUsersTotal: "6.14",
+      metric: "new",
       ranking: [
-        { label: "巴西(BR)", code: "BR", newUsers: 4, share: "0.4444" },
-        { label: "俄罗斯(RU)", code: "RU", newUsers: 2, share: "0.2222" },
-        { label: "未知", code: null, newUsers: 3, share: "0.3333" },
+        { label: "巴西(BR)", code: "BR", newUsers: 4, share: "0.4444", avgActiveUsers: "2.29" },
+        { label: "俄罗斯(RU)", code: "RU", newUsers: 2, share: "0.2222", avgActiveUsers: "0.57" },
+        { label: "未知", code: null, newUsers: 3, share: "0.3333", avgActiveUsers: "0.14" },
       ],
       matrix: {
         columns: [{ label: "巴西(BR)", code: "BR" }, { label: "俄罗斯(RU)", code: "RU" }],
@@ -175,24 +181,61 @@ describe("新增用户国家分布", () => {
     };
   }
 
-  it("排行：国家名原文、新用户、占比百分比；拆不出国家码的标注出来", () => {
-    render(<CountrySection section={countries()} />);
-    expect(screen.getByTestId("revenue-country-BR").textContent).toBe("1巴西(BR)444.44%");
+  it("排行：国家名原文、新用户、占比百分比、日均激活；拆不出国家码的标注出来；合计行带日均激活", () => {
+    render(<CountrySection section={countries()} links={LINKS} />);
+    expect(screen.getByTestId("revenue-country-BR").textContent).toBe("1巴西(BR)444.44%2.29");
     expect(screen.getByTestId("revenue-country-未知").textContent).toContain("未识别国家码");
-    expect(screen.getByTestId("revenue-country-total").textContent).toBe("区间内新用户 9 · 3 个国家 / 地区");
+    expect(screen.getByTestId("revenue-country-total").textContent).toBe("区间内新用户 9 · 日均激活 6.14 · 3 个国家 / 地区");
   });
 
-  it("国家 × 日期：表头是国家码（悬停看全名），有“其他”与“合计”列", () => {
-    render(<CountrySection section={countries()} />);
+  it("国家 × 日期：表头是国家码（悬停看全名），有“其他”与“合计”列；口径切换是带区间与按书筛选的普通链接", () => {
+    render(<CountrySection section={countries()} links={LINKS} />);
     const matrix = screen.getByTestId("revenue-country-matrix");
     const headers = within(matrix).getAllByRole("columnheader").map((cell) => [cell.textContent, cell.getAttribute("title")]);
     expect(headers).toEqual([["日期", null], ["BR", "巴西(BR)"], ["RU", "俄罗斯(RU)"], ["其他", null], ["合计", null]]);
     expect(within(matrix).getByTestId("revenue-country-day-2026-10-16").textContent).toBe("2026-10-163227");
+    const chips = within(screen.getByTestId("revenue-country-metric")).getAllByRole("link");
+    expect(chips.map((chip) => [chip.textContent, chip.getAttribute("href"), chip.getAttribute("aria-current")])).toEqual([
+      ["新用户", "/revenue?from=2026-10-10&to=2026-10-16&theater=unmatched&bookPage=2#revenue-countries", "true"],
+      ["激活", "/revenue?from=2026-10-10&to=2026-10-16&theater=unmatched&bookPage=2&countryMetric=active#revenue-countries", null],
+    ]);
   });
 
-  it("有未覆盖天时提示；没有数据时两张表都写“没有国家数据”", () => {
-    render(<CountrySection section={countries({ ranking: [], newUsersTotal: 0, matrix: { columns: [], hasOther: false, rows: [] }, coveredDays: 0, uncoveredDays: 7 })} />);
+  it("激活未同步不当 0：激活一天都没同步时排行、合计、激活矩阵都写“激活未同步”", () => {
+    render(
+      <CountrySection
+        section={countries({
+          metric: "active",
+          activeCoveredDays: 0,
+          activeUncoveredDays: 7,
+          avgActiveUsersTotal: null,
+          ranking: countries().ranking.map((row) => ({ ...row, avgActiveUsers: null })),
+          matrix: { columns: [], hasOther: false, rows: [] },
+        })}
+        links={LINKS}
+      />,
+    );
+    expect(screen.getByTestId("revenue-country-total").textContent).toContain("日均激活 激活未同步");
+    expect(screen.getByTestId("revenue-country-BR").textContent).toContain("激活未同步");
+    expect(within(screen.getByTestId("revenue-country-matrix")).getByText("激活未同步")).toBeTruthy();
+    expect(screen.getByTestId("revenue-country-active-uncovered").textContent).toContain("有 7 天还没有激活国家数据");
+    expect(screen.queryByTestId("revenue-country-uncovered")).toBeNull();
+  });
+
+  it("有未覆盖天时提示；没有数据时两张表都写“没有…国家数据”", () => {
+    render(
+      <CountrySection
+        section={countries({
+          ranking: [], newUsersTotal: 0, avgActiveUsersTotal: null, matrix: { columns: [], hasOther: false, rows: [] },
+          coveredDays: 0, uncoveredDays: 7, activeCoveredDays: 0, activeUncoveredDays: 7,
+        })}
+        links={LINKS}
+      />,
+    );
     expect(screen.getByTestId("revenue-country-uncovered").textContent).toContain("有 7 天还没有国家数据");
-    expect(screen.getAllByText("所选区间没有国家数据")).toHaveLength(2);
+    // 新用户 / 激活同样 7 天未覆盖时只提示一次，不重复。
+    expect(screen.queryByTestId("revenue-country-active-uncovered")).toBeNull();
+    expect(screen.getByText("所选区间没有国家数据")).toBeTruthy();
+    expect(screen.getByText("所选区间没有新用户国家数据")).toBeTruthy();
   });
 });

@@ -141,7 +141,11 @@ function emptyBreakdowns(): RevenueBreakdownView {
     countries: {
       coveredDays: 3,
       uncoveredDays: 0,
+      activeCoveredDays: 3,
+      activeUncoveredDays: 0,
       newUsersTotal: 0,
+      avgActiveUsersTotal: "0.00",
+      metric: "new",
       ranking: [],
       matrix: { columns: [], hasOther: false, rows: [] },
     },
@@ -202,7 +206,8 @@ describe("/revenue · 守卫与口径说明", () => {
       "账号级 · 该畅读账号下全部网文应用合计（当前 1 个应用）· 仅网文（projectType=1）· 达人凭证 · 北京时间日期。"
         + "上游次日可查，近几天会被上游回补，建议每次同步至少覆盖最近 7 天。"
         + "按书数据来自上游按书维度（书与本站按 seriesId 匹配，匹配不上标“未匹配”）；"
-        + "国家分布来自对每个有新用户的日期逐日下钻，只统计新用户。不按推广码 / 口令拆分。",
+        + "国家分布来自逐日下钻：有激活的日期查激活、有新用户的日期查新用户（每天最多 2 次请求）；"
+        + "激活不可跨日相加，排行里给日均。不统计按国家的收入，不按推广码 / 口令拆分。",
     );
     expect(revenueMethodologyText(1)).toBe(note.textContent);
     // 页面上没有按推广码的占位图表或假数据（按书 / 国家是真实表格，不画图）
@@ -719,13 +724,14 @@ describe("/revenue · 多网文应用的合计提示（账号级口径）", () =
 describe("/revenue · v0.6.2 按书与国家区块接线", () => {
   it("按书筛选 / 翻页 / 单书参数原样交给读服务（与账号级视图同一区间），两个区块都渲染在每日明细之后", async () => {
     const range = defaultRevenueRange();
-    await renderPage({ from: range.dateFrom, to: range.dateTo, theater: "unmatched", bookPage: "2", book: "1_20125409" });
+    await renderPage({ from: range.dateFrom, to: range.dateTo, theater: "unmatched", bookPage: "2", book: "1_20125409", countryMetric: "active" });
     expect(loadRevenueBreakdowns).toHaveBeenCalledWith(expect.anything(), {
       dateFrom: range.dateFrom,
       dateTo: range.dateTo,
       theater: "unmatched",
       bookPage: 2,
       book: "1_20125409",
+      countryMetric: "active",
     });
     const daily = screen.getByTestId("revenue-daily");
     const books = screen.getByTestId("revenue-books");
@@ -746,6 +752,7 @@ describe("/revenue · v0.6.2 按书与国家区块接线", () => {
       theater: null,
       bookPage: null,
       book: null,
+      countryMetric: null,
     }));
   });
 });

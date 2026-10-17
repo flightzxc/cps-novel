@@ -26,8 +26,9 @@
  * 按日请求成功之后，再依次：
  *   6. 按书：`fetchReport({ breakdown: "book" })`（维度 ["1","8"]）→ `parseNovelBookReportRows` →
  *      `resolveRevenueBookMatches`（seriesId → 本站来源条目 / 剧场）→ 书行合计与日期行对账（只作提示）；
- *   7. 国家：对按日结果里**新用户 > 0 的日期**逐日 `fetchCountryReport`（新用户口径），没有新用户的日子不发请求；
- *      任何一天失败就停止后续请求，整段记失败（不留半段数据）。
+ *   7. 国家：对按日结果里**激活 > 0 的日期**逐日查激活口径（countryReportType=0）、**新用户 > 0 的日期**逐日查
+ *      新用户口径（=1），日期升序、同一天先激活后新用户；两种都为 0 的日子不发请求。任何一次失败就停止后续请求，
+ *      整段记失败（不留半段数据）。两种口径按国家合并成一行（上游没列出的国家记 0）。
  * 两段各自独立：某一段失败 → 这一段 `failed`、不写该段任何统计行，批次 `partial_failed`
  * （`book_report_failed` / `country_report_failed`），按日数据照常写入。成功的段在 finalize 事务里把
  * 批次区间内的旧行整段删掉再插入（上游回补后，消失的书 / 国家不会残留）。
@@ -43,6 +44,7 @@ import {
   fetchNovelCountryReport,
   fetchNovelDailyReport,
   scrubSecretText,
+  type NovelCountryReportType,
 } from "../../src/lib/adapters/moboreader-revenue";
 import {
   NOVEL_REVENUE_DIMENSIONS,
@@ -64,6 +66,7 @@ import { readStarScope } from "../../src/lib/credentials/jwt";
 import { createHandlerRegistry, redactSecrets, type TaskHandler, type TaskOutcome } from "../../src/lib/tasks";
 import {
   REVENUE_RAW_DIMENSION_BOOK,
+  REVENUE_RAW_DIMENSION_COUNTRY_ACTIVE_USERS,
   REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS,
   REVENUE_SYNC_AUDIT_ACTION_COMPLETED,
   REVENUE_SYNC_AUDIT_ACTION_FAILED,
@@ -113,10 +116,39 @@ type BookSection =
   | { readonly status: "completed"; readonly report: ParsedNovelBookReport; readonly matches: ReadonlyMap<string, RevenueBookMatch>; readonly mismatchedDates: readonly string[] }
   | { readonly status: "failed"; readonly errorCode: string };
 
-/** 国家这一段的结果。`requestedDates` = 实际下钻过的日期（新用户 > 0 的日子）。 */
+/** 某一天国家这一段的结果：两种口径各自的解析结果；当天该口径人数为 0 时没有发请求，为 null。 */
+type CountryDay = {
+  readonly date: string;
+  readonly activeUsers: ParsedNovelCountryReport | null;
+  readonly newUsers: ParsedNovelCountryReport | null;
+};
+
+/** 国家这一段的结果。`days` = 实际下钻过的日期（激活或新用户 > 0 的日子），日期升序。 */
 type CountrySection =
-  | { readonly status: "completed"; readonly reports: readonly ParsedNovelCountryReport[]; readonly mismatchedDates: readonly string[] }
-  | { readonly status: "failed"; readonly errorCode: string; readonly failedDate: string | null };
+  | { readonly status: "completed"; readonly days: readonly CountryDay[]; readonly mismatchedDates: readonly string[] }
+  | { readonly status: "failed"; readonly errorCode: string; readonly failedDate: string | null; readonly failedReportType: NovelCountryReportType | null };
+
+type CountryRow = { date: string; label: string; code: string | null; newUsers: number; activeUsers: number };
+
+/** 两种口径按（日期, 国家名原文）合并成一行；某口径没列出的国家记 0。 */
+function countryRows(section: CountrySection | null): CountryRow[] {
+  if (section?.status !== "completed") return [];
+  const rows: CountryRow[] = [];
+  for (const day of section.days) {
+    const byLabel = new Map<string, CountryRow>();
+    const row = (label: string, code: string | null) => {
+      const existing = byLabel.get(label);
+      if (existing) return existing;
+      const created: CountryRow = { date: day.date, label, code, newUsers: 0, activeUsers: 0 };
+      byLabel.set(label, created);
+      return created;
+    };
+    for (const country of day.activeUsers?.countries ?? []) row(country.label, country.code).activeUsers += country.users;
+    for (const country of day.newUsers?.countries ?? []) row(country.label, country.code).newUsers += country.users;
+    rows.push(...byLabel.values());
+  }
+  return rows;
+}
 
 interface BatchRecord {
   readonly status: RevenueBatchTerminalStatus;
@@ -142,7 +174,7 @@ function bookRowCount(section: BookSection | null): number {
 }
 
 function countryRowCount(section: CountrySection | null): number {
-  return section?.status === "completed" ? section.reports.reduce((sum, report) => sum + report.countries.length, 0) : 0;
+  return countryRows(section).length;
 }
 
 /** 错误信息进批次 / 任务错误之前的最后一道脱敏：遮蔽 token 原文，再套仓库统一的 `redactSecrets`，再截断。 */
@@ -199,6 +231,8 @@ async function persistRevenueBatch(
     bookRowCount: bookRowCount(record.book),
     countryStatus: (record.country?.status ?? null) as BreakdownStatus | null,
     countryRowCount: countryRowCount(record.country),
+    // 本版本的国家这一段总是连激活一起拉：只要这一段跑了（成功或失败）就为 true。
+    countryActiveIncluded: record.country !== null,
     startedAt: record.startedAt,
     finishedAt: context.finishedAt,
   };
@@ -314,6 +348,7 @@ async function persistRevenueBatch(
         bookRowCount: bookRowCount(record.book),
         countryStatus: record.country?.status ?? null,
         countryRowCount: countryRowCount(record.country),
+        countryActiveIncluded: record.country !== null,
       },
     },
   });
@@ -417,48 +452,48 @@ async function persistBookSection(tx: Prisma.TransactionClient, context: Section
 }
 
 /**
- * 国家这一段落库（只在 completed 时）：批次区间内的国家统计整段替换（没有新用户的日子本来就没有行）；
- * 每个下钻过的日期存一条原始行（`data` 整体，new_real_dev_num = 上游 total）。
+ * 国家这一段落库（只在 completed 时）：批次区间内的国家统计整段替换（两种口径都为 0 的日子本来就没有行），
+ * 新用户与激活按国家合并成一行；每个下钻过的“日期 × 口径”存一条原始行（`data` 整体；新用户口径的上游 total
+ * 记在 new_real_dev_num，激活口径的记在 real_dev_num）。
  */
 async function persistCountrySection(tx: Prisma.TransactionClient, context: SectionContext, section: CountrySection | null): Promise<void> {
   if (section?.status !== "completed") return;
   const { params, scopeId, batchId } = context;
   await tx.revenueCountryDailyStat.deleteMany({ where: { revenueSyncScopeId: scopeId, statDate: rangeWhere(params) } });
-  const rows = section.reports.flatMap((report) =>
-    report.countries.map((country) => ({
-      revenueSyncScopeId: scopeId,
-      statDate: dateOnly(report.date),
-      countryLabel: country.label,
-      countryCode: country.code,
-      newRealDevNum: country.newUsers,
-      sourceBatchId: batchId,
-    })));
+  const rows = countryRows(section).map((row) => ({
+    revenueSyncScopeId: scopeId,
+    statDate: dateOnly(row.date),
+    countryLabel: row.label,
+    countryCode: row.code,
+    newRealDevNum: row.newUsers,
+    realDevNum: row.activeUsers,
+    sourceBatchId: batchId,
+  }));
   if (rows.length > 0) await tx.revenueCountryDailyStat.createMany({ data: rows });
 
-  for (const report of section.reports) {
+  const archives: Array<{ dimension: string; report: ParsedNovelCountryReport; totals: { newRealDevNum?: number | null; realDevNum?: number | null } }> = [];
+  for (const day of section.days) {
+    if (day.activeUsers) archives.push({ dimension: REVENUE_RAW_DIMENSION_COUNTRY_ACTIVE_USERS, report: day.activeUsers, totals: { realDevNum: day.activeUsers.total } });
+    if (day.newUsers) archives.push({ dimension: REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS, report: day.newUsers, totals: { newRealDevNum: day.newUsers.total } });
+  }
+  for (const archive of archives) {
     const dedupeKey = revenueRawDedupeKey({
       kind: "country",
       scopeId,
       projectType: params.projectType,
-      dimension: REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS,
-      date: report.date,
+      dimension: archive.dimension,
+      date: archive.report.date,
     });
     const fields = {
       syncBatchId: batchId,
-      dimensionKey: report.date,
+      dimensionKey: archive.report.date,
       dimensionValue: null,
-      newRealDevNum: report.total,
-      rawPayload: report.raw as Prisma.InputJsonObject,
+      ...archive.totals,
+      rawPayload: archive.report.raw as Prisma.InputJsonObject,
     };
     await tx.revenueRawSnapshot.upsert({
       where: { dedupeKey },
-      create: {
-        projectType: params.projectType,
-        dimension: REVENUE_RAW_DIMENSION_COUNTRY_NEW_USERS,
-        isTotal: false,
-        dedupeKey,
-        ...fields,
-      },
+      create: { projectType: params.projectType, dimension: archive.dimension, isTotal: false, dedupeKey, ...fields },
       update: fields,
     });
   }
@@ -560,37 +595,63 @@ export function createRevenueSyncHandler(
   }
 
   /**
-   * 国家这一段：只对新用户 > 0 的日期逐日下钻（升序、串行，经共享限速闸）；任何一天失败就停，整段 failed。
-   * 对账（只作提示）：国家合计 vs 当天新用户、国家合计 vs 上游 total。
+   * 国家这一段：激活 > 0 的日期查激活口径、新用户 > 0 的日期查新用户口径（日期升序、串行，同一天先激活后新用户，
+   * 经共享限速闸）；任何一次失败就停，整段 failed。对账（只作提示）：各口径国家合计 vs 当天合计、国家合计 vs 上游 total。
    */
   async function fetchCountrySection(input: {
     token: string;
     days: readonly ParsedRevenueDay[];
     signal: AbortSignal;
   }): Promise<{ section: CountrySection; requestCount: number }> {
-    const newUsersByDate = new Map<string, number>();
+    const totals = new Map<string, { activeUsers: number; newUsers: number }>();
     for (const day of input.days) {
-      if ((day.newUsers ?? 0) > 0) newUsersByDate.set(day.date, (newUsersByDate.get(day.date) ?? 0) + (day.newUsers ?? 0));
+      const current = totals.get(day.date) ?? { activeUsers: 0, newUsers: 0 };
+      current.activeUsers += day.activeUsers ?? 0;
+      current.newUsers += day.newUsers ?? 0;
+      totals.set(day.date, current);
     }
-    const dates = [...newUsersByDate.keys()].sort();
-    const reports: ParsedNovelCountryReport[] = [];
+    const dates = [...totals.entries()]
+      .filter(([, total]) => total.activeUsers > 0 || total.newUsers > 0)
+      .map(([date]) => date)
+      .sort();
+    const results: CountryDay[] = [];
+    const mismatchedDates: string[] = [];
     let requestCount = 0;
     for (const date of dates) {
-      try {
-        const report = await fetchCountryReport({ token: input.token, date, signal: input.signal, ...upstreamHooks });
-        requestCount += report.requestCount;
-        reports.push(parseNovelCountryReport(date, report.data));
-      } catch (error) {
-        if (error instanceof NovelRevenueAdapterError) {
-          return { section: { status: "failed", errorCode: error.code, failedDate: date }, requestCount: requestCount + error.requestCount };
+      const total = totals.get(date)!;
+      const day: { date: string; activeUsers: ParsedNovelCountryReport | null; newUsers: ParsedNovelCountryReport | null } = {
+        date,
+        activeUsers: null,
+        newUsers: null,
+      };
+      const plan: Array<{ reportType: NovelCountryReportType; expected: number; key: "activeUsers" | "newUsers" }> = [];
+      if (total.activeUsers > 0) plan.push({ reportType: "active_users", expected: total.activeUsers, key: "activeUsers" });
+      if (total.newUsers > 0) plan.push({ reportType: "new_users", expected: total.newUsers, key: "newUsers" });
+      let mismatched = false;
+      for (const step of plan) {
+        try {
+          const report = await fetchCountryReport({ token: input.token, date, reportType: step.reportType, signal: input.signal, ...upstreamHooks });
+          requestCount += report.requestCount;
+          const parsed = parseNovelCountryReport(date, report.data);
+          day[step.key] = parsed;
+          if (parsed.countrySum !== step.expected || (parsed.total !== null && parsed.total !== parsed.countrySum)) mismatched = true;
+        } catch (error) {
+          if (error instanceof NovelRevenueAdapterError) {
+            return {
+              section: { status: "failed", errorCode: error.code, failedDate: date, failedReportType: step.reportType },
+              requestCount: requestCount + error.requestCount,
+            };
+          }
+          return {
+            section: { status: "failed", errorCode: "country_breakdown_failed", failedDate: date, failedReportType: step.reportType },
+            requestCount,
+          };
         }
-        return { section: { status: "failed", errorCode: "country_breakdown_failed", failedDate: date }, requestCount };
       }
+      if (mismatched) mismatchedDates.push(date);
+      results.push(day);
     }
-    const mismatchedDates = reports
-      .filter((report) => report.countrySum !== newUsersByDate.get(report.date) || (report.total !== null && report.total !== report.countrySum))
-      .map((report) => report.date);
-    return { section: { status: "completed", reports, mismatchedDates }, requestCount };
+    return { section: { status: "completed", days: results, mismatchedDates }, requestCount };
   }
 
   return async ({ lease, mode, signal }) => {
@@ -747,13 +808,16 @@ export function createRevenueSyncHandler(
       }
       if (country.section.status === "failed") {
         notes.push(
-          `Country breakdown failed on ${country.section.failedDate ?? "unknown date"} (${country.section.errorCode}); no country rows were written`,
+          `Country breakdown failed on ${country.section.failedDate ?? "unknown date"} (${country.section.failedReportType ?? "unknown"}, ${country.section.errorCode}); no country rows were written`,
         );
       } else {
-        const dropped = country.section.reports.reduce((sum, item) => sum + item.droppedRowCount, 0);
+        const dropped = country.section.days.reduce(
+          (sum, day) => sum + (day.activeUsers?.droppedRowCount ?? 0) + (day.newUsers?.droppedRowCount ?? 0),
+          0,
+        );
         if (dropped > 0) notes.push(`${dropped} upstream country rows were dropped`);
         if (country.section.mismatchedDates.length > 0) {
-          notes.push(`Country sums differ from the day's new users on ${country.section.mismatchedDates.length} day(s)`);
+          notes.push(`Country sums differ from the day totals on ${country.section.mismatchedDates.length} day(s)`);
         }
       }
       const record: BatchRecord = {
@@ -791,7 +855,7 @@ export function createRevenueSyncHandler(
           unmatchedBookCount: bookMatches.filter((match) => match.status === "unmatched").length,
           ambiguousBookCount: bookMatches.filter((match) => match.status === "ambiguous").length,
           countryStatus: country.section.status,
-          countryDayCount: country.section.status === "completed" ? country.section.reports.length : 0,
+          countryDayCount: country.section.status === "completed" ? country.section.days.length : 0,
           countryRowCount: countryRowCount(country.section),
         },
         transactionTimeoutMs: SUCCESS_TRANSACTION_TIMEOUT_MS,
