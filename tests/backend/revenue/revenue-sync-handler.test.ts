@@ -98,11 +98,11 @@ const readyCredential = () => vi.fn(async () => ({
   expiringSoon: false,
 }));
 
-/** 默认国家下钻桩：把该日的新用户全部记在巴西，total 与之一致（对账不出提示）。 */
-function defaultCountryData(rows: readonly unknown[], date: string): Record<string, unknown> {
+/** 默认国家下钻桩：把该日该口径的人数（激活 = realDevNum、新用户 = newRealDevNum）全部记在巴西，total 与之一致。 */
+function defaultCountryData(rows: readonly unknown[], date: string, reportType: string): Record<string, unknown> {
   const day = rows.find((row) => (row as Record<string, unknown>).dimensionValue === date) as Record<string, unknown> | undefined;
-  const newUsers = Number(day?.newRealDevNum ?? 0);
-  return { total: newUsers, list: [{ name: "巴西(BR)", value: newUsers }] };
+  const users = Number((reportType === "active_users" ? day?.realDevNum : day?.newRealDevNum) ?? 0);
+  return { total: users, list: [{ name: "巴西(BR)", value: users }] };
 }
 
 function build(options: {
@@ -112,6 +112,7 @@ function build(options: {
   bookRows?: unknown[];
   fetchReport?: ReturnType<typeof vi.fn>;
   fetchCountryReport?: ReturnType<typeof vi.fn>;
+  /** 按 `日期:口径`（如 `2026-09-26:new_users`）覆盖国家下钻的 `data`。 */
   countryData?: Record<string, Record<string, unknown>>;
   resolveBookMatches?: ReturnType<typeof vi.fn>;
   secret?: string;
@@ -125,9 +126,10 @@ function build(options: {
         ? { rows: options.bookRows ?? [], requestCount: 1 }
         : { rows: options.rows ?? [], requestCount: options.requestCount ?? 1 });
   const fetchCountryReport = options.fetchCountryReport
-    ?? vi.fn(async (input: { date: string }) => ({
+    ?? vi.fn(async (input: { date: string; reportType: string }) => ({
       date: input.date,
-      data: options.countryData?.[input.date] ?? defaultCountryData(options.rows ?? [], input.date),
+      reportType: input.reportType,
+      data: options.countryData?.[`${input.date}:${input.reportType}`] ?? defaultCountryData(options.rows ?? [], input.date, input.reportType),
       requestCount: 1,
     }));
   const resolveBookMatches = options.resolveBookMatches
@@ -178,11 +180,11 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     const outcome = await run(handler);
 
     expect(outcome.status).toBe("success");
-    // 请求数 = 按日 1 + 按书 1 + 国家 2（两天都有新用户）。
+    // 请求数 = 按日 1 + 按书 1 + 国家 4（两天都有激活与新用户，每天激活、新用户各一次）。
     expect(outcome.result).toMatchObject({
       batchStatus: "completed",
       reconciliationStatus: "matched",
-      requestCount: 4,
+      requestCount: 6,
       detailRowCount: 2,
       totalRowCount: 1,
       beginDate: "2026-09-20",
@@ -208,6 +210,8 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
       "country.createMany",
       "raw.upsert",
       "raw.upsert",
+      "raw.upsert",
+      "raw.upsert",
       "audit.create",
     ]);
 
@@ -227,7 +231,7 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
       endDate: new Date("2026-10-07T00:00:00.000Z"),
       requestFingerprint: fingerprint,
       status: "completed",
-      requestCount: 4,
+      requestCount: 6,
       detailRowCount: 2,
       totalRowCount: 1,
       reconciliationStatus: "matched",
@@ -242,7 +246,7 @@ describe("成功路径：全部业务写入在 protectedWrite 里，顺序 scope
     expect(batch.update.status).toBe("completed");
 
     const rawCalls = calls.filter((call) => call.model === "raw").map((call) => call.args);
-    expect(rawCalls).toHaveLength(5); // 按日 2 明细 + 1 总计；国家下钻 2 天
+    expect(rawCalls).toHaveLength(7); // 按日 2 明细 + 1 总计；国家下钻 2 天 × 激活 / 新用户
     expect(rawCalls[0]!.create).toMatchObject({
       syncBatchId: BATCH_ID, projectType: 1, dimension: "1", dimensionKey: "2026-09-26", isTotal: false,
       realDevNum: 1, newRealDevNum: 1, realDevNumRate: "1", realIncome: "28.88",
@@ -564,19 +568,24 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     expect(fetchReport).toHaveBeenCalledTimes(2);
     expect(fetchReport.mock.calls[1]![0]).toMatchObject({ token: TOKEN, beginDate: "2026-09-20", endDate: "2026-10-07", breakdown: "book" });
     expect(resolveBookMatches).toHaveBeenCalledWith(expect.anything(), ACCOUNT_ID, ["20125409", "25710418", "20125409"]);
-    // 国家只下钻新用户 > 0 的日期（09-27 没有新用户，不发请求），升序。
-    expect(fetchCountryReport.mock.calls.map((call) => (call[0] as { date: string }).date)).toEqual(["2026-09-26", "2026-09-28"]);
+    // 国家：激活 > 0 的日期查激活、新用户 > 0 的日期查新用户（09-27 只有激活），日期升序、同一天先激活后新用户。
+    expect(fetchCountryReport.mock.calls.map((call) => {
+      const input = call[0] as { date: string; reportType: string };
+      return `${input.date}:${input.reportType}`;
+    })).toEqual([
+      "2026-09-26:active_users", "2026-09-26:new_users", "2026-09-27:active_users", "2026-09-28:active_users", "2026-09-28:new_users",
+    ]);
     expect(outcome.result).toMatchObject({
       batchStatus: "completed",
-      requestCount: 1 + 1 + 2,
+      requestCount: 1 + 1 + 5,
       bookStatus: "completed",
       bookRowCount: 3,
       bookCount: 2,
       unmatchedBookCount: 1,
       ambiguousBookCount: 0,
       countryStatus: "completed",
-      countryDayCount: 2,
-      countryRowCount: 2,
+      countryDayCount: 3,
+      countryRowCount: 3,
     });
     expect(outcome.transactionTimeoutMs).toBe(60_000);
 
@@ -584,7 +593,7 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     const batch = calls.find((call) => call.model === "batch")!.args;
     expect(batch.create).toMatchObject({
       status: "completed", errorCode: null, errorMessage: null,
-      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 2,
+      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 3, countryActiveIncluded: true,
     });
 
     const bookDelete = calls.find((call) => call.model === "book" && call.method === "deleteMany")!.args;
@@ -616,16 +625,24 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     expect(calls.find((call) => call.model === "raw" && call.args.create.dimension === "1,8")!.args.where.dedupeKey).toBe(
       revenueRawDedupeKey({ kind: "detail", scopeId: SCOPE_ID, projectType: 1, dimension: "1,8", date: "2026-09-26" }),
     );
-    const countryRaws = raws.filter((raw) => raw.dimension === "country:1");
-    expect(countryRaws.map((raw) => [raw.dimensionKey, raw.newRealDevNum])).toEqual([["2026-09-26", 2], ["2026-09-28", 1]]);
-
-    const countryCreate = calls.find((call) => call.model === "country" && call.method === "createMany")!.args;
-    expect(countryCreate.data).toEqual([
-      { revenueSyncScopeId: SCOPE_ID, statDate: new Date("2026-09-26T00:00:00.000Z"), countryLabel: "巴西(BR)", countryCode: "BR", newRealDevNum: 2, sourceBatchId: BATCH_ID },
-      { revenueSyncScopeId: SCOPE_ID, statDate: new Date("2026-09-28T00:00:00.000Z"), countryLabel: "巴西(BR)", countryCode: "BR", newRealDevNum: 1, sourceBatchId: BATCH_ID },
+    const countryRaws = raws.filter((raw) => String(raw.dimension).startsWith("country:"));
+    expect(countryRaws.map((raw) => [raw.dimension, raw.dimensionKey, raw.newRealDevNum ?? null, raw.realDevNum ?? null])).toEqual([
+      ["country:0", "2026-09-26", null, 3],
+      ["country:1", "2026-09-26", 2, null],
+      ["country:0", "2026-09-27", null, 1],
+      ["country:0", "2026-09-28", null, 2],
+      ["country:1", "2026-09-28", 1, null],
     ]);
+
+    // 新用户与激活按国家合并成一行；只有激活的日子新用户记 0。
+    const countryCreate = calls.find((call) => call.model === "country" && call.method === "createMany")!.args;
+    const countryRow = (date: string, newRealDevNum: number, realDevNum: number) => ({
+      revenueSyncScopeId: SCOPE_ID, statDate: new Date(`${date}T00:00:00.000Z`), countryLabel: "巴西(BR)", countryCode: "BR",
+      newRealDevNum, realDevNum, sourceBatchId: BATCH_ID,
+    });
+    expect(countryCreate.data).toEqual([countryRow("2026-09-26", 2, 3), countryRow("2026-09-27", 0, 1), countryRow("2026-09-28", 1, 2)]);
     expect(calls.at(-1)!.args.data.afterSnapshot).toMatchObject({
-      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 2,
+      bookStatus: "completed", bookRowCount: 3, countryStatus: "completed", countryRowCount: 3, countryActiveIncluded: true,
     });
     noToken(calls);
   });
@@ -637,12 +654,12 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
       if (input.breakdown === "book") throw error;
       return { rows: accountRows, requestCount: 1 };
     });
-    const { handler, fetchCountryReport, resolveBookMatches } = build({ fetchReport });
+    const { handler, fetchCountryReport, resolveBookMatches } = build({ fetchReport, rows: accountRows });
     const outcome = await run(handler);
     expect(outcome.status).toBe("success");
     expect(resolveBookMatches).not.toHaveBeenCalled();
-    expect(fetchCountryReport).toHaveBeenCalledTimes(2);
-    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 2 + 2, bookStatus: "failed", countryStatus: "completed" });
+    expect(fetchCountryReport).toHaveBeenCalledTimes(5);
+    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 2 + 5, bookStatus: "failed", countryStatus: "completed" });
 
     const { calls } = await persist(outcome);
     expect(calls.filter((call) => call.model === "book")).toEqual([]);
@@ -653,25 +670,30 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     expect(batch.errorMessage).toContain("Book breakdown failed (upstream_rate_limited)");
   });
 
-  it("国家下钻第二天失败 → 立即停止后续请求，这一段整段 failed（第一天的结果也不写）；批次 partial_failed + country_report_failed", async () => {
+  it("国家下钻中途失败 → 立即停止后续请求，这一段整段 failed（之前成功的也不写）；批次 partial_failed + country_report_failed", async () => {
     const error = new NovelRevenueAdapterError("upstream_http_error", 500);
     error.requestCount = 1;
-    const fetchCountryReport = vi.fn(async (input: { date: string }) => {
+    const fetchCountryReport = vi.fn(async (input: { date: string; reportType: string }) => {
       if (input.date === "2026-09-28") throw error;
-      return { date: input.date, data: countryData([["巴西(BR)", 2]]), requestCount: 1 };
+      return { date: input.date, reportType: input.reportType, data: countryData([["巴西(BR)", 2]]), requestCount: 1 };
     });
     const rows = [...accountRows.slice(0, 3), detailRow("2026-09-29", { newRealDevNum: 4 })];
     const { handler } = build({ rows, bookRows: [], fetchCountryReport });
     const outcome = await run(handler);
-    expect(fetchCountryReport.mock.calls.map((call) => (call[0] as { date: string }).date)).toEqual(["2026-09-26", "2026-09-28"]);
-    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 1 + 2, countryStatus: "failed", countryRowCount: 0 });
+    // 09-28 的激活请求失败，09-28 的新用户与 09-29 都不再请求。
+    expect(fetchCountryReport.mock.calls.map((call) => {
+      const input = call[0] as { date: string; reportType: string };
+      return `${input.date}:${input.reportType}`;
+    })).toEqual(["2026-09-26:active_users", "2026-09-26:new_users", "2026-09-27:active_users", "2026-09-28:active_users"]);
+    expect(outcome.result).toMatchObject({ batchStatus: "partial_failed", requestCount: 1 + 1 + 4, countryStatus: "failed", countryRowCount: 0 });
 
     const { calls } = await persist(outcome);
     expect(calls.filter((call) => call.model === "country")).toEqual([]);
-    expect(calls.filter((call) => call.model === "raw" && call.args.create.dimension === "country:1")).toEqual([]);
+    expect(calls.filter((call) => call.model === "raw" && String(call.args.create.dimension).startsWith("country:"))).toEqual([]);
     const batch = calls[1]!.args.create;
-    expect(batch).toMatchObject({ errorCode: "country_report_failed", countryStatus: "failed", bookStatus: "completed" });
-    expect(batch.errorMessage).toContain("Country breakdown failed on 2026-09-28 (upstream_http_error)");
+    // 失败也算“这一段带了激活口径”——覆盖判定还要求 country_status = completed，所以不会被当成已同步。
+    expect(batch).toMatchObject({ errorCode: "country_report_failed", countryStatus: "failed", countryActiveIncluded: true, bookStatus: "completed" });
+    expect(batch.errorMessage).toContain("Country breakdown failed on 2026-09-28 (active_users, upstream_http_error)");
   });
 
   it("错误码优先级：总计对不上 > 按书失败 > 国家失败；备注里各段原因都在", async () => {
@@ -695,14 +717,14 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     const { handler } = build({
       rows: accountRows.slice(0, 3),
       bookRows: mismatchedBooks,
-      countryData: { "2026-09-26": countryData([["巴西(BR)", 1]], 2), "2026-09-28": countryData([["俄罗斯(RU)", 1]]) },
+      countryData: { "2026-09-26:new_users": countryData([["巴西(BR)", 1]], 2), "2026-09-28:new_users": countryData([["俄罗斯(RU)", 1]]) },
     });
     const outcome = await run(handler);
     const { calls } = await persist(outcome);
     const batch = calls[1]!.args.create;
     expect(batch).toMatchObject({ status: "completed", errorCode: null, bookStatus: "completed", countryStatus: "completed" });
     expect(batch.errorMessage).toContain("Per-book sums differ from the day totals on 1 day(s)");
-    expect(batch.errorMessage).toContain("Country sums differ from the day's new users on 1 day(s)");
+    expect(batch.errorMessage).toContain("Country sums differ from the day totals on 1 day(s)");
   });
 
   it("上游书行里不是网文 seriesKey 的（例如 2_ 前缀的短剧、维度不是 8）一律丢弃并计入备注，不写进按书表", async () => {
@@ -732,7 +754,9 @@ describe("v0.6.2 按书与国家：同一任务里在按日之后追加，各段
     expect(fetchReport).toHaveBeenCalledTimes(1);
     expect(fetchCountryReport).not.toHaveBeenCalled();
     const { calls } = await persist(outcome);
-    expect(calls[1]!.args.create).toMatchObject({ status: "failed", bookStatus: null, countryStatus: null, bookRowCount: 0, countryRowCount: 0 });
+    expect(calls[1]!.args.create).toMatchObject({
+      status: "failed", bookStatus: null, countryStatus: null, bookRowCount: 0, countryRowCount: 0, countryActiveIncluded: false,
+    });
     expect(calls.map((call) => call.model)).not.toContain("book");
     expect(calls.map((call) => call.model)).not.toContain("country");
   });

@@ -16,9 +16,12 @@
  * 激活用户不可跨日相加，所以汇总里不出现，只在单书按日明细里出现。书名、匹配结果、剧场取该书在区间内
  * **最近一天**的行（重新同步会刷新匹配）。剧场筛选：全部 / 某个剧场（channel_app）/ 未匹配。
  *
- * ── 国家 ──────────────────────────────────────────────────────────────────────
- * 区间内国家排行（新用户合计、占比），以及“国家 × 日期”矩阵：取排行前 N 个国家做列，其余并为“其他”。
- * 只有新用户 > 0 的日子才有国家行，所以矩阵只列有数据的日期。
+ * ── 国家（新用户 + 激活）────────────────────────────────────────────────────────
+ * 区间内国家排行：新用户合计、占比、日均激活（激活是当天活跃人数，同一用户多天活跃会重复计，不能跨日相加，
+ * 所以给“激活合计 ÷ 激活已同步天数”）。“国家 × 日期”矩阵按 `countryMetric`（缺省新用户 / active 激活）取该口径
+ * 排行前 N 个国家做列，其余并为“其他”，只列该口径当天有人数的日期。
+ * 激活单独判覆盖：要求批次 `country_status = 'completed'` 且 `country_active_included = true`；
+ * 早于激活口径的批次写下的国家行 `real_dev_num` 为 NULL，不计入激活——页面显示“激活未同步”，不当 0。
  *
  * 金额全程 Decimal / 十进制字符串，不经过 JS 浮点。
  */
@@ -78,11 +81,15 @@ export type RevenueBookSection = {
   detail: { book: RevenueBookSummaryRow; days: RevenueBookDayRow[] } | null;
 };
 
+export type RevenueCountryMetric = "new" | "active";
+
 export type RevenueCountryRankRow = {
   label: string; // 上游原文，如 "巴西(BR)"
   code: string | null;
   newUsers: number;
-  share: string | null; // 占比小数串，"0.4286"；合计为 0 时 null
+  share: string | null; // 新用户占比小数串，"0.4286"；新用户合计为 0 时 null
+  /** 日均激活（两位小数串）= 激活合计 ÷ 区间内激活已同步天数；激活一天都没同步时为 null。 */
+  avgActiveUsers: string | null;
 };
 
 export type RevenueCountryMatrix = {
@@ -92,9 +99,17 @@ export type RevenueCountryMatrix = {
 };
 
 export type RevenueCountrySection = {
+  /** 新用户口径的覆盖天数（批次 country_status = completed）。 */
   coveredDays: number;
   uncoveredDays: number;
+  /** 激活口径的覆盖天数（还要求 country_active_included = true）。 */
+  activeCoveredDays: number;
+  activeUncoveredDays: number;
   newUsersTotal: number;
+  /** 全部国家合计的日均激活；激活一天都没同步时为 null。 */
+  avgActiveUsersTotal: string | null;
+  /** 矩阵当前展示的口径。 */
+  metric: RevenueCountryMetric;
   ranking: RevenueCountryRankRow[];
   matrix: RevenueCountryMatrix;
 };
@@ -112,6 +127,8 @@ export type RevenueBreakdownQuery = {
   bookPage?: number | null;
   /** 单书按日明细：上游 seriesKey（`1_<数字>`）。 */
   book?: string | null;
+  /** 国家矩阵的口径：缺省 / 其它取值 = 新用户；"active" = 激活。 */
+  countryMetric?: string | null;
 };
 
 const Decimal = Prisma.Decimal;
@@ -147,54 +164,82 @@ export function countCoveredDays(
   return covered;
 }
 
+type CountryStatRow = { date: string; label: string; code: string | null; newUsers: number; activeUsers: number | null };
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /**
- * 国家排行 → 占比 + 矩阵（纯函数）。`rows` 是 (日期, 国家) 粒度的行；排行按新用户倒序、国名升序。
+ * 国家排行 + 矩阵（纯函数）。`rows` 是 (日期, 国家) 粒度的行，`activeUsers` 为 null 表示写这一行的批次没有拉激活
+ * （不计入激活）。排行按新用户倒序、激活合计倒序、国名升序。
  */
 export function buildCountrySection(input: {
-  rows: readonly { date: string; label: string; code: string | null; newUsers: number }[];
+  rows: readonly CountryStatRow[];
   coveredDays: number;
   uncoveredDays: number;
+  activeCoveredDays: number;
+  activeUncoveredDays: number;
+  metric?: RevenueCountryMetric;
   columns?: number;
 }): RevenueCountrySection {
-  const totals = new Map<string, { code: string | null; newUsers: number }>();
-  let grandTotal = 0;
+  const metric = input.metric ?? "new";
+  const totals = new Map<string, { code: string | null; newUsers: number; activeUsers: number }>();
+  let newTotal = 0;
+  let activeTotal = 0;
   for (const row of input.rows) {
-    const current = totals.get(row.label) ?? { code: row.code, newUsers: 0 };
+    const current = totals.get(row.label) ?? { code: row.code, newUsers: 0, activeUsers: 0 };
     current.newUsers += row.newUsers;
+    current.activeUsers += row.activeUsers ?? 0;
     totals.set(row.label, current);
-    grandTotal += row.newUsers;
+    newTotal += row.newUsers;
+    activeTotal += row.activeUsers ?? 0;
   }
-  const ranking = [...totals.entries()]
-    .map(([label, value]): RevenueCountryRankRow => ({
-      label,
-      code: value.code,
-      newUsers: value.newUsers,
-      share: grandTotal === 0 ? null : new Decimal(value.newUsers).div(grandTotal).toFixed(4),
-    }))
-    .sort((a, b) => b.newUsers - a.newUsers || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  const average = (sum: number) => (input.activeCoveredDays === 0 ? null : new Decimal(sum).div(input.activeCoveredDays).toFixed(2));
+  const ranked = [...totals.entries()]
+    .map(([label, value]) => ({ label, ...value }))
+    .sort((a, b) => b.newUsers - a.newUsers || b.activeUsers - a.activeUsers || compareText(a.label, b.label));
+  const ranking = ranked.map((row): RevenueCountryRankRow => ({
+    label: row.label,
+    code: row.code,
+    newUsers: row.newUsers,
+    share: newTotal === 0 ? null : new Decimal(row.newUsers).div(newTotal).toFixed(4),
+    avgActiveUsers: average(row.activeUsers),
+  }));
 
+  // 矩阵：只取当前口径里人数 > 0 的国家与日期。
+  const valueOf = (row: CountryStatRow) => (metric === "active" ? row.activeUsers ?? 0 : row.newUsers);
   const limit = input.columns ?? REVENUE_COUNTRY_MATRIX_COLUMNS;
-  const columns = ranking.slice(0, limit).map((row) => ({ label: row.label, code: row.code }));
+  const metricRanked = [...ranked]
+    .filter((row) => (metric === "active" ? row.activeUsers : row.newUsers) > 0)
+    .sort((a, b) => (metric === "active" ? b.activeUsers - a.activeUsers : b.newUsers - a.newUsers) || compareText(a.label, b.label));
+  const columns = metricRanked.slice(0, limit).map((row) => ({ label: row.label, code: row.code }));
   const columnIndex = new Map(columns.map((column, index) => [column.label, index]));
   const byDate = new Map<string, { values: number[]; other: number; total: number }>();
   for (const row of input.rows) {
+    const value = valueOf(row);
+    if (value === 0) continue;
     const entry = byDate.get(row.date) ?? { values: columns.map(() => 0), other: 0, total: 0 };
     const index = columnIndex.get(row.label);
-    if (index === undefined) entry.other += row.newUsers;
-    else entry.values[index] += row.newUsers;
-    entry.total += row.newUsers;
+    if (index === undefined) entry.other += value;
+    else entry.values[index] += value;
+    entry.total += value;
     byDate.set(row.date, entry);
   }
   const matrixRows = [...byDate.entries()]
     .map(([date, entry]) => ({ date, ...entry }))
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    .sort((a, b) => compareText(b.date, a.date));
 
   return {
     coveredDays: input.coveredDays,
     uncoveredDays: input.uncoveredDays,
-    newUsersTotal: grandTotal,
+    activeCoveredDays: input.activeCoveredDays,
+    activeUncoveredDays: input.activeUncoveredDays,
+    newUsersTotal: newTotal,
+    avgActiveUsersTotal: average(activeTotal),
+    metric,
     ranking,
-    matrix: { columns, hasOther: ranking.length > columns.length, rows: matrixRows },
+    matrix: { columns, hasOther: metricRanked.length > columns.length, rows: matrixRows },
   };
 }
 
@@ -226,8 +271,19 @@ function emptyView(query: RevenueBreakdownQuery, dayCount: number): RevenueBreak
       rows: [],
       detail: null,
     },
-    countries: buildCountrySection({ rows: [], coveredDays: 0, uncoveredDays: dayCount }),
+    countries: buildCountrySection({
+      rows: [],
+      coveredDays: 0,
+      uncoveredDays: dayCount,
+      activeCoveredDays: 0,
+      activeUncoveredDays: dayCount,
+      metric: countryMetricOf(query),
+    }),
   };
+}
+
+function countryMetricOf(query: RevenueBreakdownQuery): RevenueCountryMetric {
+  return query.countryMetric === "active" ? "active" : "new";
 }
 
 type BookLatestRow = {
@@ -290,16 +346,20 @@ export async function loadRevenueBreakdowns(db: PrismaClient, query: RevenueBrea
   };
   const [bookBatches, countryBatches, countryRows] = await Promise.all([
     db.revenueSyncBatch.findMany({ where: { ...overlapping, bookStatus: "completed" }, select: { beginDate: true, endDate: true } }),
-    db.revenueSyncBatch.findMany({ where: { ...overlapping, countryStatus: "completed" }, select: { beginDate: true, endDate: true } }),
+    db.revenueSyncBatch.findMany({
+      where: { ...overlapping, countryStatus: "completed" },
+      select: { beginDate: true, endDate: true, countryActiveIncluded: true },
+    }),
     db.revenueCountryDailyStat.findMany({
       where: { revenueSyncScopeId: scope.id, statDate: range },
-      select: { statDate: true, countryLabel: true, countryCode: true, newRealDevNum: true },
+      select: { statDate: true, countryLabel: true, countryCode: true, newRealDevNum: true, realDevNum: true },
     }),
   ]);
   const toRanges = (batches: Array<{ beginDate: Date; endDate: Date }>) =>
     batches.map((batch) => ({ beginDate: isoDate(batch.beginDate), endDate: isoDate(batch.endDate) }));
   const bookCovered = countCoveredDays(dateFrom, dateTo, toRanges(bookBatches));
   const countryCovered = countCoveredDays(dateFrom, dateTo, toRanges(countryBatches));
+  const activeCovered = countCoveredDays(dateFrom, dateTo, toRanges(countryBatches.filter((batch) => batch.countryActiveIncluded)));
 
   const filterSql = filter === null
     ? Prisma.empty
@@ -413,9 +473,13 @@ export async function loadRevenueBreakdowns(db: PrismaClient, query: RevenueBrea
         label: row.countryLabel,
         code: row.countryCode,
         newUsers: row.newRealDevNum,
+        activeUsers: row.realDevNum,
       })),
       coveredDays: countryCovered,
       uncoveredDays: dayCount - countryCovered,
+      activeCoveredDays: activeCovered,
+      activeUncoveredDays: dayCount - activeCovered,
+      metric: countryMetricOf(query),
     }),
   };
 }

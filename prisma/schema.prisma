@@ -1518,6 +1518,9 @@ model RevenueSyncBatch {
   /// v0.6.2 新增用户国家（GetCountryReport 逐日下钻）这一段的结果，取值同 book_status。
   countryStatus               String?   @map("country_status") @db.VarChar(32)
   countryRowCount             Int       @default(0) @map("country_row_count")
+  /// v0.6.2 追加（迁移 20261017180000）：本批次国家这一段是否连激活口径一起拉了。false = 只拉过新用户或没拉；
+  /// 激活的覆盖判定要求 country_status = completed 且本列为 true。
+  countryActiveIncluded       Boolean   @default(false) @map("country_active_included")
   startedAt                   DateTime? @map("started_at") @db.Timestamptz(6)
   finishedAt                  DateTime? @map("finished_at") @db.Timestamptz(6)
   createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1615,7 +1618,7 @@ model RevenueBookDailyStat {
   @@map("revenue_book_daily_stat")
 }
 
-/// v0.6.2 新增用户国家每日分布（GetCountryReport 对日期行下钻，countryReportType=1）。
+/// v0.6.2 国家每日分布（GetCountryReport 对日期行下钻）：新用户（countryReportType=1）与激活（=0）。
 /// 身份 = 作用域 × 日期 × 上游国家名原文（如 `巴西(BR)`）；`country_code` 是从中拆出的 ISO 二字码。
 /// 同一区间重新同步时整段替换（先删后插）。
 model RevenueCountryDailyStat {
@@ -1625,6 +1628,8 @@ model RevenueCountryDailyStat {
   countryLabel       String   @map("country_label") @db.VarChar(128)
   countryCode        String?  @map("country_code") @db.VarChar(8)
   newRealDevNum      Int      @map("new_real_dev_num")
+  /// v0.6.2 追加（迁移 20261017180000）：该国家当天的激活用户数（countryReportType=0）。NULL = 写这一行的批次没有拉激活。
+  realDevNum         Int?     @map("real_dev_num")
   sourceBatchId      String   @map("source_batch_id") @db.Uuid
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

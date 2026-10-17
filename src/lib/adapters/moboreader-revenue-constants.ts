@@ -26,10 +26,11 @@ export const NOVEL_REVENUE_DIMENSION_BOOK = "8" as const;
 export const NOVEL_REVENUE_BOOK_DIMENSIONS = Object.freeze(["1", "8"] as const);
 
 /**
- * v0.6.2 新增用户国家：`POST /api/Report/GetCountryReport`，对日报的某一行下钻（上游前端就是这么调的）。
+ * v0.6.2 国家分布：`POST /api/Report/GetCountryReport`，对日报的某一行下钻（上游前端就是这么调的）。
  * 只按「日期行」下钻（总计行 dimension=0 上游返回空列表）；`countryReportType`：0 激活、1 新用户、2 收入。
- * 本期只取新用户（Owner 10-17：看新增用户来自哪个国家）。
+ * 本期取新用户与激活（Owner 10-17：先看新增用户来自哪个国家，随后追加“激活也看看”）；收入不取。
  */
 export const NOVEL_REVENUE_COUNTRY_REPORT_PATH = "/api/Report/GetCountryReport";
 export const NOVEL_REVENUE_COUNTRY_ENDPOINT = `${NOVEL_REVENUE_ORIGIN}${NOVEL_REVENUE_COUNTRY_REPORT_PATH}`;
+export const NOVEL_REVENUE_COUNTRY_REPORT_TYPE_ACTIVE_USERS = 0 as const;
 export const NOVEL_REVENUE_COUNTRY_REPORT_TYPE_NEW_USERS = 1 as const;

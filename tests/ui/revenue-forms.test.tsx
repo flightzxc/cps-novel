@@ -128,7 +128,7 @@ describe("SyncForm · 确认弹窗", () => {
     expect(dialogCalls(dialog()).showModal).toBe(1);
     expect(dialog().open).toBe(true);
     expect(screen.getByTestId("revenue-sync-confirm-body").textContent).toBe(
-      "将向上游发起只读查询，同步 2026-10-02 ~ 2026-10-08 共 7 天（按日、按书各一次，有新用户的日期再逐日查国家分布）。",
+      "将向上游发起只读查询，同步 2026-10-02 ~ 2026-10-08 共 7 天（按日、按书各一次；国家分布按天查，有激活的日期查激活、有新用户的日期再查新用户）。",
     );
     expect(actions.enqueueRevenueSyncAction).not.toHaveBeenCalled();
 

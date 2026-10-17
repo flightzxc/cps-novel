@@ -437,7 +437,7 @@ export function reconcileBookBreakdown(
   return mismatched.sort();
 }
 
-// ── v0.6.2 新增用户国家（GetCountryReport）─────────────────────────────────────────────────
+// ── v0.6.2 国家分布（GetCountryReport；新用户 / 激活两种口径的响应形状相同）──────────────────
 
 /** 上游国家名形如 `巴西(BR)`：中文国名 + 半角括号里的 ISO 3166-1 二字码。 */
 const COUNTRY_LABEL = /^(.*?)\s*\(\s*([A-Za-z]{2})\s*\)\s*$/;
@@ -450,15 +450,16 @@ export interface ParsedRevenueCountry {
   readonly code: string | null;
   /** 去掉二字码后的国名；拆不出时等于 label。 */
   readonly name: string;
-  readonly newUsers: number;
+  /** 该国家当天的人数（上游 `value`）：新用户口径是新用户数，激活口径是激活用户数。 */
+  readonly users: number;
 }
 
 export interface ParsedNovelCountryReport {
   readonly date: string;
-  /** 上游 `data.total`（该日新用户总数）；缺失 / 无法解析为 null。 */
+  /** 上游 `data.total`（该日该口径的总人数）；缺失 / 无法解析为 null。 */
   readonly total: number | null;
   readonly countries: readonly ParsedRevenueCountry[];
-  /** 国家行新用户合计。 */
+  /** 国家行人数合计。 */
   readonly countrySum: number;
   /** 被丢弃的行：不是对象、`name` 为空、`value` 不是非负整数。 */
   readonly droppedRowCount: number;
@@ -470,7 +471,7 @@ export interface ParsedNovelCountryReport {
 
 export function parseNovelCountryReport(date: string, data: Readonly<Record<string, unknown>>): ParsedNovelCountryReport {
   const list = Array.isArray(data.list) ? data.list : [];
-  const byLabel = new Map<string, { code: string | null; name: string; newUsers: number }>();
+  const byLabel = new Map<string, { code: string | null; name: string; users: number }>();
   let droppedRowCount = 0;
   let duplicateRowCount = 0;
 
@@ -489,14 +490,14 @@ export function parseNovelCountryReport(date: string, data: Readonly<Record<stri
     const existing = byLabel.get(label);
     if (existing) {
       duplicateRowCount += 1;
-      existing.newUsers += value;
+      existing.users += value;
       continue;
     }
     const match = COUNTRY_LABEL.exec(label);
     byLabel.set(label, {
       code: match ? match[2]!.toUpperCase() : null,
       name: match && match[1]!.trim() ? match[1]!.trim() : label,
-      newUsers: value,
+      users: value,
     });
   }
 
@@ -505,7 +506,7 @@ export function parseNovelCountryReport(date: string, data: Readonly<Record<stri
     date,
     total: toIntegerOrNull(data.total),
     countries,
-    countrySum: countries.reduce((sum, country) => sum + country.newUsers, 0),
+    countrySum: countries.reduce((sum, country) => sum + country.users, 0),
     droppedRowCount,
     duplicateRowCount,
     raw: toRawPayload(data as Record<string, unknown>),

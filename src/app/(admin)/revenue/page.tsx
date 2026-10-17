@@ -105,8 +105,20 @@ export default async function RevenuePage({
         />
         <SummaryCards summary={view.summary} novelAppCount={view.account?.novelAppCount ?? null} />
         <DailyTable days={view.days} />
-        <BookTable section={breakdowns.books} range={{ dateFrom: view.range.dateFrom, dateTo: view.range.dateTo }} />
-        <CountrySection section={breakdowns.countries} />
+        <BookTable
+          section={breakdowns.books}
+          range={{ dateFrom: view.range.dateFrom, dateTo: view.range.dateTo, countryMetric: breakdownParams.countryMetric }}
+        />
+        <CountrySection
+          section={breakdowns.countries}
+          links={{
+            dateFrom: view.range.dateFrom,
+            dateTo: view.range.dateTo,
+            theater: breakdowns.books.filter,
+            bookPage: breakdowns.books.page,
+            book: breakdowns.books.detail?.book.seriesKey ?? null,
+          }}
+        />
         <BatchTable batches={view.batches} />
       </div>
     </AdminShell>

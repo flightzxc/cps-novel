@@ -8,7 +8,8 @@ import { revenueHref } from "../_lib/breakdown-params";
 import { bookMatchView, breakdownUncoveredNotice } from "../_lib/copy";
 import { formatCount, formatRatioPercent, formatUsd, PLACEHOLDER } from "../_lib/format";
 
-type Range = { dateFrom: string; dateTo: string };
+/** 区间 + 需要在本区块链接里原样带上的其它区块状态（国家矩阵口径）。 */
+type Range = { dateFrom: string; dateTo: string; countryMetric?: "active" | null };
 
 function BookCell({ row }: { row: RevenueBookSummaryRow }) {
   return (

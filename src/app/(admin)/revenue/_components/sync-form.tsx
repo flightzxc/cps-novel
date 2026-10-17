@@ -181,7 +181,7 @@ export function SyncForm({
         title="确认发起同步"
         body={
           <p data-testid="revenue-sync-confirm-body">
-            将向上游发起只读查询，同步 {begin} ~ {end} 共 {spanDays ?? "—"} 天（按日、按书各一次，有新用户的日期再逐日查国家分布）。
+            将向上游发起只读查询，同步 {begin} ~ {end} 共 {spanDays ?? "—"} 天（按日、按书各一次；国家分布按天查，有激活的日期查激活、有新用户的日期再查新用户）。
           </p>
         }
         confirmLabel="确认同步"

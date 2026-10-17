@@ -172,3 +172,54 @@ describe("v0.6.2 按书 / 国家字典（静态）", () => {
     }
   });
 });
+
+describe("v0.6.2 追加·国家激活口径迁移（静态）", () => {
+  const ACTIVE_MIGRATION = "20261017180000_revenue_country_active_users";
+  const activeCode = read(`prisma/migrations/${ACTIVE_MIGRATION}/migration.sql`).replace(/^\s*--.*$/gm, "");
+  const activeCheck = (name: string) => {
+    const match = activeCode.match(new RegExp(`ADD CONSTRAINT "${name}"\\s*\\n\\s*CHECK \\(([\\s\\S]*?)\\);`));
+    if (!match) throw new Error(`No CHECK constraint "${name}"`);
+    return match[1]!.replace(/\s+/g, " ").trim();
+  };
+
+  it("只新增两列与两条 CHECK：不建表、不删、不改已有列、不动数据", () => {
+    expect(activeCode).not.toMatch(/CREATE TABLE|\bDROP\b|\bRENAME\b|ALTER COLUMN/i);
+    expect(activeCode).not.toMatch(/\bINSERT\s+INTO\b|^\s*UPDATE\s+"|\bDELETE\s+FROM\b/im);
+    const added = [...activeCode.matchAll(/ALTER TABLE "([a-z_]+)" ADD COLUMN\s+"([a-z_]+)" ([^;\n]+);/g)].map((match) => [match[1], match[2], match[3]!.trim()]);
+    expect(added).toEqual([
+      ["revenue_sync_batch", "country_active_included", "BOOLEAN NOT NULL DEFAULT false"],
+      ["revenue_country_daily_stat", "real_dev_num", "INTEGER"],
+    ]);
+    expect(activeCheck("revenue_sync_batch_country_active_shape_check")).toBe(`"country_active_included" = false OR "country_status" IS NOT NULL`);
+    expect(activeCheck("revenue_country_daily_stat_active_users_check")).toBe(`"real_dev_num" IS NULL OR "real_dev_num" >= 0`);
+  });
+
+  it("紧跟在 20261017120000 之后；20261017120000 自己的国家表定义里没有激活列（那一条逐字节不动）", () => {
+    const names = readdirSync(path.resolve(root, "prisma/migrations"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(names.indexOf(ACTIVE_MIGRATION)).toBe(names.indexOf(MIGRATION) + 1);
+    expect(migrationCode).not.toContain('"real_dev_num" INTEGER,\n    "source_batch_id"');
+    expect(migrationCode).not.toContain("country_active_included");
+  });
+
+  it("字典新增 4 条（2 字段 + 2 约束），读写角色与表级 grants 一致；grants 没有为它们新增列级授权", () => {
+    const records = read("docs/governance/database-schema-dictionary.jsonl")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((record) => record.introduced_in_migration === ACTIVE_MIGRATION);
+    expect(records.map((record) => record.stable_key).sort()).toEqual([
+      "db:public:revenue_country_daily_stat:real_dev_num",
+      "db:public:revenue_country_daily_stat:revenue_country_daily_stat_active_users_check",
+      "db:public:revenue_sync_batch:country_active_included",
+      "db:public:revenue_sync_batch:revenue_sync_batch_country_active_shape_check",
+    ]);
+    for (const record of records) {
+      expect(record.read_roles).toEqual(["web_app", "worker_app", "analyst_ro"]);
+      expect(record.write_roles).toEqual(["migration_owner", "worker_app"]);
+    }
+    expect(read("infra/postgres/grants.sql")).not.toMatch(/real_dev_num|country_active_included/);
+  });
+});
