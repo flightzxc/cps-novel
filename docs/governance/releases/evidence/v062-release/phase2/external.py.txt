@@ -1,0 +1,39 @@
+import datetime,hashlib,json,pathlib,subprocess,urllib.parse
+
+out=pathlib.Path('.tmp/v062-release/phase2')
+baseline=json.loads((out/'baseline.json').read_text())
+ledger=out/'external-requests.jsonl'
+assert not ledger.exists()
+paths=[('book',baseline['data']['sampleBookPath']),('sitemap-index','/sitemap.xml'),('health','/api/health')]
+results=[]
+retry_used=False
+for kind,path in paths:
+    while True:
+        count=len(ledger.read_text().splitlines()) if ledger.exists() else 0
+        assert count<4,'external_request_budget_exhausted'
+        row={'sequence':count+1,'kind':kind,'path':path,'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'proxy':'http://127.0.0.1:7899','follow_redirects':False}
+        with ledger.open('a') as f:f.write(json.dumps(row)+'\n')
+        url='https://pulsenovels.com'+urllib.parse.quote(path,safe='/%-')
+        r=subprocess.run(['curl','--silent','--show-error','--compressed','--proxy','http://127.0.0.1:7899','--noproxy','','--retry','0','--connect-timeout','15','--max-time','40','--write-out','\n%{http_code}',url],capture_output=True)
+        if r.returncode:
+            results.append({**row,'curlExit':r.returncode,'status':'network_failed'})
+            (out/'external-results.json').write_text(json.dumps({'status':'RUNNING','results':results},indent=2)+'\n')
+            if not retry_used and count+1<4:
+                retry_used=True
+                continue
+            raise RuntimeError('external_network_failed exit='+str(r.returncode))
+        body,status=r.stdout.rsplit(b'\n',1);status=int(status)
+        assert status==200,(kind,status)
+        checks={}
+        if kind=='sitemap-index':assert b'<sitemapindex' in body
+        if kind=='health':
+            h=json.loads(body)
+            assert h['ok'] and h['build']['version']=='0.6.2' and h['build']['commit']=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+            assert h['metadataConsistency']['status']=='passed'
+            checks={'version':h['build']['version'],'commit':h['build']['commit'],'metadataConsistency':'passed'}
+        result={**row,'status':status,'bodySha256':hashlib.sha256(body).hexdigest(),**checks}
+        results.append(result)
+        print('EXTERNAL='+json.dumps(result),flush=True)
+        break
+(out/'external-results.json').write_text(json.dumps({'status':'PASS','requests':len(results),'results':results,'rawBodiesSaved':False,'revenueSyncTriggered':False},indent=2)+'\n')
+print('EXTERNAL_ACCEPTANCE=PASS requests='+str(len(results)))

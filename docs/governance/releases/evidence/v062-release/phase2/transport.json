@@ -1,0 +1,11 @@
+{
+  "bundle_ref": "release/v0.6.2-2026-10-17",
+  "bundle_prerequisite": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f",
+  "approved_checkout": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "files": [
+    "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/cps-novel-0.6.2-fbc0016.tar.zst",
+    "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/fbc00167f34cefde6d3f079f8573700ea9e86245.json",
+    "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/cps-novel-code-fbc0016.bundle",
+    "/Users/chenweifeng/Documents/cps海阅/release-v0.6.2/.tmp/preproduction-archive/cps-novel-0.6.2-fbc0016.tar.zst.sha256"
+  ]
+}

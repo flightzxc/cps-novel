@@ -1,0 +1,11 @@
+ENV_BEFORE_SHA256=23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509
+APPROVED_FLAGS={"FEATURE_SITEMAP_AUTO_REFRESH": "true", "FEATURE_INDEXNOW_OUTBOX": "true", "INDEXNOW_OUTBOX_ALLOW_WRITE": "true", "FEATURE_INDEXNOW_DELIVERY": "true", "INDEXNOW_DELIVERY_ALLOW_WRITE": "true", "PREPROD_APPROVED_OPEN_WRITE_GATES": "catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery", "WORKER_TASK_ALLOWLIST": "credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1", "WORKER_LIGHT_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery"}
+HEALTH_BEFORE={"ok": true, "status": "healthy", "build": {"version": "0.6.1", "commit": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f", "builtAt": "2026-10-16T06:52:34Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.6.1", "commit": "cb255e0f1c93041eda6aefeefbb541d7eddfc15f"}}, "database": {"status": "passed", "reason": null, "durationMs": 2}, "reasons": []}
+POSTGRES_BEFORE_ID=691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e
+NGINX_BEFORE={"/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e", "/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe"}
+TRAFFIC_SAMPLE={"at": "2026-10-17T12:45:35.652938+00:00", "publicEstablished": 2}
+TRAFFIC_SAMPLE={"at": "2026-10-17T12:45:45.659915+00:00", "publicEstablished": 2}
+TRAFFIC_SAMPLE={"at": "2026-10-17T12:45:55.667855+00:00", "publicEstablished": 4}
+Traceback (most recent call last):
+  File "<stdin>", line 11, in <module>
+AssertionError: LOW_TRAFFIC_WINDOW_NOT_READY

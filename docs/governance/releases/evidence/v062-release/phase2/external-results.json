@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "requests": 3,
+  "results": [
+    {
+      "sequence": 1,
+      "kind": "book",
+      "path": "/novel/contract-baby-and-billionaire-pg15q11wz",
+      "at": "2026-10-17T12:50:10.127948+00:00",
+      "proxy": "http://127.0.0.1:7899",
+      "follow_redirects": false,
+      "status": 200,
+      "bodySha256": "089d18fdaf00f872a7a189389af74628d8fe0651d74ba745b8950e345e333433"
+    },
+    {
+      "sequence": 2,
+      "kind": "sitemap-index",
+      "path": "/sitemap.xml",
+      "at": "2026-10-17T12:50:12.088597+00:00",
+      "proxy": "http://127.0.0.1:7899",
+      "follow_redirects": false,
+      "status": 200,
+      "bodySha256": "5025b9cbebf43e36b2fe67f635f130a230a1150a5439fce33599c989112579f7"
+    },
+    {
+      "sequence": 3,
+      "kind": "health",
+      "path": "/api/health",
+      "at": "2026-10-17T12:50:13.671005+00:00",
+      "proxy": "http://127.0.0.1:7899",
+      "follow_redirects": false,
+      "status": 200,
+      "bodySha256": "19aa44131dc24b1dadb5b9401a9201ea9ffcc419024657eccc7deab02ad1ee01",
+      "version": "0.6.2",
+      "commit": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+      "metadataConsistency": "passed"
+    }
+  ],
+  "rawBodiesSaved": false,
+  "revenueSyncTriggered": false
+}

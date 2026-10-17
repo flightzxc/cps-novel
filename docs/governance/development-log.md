@@ -39,6 +39,15 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-17 21:48 - codex（GPT-6，正式发版执行；JST / +0800为20:48）
+
+**变更类型**：海阅 v0.6.2 **PATCH** 正式站部署，仅haiyue-vps；Owner本会话明确“批准部署”，原RELEASE=PASS/exit0，维护OFF。后台能力已部署，运营最近30天手动收入同步及页面验收待Owner操作。
+**背景**：Owner10-17要求运营看用户来自哪本书、畅读新增用户来自哪个国家，后追加“激活也看看吧”。来源feat/v062-revenue-book-country，经integration/v0.6.2-2026-10-17的2114062c、004c81c0两次no-ff合入；固定Final fbc00167f34cefde6d3f079f8573700ea9e86245，tree 0b13b516b1f50df286f2775f281a83403669a790。
+**变更内容**：按书看新用户和分成收入、区间汇总与单书按日，PlotNovel同表加剧场列及筛选；国家看新用户和激活、区间排行与国家×日期，本期不做收入按国家或书×国家。主控10-17原上游只读实测共7次，核对seriesId映射和countryReportType=0激活/1新用户；本发版会话未重复生产上游请求。Owner追加激活后另起20261017180000只新增迁移，已合入20261017120000逐字节不动；原27条亦不动。B-48将p1-05b固定postgres:16.14、已有镜像不拉取（本轮pull事件0）；v0.6.1八份证据脚本改.ts.txt，修复末端tsc。
+**影响范围**：仅后台/revenue，沿用changdu.revenue_sync.v1；迁移27→29、表58→60，字典1349→1401/active1279→1331。worker_app对两张新表四项权限，web_app/analyst_ro只读；无新环境变量、任务类型或依赖变化。公开网址冻结，任务白名单、nginx、证书、DNS、业务开关保持。
+**验证方式**：全量11,492通过/0失败/无Unhandled，p1-05b真实库11,502通过、37运行器及全部附加门禁PASS；最终归档SHA256 8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96，运输/原--load/OCI/Final/tree PASS。维护JST21:47:57.357965–21:48:47.521232，共50.163267秒；新迁移76.389/7.815ms，29 finished/0 rolled_back、60表。新表权限、5个批次列及存量默认值、国家可空激活列与CHECK读回PASS；收入批次22/日统计9不变，新表0行。health0.6.2/Final/metadata passed，五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0，IndexNow及写闸/白名单/nginx/备份PASS，公网3/4全部200。env只改两版本行、脱敏diff/cmp PASS，在线逻辑备份和restore-list PASS。初次维护前采样2/2/4未满足窗口，等待后2/1/0按原阈值通过；自写只读SSH探针引号错误已修复。第一阶段Docker ECONNRESET一次授权重试成功，证据JSON脱敏包装修复记录保留。
+**后续待办**：Owner登录2FA后在/revenue手动同步最近30天，确认两块统计及国家×日期口径切换，再通知Codex作只读对账（批次状态、书匹配分布、国家逐日合计、请求数、耗时和worker错误）。未代触发收入同步。annotated v0.6.2固定Final、原生成器core.abbrev=7 CHANGELOG、PATCH台账及本唯一日志完成；Notion同步回读待补。回滚仅v0.6.1 Final cb255e0f1c93041eda6aefeefbb541d7eddfc15f，兼容标志须Owner回滚时明确批准，不down、不改nginx。完整[发布记录](releases/v0.6.2-preproduction.md)。
+
 ### 2026-10-16 22:09 - codex（GPT-6，正式发版执行；时间 +0800 / JST 23:09）
 
 **变更类型**：海阅 v0.6.1 PATCH 正式站部署，仅 haiyue-vps。Owner 明确批准第二阶段和第三阶段甲；14:09:04Z 原 RELEASE=PASS / exit0，维护OFF。补发与定向试读 apply 仍须 Owner 看过只读预演后说“批准补发”。

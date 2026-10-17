@@ -1,0 +1,8 @@
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+DO $$ BEGIN
+IF EXISTS (SELECT 1 FROM generic_task b WHERE b.status IN ('pending','processing') AND EXISTS (SELECT 1 FROM generic_task s WHERE s.parent_task_id=b.id AND s.task_type='promo_link.claim.v1')) OR EXISTS (SELECT 1 FROM generic_task WHERE task_type='promo_link.claim.v1' AND status IN ('pending','processing')) OR EXISTS (SELECT 1 FROM side_effect_intent WHERE status IN ('prepared','claim_retry_blocked')) OR EXISTS (SELECT 1 FROM generic_task_item WHERE status='processing') OR EXISTS (SELECT 1 FROM channel_sync_task_item WHERE status='processing') THEN RAISE EXCEPTION 'PUBLIC_CUTOVER_PAUSE_GATE=FAIL'; END IF;
+IF EXISTS (SELECT 1 FROM generic_task WHERE (task_type LIKE 'article.publish.%' OR task_type LIKE 'article.generate.%') AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'ARTICLE_INFLIGHT=FAIL'; END IF;
+IF EXISTS (SELECT 1 FROM generic_task WHERE task_type='moboreader.preview_refresh.v1' AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'PREVIEW_INFLIGHT=FAIL'; END IF;
+IF EXISTS (SELECT 1 FROM generic_task WHERE task_type='changdu.revenue_sync.v1' AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'REVENUE_INFLIGHT=FAIL'; END IF;
+END $$;
+SELECT 'PUBLIC_CUTOVER_PAUSE_GATE=PASS';

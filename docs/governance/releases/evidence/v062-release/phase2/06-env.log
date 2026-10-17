@@ -1,0 +1,9 @@
+--- /opt/cps-novel/shared/env/preprod.env.bak-v062-20261017T124744Z
++++ /opt/cps-novel/shared/env/preprod.env
+@@ -1,2 +1,2 @@
+-APP_VERSION=0.6.1
+-NEXT_PUBLIC_BUILD_VERSION=v0.6.1
++APP_VERSION=0.6.2
++NEXT_PUBLIC_BUILD_VERSION=v0.6.2
+{"envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v062-20261017T124744Z", "beforeSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509", "afterSha256": "0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b", "otherBytesCmp": "PASS", "allowlists": "UNCHANGED"}
+ENV_TWO_LINES_ONLY=PASS

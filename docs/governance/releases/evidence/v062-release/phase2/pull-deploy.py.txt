@@ -1,0 +1,12 @@
+import pathlib,json,re,subprocess
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+b=pathlib.Path('/opt/cps-novel/logs/release-v0.6.2-fbc0016')
+e=pathlib.Path(str(b)+'.exit.json')
+if not e.exists():
+ print('DEPLOY_STATUS=RUNNING')
+ if pathlib.Path(str(b)+'.timeline.json').exists():print(pathlib.Path(str(b)+'.timeline.json').read_text())
+else:
+ x=json.loads(e.read_text());print('DEPLOY_EXIT='+str(x['exit']))
+ for suffix in ['.log','.timeline.json','.exit.json']:
+  print('BEGIN_FILE='+suffix);print(re.sub(r'0x4[A-Za-z0-9_-]+','[REDACTED]',pathlib.Path(str(b)+suffix).read_text()));print('END_FILE='+suffix)
+ assert x['exit']==0

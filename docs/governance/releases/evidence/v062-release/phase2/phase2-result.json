@@ -1,0 +1,324 @@
+{
+  "status": "deployed_technical_acceptance_pass_owner_sync_pending",
+  "host": "haiyue-vps",
+  "version": "0.6.2",
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "tree": "0b13b516b1f50df286f2775f281a83403669a790",
+  "maintenanceStartUtc": "2026-10-17T12:47:57.357965+00:00",
+  "maintenanceEndUtc": "2026-10-17T12:48:47.521232+00:00",
+  "maintenanceStartJst": "2026-10-17T21:47:57.357965+09:00",
+  "maintenanceEndJst": "2026-10-17T21:48:47.521232+09:00",
+  "maintenanceSeconds": 50.163267,
+  "newMigrations": [
+    {
+      "name": "20261017120000_revenue_book_country_breakdown",
+      "checksum": "918fb95b2b89e5d530316599cffb84601fc17061d41a9e39e351ec09ed699011",
+      "finished": true,
+      "durationMs": 76.389,
+      "rolled_back": false
+    },
+    {
+      "name": "20261017180000_revenue_country_active_users",
+      "checksum": "d8137148b02d2eb500c9e722a751f2cdaa0e4f46dbb4ee27ec8322ce3e0a8c38",
+      "finished": true,
+      "durationMs": 7.815,
+      "rolled_back": false
+    }
+  ],
+  "migrationCount": 29,
+  "tableCount": 60,
+  "rowCounts": {
+    "revenueBatchRows": 22,
+    "revenueDailyRows": 9,
+    "bookRows": 0,
+    "countryRows": 0
+  },
+  "oldBatchDefaultsOk": true,
+  "grants": [
+    {
+      "role": "worker_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "SELECT"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "INSERT"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": true,
+      "privilege": "DELETE"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "DELETE"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_book_daily_stat",
+      "allowed": false,
+      "privilege": "DELETE"
+    },
+    {
+      "role": "worker_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": true,
+      "privilege": "DELETE"
+    },
+    {
+      "role": "web_app",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "DELETE"
+    },
+    {
+      "role": "analyst_ro",
+      "table": "revenue_country_daily_stat",
+      "allowed": false,
+      "privilege": "DELETE"
+    }
+  ],
+  "env": {
+    "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v062-20261017T124744Z",
+    "beforeSha256": "23425e8289854167d53d91f1f3673e383239458f0ae76fb4a5c695559e224509",
+    "afterSha256": "0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b",
+    "otherBytesCmp": "PASS",
+    "allowlists": "UNCHANGED"
+  },
+  "services": [
+    {
+      "service": "web",
+      "id": "781797f39b574b304b966e4517e24673542e1455a9663b48d0ed72b361e5f74a",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "worker",
+      "id": "1e5b10fdd05087f306faa9eb75ba7949950bf723d01eb48b5547cc5deba579f7",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "worker-light",
+      "id": "9ef88ad585b116cf459cce336f1a28d4f156afcf0dd0ba10dec32b895b801e8b",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "scheduler",
+      "id": "152d3c390892ea6d5bafc6c93b807830b9a8e59a42319caf54c43234cb0025af",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "backup-timer",
+      "id": "c6276be95b900e394d10e60b85bc25aae9440da5ab3c43c6b2fe06074eba11b2",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-17T12:47:47.954275+00:00"
+    }
+  ],
+  "postgresIdUnchanged": true,
+  "effectiveTagProjection": {
+    "missing": 0,
+    "extra": 0,
+    "changed": 0
+  },
+  "indexnow": "breaker_closed_no429_no_backlog",
+  "external": {
+    "status": "PASS",
+    "requests": 3,
+    "results": [
+      {
+        "sequence": 1,
+        "kind": "book",
+        "path": "/novel/contract-baby-and-billionaire-pg15q11wz",
+        "at": "2026-10-17T12:50:10.127948+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "follow_redirects": false,
+        "status": 200,
+        "bodySha256": "089d18fdaf00f872a7a189389af74628d8fe0651d74ba745b8950e345e333433"
+      },
+      {
+        "sequence": 2,
+        "kind": "sitemap-index",
+        "path": "/sitemap.xml",
+        "at": "2026-10-17T12:50:12.088597+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "follow_redirects": false,
+        "status": 200,
+        "bodySha256": "5025b9cbebf43e36b2fe67f635f130a230a1150a5439fce33599c989112579f7"
+      },
+      {
+        "sequence": 3,
+        "kind": "health",
+        "path": "/api/health",
+        "at": "2026-10-17T12:50:13.671005+00:00",
+        "proxy": "http://127.0.0.1:7899",
+        "follow_redirects": false,
+        "status": 200,
+        "bodySha256": "19aa44131dc24b1dadb5b9401a9201ea9ffcc419024657eccc7deab02ad1ee01",
+        "version": "0.6.2",
+        "commit": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+        "metadataConsistency": "passed"
+      }
+    ],
+    "rawBodiesSaved": false,
+    "revenueSyncTriggered": false
+  },
+  "revenueSyncTriggered": false,
+  "publicUrlsChanged": false,
+  "deviations": [
+    "First immediate traffic recheck 2/2/4 not ready; waited and passed unchanged threshold with 2/1/0 before env or maintenance changes",
+    "Read-only staging diagnostic had SSH shell quoting syntax error; switched to Python stdin client; no production state changed",
+    "Evidence pack reused helper with wrong parent depth; fail-fast stopped before commit; root path corrected and package validation rerun"
+  ],
+  "ownerAcceptance": [
+    "Login with 2FA and open /revenue; manually synchronize recent 30 days",
+    "Verify book statistics and country rankings; switch country/date between new users and active users",
+    "Tell Codex synchronization finished; then perform the specified read-only reconciliation"
+  ]
+}

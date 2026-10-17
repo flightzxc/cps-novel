@@ -1,0 +1,11 @@
+{
+  "name": "10-runtime",
+  "command": [
+    "python3",
+    ".tmp/v062-release/phase2/remote-client.py.txt",
+    ".tmp/v062-release/phase2/post-check.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792241382.230412,
+  "finishedAt": 1792241410.046384
+}

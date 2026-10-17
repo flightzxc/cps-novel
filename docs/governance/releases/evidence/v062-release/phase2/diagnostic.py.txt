@@ -1,0 +1,5 @@
+import subprocess,pathlib,json
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+p=pathlib.Path('/opt/cps-novel/shared/artifacts/staging/v062')
+print('STAGING_EXISTS='+str(p.exists()))
+print(subprocess.check_output(['ps','-eo','pid,ppid,etimes,comm'],text=True))

@@ -1,0 +1,11 @@
+{
+  "name": "08-poll",
+  "command": [
+    "python3",
+    ".tmp/v062-release/phase2/remote-client.py.txt",
+    ".tmp/v062-release/phase2/pull-deploy.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792241299.106446,
+  "finishedAt": 1792241304.082367
+}

@@ -19,15 +19,17 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.2 —— 第一阶段完成，尚未部署（2026-10-17 JST）
+### v0.6.2 —— 已部署正式站，技术验收PASS，Owner手动同步验收待做（2026-10-17 21:48:48 JST）
 
 - 版本类型 **PATCH**（沿用 v0.5.11 收入看板与 v0.5.14 站内搜索含迁移的先例）。基线 `004c81c07e09868f695e4d5486d29dd602738be7`（tree `be3f7dbcb49d72256a02f29a1dff91976aaf1f5f`），集成线 `integration/v0.6.2-2026-10-17`，发布分支 `release/v0.6.2-2026-10-17`；来源 `feat/v062-revenue-book-country`，两次 no-ff 合并 `2114062c`、`004c81c0`。
 - 后台 `/revenue` 新增按书统计（新用户、分成收入、区间汇总、单书按日、剧场列与筛选）和国家分布（新用户／激活、区间排行、国家 × 日期）；沿用 `changdu.revenue_sync.v1`，缺失覆盖不记为 0。本期不做收入按国家或书 × 国家。
 - 只新增迁移 `20261017120000_revenue_book_country_breakdown` 与 `20261017180000_revenue_country_active_users`：迁移 **29 条**、业务表 **60 张**、字典 **1401 条 / active 1331 条**；两张新表 worker_app 读写删，web_app / analyst_ro 只读。原迁移逐字节不动；无新环境变量、任务类型或依赖变化，无回填。
 - 顺带 B-48：p1-05b 固定 postgres:16.14，本机已有镜像不再拉取；v0.6.1 八个证据脚本改为 `.ts.txt`，恢复末端 tsc。公开网址冻结，任务白名单、nginx、公开页面和路由不变。
-- 第一阶段仅本地升版、完整门禁、GitHub 推送及 linux/amd64 不可变归档；第二阶段须 Owner 明确说“批准部署”，仅限 haiyue-vps。收入同步由 Owner 在后台手动触发；annotated tag、生成 CHANGELOG、唯一正式开发日志与 Notion 同步回读在部署验收后完成。
+- 第一阶段交付时仅本地升版、完整门禁、GitHub 推送及 linux/amd64 不可变归档；第二阶段须 Owner 明确说“批准部署”，仅限 haiyue-vps。收入同步由 Owner 在后台手动触发；annotated tag、生成 CHANGELOG、唯一正式开发日志与 Notion 同步回读在部署验收后完成。
 
-- 第一阶段已完成：Final `fbc00167f34cefde6d3f079f8573700ea9e86245` / tree `0b13b516b1f50df286f2775f281a83403669a790`；全量11,492通过/0失败/无Unhandled，p1-05b真实库全量11,502通过；37运行器、迁移/字典、严格探针1742、B21、nginx矩阵、18组变异、Compose、audit及最终归档镜像端到端均PASS。归档 SHA256 `8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96`；GitHub已推送并回读。尚未连接生产，等待Owner“批准部署”。详见[发布记录](releases/v0.6.2-preproduction.md)。
+- 第一阶段历史交付快照（当时尚未连接生产）：Final `fbc00167f34cefde6d3f079f8573700ea9e86245` / tree `0b13b516b1f50df286f2775f281a83403669a790`；全量11,492通过/0失败/无Unhandled，p1-05b真实库全量11,502通过；37运行器、迁移/字典、严格探针1742、B21、nginx矩阵、18组变异、Compose、audit及最终归档镜像端到端均PASS。归档 SHA256 `8865879ee4828f21dfc2bc696e3e6a6c17d8467a6a7529307f89276388bc0a96`；GitHub已推送并回读。尚未连接生产，等待Owner“批准部署”。详见[发布记录](releases/v0.6.2-preproduction.md)。
+
+- 第二阶段已完成：Owner明确批准，仅haiyue-vps；维护21:47:57–21:48:47 JST（50.163267秒），两条迁移76.389ms/7.815ms，29 finished/0 rolled_back、60表；新表24项授权及新增列/存量默认值PASS，收入批次22/日统计9保持、新表0行。health0.6.2/Final/metadata passed、五应用healthy、postgres CID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429/积压、写闸/白名单/nginx/备份定时器PASS，外部3/4全部200；未触发收入同步。annotated v0.6.2固定Final，原生成CHANGELOG和唯一发版日志完成，Notion同步回读待补。
 
 ### v0.6.1 —— 已部署，58本补发及34本定向试读全部验收PASS（JST 2026-10-17）
 
@@ -520,7 +522,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 第一阶段完成，尚未部署 |
+| `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术验收PASS，Owner手动同步验收待做 |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
 | `v0.5.15` | 2026-10-11 JST | PATCH | 首页导航运营勾选、阿语 ICU plural、B-41 IndexNow 批量投递；迁移 26、表 58；导航默认全勾选，存量回填未执行 | Final `db623505539c3ca55f55b1270aab829b8db102d7`；`release/v0.5.15-2026-10-10`；image `cps-novel:0.5.15-db62350` | 已部署正式站；A–E/F.1/F.2 PASS；三篇合一请求，首发100限制可解除 |

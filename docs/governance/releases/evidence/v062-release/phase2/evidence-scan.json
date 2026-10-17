@@ -1,0 +1,11 @@
+{
+  "format_version": 2,
+  "known_local_secrets": 11,
+  "redactions": 0,
+  "leaks": 0,
+  "upstream_requests": 0,
+  "all_json_parse": true,
+  "phase2_result_preserved": true,
+  "trailing_whitespace_lines_normalized": 42,
+  "raw_originals_preserved_in": "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.2/.tmp/v062-release/phase2"
+}

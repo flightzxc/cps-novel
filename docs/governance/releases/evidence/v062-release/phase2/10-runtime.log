@@ -1,0 +1,40 @@
+{"service": "web", "id": "781797f39b574b304b966e4517e24673542e1455a9663b48d0ed72b361e5f74a", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+NEXT_VERSION=16.3.8 service=web
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=web
+service=web RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "worker", "id": "1e5b10fdd05087f306faa9eb75ba7949950bf723d01eb48b5547cc5deba579f7", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+STARTUP_ALLOWLIST={"service": "worker", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "effective": ["credential.validate.v1", "credential.supersede.v1", "catalog_scan", "promo_link.claim.v1", "batch.materialize.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "moboreader.preview_refresh.v1", "tagging.auto_classify", "changdu.revenue_sync.v1"], "invalid": []}
+NEXT_VERSION=16.3.8 service=worker
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker
+service=worker RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "worker-light", "id": "9ef88ad585b116cf459cce336f1a28d4f156afcf0dd0ba10dec32b895b801e8b", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+STARTUP_ALLOWLIST={"service": "worker-light", "schemaVersion": 1, "event": "worker_task_allowlist", "level": "info", "requested": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "effective": ["sitemap_refresh", "sitemap.daily_fallback.v1", "home_carousel.compute.v1", "indexnow.sweep.v1", "article.publish.batch.v1", "article.publish.v1", "indexnow_delivery"], "invalid": []}
+NEXT_VERSION=16.3.8 service=worker-light
+INDEXNOW_OUTBOX_UNCHANGED=PASS service=worker-light
+service=worker-light RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "scheduler", "id": "152d3c390892ea6d5bafc6c93b807830b9a8e59a42319caf54c43234cb0025af", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+NEXT_VERSION=16.3.8 service=scheduler
+service=scheduler RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+{"service": "backup-timer", "id": "c6276be95b900e394d10e60b85bc25aae9440da5ab3c43c6b2fe06074eba11b2", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+{"service": "postgres", "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e", "state": "running", "health": "healthy", "error_lines": 0, "permission_denied": 0, "expected_permission_probe_errors": 0, "unexpected_error_lines": 0, "unexpected_permission_denied": 0, "since": "2026-10-17T12:47:47.954275+00:00"}
+HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.6.2", "commit": "fbc00167f34cefde6d3f079f8573700ea9e86245", "builtAt": "2026-10-17T09:13:28Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.6.2", "commit": "fbc00167f34cefde6d3f079f8573700ea9e86245"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+WEB_VERSIONS={"next":"16.3.8","nanoid":"3.3.18"}
+POST_NGINX_HASHES={"/etc/nginx/conf.d/cps-novel-preprod.conf": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "/etc/nginx/nginx.conf": "ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e"}
+BACKUP_TIMER=RUNNING
+POST_CHECK=PASS
+PREPROD_SITE_MODE=public
+PREPROD_WORKER_LANES=PASS main=cps-novel-preprod-worker-1 light=cps-novel-preprod-worker-light-1
+SECRET_CONSUMER_MATRIX=PASS count=15
+MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=/opt/cps-novel/shared/maintenance/enabled
+SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED
+PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery
+PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true approvalTtlMinutes=1440 shardWindowMinutes=90 shardSizeMin=50 shardSizeMax=1000 credentialSafetyMarginMinutes=30 deadlineGraceMinutes=10
+PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=true intervalGetlistpcMs=1500 intervalGetcodeMs=1500 hostMinGapMs=250 remainingFloorGetlistpc=8 remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000
+PREPROD_ADMIN_LOGIN_TURNSTILE_CONFIG=PASS enabled=true siteKey=set secret=file:admin_login_turnstile_secret_key
+PREPROD_PREFLIGHT=PASS
+
+
+POST_PREFLIGHT_UNCHANGED=PASS
+EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0
+INDEXNOW_STATUS={"generatedAt": "2026-10-17T12:50:09.422Z", "control": {"dbNow": "2026-10-17T12:50:09.420Z", "breaker": {"open": false}, "rateLimit": {"waiting": false}, "lastResume": null, "lastBisect": null}, "keyValidation": {"state": "verified", "lastAccepted": {"httpStatus": 200, "at": "2026-10-16T14:58:08.819Z", "requestBatchId": "dea5b09f-35aa-41fc-9a77-a8d6bdaf2981"}, "accepted": {"all": {"status200": {"urls": 33776, "httpRequests": 79}, "status202": {"urls": 1, "httpRequests": 1}}, "last24h": {"status200": {"urls": 58, "httpRequests": 1}, "status202": {"urls": 0, "httpRequests": 0}}}}, "outbox": {"urlsByStatusAndSource": [{"status": "accepted", "source": "admin.article.publish", "urls": 2976}, {"status": "accepted", "source": "backfill", "urls": 30801}], "dueUrls": 0, "cancelledUrlsByErrorKind": [], "invalidUrls": [], "deadLetters": []}, "attempts": {"all": [{"httpStatus": "200", "urls": 33776, "httpRequests": 79}, {"httpStatus": "202", "urls": 1, "httpRequests": 1}], "last24h": [{"httpStatus": "200", "urls": 58, "httpRequests": 1}]}, "tasks": {"deliveryTaskItemsByStatus": {"success": 80}, "scanTaskItemsByStatus": {"success": 10486}, "inFlightBatchTasks": []}}
+INDEXNOW_POST_STATUS=PASS
