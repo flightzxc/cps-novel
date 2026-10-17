@@ -1,0 +1,169 @@
+{
+  "since": "2026-10-17T13:04:53.148+00:00",
+  "until": "2026-10-17T13:05:17.403+00:00",
+  "observations": [
+    {
+      "at": "2026-10-17T13:04:54.982436453Z",
+      "service": "worker",
+      "endpoint": "getreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 1809,
+      "gateWaitMs": 0
+    },
+    {
+      "at": "2026-10-17T13:04:55.233564538Z",
+      "service": "worker",
+      "endpoint": "getreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 243,
+      "gateWaitMs": 0
+    },
+    {
+      "at": "2026-10-17T13:04:57.000233490Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 868,
+      "gateWaitMs": 0
+    },
+    {
+      "at": "2026-10-17T13:04:58.269066246Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 637,
+      "gateWaitMs": 630
+    },
+    {
+      "at": "2026-10-17T13:04:59.397089355Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 265,
+      "gateWaitMs": 862
+    },
+    {
+      "at": "2026-10-17T13:05:00.899808123Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 267,
+      "gateWaitMs": 1234
+    },
+    {
+      "at": "2026-10-17T13:05:02.409242086Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 267,
+      "gateWaitMs": 1231
+    },
+    {
+      "at": "2026-10-17T13:05:03.897692141Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 264,
+      "gateWaitMs": 1225
+    },
+    {
+      "at": "2026-10-17T13:05:05.388233632Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 253,
+      "gateWaitMs": 1236
+    },
+    {
+      "at": "2026-10-17T13:05:06.893127309Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 260,
+      "gateWaitMs": 1243
+    },
+    {
+      "at": "2026-10-17T13:05:08.392165299Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 258,
+      "gateWaitMs": 1240
+    },
+    {
+      "at": "2026-10-17T13:05:09.916658495Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 282,
+      "gateWaitMs": 1241
+    },
+    {
+      "at": "2026-10-17T13:05:11.397031199Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 263,
+      "gateWaitMs": 1215
+    },
+    {
+      "at": "2026-10-17T13:05:12.895936277Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 263,
+      "gateWaitMs": 1235
+    },
+    {
+      "at": "2026-10-17T13:05:14.418133417Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 283,
+      "gateWaitMs": 1238
+    },
+    {
+      "at": "2026-10-17T13:05:15.897936044Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 262,
+      "gateWaitMs": 1216
+    },
+    {
+      "at": "2026-10-17T13:05:17.398437353Z",
+      "service": "worker",
+      "endpoint": "getcountryreport",
+      "httpStatus": 200,
+      "outcome": "ok",
+      "latencyMs": 262,
+      "gateWaitMs": 1238
+    }
+  ],
+  "workers": [
+    {
+      "service": "worker",
+      "errorLines": 0
+    },
+    {
+      "service": "worker-light",
+      "errorLines": 0
+    }
+  ]
+}

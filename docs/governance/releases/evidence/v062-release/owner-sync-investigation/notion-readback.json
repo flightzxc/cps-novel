@@ -1,0 +1,10 @@
+{
+  "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+  "lastEdited": "2026-10-17T13:38:11.036Z",
+  "status": "investigation_complete_upstream_endpoint_disagreement_confirmed",
+  "targets": 4,
+  "readbackPass": true,
+  "historyPreserved": true,
+  "priorBodyChars": 308832,
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245"
+}

@@ -1,0 +1,49 @@
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import { parseNovelCountryReport, parseNovelReportRows } from './src/lib/adapters/moboreader-revenue-parser.ts';
+
+const base='.tmp/v062-release/country-investigation';
+const input=JSON.parse(fs.readFileSync(base+'/snapshots.json','utf8'));
+const countrySnapshots=input.snapshots.filter(s=>s.dimension.startsWith('country:'));
+const parsed=countrySnapshots.map(s=>({...parseNovelCountryReport(s.key,s.payload),dimension:s.dimension,snapshotId:s.id,payloadSha256:s.payloadSha256}));
+assert.equal(parsed.length,15);
+assert.ok(parsed.every(p=>p.droppedRowCount===0&&p.duplicateRowCount===0&&p.countrySum===p.total));
+const rows=new Map();
+for (const p of parsed) for (const country of p.countries) {
+  const key=JSON.stringify([p.date,country.label]);
+  const row=rows.get(key)??{date:p.date,label:country.label,code:country.code,newUsers:0,activeUsers:0};
+  if(p.dimension==='country:0')row.activeUsers+=country.users;
+  else row.newUsers+=country.users;
+  rows.set(key,row);
+}
+assert.equal(rows.size,input.countries.length);
+for(const stored of input.countries){
+  assert.deepEqual(rows.get(JSON.stringify([stored.date,stored.label])),{date:stored.date,label:stored.label,code:stored.code,newUsers:stored.newUsers,activeUsers:stored.activeUsers});
+}
+const daily=parseNovelReportRows(input.snapshots.filter(s=>s.dimension==='1').map(s=>s.payload));
+assert.equal(daily.detail.length,input.daily.length);
+assert.equal(daily.duplicateDateCount,0);
+assert.equal(daily.droppedRowCount,0);
+for(const row of daily.detail){
+  const stored=input.daily.find(s=>s.date===row.date);
+  assert.ok(stored);
+  assert.equal(row.activeUsers,stored.activeUsers);
+  assert.equal(row.newUsers,stored.newUsers);
+}
+const comparisons=daily.detail.map(d=>{
+  const active=parsed.find(p=>p.date===d.date&&p.dimension==='country:0');
+  const nu=parsed.find(p=>p.date===d.date&&p.dimension==='country:1');
+  return {date:d.date,dailyRawNewUsers:d.newUsers,countryRawNewUsersTotal:nu?.total??0,countryRawNewUsersSum:nu?.countrySum??0,dailyRawActiveUsers:d.activeUsers,countryRawActiveUsersTotal:active?.total??0,countryRawActiveUsersSum:active?.countrySum??0};
+}).sort((a,b)=>a.date.localeCompare(b.date));
+const mismatches=comparisons.filter(d=>d.dailyRawNewUsers!==d.countryRawNewUsersTotal||d.dailyRawActiveUsers!==d.countryRawActiveUsersTotal);
+assert.equal(mismatches.length,4);
+const logs=JSON.parse(fs.readFileSync(base+'/logs.json','utf8'));
+assert.equal(logs.observations.length,17);
+assert.ok(logs.observations.every(o=>o.httpStatus===200&&o.outcome==='ok'));
+const result={status:'investigation_complete_upstream_endpoint_disagreement_confirmed',batchId:input.batch.id,final:'fbc00167f34cefde6d3f079f8573700ea9e86245',readAt:input.readAt,countryReportCount:parsed.length,countryReportInternalSumEqualsTotal:15,countryDroppedRows:0,countryDuplicateRows:0,storedCountryRowsExact:input.countries.length,dailyRowsExact:daily.detail.length,dailyDroppedRows:0,dailyDuplicateDates:0,databaseDuplicateCountryKeys:input.duplicateKeys,comparisons,mismatches,batchNote:input.batch.note,observedRequests:logs.observations.length,getReportRequests:logs.observations.filter(o=>o.endpoint==='getreport').length,getCountryReportRequests:logs.observations.filter(o=>o.endpoint==='getcountryreport').length,allObservedHttp200:true,workerErrors:logs.workers,additionalUpstreamRequests:0,productionWrites:0,conclusion:'本批次上游GetReport按日与GetCountryReport的返回值本身不一致；15份国家快照均明细和=其自身total，原生产解析器离线重放与34条国家及9条按日记录逐条相等，未发现本站解析、合并、重复或落库引入差异。',unresolved:'现存快照及日志不含上游用户级身份或去重规则，不能判断上游差异来自口径、去重、缓存或取数时刻；不能据此声称国家逐日守恒已通过。',code:[...['src/lib/adapters/moboreader-revenue-parser.ts','worker/handlers/revenue-sync.ts','src/lib/adapters/moboreader-revenue.ts']].map(path=>({path,sha256:crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex')}))};
+fs.writeFileSync(base+'/investigation-result.json',JSON.stringify(result,null,2)+'\n');
+console.log('PRODUCTION_PARSER_OFFLINE_REPLAY=PASS country_reports=15 country_rows_exact=34 daily_rows_exact=9 dropped=0 duplicates=0');
+console.log('UPSTREAM_ENDPOINT_DIFFERENCES='+JSON.stringify(mismatches));
+console.log('EXISTING_LOG_REQUESTS=17 getreport=2 getcountryreport=15 all_http_200=YES worker_errors=0');
+console.log('ADDITIONAL_UPSTREAM_REQUESTS=0 PRODUCTION_WRITES=0');

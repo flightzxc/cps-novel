@@ -1,0 +1,11 @@
+{
+  "name": "14-country-snapshot-investigation",
+  "command": [
+    "python3",
+    ".tmp/v062-release/phase2/remote-client.py.txt",
+    ".tmp/v062-release/phase2/country-snapshot-investigation.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792244159.129161,
+  "finishedAt": 1792244163.672559
+}

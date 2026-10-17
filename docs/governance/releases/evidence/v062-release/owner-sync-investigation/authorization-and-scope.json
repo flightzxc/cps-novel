@@ -1,0 +1,10 @@
+{
+  "ownerAuthorization": "允许继续只读排查",
+  "scope": "仅已存原始快照、现有日志及本地已发布源码离线重放",
+  "host": "haiyue-vps",
+  "batchId": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc",
+  "additionalUpstreamRequests": 0,
+  "productionWrites": 0,
+  "projection": "快照仅输出国家name/value/total及日报所需数值字段，未输出凭据或完整敏感payload；原payload SHA256随记录保留",
+  "localReplayDeviation": "本地无tsx，首次进程未启动；改用现有Node24 module-typescript执行原解析器，未安装依赖或修改package.json。Node模块类型警告原样保留。"
+}

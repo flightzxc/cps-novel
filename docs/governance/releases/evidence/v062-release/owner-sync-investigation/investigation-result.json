@@ -1,0 +1,169 @@
+{
+  "status": "investigation_complete_upstream_endpoint_disagreement_confirmed",
+  "batchId": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc",
+  "final": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "readAt": "2026-10-17T13:36:03.286211+00:00",
+  "countryReportCount": 15,
+  "countryReportInternalSumEqualsTotal": 15,
+  "countryDroppedRows": 0,
+  "countryDuplicateRows": 0,
+  "storedCountryRowsExact": 34,
+  "dailyRowsExact": 9,
+  "dailyDroppedRows": 0,
+  "dailyDuplicateDates": 0,
+  "databaseDuplicateCountryKeys": 0,
+  "comparisons": [
+    {
+      "date": "2026-09-26",
+      "dailyRawNewUsers": 1,
+      "countryRawNewUsersTotal": 1,
+      "countryRawNewUsersSum": 1,
+      "dailyRawActiveUsers": 1,
+      "countryRawActiveUsersTotal": 1,
+      "countryRawActiveUsersSum": 1
+    },
+    {
+      "date": "2026-10-09",
+      "dailyRawNewUsers": 0,
+      "countryRawNewUsersTotal": 0,
+      "countryRawNewUsersSum": 0,
+      "dailyRawActiveUsers": 1,
+      "countryRawActiveUsersTotal": 1,
+      "countryRawActiveUsersSum": 1
+    },
+    {
+      "date": "2026-10-11",
+      "dailyRawNewUsers": 0,
+      "countryRawNewUsersTotal": 0,
+      "countryRawNewUsersSum": 0,
+      "dailyRawActiveUsers": 1,
+      "countryRawActiveUsersTotal": 2,
+      "countryRawActiveUsersSum": 2
+    },
+    {
+      "date": "2026-10-12",
+      "dailyRawNewUsers": 4,
+      "countryRawNewUsersTotal": 4,
+      "countryRawNewUsersSum": 4,
+      "dailyRawActiveUsers": 5,
+      "countryRawActiveUsersTotal": 6,
+      "countryRawActiveUsersSum": 6
+    },
+    {
+      "date": "2026-10-13",
+      "dailyRawNewUsers": 1,
+      "countryRawNewUsersTotal": 1,
+      "countryRawNewUsersSum": 1,
+      "dailyRawActiveUsers": 4,
+      "countryRawActiveUsersTotal": 4,
+      "countryRawActiveUsersSum": 4
+    },
+    {
+      "date": "2026-10-14",
+      "dailyRawNewUsers": 0,
+      "countryRawNewUsersTotal": 0,
+      "countryRawNewUsersSum": 0,
+      "dailyRawActiveUsers": 2,
+      "countryRawActiveUsersTotal": 3,
+      "countryRawActiveUsersSum": 3
+    },
+    {
+      "date": "2026-10-15",
+      "dailyRawNewUsers": 1,
+      "countryRawNewUsersTotal": 1,
+      "countryRawNewUsersSum": 1,
+      "dailyRawActiveUsers": 3,
+      "countryRawActiveUsersTotal": 3,
+      "countryRawActiveUsersSum": 3
+    },
+    {
+      "date": "2026-10-16",
+      "dailyRawNewUsers": 7,
+      "countryRawNewUsersTotal": 7,
+      "countryRawNewUsersSum": 7,
+      "dailyRawActiveUsers": 15,
+      "countryRawActiveUsersTotal": 15,
+      "countryRawActiveUsersSum": 15
+    },
+    {
+      "date": "2026-10-17",
+      "dailyRawNewUsers": 8,
+      "countryRawNewUsersTotal": 9,
+      "countryRawNewUsersSum": 9,
+      "dailyRawActiveUsers": 24,
+      "countryRawActiveUsersTotal": 28,
+      "countryRawActiveUsersSum": 28
+    }
+  ],
+  "mismatches": [
+    {
+      "date": "2026-10-11",
+      "dailyRawNewUsers": 0,
+      "countryRawNewUsersTotal": 0,
+      "countryRawNewUsersSum": 0,
+      "dailyRawActiveUsers": 1,
+      "countryRawActiveUsersTotal": 2,
+      "countryRawActiveUsersSum": 2
+    },
+    {
+      "date": "2026-10-12",
+      "dailyRawNewUsers": 4,
+      "countryRawNewUsersTotal": 4,
+      "countryRawNewUsersSum": 4,
+      "dailyRawActiveUsers": 5,
+      "countryRawActiveUsersTotal": 6,
+      "countryRawActiveUsersSum": 6
+    },
+    {
+      "date": "2026-10-14",
+      "dailyRawNewUsers": 0,
+      "countryRawNewUsersTotal": 0,
+      "countryRawNewUsersSum": 0,
+      "dailyRawActiveUsers": 2,
+      "countryRawActiveUsersTotal": 3,
+      "countryRawActiveUsersSum": 3
+    },
+    {
+      "date": "2026-10-17",
+      "dailyRawNewUsers": 8,
+      "countryRawNewUsersTotal": 9,
+      "countryRawNewUsersSum": 9,
+      "dailyRawActiveUsers": 24,
+      "countryRawActiveUsersTotal": 28,
+      "countryRawActiveUsersSum": 28
+    }
+  ],
+  "batchNote": "Country sums differ from the day totals on 4 day(s)",
+  "observedRequests": 17,
+  "getReportRequests": 2,
+  "getCountryReportRequests": 15,
+  "allObservedHttp200": true,
+  "workerErrors": [
+    {
+      "service": "worker",
+      "errorLines": 0
+    },
+    {
+      "service": "worker-light",
+      "errorLines": 0
+    }
+  ],
+  "additionalUpstreamRequests": 0,
+  "productionWrites": 0,
+  "conclusion": "本批次上游GetReport按日与GetCountryReport的返回值本身不一致；15份国家快照均明细和=其自身total，原生产解析器离线重放与34条国家及9条按日记录逐条相等，未发现本站解析、合并、重复或落库引入差异。",
+  "unresolved": "现存快照及日志不含上游用户级身份或去重规则，不能判断上游差异来自口径、去重、缓存或取数时刻；不能据此声称国家逐日守恒已通过。",
+  "code": [
+    {
+      "path": "src/lib/adapters/moboreader-revenue-parser.ts",
+      "sha256": "241a5d7693435bf51ac220bf8c833fb0f4c2a6f4847d69bb82f45264820c335b"
+    },
+    {
+      "path": "worker/handlers/revenue-sync.ts",
+      "sha256": "c4d9000a117c7b70aa7e10d9139b2ec5a275f951dd8b77074c7f4d58502e5f2b"
+    },
+    {
+      "path": "src/lib/adapters/moboreader-revenue.ts",
+      "sha256": "371af8daee52e094e62d742f225aa9b67d6fde5cb6cda8541bf07e4c78bafdda"
+    }
+  ]
+}

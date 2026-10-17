@@ -1,0 +1,972 @@
+{
+  "batch": {
+    "id": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc",
+    "note": "Country sums differ from the day totals on 4 day(s)",
+    "status": "completed",
+    "startedAt": "2026-10-17T13:04:53.148+00:00",
+    "bookStatus": "completed",
+    "finishedAt": "2026-10-17T13:05:17.403+00:00",
+    "requestCount": 17,
+    "countryStatus": "completed"
+  },
+  "daily": [
+    {
+      "date": "2026-09-26",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-09",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-11",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-12",
+      "newUsers": 4,
+      "activeUsers": 5,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-13",
+      "newUsers": 1,
+      "activeUsers": 4,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-14",
+      "newUsers": 0,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-15",
+      "newUsers": 1,
+      "activeUsers": 3,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-16",
+      "newUsers": 7,
+      "activeUsers": 15,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "date": "2026-10-17",
+      "newUsers": 8,
+      "activeUsers": 24,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    }
+  ],
+  "readAt": "2026-10-17T13:36:03.286211+00:00",
+  "countries": [
+    {
+      "code": null,
+      "date": "2026-09-26",
+      "label": "GB",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "RU",
+      "date": "2026-10-09",
+      "label": "俄罗斯(RU)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "MX",
+      "date": "2026-10-11",
+      "label": "墨西哥(MX)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "ES",
+      "date": "2026-10-11",
+      "label": "西班牙(ES)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "CO",
+      "date": "2026-10-12",
+      "label": "哥伦比亚(CO)",
+      "newUsers": 1,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "MX",
+      "date": "2026-10-12",
+      "label": "墨西哥(MX)",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "VE",
+      "date": "2026-10-12",
+      "label": "委内瑞拉(VE)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "BR",
+      "date": "2026-10-12",
+      "label": "巴西(BR)",
+      "newUsers": 2,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "CO",
+      "date": "2026-10-13",
+      "label": "哥伦比亚(CO)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "BR",
+      "date": "2026-10-13",
+      "label": "巴西(BR)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "ES",
+      "date": "2026-10-13",
+      "label": "西班牙(ES)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "AR",
+      "date": "2026-10-13",
+      "label": "阿根廷(AR)",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "RU",
+      "date": "2026-10-14",
+      "label": "俄罗斯(RU)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "MX",
+      "date": "2026-10-14",
+      "label": "墨西哥(MX)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "AR",
+      "date": "2026-10-14",
+      "label": "阿根廷(AR)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "CL",
+      "date": "2026-10-15",
+      "label": "智利(CL)",
+      "newUsers": 1,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "FR",
+      "date": "2026-10-15",
+      "label": "法国(FR)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "UA",
+      "date": "2026-10-16",
+      "label": "乌克兰(UA)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "RU",
+      "date": "2026-10-16",
+      "label": "俄罗斯(RU)",
+      "newUsers": 2,
+      "activeUsers": 3,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "EC",
+      "date": "2026-10-16",
+      "label": "厄瓜多尔(EC)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "CO",
+      "date": "2026-10-16",
+      "label": "哥伦比亚(CO)",
+      "newUsers": 1,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "BR",
+      "date": "2026-10-16",
+      "label": "巴西(BR)",
+      "newUsers": 3,
+      "activeUsers": 4,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "SV",
+      "date": "2026-10-16",
+      "label": "萨尔瓦多(SV)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "PT",
+      "date": "2026-10-16",
+      "label": "葡萄牙(PT)",
+      "newUsers": 1,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "ES",
+      "date": "2026-10-16",
+      "label": "西班牙(ES)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "RU",
+      "date": "2026-10-17",
+      "label": "俄罗斯(RU)",
+      "newUsers": 5,
+      "activeUsers": 18,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "KZ",
+      "date": "2026-10-17",
+      "label": "哈萨克斯坦(KZ)",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "CO",
+      "date": "2026-10-17",
+      "label": "哥伦比亚(CO)",
+      "newUsers": 1,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "MX",
+      "date": "2026-10-17",
+      "label": "墨西哥(MX)",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "DE",
+      "date": "2026-10-17",
+      "label": "德国(DE)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "FR",
+      "date": "2026-10-17",
+      "label": "法国(FR)",
+      "newUsers": 0,
+      "activeUsers": 2,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "AU",
+      "date": "2026-10-17",
+      "label": "澳大利亚(AU)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "BY",
+      "date": "2026-10-17",
+      "label": "白俄罗斯(BY)",
+      "newUsers": 1,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    },
+    {
+      "code": "US",
+      "date": "2026-10-17",
+      "label": "美国(US)",
+      "newUsers": 0,
+      "activeUsers": 1,
+      "sourceBatch": "7fd26b71-6831-4d2b-bdb6-faddf702c4cc"
+    }
+  ],
+  "snapshots": [
+    {
+      "id": "94e8460d-d6bf-49a8-9787-28bbac1daba6",
+      "key": "2026-09-26",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 1,
+        "realIncome": 0,
+        "dimensionKey": "2026-09-26",
+        "newRealDevNum": 1,
+        "dimensionValue": "2026-09-26"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-08T10:05:33.342+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.452+00:00",
+      "payloadSha256": "96985d0c864b0c0b5fff94de5f91fb50d486d736617f4e6816b6e31875d8914f",
+      "storedNewUsers": 1,
+      "storedActiveUsers": 1
+    },
+    {
+      "id": "ca0a3897-9281-4471-be16-f9b65b95a34b",
+      "key": "2026-10-09",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 1,
+        "realIncome": 0,
+        "dimensionKey": "2026-10-09",
+        "newRealDevNum": 0,
+        "dimensionValue": "2026-10-09"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-09T16:09:44.23+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.448+00:00",
+      "payloadSha256": "75c785e794cd930c09b32fa7a08c5d90837b31cc242baf4c879779919ee02816",
+      "storedNewUsers": 0,
+      "storedActiveUsers": 1
+    },
+    {
+      "id": "f4e7cd3c-de89-43a5-aadb-95f6760bdd56",
+      "key": "2026-10-11",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 1,
+        "realIncome": 0.01,
+        "dimensionKey": "2026-10-11",
+        "newRealDevNum": 0,
+        "dimensionValue": "2026-10-11"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-12T02:31:37.697+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.442+00:00",
+      "payloadSha256": "24ed28008f170089fad982e0c028b6401f2941dd39c4f07882d6c0a46ead8617",
+      "storedNewUsers": 0,
+      "storedActiveUsers": 1
+    },
+    {
+      "id": "b10257b9-c9c4-47f4-8a3e-475a47671217",
+      "key": "2026-10-12",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 5,
+        "realIncome": 0,
+        "dimensionKey": "2026-10-12",
+        "newRealDevNum": 4,
+        "dimensionValue": "2026-10-12"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-12T02:31:37.686+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.437+00:00",
+      "payloadSha256": "6afb98a0ee50d3971131de6e54320f12e680bfd6a7231391b084551951f3a31d",
+      "storedNewUsers": 4,
+      "storedActiveUsers": 5
+    },
+    {
+      "id": "3dba2001-f80f-4574-8000-1d35f6c80bf7",
+      "key": "2026-10-13",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 4,
+        "realIncome": 0.07,
+        "dimensionKey": "2026-10-13",
+        "newRealDevNum": 1,
+        "dimensionValue": "2026-10-13"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-13T01:23:04.037+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.433+00:00",
+      "payloadSha256": "b2bef81021a58e66b0c60443bf7285f300251ffc6a078d8c2b93c06ddf8a2e5f",
+      "storedNewUsers": 1,
+      "storedActiveUsers": 4
+    },
+    {
+      "id": "c3d1a8a6-6eea-4083-9a18-9f8e717c1832",
+      "key": "2026-10-14",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 2,
+        "realIncome": 0.02,
+        "dimensionKey": "2026-10-14",
+        "newRealDevNum": 0,
+        "dimensionValue": "2026-10-14"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-14T01:22:26.268+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.429+00:00",
+      "payloadSha256": "e73149d09950d7530abb77ee0cda2a282c822e749c847a07a55ffae0df1582b1",
+      "storedNewUsers": 0,
+      "storedActiveUsers": 2
+    },
+    {
+      "id": "0f2d1f18-8baa-4e17-b31f-0d507ca65e5b",
+      "key": "2026-10-15",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 3,
+        "realIncome": 0.03,
+        "dimensionKey": "2026-10-15",
+        "newRealDevNum": 1,
+        "dimensionValue": "2026-10-15"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-15T09:32:44.69+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.425+00:00",
+      "payloadSha256": "31aec0a2d988bf173f08ada20a400dc0c8dc26a3c699a7788634aee9bc6ef2ec",
+      "storedNewUsers": 1,
+      "storedActiveUsers": 3
+    },
+    {
+      "id": "a552c13b-ff4e-4609-a4d4-769a2ee1e531",
+      "key": "2026-10-16",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 15,
+        "realIncome": 2.5,
+        "dimensionKey": "2026-10-16",
+        "newRealDevNum": 7,
+        "dimensionValue": "2026-10-16"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-16T06:19:11.741+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.421+00:00",
+      "payloadSha256": "9b1bb9e04bd622990b656955f087bbdcea84a4b84b552522a8e50193363c351d",
+      "storedNewUsers": 7,
+      "storedActiveUsers": 15
+    },
+    {
+      "id": "9271aea6-d7c8-4277-9c84-0cc46b92e647",
+      "key": "2026-10-17",
+      "payload": {
+        "isTotal": 0,
+        "realDevNum": 24,
+        "realIncome": 4.25,
+        "dimensionKey": "2026-10-17",
+        "newRealDevNum": 8,
+        "dimensionValue": "2026-10-17"
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-16T21:44:48.109+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.413+00:00",
+      "payloadSha256": "b8c0cd05ef7addf61a22a7474eef120f369d8fcbed871b4e587919da0287bbbb",
+      "storedNewUsers": 8,
+      "storedActiveUsers": 24
+    },
+    {
+      "id": "73e601f4-a314-4cbb-a220-33b948288dfe",
+      "key": "总计",
+      "payload": {
+        "isTotal": 1,
+        "realDevNum": 56,
+        "realIncome": 6.88,
+        "dimensionKey": "总计",
+        "newRealDevNum": 22,
+        "dimensionValue": null
+      },
+      "totalRow": true,
+      "createdAt": "2026-10-17T13:05:17.456+00:00",
+      "dimension": "1",
+      "updatedAt": "2026-10-17T13:05:17.456+00:00",
+      "payloadSha256": "37b3bddc783bc31b75e5036eae0248884fa649dbda3e9a0b019af7ce9197eb88",
+      "storedNewUsers": 22,
+      "storedActiveUsers": 56
+    },
+    {
+      "id": "85d5c2a5-2c2b-4beb-88c2-c5d9b4aeb5b3",
+      "key": "2026-09-26",
+      "payload": {
+        "list": [
+          {
+            "name": "GB",
+            "value": 1
+          }
+        ],
+        "total": 1
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.535+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.535+00:00",
+      "payloadSha256": "410461ec2cd8af521e67f5a846725c8c6a9f115db0eed186f6c80bec011f2049",
+      "storedNewUsers": null,
+      "storedActiveUsers": 1
+    },
+    {
+      "id": "6e117a26-7bf4-4e08-99b9-0b617d606a60",
+      "key": "2026-10-09",
+      "payload": {
+        "list": [
+          {
+            "name": "俄罗斯(RU)",
+            "value": 1
+          }
+        ],
+        "total": 1
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.54+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.54+00:00",
+      "payloadSha256": "0b10f23b210dbabe3fd16171a8a8d779a15b80d45c41bf8b6bf2045b3918ab74",
+      "storedNewUsers": null,
+      "storedActiveUsers": 1
+    },
+    {
+      "id": "02a89407-f431-43c4-8cf4-13054a4d2f85",
+      "key": "2026-10-11",
+      "payload": {
+        "list": [
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          },
+          {
+            "name": "西班牙(ES)",
+            "value": 1
+          }
+        ],
+        "total": 2
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.542+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.542+00:00",
+      "payloadSha256": "ca1efb337bb7ed271f86d4583383e792d73577a05fe79e5a3d078417a9195780",
+      "storedNewUsers": null,
+      "storedActiveUsers": 2
+    },
+    {
+      "id": "ae6a7b95-9d5b-487e-a9be-c554b47908a7",
+      "key": "2026-10-12",
+      "payload": {
+        "list": [
+          {
+            "name": "巴西(BR)",
+            "value": 2
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 2
+          },
+          {
+            "name": "委内瑞拉(VE)",
+            "value": 1
+          },
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          }
+        ],
+        "total": 6
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.543+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.543+00:00",
+      "payloadSha256": "b9407c0518782e262abe3086d18195afc036e4e5b63bda522112f98c4fbf5515",
+      "storedNewUsers": null,
+      "storedActiveUsers": 6
+    },
+    {
+      "id": "b07887f2-b01f-4407-8a3d-622b2fffaefd",
+      "key": "2026-10-13",
+      "payload": {
+        "list": [
+          {
+            "name": "巴西(BR)",
+            "value": 1
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 1
+          },
+          {
+            "name": "阿根廷(AR)",
+            "value": 1
+          },
+          {
+            "name": "西班牙(ES)",
+            "value": 1
+          }
+        ],
+        "total": 4
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.547+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.547+00:00",
+      "payloadSha256": "0101f2e7ff62dde3f8efd6d9fcc225d84777b762eaf5d694e023d98cc4826d4f",
+      "storedNewUsers": null,
+      "storedActiveUsers": 4
+    },
+    {
+      "id": "f8802c11-6603-45f7-a301-94c2dd815cac",
+      "key": "2026-10-14",
+      "payload": {
+        "list": [
+          {
+            "name": "俄罗斯(RU)",
+            "value": 1
+          },
+          {
+            "name": "阿根廷(AR)",
+            "value": 1
+          },
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          }
+        ],
+        "total": 3
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.55+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.55+00:00",
+      "payloadSha256": "63d1d1f513176988a29db17d6c5f61d882fc9d9ae4ba6f0c1a9393a625609c08",
+      "storedNewUsers": null,
+      "storedActiveUsers": 3
+    },
+    {
+      "id": "a824a0d5-9025-4135-8681-cd47497e8f21",
+      "key": "2026-10-15",
+      "payload": {
+        "list": [
+          {
+            "name": "智利(CL)",
+            "value": 2
+          },
+          {
+            "name": "法国(FR)",
+            "value": 1
+          }
+        ],
+        "total": 3
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.552+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.552+00:00",
+      "payloadSha256": "f03839c21ae9fe3afe66d3deee85f09598db53c79a0081b16c6fadab07670530",
+      "storedNewUsers": null,
+      "storedActiveUsers": 3
+    },
+    {
+      "id": "699cfa72-58d6-448e-8236-498d162a2541",
+      "key": "2026-10-16",
+      "payload": {
+        "list": [
+          {
+            "name": "巴西(BR)",
+            "value": 4
+          },
+          {
+            "name": "俄罗斯(RU)",
+            "value": 3
+          },
+          {
+            "name": "葡萄牙(PT)",
+            "value": 2
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 2
+          },
+          {
+            "name": "乌克兰(UA)",
+            "value": 1
+          },
+          {
+            "name": "西班牙(ES)",
+            "value": 1
+          },
+          {
+            "name": "厄瓜多尔(EC)",
+            "value": 1
+          },
+          {
+            "name": "萨尔瓦多(SV)",
+            "value": 1
+          }
+        ],
+        "total": 15
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.556+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.556+00:00",
+      "payloadSha256": "10cdd8e65117da841666f467e7224d13c4e0d6160025a4493461661fe9e713f1",
+      "storedNewUsers": null,
+      "storedActiveUsers": 15
+    },
+    {
+      "id": "05bdd036-ff15-497f-93f3-3ccba6904ad3",
+      "key": "2026-10-17",
+      "payload": {
+        "list": [
+          {
+            "name": "俄罗斯(RU)",
+            "value": 18
+          },
+          {
+            "name": "法国(FR)",
+            "value": 2
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 2
+          },
+          {
+            "name": "白俄罗斯(BY)",
+            "value": 1
+          },
+          {
+            "name": "哈萨克斯坦(KZ)",
+            "value": 1
+          },
+          {
+            "name": "德国(DE)",
+            "value": 1
+          },
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          },
+          {
+            "name": "美国(US)",
+            "value": 1
+          },
+          {
+            "name": "澳大利亚(AU)",
+            "value": 1
+          }
+        ],
+        "total": 28
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.56+00:00",
+      "dimension": "country:0",
+      "updatedAt": "2026-10-17T13:05:17.56+00:00",
+      "payloadSha256": "2f13fb31922fefbcdd0357b8fab0a35d34e1a5e5948fc93dc901548ae36401c2",
+      "storedNewUsers": null,
+      "storedActiveUsers": 28
+    },
+    {
+      "id": "d3d4c490-4c01-4dd7-959f-f8b5d2c77a62",
+      "key": "2026-09-26",
+      "payload": {
+        "list": [
+          {
+            "name": "GB",
+            "value": 1
+          }
+        ],
+        "total": 1
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.538+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.538+00:00",
+      "payloadSha256": "410461ec2cd8af521e67f5a846725c8c6a9f115db0eed186f6c80bec011f2049",
+      "storedNewUsers": 1,
+      "storedActiveUsers": null
+    },
+    {
+      "id": "b4bcb31a-864c-4a93-bca2-202825bcf353",
+      "key": "2026-10-12",
+      "payload": {
+        "list": [
+          {
+            "name": "巴西(BR)",
+            "value": 2
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 1
+          },
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          }
+        ],
+        "total": 4
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.545+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.545+00:00",
+      "payloadSha256": "63adcd0d23210991a2fc3a3adacaa66e22bef4fdcd93821feedd2442376cbc07",
+      "storedNewUsers": 4,
+      "storedActiveUsers": null
+    },
+    {
+      "id": "89fa2328-cab7-41f5-af18-bc6c898259f8",
+      "key": "2026-10-13",
+      "payload": {
+        "list": [
+          {
+            "name": "阿根廷(AR)",
+            "value": 1
+          }
+        ],
+        "total": 1
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.548+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.548+00:00",
+      "payloadSha256": "138a7c9046c43fb233e32b9d72ad761783c68567d3ec10843bd483f72e0d1587",
+      "storedNewUsers": 1,
+      "storedActiveUsers": null
+    },
+    {
+      "id": "8f9726b1-748e-4a58-ab31-d7375cefe395",
+      "key": "2026-10-15",
+      "payload": {
+        "list": [
+          {
+            "name": "智利(CL)",
+            "value": 1
+          }
+        ],
+        "total": 1
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.553+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.553+00:00",
+      "payloadSha256": "5cc0d1ba8cdc6795d0eaf49d4735bdf7f5c88784b6f0dd17114bb0fffc83b536",
+      "storedNewUsers": 1,
+      "storedActiveUsers": null
+    },
+    {
+      "id": "22c6d05a-e9fc-41b8-8ff0-953053581fc2",
+      "key": "2026-10-16",
+      "payload": {
+        "list": [
+          {
+            "name": "巴西(BR)",
+            "value": 3
+          },
+          {
+            "name": "俄罗斯(RU)",
+            "value": 2
+          },
+          {
+            "name": "葡萄牙(PT)",
+            "value": 1
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 1
+          }
+        ],
+        "total": 7
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.558+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.558+00:00",
+      "payloadSha256": "8f7153aa649cfbae27f21befc88fef36cf63ac041fa6927f0453eb3b00d298aa",
+      "storedNewUsers": 7,
+      "storedActiveUsers": null
+    },
+    {
+      "id": "14616f24-466d-4f36-885a-286b92c3b96d",
+      "key": "2026-10-17",
+      "payload": {
+        "list": [
+          {
+            "name": "俄罗斯(RU)",
+            "value": 5
+          },
+          {
+            "name": "白俄罗斯(BY)",
+            "value": 1
+          },
+          {
+            "name": "哈萨克斯坦(KZ)",
+            "value": 1
+          },
+          {
+            "name": "哥伦比亚(CO)",
+            "value": 1
+          },
+          {
+            "name": "墨西哥(MX)",
+            "value": 1
+          }
+        ],
+        "total": 9
+      },
+      "totalRow": false,
+      "createdAt": "2026-10-17T13:05:17.562+00:00",
+      "dimension": "country:1",
+      "updatedAt": "2026-10-17T13:05:17.562+00:00",
+      "payloadSha256": "bd2fc4645012aeda09ef663b4dd4ddab9058b4f133b3b5578d7431bd3fbc93c9",
+      "storedNewUsers": 9,
+      "storedActiveUsers": null
+    }
+  ],
+  "duplicateKeys": 0
+}

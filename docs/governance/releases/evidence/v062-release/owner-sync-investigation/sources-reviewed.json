@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "upstream-country-daily-difference",
+      "title": "国家与日报差异已存在于上游原始返回",
+      "queries": [
+        {
+          "id": "fixed-batch-snapshot-replay",
+          "source": {
+            "label": "本次同步原始快照",
+            "tables": [
+              {
+                "label": "revenue_raw_snapshot"
+              },
+              {
+                "label": "revenue_daily_stat"
+              },
+              {
+                "label": "revenue_country_daily_stat"
+              }
+            ],
+            "files": [
+              {
+                "label": "investigation-result.json"
+              },
+              {
+                "label": "snapshots.json"
+              },
+              {
+                "label": "replay.ts.txt"
+              },
+              {
+                "label": "logs.json"
+              }
+            ],
+            "links": [
+              {
+                "label": "完整发布记录",
+                "url": "https://github.com/flightzxc/cps-novel/blob/release/v0.6.2-2026-10-17/docs/governance/releases/v0.6.2-preproduction.md"
+              }
+            ],
+            "executedAt": "2026-10-17T13:36:03.286211+00:00",
+            "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\nSET LOCAL statement_timeout='15s';\nSELECT jsonb_build_object(\n 'readAt',clock_timestamp(),\n 'batch',(SELECT jsonb_build_object('id',id,'status',status,'bookStatus',book_status,'countryStatus',country_status,'requestCount',request_count,'startedAt',started_at,'finishedAt',finished_at,'note',CASE WHEN error_message ~ '^Country sums differ from the day totals on [0-9]+ day\\(s\\)$' THEN error_message ELSE '[nonmatching note omitted]' END) FROM revenue_sync_batch WHERE id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),\n 'snapshots',(SELECT jsonb_agg(jsonb_build_object('id',id,'dimension',dimension,'key',dimension_key,'totalRow',is_total,'storedNewUsers',new_real_dev_num,'storedActiveUsers',real_dev_num,'createdAt',created_at,'updatedAt',updated_at,'payloadSha256',encode(sha256(convert_to(raw_payload::text,'UTF8')),'hex'),\n 'payload',CASE WHEN dimension LIKE 'country:%' THEN jsonb_build_object('total',raw_payload->'total','list',(SELECT jsonb_agg(jsonb_build_object('name',e->'name','value',e->'value')) FROM jsonb_array_elements(raw_payload->'list') e)) ELSE jsonb_build_object('dimensionKey',raw_payload->'dimensionKey','dimensionValue',raw_payload->'dimensionValue','isTotal',raw_payload->'isTotal','realDevNum',raw_payload->'realDevNum','newRealDevNum',raw_payload->'newRealDevNum','realIncome',raw_payload->'realIncome') END) ORDER BY dimension,dimension_key) FROM revenue_raw_snapshot WHERE sync_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc' AND dimension IN ('1','country:0','country:1')),\n 'daily',(SELECT jsonb_agg(jsonb_build_object('date',stat_date,'newUsers',new_real_dev_num,'activeUsers',real_dev_num,'sourceBatch',source_batch_id) ORDER BY stat_date) FROM revenue_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),\n 'countries',(SELECT jsonb_agg(jsonb_build_object('date',stat_date,'label',country_label,'code',country_code,'newUsers',new_real_dev_num,'activeUsers',real_dev_num,'sourceBatch',source_batch_id) ORDER BY stat_date,country_label) FROM revenue_country_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),\n 'duplicateKeys',(SELECT count(*) FROM (SELECT revenue_sync_scope_id,stat_date,country_label FROM revenue_country_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc' GROUP BY revenue_sync_scope_id,stat_date,country_label HAVING count(*)>1) d)\n);\nCOMMIT;\n",
+            "metricDefinitions": [
+              {
+                "label": "国家逐日合计",
+                "definition": "国家逐日合计是本次GetCountryReport原始响应的各国家人数之和，与同一批次GetReport的当天值比较。"
+              }
+            ],
+            "filters": [
+              "固定批次7fd26b71-6831-4d2b-bdb6-faddf702c4cc",
+              "仅已存原始快照和现有日志；新增上游请求0，生产写0"
+            ],
+            "caveats": [
+              "国家明细合计等于国家接口自身total，但四天与日报接口返回值不同。",
+              "现有快照没有用户级身份和上游统计定义，不能证明去重、缓存或取数时刻是差异的原因。"
+            ],
+            "evidenceFlow": [
+              {
+                "kind": "validation",
+                "title": "本地原解析器重放",
+                "detail": "Final源码一致；15份国家报告无丢弃或重复，合并34条国家记录及9条日报均与数据库逐字段相等。"
+              },
+              {
+                "kind": "validation",
+                "title": "现有请求日志",
+                "detail": "固定批次17次调用：getreport2、getcountryreport15，全部HTTP200/outcome=ok；两worker错误0。"
+              }
+            ]
+          },
+          "reportingPeriod": "2026-09-17至2026-10-17（9个有记录日期）",
+          "columns": [
+            "date",
+            "dailyRawNewUsers",
+            "countryRawNewUsersTotal",
+            "countryRawNewUsersSum",
+            "dailyRawActiveUsers",
+            "countryRawActiveUsersTotal",
+            "countryRawActiveUsersSum"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-26",
+              "dailyRawNewUsers": 1,
+              "countryRawNewUsersTotal": 1,
+              "countryRawNewUsersSum": 1,
+              "dailyRawActiveUsers": 1,
+              "countryRawActiveUsersTotal": 1,
+              "countryRawActiveUsersSum": 1
+            },
+            {
+              "date": "2026-10-09",
+              "dailyRawNewUsers": 0,
+              "countryRawNewUsersTotal": 0,
+              "countryRawNewUsersSum": 0,
+              "dailyRawActiveUsers": 1,
+              "countryRawActiveUsersTotal": 1,
+              "countryRawActiveUsersSum": 1
+            },
+            {
+              "date": "2026-10-11",
+              "dailyRawNewUsers": 0,
+              "countryRawNewUsersTotal": 0,
+              "countryRawNewUsersSum": 0,
+              "dailyRawActiveUsers": 1,
+              "countryRawActiveUsersTotal": 2,
+              "countryRawActiveUsersSum": 2
+            },
+            {
+              "date": "2026-10-12",
+              "dailyRawNewUsers": 4,
+              "countryRawNewUsersTotal": 4,
+              "countryRawNewUsersSum": 4,
+              "dailyRawActiveUsers": 5,
+              "countryRawActiveUsersTotal": 6,
+              "countryRawActiveUsersSum": 6
+            },
+            {
+              "date": "2026-10-13",
+              "dailyRawNewUsers": 1,
+              "countryRawNewUsersTotal": 1,
+              "countryRawNewUsersSum": 1,
+              "dailyRawActiveUsers": 4,
+              "countryRawActiveUsersTotal": 4,
+              "countryRawActiveUsersSum": 4
+            },
+            {
+              "date": "2026-10-14",
+              "dailyRawNewUsers": 0,
+              "countryRawNewUsersTotal": 0,
+              "countryRawNewUsersSum": 0,
+              "dailyRawActiveUsers": 2,
+              "countryRawActiveUsersTotal": 3,
+              "countryRawActiveUsersSum": 3
+            },
+            {
+              "date": "2026-10-15",
+              "dailyRawNewUsers": 1,
+              "countryRawNewUsersTotal": 1,
+              "countryRawNewUsersSum": 1,
+              "dailyRawActiveUsers": 3,
+              "countryRawActiveUsersTotal": 3,
+              "countryRawActiveUsersSum": 3
+            },
+            {
+              "date": "2026-10-16",
+              "dailyRawNewUsers": 7,
+              "countryRawNewUsersTotal": 7,
+              "countryRawNewUsersSum": 7,
+              "dailyRawActiveUsers": 15,
+              "countryRawActiveUsersTotal": 15,
+              "countryRawActiveUsersSum": 15
+            },
+            {
+              "date": "2026-10-17",
+              "dailyRawNewUsers": 8,
+              "countryRawNewUsersTotal": 9,
+              "countryRawNewUsersSum": 9,
+              "dailyRawActiveUsers": 24,
+              "countryRawActiveUsersTotal": 28,
+              "countryRawActiveUsersSum": 28
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

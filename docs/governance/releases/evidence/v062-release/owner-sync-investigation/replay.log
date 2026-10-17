@@ -1,0 +1,8 @@
+PRODUCTION_PARSER_OFFLINE_REPLAY=PASS country_reports=15 country_rows_exact=34 daily_rows_exact=9 dropped=0 duplicates=0
+UPSTREAM_ENDPOINT_DIFFERENCES=[{"date":"2026-10-11","dailyRawNewUsers":0,"countryRawNewUsersTotal":0,"countryRawNewUsersSum":0,"dailyRawActiveUsers":1,"countryRawActiveUsersTotal":2,"countryRawActiveUsersSum":2},{"date":"2026-10-12","dailyRawNewUsers":4,"countryRawNewUsersTotal":4,"countryRawNewUsersSum":4,"dailyRawActiveUsers":5,"countryRawActiveUsersTotal":6,"countryRawActiveUsersSum":6},{"date":"2026-10-14","dailyRawNewUsers":0,"countryRawNewUsersTotal":0,"countryRawNewUsersSum":0,"dailyRawActiveUsers":2,"countryRawActiveUsersTotal":3,"countryRawActiveUsersSum":3},{"date":"2026-10-17","dailyRawNewUsers":8,"countryRawNewUsersTotal":9,"countryRawNewUsersSum":9,"dailyRawActiveUsers":24,"countryRawActiveUsersTotal":28,"countryRawActiveUsersSum":28}]
+EXISTING_LOG_REQUESTS=17 getreport=2 getcountryreport=15 all_http_200=YES worker_errors=0
+ADDITIONAL_UPSTREAM_REQUESTS=0 PRODUCTION_WRITES=0
+(node:83472) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/chenweifeng/Documents/cps%E6%B5%B7%E9%98%85/release-v0.6.2/src/lib/adapters/moboreader-revenue-parser.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/chenweifeng/Documents/cps海阅/release-v0.6.2/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)

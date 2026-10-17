@@ -1,0 +1,12 @@
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout='15s';
+SELECT jsonb_build_object(
+ 'readAt',clock_timestamp(),
+ 'batch',(SELECT jsonb_build_object('id',id,'status',status,'bookStatus',book_status,'countryStatus',country_status,'requestCount',request_count,'startedAt',started_at,'finishedAt',finished_at,'note',CASE WHEN error_message ~ '^Country sums differ from the day totals on [0-9]+ day\(s\)$' THEN error_message ELSE '[nonmatching note omitted]' END) FROM revenue_sync_batch WHERE id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),
+ 'snapshots',(SELECT jsonb_agg(jsonb_build_object('id',id,'dimension',dimension,'key',dimension_key,'totalRow',is_total,'storedNewUsers',new_real_dev_num,'storedActiveUsers',real_dev_num,'createdAt',created_at,'updatedAt',updated_at,'payloadSha256',encode(sha256(convert_to(raw_payload::text,'UTF8')),'hex'),
+ 'payload',CASE WHEN dimension LIKE 'country:%' THEN jsonb_build_object('total',raw_payload->'total','list',(SELECT jsonb_agg(jsonb_build_object('name',e->'name','value',e->'value')) FROM jsonb_array_elements(raw_payload->'list') e)) ELSE jsonb_build_object('dimensionKey',raw_payload->'dimensionKey','dimensionValue',raw_payload->'dimensionValue','isTotal',raw_payload->'isTotal','realDevNum',raw_payload->'realDevNum','newRealDevNum',raw_payload->'newRealDevNum','realIncome',raw_payload->'realIncome') END) ORDER BY dimension,dimension_key) FROM revenue_raw_snapshot WHERE sync_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc' AND dimension IN ('1','country:0','country:1')),
+ 'daily',(SELECT jsonb_agg(jsonb_build_object('date',stat_date,'newUsers',new_real_dev_num,'activeUsers',real_dev_num,'sourceBatch',source_batch_id) ORDER BY stat_date) FROM revenue_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),
+ 'countries',(SELECT jsonb_agg(jsonb_build_object('date',stat_date,'label',country_label,'code',country_code,'newUsers',new_real_dev_num,'activeUsers',real_dev_num,'sourceBatch',source_batch_id) ORDER BY stat_date,country_label) FROM revenue_country_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc'),
+ 'duplicateKeys',(SELECT count(*) FROM (SELECT revenue_sync_scope_id,stat_date,country_label FROM revenue_country_daily_stat WHERE source_batch_id='7fd26b71-6831-4d2b-bdb6-faddf702c4cc' GROUP BY revenue_sync_scope_id,stat_date,country_label HAVING count(*)>1) d)
+);
+COMMIT;
