@@ -15,7 +15,15 @@ args=sys.argv[1:];url=args[-1];u=urlparse(url)
 public=u.netloc==urlparse(os.environ['SITE_URL']).netloc
 live=os.environ['CASE_MODE']=='public'
 maintenance=os.path.exists(os.environ['PREPROD_SHARED_ROOT']+'/maintenance/enabled')
-code=404 if public and u.path in ['/dashboard','/api/admin'] else 503 if maintenance else 200 if public and live else 401
+admin_login=(not public) and u.path=='/login'
+# Owner 2026-10-18: public mode serves the admin login page without nginx Basic Auth.
+# ADMIN_GATED=1 simulates the old gated edge still installed; ADMIN_OPEN=1 an opened preprod edge.
+if public and u.path in ['/dashboard','/api/admin']: code=404
+elif maintenance: code=503
+elif public and live: code=200
+elif admin_login and live: code=401 if os.environ.get('ADMIN_GATED')=='1' else 200
+elif admin_login and os.environ.get('ADMIN_OPEN')=='1': code=200
+else: code=401
 if os.environ.get('BAD_STATUS')=='1': code=200
 headers='X-Content-Type-Options: nosniff\\n'
 if not (live and public) or os.environ.get('LEAK_ROBOTS')=='1': headers+='X-Robots-Tag: noindex, nofollow, noarchive\\n'
@@ -35,4 +43,8 @@ describe.each(SITE_MODE_CASES)('$mode release verification',site=>{
  it('rejects a generic upstream 503 instead of the known maintenance page',()=>expect(verify(site,true,{BAD_BODY:'1'}).status).toBe(65));
  it('refuses stale maintenance marker in the final live check',()=>{const r=verify(site,true,{},true);expect(r.status).toBe(65);expect(r.stdout).toContain('expect_live_maintenance_marker_present');});
  if(site.mode==='public')it('rejects leaked public noindex',()=>{const r=verify(site,false,{LEAK_ROBOTS:'1'});expect(r.status).toBe(65);expect(r.stdout).toContain('public_robots_tag');});
+ // 后台门禁（Owner 2026-10-18）：public 模式后台登录页匿名直达（200）；仍是 401 说明旧的带门禁 nginx 还在。preprod 模板冻结，仍须 401。
+ if(site.mode==='public')it('admin login gate: rejects the old Basic Auth edge (anonymous admin login still 401)',()=>{const r=verify(site,false,{ADMIN_GATED:'1'});expect(r.status,r.stderr+r.stdout).toBe(65);expect(r.stdout).toContain(`RELEASE_VERIFY=FAIL reason=anonymous_status url=${site.ADMIN_CANONICAL_ORIGIN}/login expected=200 code=401`);});
+ if(site.mode==='preprod')it('admin login gate: preprod admin login must stay behind Basic Auth (401)',()=>{const r=verify(site,false,{ADMIN_OPEN:'1'});expect(r.status,r.stderr+r.stdout).toBe(65);expect(r.stdout).toContain(`RELEASE_VERIFY=FAIL reason=anonymous_status url=${site.ADMIN_CANONICAL_ORIGIN}/login expected=401 code=200`);});
+ it('admin login gate: maintenance still answers the admin login with the real maintenance page',()=>{const r=verify(site,true,{ADMIN_GATED:'1'});expect(r.status,r.stderr+r.stdout).toBe(0);});
 });

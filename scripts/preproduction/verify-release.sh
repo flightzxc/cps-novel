@@ -74,7 +74,8 @@ assert_robots_tag() {
 }
 
 # --- State-aware anonymous matrix. Maintenance flips the expected code from
-# the live expectation (public 200, protected 401) to 503, and a 503 is
+# the live expectation (public 200, protected 401; in public mode the admin
+# login page is 200 too, see below) to 503, and a 503 is
 # only accepted when it is provably the real maintenance page (marker file
 # present AND exact known body), not any other source of 503/502. Outside a
 # maintenance window this is exactly as strict as the previous check (401
@@ -107,6 +108,12 @@ run_anonymous_matrix() {
     else
       local expected=401
       if [[ "$site_mode" == public && "$url" == "$SITE_URL/"* ]]; then expected=200; fi
+      # Owner 2026-10-18: in public mode the admin login page is no longer
+      # behind nginx Basic Auth (only the admin health endpoints are), so an
+      # anonymous caller must reach the login page itself. A 401 here means
+      # the old gated edge is still (or again) installed. Preprod keeps its
+      # frozen, fully gated template, so it stays 401.
+      if [[ "$site_mode" == public && "$url" == "$ADMIN_CANONICAL_ORIGIN/login" ]]; then expected=200; fi
       [[ "$code" == "$expected" ]] || {
         echo "RELEASE_VERIFY=FAIL reason=anonymous_status url=$url expected=$expected code=$code"; exit 65;
       }
@@ -143,6 +150,9 @@ fi
 [[ -r "$PREPROD_CURL_CONFIG" && -r "$PREPROD_ADMIN_PASSWORD_FILE" ]] || { echo "RELEASE_VERIFY=FAIL"; exit 66; }
 
 # --- /api/health anonymous: public mode public host is 200; protected hosts 401.
+# The admin host's health endpoints keep nginx Basic Auth in every mode (they
+# are for monitoring, not people), so they stay 401 even though the admin
+# login page itself is open in public mode.
 # Preprod is exactly 401 on both hosts -- never 200
 # (that would mean the health endpoint leaked past auth), never 503 (that
 # would mean the maintenance gate is still swallowing it, which is the

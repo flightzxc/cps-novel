@@ -45,7 +45,10 @@ try{
    security(await probe(pub,p,mode==='public'?(p==='/missing'?404:200):401),'public');security(await probe(pub,p,p==='/missing'?404:200,auth),'public');await pause(100);
   }
   for(const p of ['/dashboard','/login','/api/admin','/api/admin/foo','/api/health/worker','/api/health/backup'])for(const h of [{},auth])security(await probe(pub,p,404,h),'public');
-  for(const p of ['/login','/dashboard','/api/admin','/api/health','/api/health/worker','/api/health/backup','/_next/static/a.js']){security(await probe(admin,p,401),'admin');security(await probe(admin,p,200,auth),'admin');}
+  // 后台门禁（Owner 2026-10-18）：后台登录页、页面、接口、静态资源匿名直达（不再 401，也不发 Basic 质询）；
+  // 健康检查接口仍是 Administration 口令域的 401，带口令才 200。
+  for(const p of ['/login','/dashboard','/novels/book','/two-factor/challenge','/api/admin','/api/admin/foo','/_next/static/a.js'])for(const h of [{},auth]){const r=await probe(admin,p,200,h);assert.equal(r.headers['www-authenticate'],undefined,`${mode} ${admin}${p}: Basic challenge on an open admin path`);security(r,'admin');}
+  for(const p of ['/api/health','/api/health/worker','/api/health/backup']){const r=await probe(admin,p,401);assert.equal(r.headers['www-authenticate'],'Basic realm="CPS Novel Administration"',`${mode} ${admin}${p}: realm`);security(r,'admin');security(await probe(admin,p,200,auth),'admin');}
   for(const p of ['/','/ko','/novel/book','/browse','/robots.txt','/sitemap.xml','/go/a','/brand/og-default.png','/api/health-anything','/api/health/other','/api/health/worker/extra'])for(const h of [{},auth])security(await probe(admin,p,404,h),'admin');
   await probe('unknown.example','/',404);await assert.rejects(get('unknown.example','/',{},false));
   for(const h of [pub,admin]){assert.equal((await probe(h,'/path?q=1',301,{},false)).headers.location,`https://${h}/path?q=1`);await probe(h,'/.well-known/acme-challenge/probe',200,{},false);}

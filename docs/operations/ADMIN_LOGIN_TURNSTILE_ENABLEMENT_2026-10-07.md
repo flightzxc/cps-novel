@@ -7,7 +7,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 现有防护（不变） | nginx Basic Auth → nginx 登录页每 IP 每秒 2 次 → 应用层同用户名/IP 失败 5 次锁 15 分钟 → 强制两步验证 |
+| 现有防护（不变） | nginx 登录页每 IP 每秒 2 次 → 应用层同用户名/IP 失败 5 次锁 15 分钟 → 强制两步验证。（v0.6.3 起后台不再有 nginx Basic Auth，Owner 2026-10-18 拍板，只剩健康检查接口带口令；见 [ADR-V063](../adr/ADR-V063-ADMIN-EDGE-BASIC-AUTH-REMOVAL.md)。v0.6.3 之前这里第一道是 nginx Basic Auth。） |
 | 新增 | 密码校验**之前**多一道 Turnstile 人机验证（服务端向 Cloudflare `siteverify` 核验，并要求令牌签发给后台主机） |
 | 需要你准备 | Cloudflare 里为后台主机建一个 Turnstile Widget，拿到 **Site Key（公开）** 与 **Secret Key（保密）** |
 | 需要放的东西 | Site Key → `preprod.env` 的 `ADMIN_LOGIN_TURNSTILE_SITE_KEY`；Secret Key → 密钥**文件** `/opt/cps-novel/shared/secrets/admin_login_turnstile_secret_key`；开关 `ADMIN_LOGIN_TURNSTILE_ENABLED=true` |
@@ -97,7 +97,7 @@ preflight 在开关为 `true` 时会：校验开关取值与 Site Key 格式、�
    preprod_compose exec -T web sh -c 'wc -c < /run/secrets/admin_login_turnstile_secret_key'
    ```
    期望是大于 0 的数字（0 表示挂到了 `/dev/null`，即开关没读到 `true`）。
-3. **浏览器**：打开 `https://zbcwf.…/login`（先过 Basic Auth）。应看到"人机验证"组件；开发者工具 Network 里能看到 `challenges.cloudflare.com` 的请求。
+3. **浏览器**：打开 `https://zbcwf.…/login`（v0.6.3 起直接到登录页；v0.6.3 之前要先过 Basic Auth）。应看到"人机验证"组件；开发者工具 Network 里能看到 `challenges.cloudflare.com` 的请求。
    - 不点验证直接点"登录"：提示"请先完成人机验证"，且没有登录请求发出。
    - 完成验证后用管理员账号登录：照常进入两步验证页，流程不变。
    - 登录页响应头应仍有 `X-Frame-Options: DENY`（别人不能嵌入后台）；后台没有 CSP，所以不会拦截 Cloudflare 的 iframe。
@@ -127,7 +127,7 @@ preprod_load_env && preprod_compose_app_up web
 
 - 回退不需要先跑 preflight（关闭值恒通过），也**不需要**删除密钥文件或 Site Key；留着无副作用。
 - 回退后：登录页不再有组件、不再加载 Cloudflare 脚本，Compose 把密钥挂载切回 `/dev/null`，`secrets-preflight.sh` 不再检查该文件。
-- Basic Auth、nginx 限速、5 次锁定、两步验证全程不受这个开关影响；管理员被"挡在门外"时，关开关即可恢复。
+- nginx 限速、5 次锁定、两步验证（以及 v0.6.3 之前的 Basic Auth）全程不受这个开关影响；管理员被"挡在门外"时，关开关即可恢复。
 - 如果是 web 容器起不来：这个功能不会让 web 崩溃（密钥读取失败只会让后台登录一律被拒并在日志里打 WARN）；起不来请另查，而不是先怀疑 Turnstile。
 
 **轮换 Secret Key**：Cloudflare 后台重置密钥 → 按 3.1 覆盖写入同一文件（保持属主/模式/ACL）→ `preprod_compose_app_up web`。密钥只在容器启动时读取一次，所以覆盖文件后必须重启/重建 web 才生效。
