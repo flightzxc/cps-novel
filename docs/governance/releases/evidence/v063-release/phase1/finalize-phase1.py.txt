@@ -1,0 +1,98 @@
+import hashlib,json,pathlib,re,subprocess
+root=pathlib.Path.cwd();base=root/'.tmp/v063-release';identity=json.loads((base/'identity.json').read_text())
+run=lambda *a:subprocess.check_output(['git',*a],text=True).strip()
+assert run('rev-parse','HEAD')==identity['final'];assert not run('status','--porcelain=v1')
+for stage,count in [('prepare',2),('basic',6),('runners',37),('remaining',9),('artifact',5)]:
+ rows=json.loads((base/(stage+'-result.json')).read_text());assert len(rows)==count and all(r['exit']==0 for r in rows),(stage,rows[-1])
+full=json.loads((base/'full-test.json').read_text());assert full['success'] and full['numFailedTests']==0
+assert not re.search(r'Unhandled Errors|Unhandled Rejection|uncaughtException',(base/'full-test.log').read_text(),re.I)
+static=json.loads((base/'dictionary-static.log').read_text());assert static=={'status':'ok','models':60,'recordCount':1401,'activeCount':1331}
+p106=(base/'run-p1-06-postgres-verification.log').read_text();assert 'TABLE_COUNT=60' in p106 and 'DICTIONARY_DRIFT=0_OF_1331' in p106
+mut=(base/'public-cutover-mutations.log').read_text();assert len(re.findall(r'^MUTATION=PASS ',mut,re.M))==27 and 'PUBLIC_CUTOVER_MUTATIONS=PASS' in mut
+assert (base/'mutation-restored.log').read_text()==''
+nginx=base/'nginx-public-86400.conf';assert nginx.stat().st_size==18307;candidate_sha=hashlib.sha256(nginx.read_bytes()).hexdigest();assert candidate_sha=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+assert 'NGINX_CANDIDATE=PASS' in (base/'nginx-candidate.log').read_text()
+assert 'B21_MEASUREMENT=PASS' in (base/'b21.log').read_text()
+brand=(base/'brand.log').read_text();assert 'RUNTIME_IMAGE_DEPS=PASS' in brand and 'BRAND_IMAGE=PASS' in brand
+assert 'IMAGE_E2E=PASS' in (base/'archive-image-e2e.log').read_text()
+p105=(base/'run-p1-05b-postgres-verification.log').read_text();assert not re.search(r'Unhandled Errors|Unhandled Rejection|uncaughtException',p105,re.I)
+p105_counts=re.findall(r'Tests\s+(\d+) passed(?: \| (\d+) skipped)? \((\d+)\)',p105);assert p105_counts;p105_passed=int(p105_counts[-1][0])
+probe=(base/'run-next-proxy-probe-verification.log').read_text();assert 'NEXT_PROXY_PROBE_VERIFICATION=PASS' in probe and 'probes=1742' in probe
+manifest=json.loads((base/'archive-manifest.json').read_text());assert manifest['approved_git_commit']==identity['final'] and manifest['image_revision']==identity['final'] and manifest['version']=='0.6.3' and manifest['image_platform']=='linux/amd64';archive=root/'.tmp/preproduction-archive'/manifest['archive_filename'];assert hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()==manifest['archive_sha256']
+assert not pathlib.Path('/Users/chenweifeng/Documents/cps海阅/.heavy-test.lock').exists()
+for before in json.loads((base/'reference-before.json').read_text()):
+ assert subprocess.check_output(['git','-C',before['path'],'rev-parse','HEAD'],text=True).strip()==before['head']
+ assert subprocess.check_output(['git','-C',before['path'],'status','--porcelain=v1'],text=True)==before['status']
+result={'status':'phase1_complete_not_deployed',**identity,'archive':str(archive),'archiveSha256':manifest['archive_sha256'],'archiveBytes':archive.stat().st_size,'manifest':str(root/'.tmp/preproduction-archive'/(identity['final']+'.json')),'imageTag':manifest['image_tag'],'platform':manifest['image_platform'],'ociTarget':manifest['oci']['target']['digest'],'ociPlatformManifest':manifest['oci']['platform_manifest']['digest'],'ociConfig':manifest['oci']['config']['digest'],'nginxCandidateBytes':18307,'nginxCandidateSha256':candidate_sha,'runnersPassed':37,'mutationsPassed':27,'fullRegressionPassed':full['numPassedTests'],'fullRegressionSkipped':full['numPendingTests'],'fullRegressionFailed':0,'realDbFullRegressionPassed':p105_passed,'unhandled':0,'typecheckErrors':0,'lintErrors':0,'lintWarnings':16,'migrationCount':29,'tableCount':60,'dictionaryTotal':1401,'dictionaryActive':1331,'productionConnected':False,'heavyLockReleased':True,'networkRetriesUsed':0,'wrapperRepair':'read-only manifest summary field corrected; repository gates unaffected','governance':{'registry':'phase1_complete','releaseRecord':'phase1_complete','tag':'after_deployment','changelog':'after_deployment','developmentLog':'after_deployment','notion':'after_deployment'}}
+for mode in ['production','full']:
+ data=json.loads((base/('audit-'+mode+'.json')).read_text());assert data['metadata']['vulnerabilities']['critical']==0;result['audit'+mode.title()]=data['metadata']['vulnerabilities']
+assert result['auditProduction']['high']==4
+(base/'phase1-final-result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+summary=['PHASE1=PASS not_deployed=yes','FINAL='+identity['final'],'TREE='+identity['tree'],'TYPECHECK=PASS errors=0','LINT=PASS errors=0 warnings=16','FULL_TEST=PASS passed=%s skipped=%s failed=0 unhandled=0'%(full['numPassedTests'],full['numPendingTests']),'RUNNERS=PASS count=37','NGINX_MUTATIONS=PASS count=27','MIGRATIONS=29 TABLE_COUNT=60 DICTIONARY_TOTAL=1401 DICTIONARY_ACTIVE=1331','ARCHIVE_SHA256='+manifest['archive_sha256'],'OCI_TARGET='+result['ociTarget'],'OCI_PLATFORM_MANIFEST='+result['ociPlatformManifest'],'OCI_CONFIG='+result['ociConfig'],'NGINX_PUBLIC_86400 bytes=18307 sha256='+candidate_sha]
+markers=re.compile(r'^(?:PUBLIC_CUTOVER_MUTATIONS|NGINX_CANDIDATE|NGINX_MATRIX[^ =]*|TABLE_COUNT|DICTIONARY_DRIFT|NEXT_PROXY_PROBE[^ =]*|B21_MEASUREMENT|RUNTIME_IMAGE_DEPS|BRAND_IMAGE|ARCHIVE_BUILD|ARCHIVE_VERIFY|ARCHIVE_INDEPENDENT_SHA256|E2E_MIGRATIONS|INDEXNOW_STATUS_HELP|IMAGE_HEALTH|IMAGE_E2E|COMPOSE_[^ =]*|AUDIT|GITHUB_FINAL_PUSH)=')
+for p in sorted(base.glob('*.log')):
+ for line in p.read_text().splitlines():
+  if markers.match(line):summary.append(p.name+': '+line)
+(base/'phase1-summary.txt').write_text('\n'.join(summary)+'\n')
+registry=root/'docs/governance/version-registry.md';s=registry.read_text();s=s.replace('### v0.6.3 —— 第一阶段准备中，尚未部署','### v0.6.3 —— 第一阶段完成，尚未部署',1)
+needle='| `v0.6.3` | 2026-10-18 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `release/v0.6.3-2026-10-18` | 第一阶段准备中，尚未部署 |'
+assert needle in s;s=s.replace(needle,needle.replace('`release/v0.6.3-2026-10-18`','`'+identity['final'][:7]+'` / [发布记录](releases/v0.6.3-preproduction.md)').replace('第一阶段准备中','第一阶段完成'),1)
+pos=s.index('### v0.6.2');s=s[:pos]+'- 第一阶段实测完成：Final `'+identity['final']+'` / tree `'+identity['tree']+'`；全量'+str(full['numPassedTests'])+'通过/0失败/无Unhandled，37运行器、27条nginx变异、三模式矩阵及最终归档端到端通过。public@86400候选18307字节，SHA256 `'+candidate_sha+'`；归档SHA256 `'+manifest['archive_sha256']+'`。GitHub已推送Final；未连接生产，等待Owner“批准部署”。完整证据见[发布记录](releases/v0.6.3-preproduction.md)。\n\n'+s[pos:];registry.write_text(s)
+record=f"""# v0.6.3 PATCH 发布记录
+
+## 当前状态：第一阶段完成，尚未部署
+
+本阶段仅本地升版、完整门禁、GitHub推送及不可变镜像归档核验，未连接生产。第二阶段须Owner明确说“批准部署”，sudo密码由Owner在交互终端亲自输入。
+
+| 身份 | 固定值 |
+| --- | --- |
+| 基线 | `{identity['baseline']}` / tree `{identity['baselineTree']}` |
+| Final | `{identity['final']}` |
+| tree | `{identity['tree']}` |
+| 发布分支 | `{identity['branch']}`；后续治理提交不改变工件Final |
+| image | `{result['imageTag']}` / `{result['platform']}` |
+| 归档 | `{archive}`；{result['archiveBytes']}字节 |
+| 归档 SHA256 | `{result['archiveSha256']}` |
+| OCI target | `{result['ociTarget']}` |
+| OCI platform manifest | `{result['ociPlatformManifest']}` |
+| OCI config | `{result['ociConfig']}` |
+| nginx public@86400 | 18307字节；SHA256 `{candidate_sha}` |
+
+## 本版范围与实测
+
+- PATCH：后台登录页、页面、接口及静态资源移除nginx Basic Auth，三个健康检查保留口令；应用登录、人机验证、限速、失败锁定、两步验证保持。B-49只增加国家分布口径说明。
+- 零新增迁移；迁移29、表60、字典1401/active1331、drift0。Prisma、grants及compose与v0.6.2逐字节一致，环境变量集合added0/removed0。锁文件只改根版本字段。
+- npm ci、Prisma generate、tsc、lint、build均通过；lint 0 error / 16 warning。全量{full['numPassedTests']} passed / {full['numPendingTests']} skipped / 0 failed / 无Unhandled；p1-05b真实库全量{p105_passed} passed、0 failed、无Unhandled。37个原运行器全部通过，禁止整文件跳过断言保留，严格代理探针1742。
+- nginx preprod/rehearsal/public三模式通过；27条变异通过并还原，git diff为空；候选字节及SHA256符合交接。B21、RUNTIME_IMAGE_DEPS、BRAND_IMAGE均通过。
+- 生产audit critical0/high4（@prisma/config、deepmerge-ts、effect、prisma），全量audit critical0。未执行audit fix。
+- 最终归档独立SHA256、原消费端--load、OCI引用链与镜像身份核验通过；临时postgres:16.14迁移29条、postgres单事务grants、effective-tag 0/0/0、IndexNow帮助退出0、health 0.6.3/Final及metadataConsistency passed。Next16.3.8，运行镜像无vitest/tinypool。
+- 重型任务持指定锁串行，负载阈值18；构建前记录docker system df。仅原运行器清理本轮自建临时卷，既有卷、镜像和缓存保留。两个CPS只读参考仓前后HEAD/status一致，锁已释放。
+
+只读manifest摘要探针首次误取不存在的commit字段而报KeyError，改用schemaVersion 2的实际字段后回读通过；原构建器、消费端验证及端到端门禁均首次通过，工件身份不变。详见[包装修复记录](evidence/v063-release/phase1/wrapper-repair.json)。
+
+原始结论见[phase1-summary.txt](evidence/v063-release/phase1/phase1-summary.txt)，机器交付见[phase1-final-result.json](evidence/v063-release/phase1/phase1-final-result.json)。证据脚本全部以.txt结尾；原输出私有保留，提交副本脱敏并验证JSON与校验清单。
+
+## 第二阶段待授权
+
+以[后台门禁移除运维手册](../../operations/ADMIN_EDGE_GATE_REMOVAL_RUNBOOK_2026-10-18.md)为准，仅haiyue-vps低流量窗口。顺序固定：上传并校验解包至新Final目录 → nginx只读预检 → Owner交互输入sudo安装 → 公网矩阵 → release.sh deploy。
+
+- current仍为v0.6.2时，从新Final目录运行安装器；旧nginx SHA256必须为`d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe`，7个snippet一致；diff删10行/加26行，去注释新增12行全属搜索。
+- env改前SHA256必须为`0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b`；备份后只改APP_VERSION和NEXT_PUBLIC_BUILD_VERSION，以脱敏diff/cmp证明。
+- 暂停门禁通过，发布/生成/收入同步无pending或processing；29条迁移名称/checksum与v0.6.2一致；在线逻辑备份及pg_restore --list通过。
+- nginx取得NGINX_CANDIDATE/READY/INSTALL三项PASS，记录NGINX_BACKUP及前后SHA256；装后轮询登录页最多10次至200。失败停止，按手册处理自动回退。
+- Owner已裁定矩阵预算：客户机完整24项，服务器复核登录页、3个匿名健康检查、带口令主健康检查及静态资源，共30次；探针不自动跟随重定向，检查dashboard的Location。安装前检查及装后轮询另计；Owner浏览器验收另计。UptimeRobot未配置，跳过，不新建监控。
+- 矩阵不符先只回nginx；通过后才运行APPROVED_GIT_COMMIT=Final、PREPROD_APPROVED_MIGRATION=YES的原release.sh deploy。记录维护时长；本版零迁移，流程只重放grants，不手写SQL。
+- 部署后核对health/Final、五应用healthy、postgres容器ID不变、29迁移finished/0 rolled_back；后台健康匿名401/带口令200，登录页200且无WWW-Authenticate；投影0/0/0、IndexNow熔断关闭/无429/积压0、Next16.3.8及无测试依赖、写闸不变、备份运行、服务error/permission denied为0、nginx无新增emerg/crit，以及公开页抽查。
+
+## Owner验收、回滚与治理
+
+Owner无痕打开后台/login，应直接看到登录页；自行登录并完成两步验证；在/revenue国家分布标题下核对口径说明；通知运营无需再输入门禁账号密码。执行者不尝试后台登录。
+
+只回nginx使用安装器--restore-backup（不带--mode），由Owner输入sudo；应恢复旧哈希和/login 401。应用回滚必须先回nginx，再恢复本次env备份、从v0.6.2不可变目录回滚；SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES须Owner另行明确批准。
+
+公开网址、canonical、hreflang、站点地图、robots不变。PN-15搜索独立限流将随第二阶段模板重装生效，HSTS保持86400。本阶段不登记为已上线。
+
+发版治理：PATCH台账、发布记录、证据已完成；annotated v0.6.3、指定core.abbrev=7的CHANGELOG生成、唯一发版级开发日志、Notion同步回读均待部署验收。日志须记录Owner 10-18后台登录决定、B-49来源、PN-15随模板生效和HSTS不提级。
+"""
+(root/'docs/governance/releases/v0.6.3-preproduction.md').write_text(record)
+print('PHASE1_DELIVERY_PREPARED=PASS')

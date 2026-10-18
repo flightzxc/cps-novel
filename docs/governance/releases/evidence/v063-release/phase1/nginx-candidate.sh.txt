@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+scripts/preproduction/render-nginx.sh --mode public --hsts-max-age 86400 --output "$PWD/.tmp/v063-release/nginx-public-86400.conf"
+node scripts/preproduction/verify-nginx-candidate.mjs --mode public --hsts-max-age 86400 .tmp/v063-release/nginx-public-86400.conf
+python3 - <<'CHECK'
+import pathlib,hashlib
+p=pathlib.Path('.tmp/v063-release/nginx-public-86400.conf');d=p.read_bytes()
+assert len(d)==18307
+assert hashlib.sha256(d).hexdigest()=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+print('NGINX_PUBLIC_86400_IDENTITY=PASS bytes='+str(len(d))+' sha256='+hashlib.sha256(d).hexdigest())
+CHECK

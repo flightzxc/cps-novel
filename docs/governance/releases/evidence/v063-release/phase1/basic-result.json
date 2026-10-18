@@ -1,0 +1,78 @@
+[
+  {
+    "name": "typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-18T10:58:22.671456+00:00",
+    "exit": 0,
+    "seconds": 22.045,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/typecheck.log"
+  },
+  {
+    "name": "lint",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-18T10:59:14.727889+00:00",
+    "exit": 0,
+    "seconds": 22.04,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/lint.log"
+  },
+  {
+    "name": "full-test",
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=.tmp/v063-release/full-test.json"
+    ],
+    "started_at": "2026-10-18T10:59:36.770148+00:00",
+    "exit": 0,
+    "seconds": 224.299,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/full-test.log"
+  },
+  {
+    "name": "docker-df-build",
+    "command": [
+      "docker",
+      "system",
+      "df"
+    ],
+    "started_at": "2026-10-18T11:04:06.082663+00:00",
+    "exit": 0,
+    "seconds": 2.006,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/docker-df-build.log"
+  },
+  {
+    "name": "build",
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "started_at": "2026-10-18T11:04:08.090224+00:00",
+    "exit": 0,
+    "seconds": 24.042,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/build.log"
+  },
+  {
+    "name": "dictionary-static",
+    "command": [
+      "node",
+      "scripts/check-database-dictionary-drift.mjs",
+      "--static"
+    ],
+    "started_at": "2026-10-18T11:04:32.135010+00:00",
+    "exit": 0,
+    "seconds": 2.006,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/dictionary-static.log"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "action": "read-only manifest summary",
+  "initialError": "KeyError: commit",
+  "cause": "summary probe assumed a field absent from the schemaVersion 2 manifest",
+  "repair": "read actual schema fields; original archive build and consumer verification untouched",
+  "repositoryGatesFailed": false,
+  "imageE2ePassed": true
+}

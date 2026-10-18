@@ -1,0 +1,17 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.3
+
+ ✓ |node| tests/integration/auth/add-admin-identity-postgres.test.ts (2 tests) 770ms
+     ✓ uses web_app to create, independently enroll, replay and deactivate admin2  585ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:04:45
+   Duration  961ms (transform 72ms, setup 0ms, import 103ms, tests 770ms, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-add-admin-identity-secrets.gwyeB7/integration-result.json
+ADD_ADMIN_IDENTITY_INTEGRATION=PASS passed=2 skipped=0
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+ADD_ADMIN_IDENTITY_DICTIONARY_DRIFT=0
+ADD_ADMIN_IDENTITY_POSTGRES_VERIFICATION=PASS
+ADD_ADMIN_IDENTITY_DISPOSABLE_DATABASE_CLEANED=yes

@@ -1,0 +1,46 @@
+PHASE1=PASS not_deployed=yes
+FINAL=6543af6876b1dda857ec6b28ae13df1e2c1a49c6
+TREE=c5f7680d71642cf36c725b05dcaf9f5501b9709e
+TYPECHECK=PASS errors=0
+LINT=PASS errors=0 warnings=16
+FULL_TEST=PASS passed=11528 skipped=880 failed=0 unhandled=0
+RUNNERS=PASS count=37
+NGINX_MUTATIONS=PASS count=27
+MIGRATIONS=29 TABLE_COUNT=60 DICTIONARY_TOTAL=1401 DICTIONARY_ACTIVE=1331
+ARCHIVE_SHA256=271b4763615c2d50258029dbd6a341a8e2ffd8b31d15df75bccf3a1c224dcbfc
+OCI_TARGET=sha256:4ca2bee0ea5d1d486ad345e18f82486d64750923fa3af80a60a439dcc8fdd0d9
+OCI_PLATFORM_MANIFEST=sha256:4ca2bee0ea5d1d486ad345e18f82486d64750923fa3af80a60a439dcc8fdd0d9
+OCI_CONFIG=sha256:1800ca9ea941aadf8a5b728f1d610e4fca8dee1804f2c575a41c1313278a05c7
+NGINX_PUBLIC_86400 bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+archive-build.log: ARCHIVE_BUILD=PASS
+archive-image-e2e.log: E2E_MIGRATIONS=PASS applied=29
+archive-image-e2e.log: INDEXNOW_STATUS_HELP=PASS
+archive-image-e2e.log: RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+archive-image-e2e.log: IMAGE_HEALTH=PASS {"ok":true,"status":"healthy","build":{"version":"0.6.3","commit":"6543af6876b1dda857ec6b28ae13df1e2c1a49c6","builtAt":"2026-10-18T11:22:59Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.6.3","commit":"6543af6876b1dda857ec6b28ae13df1e2c1a49c6"}},"database":{"status":"passed","reason":null,"durationMs":154},"reasons":[]}
+archive-image-e2e.log: IMAGE_E2E=PASS
+archive-verify.log: ARCHIVE_INDEPENDENT_SHA256=PASS sha256=271b4763615c2d50258029dbd6a341a8e2ffd8b31d15df75bccf3a1c224dcbfc
+audit.log: AUDIT=PASS mode=production critical=0 high=4 high_names=@prisma/config,deepmerge-ts,effect,prisma
+audit.log: AUDIT=PASS mode=full critical=0 high=11 high_names=@next/eslint-plugin-next,@prisma/config,brace-expansion,braces,deepmerge-ts,effect,eslint-config-next,fast-glob,js-yaml,micromatch,prisma
+b21.log: B21_MEASUREMENT=PASS
+brand.log: RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+brand.log: BRAND_IMAGE=PASS image=cps-novel:cutover-local-6543af6 status=200 content_type=image/png sha256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb
+compose.log: COMPOSE_VARIABLES=PASS file=docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/production-like/docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/preproduction/docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=.env.example added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/preproduction/preprod.env.example added=0 removed=0
+compose.log: COMPOSE_RENDER=PASS mode=root services=5
+compose.log: COMPOSE_RENDER=PASS mode=production-like services=7
+compose.log: COMPOSE_RENDER=PASS mode=preproduction services=6
+compose.log: COMPOSE_ALL=PASS
+github-final-push.log: GITHUB_FINAL_PUSH=PASS commit=6543af6876b1dda857ec6b28ae13df1e2c1a49c6
+nginx-candidate.log: NGINX_CANDIDATE=PASS mode=public bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+nginx-matrix.log: NGINX_MATRIX=PASS
+nginx-matrix.log: NGINX_MATRIX=PASS mode=rehearsal
+nginx-matrix.log: NGINX_MATRIX=PASS mode=public
+nginx-matrix.log: NGINX_MATRIX_ALL=PASS
+public-cutover-mutations.log: PUBLIC_CUTOVER_MUTATIONS=PASS
+run-next-proxy-probe-verification.log: NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1742 known_findings=0
+run-next-proxy-probe-verification.log: NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.8
+run-p1-06-postgres-verification.log: TABLE_COUNT=60
+run-p1-06-postgres-verification.log: DICTIONARY_DRIFT=0_OF_1331

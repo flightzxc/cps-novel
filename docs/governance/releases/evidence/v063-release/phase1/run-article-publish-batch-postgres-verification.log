@@ -1,0 +1,37 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.3
+
+ARTICLE_PUBLISH_BATCH_A articles=1000 children=5 worker_cycles=1001
+ARTICLE_PUBLISH_BATCH_D sitemap_trigger_calls=1 for_articles=1000
+stdout | tests/integration/tasks/article-publish-batch-postgres.test.ts > article publish batch task · real roles (web_app enqueue/control, worker_app execution) > A / C(默认) / D：全选 1,000 篇草稿 > D. 全量发布后站点地图触发一次（实测次数不随篇数线性增长），且那次刷新真的成功把文章写进站点地图
+{"schemaVersion":1,"level":"info","event":"effective_tag_check","missing":0,"extra":0,"changed":0,"reconcile":false,"ms":3}
+
+stdout | tests/integration/tasks/article-publish-batch-postgres.test.ts > article publish batch task · real roles (web_app enqueue/control, worker_app execution) > A / C(默认) / D：全选 1,000 篇草稿 > D. 全量发布后站点地图触发一次（实测次数不随篇数线性增长），且那次刷新真的成功把文章写进站点地图
+{"schemaVersion":1,"event":"sitemap_release_cleanup","outcome":"ok","keepRecent":10,"current":"11e83501-ce50-4640-8616-e18c793912be","total":1,"kept":1,"removed":0,"failed":0,"deferred":0,"freedBytes":0,"keptOrphans":0,"ignored":0,"durationMs":1}
+
+stderr | tests/integration/tasks/article-publish-batch-postgres.test.ts > article publish batch task · real roles (web_app enqueue/control, worker_app execution) > F. 发布检查不通过的文章记为失败并带原因；重试失败项不会重复发布已发布的；条目重放走稳定请求编号
+{"family":"generic","taskType":"article.publish.v1","taskId":"8dd0010c-835a-4b36-a0c7-6ead5bdd4108","itemId":"28ec9235-09d3-4000-bcee-fb5fc021a2ef","workerId":"light-publish-test","errorKind":"publish_gate_rejected","attempt":1,"source":"handler","occurredAt":"2026-10-18T11:05:26.349Z"}
+
+stderr | tests/integration/tasks/article-publish-batch-postgres.test.ts > article publish batch task · real roles (web_app enqueue/control, worker_app execution) > F. 发布检查不通过的文章记为失败并带原因；重试失败项不会重复发布已发布的；条目重放走稳定请求编号
+{"family":"generic","taskType":"article.publish.v1","taskId":"8dd0010c-835a-4b36-a0c7-6ead5bdd4108","itemId":"521a8330-8569-49ca-9f8c-c4b5345cd249","workerId":"light-publish-test","errorKind":"publish_gate_rejected","attempt":1,"source":"handler","occurredAt":"2026-10-18T11:05:26.359Z"}
+
+stderr | tests/integration/tasks/article-publish-batch-postgres.test.ts > article publish batch task · real roles (web_app enqueue/control, worker_app execution) > F. 发布检查不通过的文章记为失败并带原因；重试失败项不会重复发布已发布的；条目重放走稳定请求编号
+{"family":"generic","taskType":"article.publish.v1","taskId":"8dd0010c-835a-4b36-a0c7-6ead5bdd4108","itemId":"d24f2b6a-2fe4-4459-820e-52adba531d12","workerId":"light-publish-test","errorKind":"publish_gate_rejected","attempt":1,"source":"handler","occurredAt":"2026-10-18T11:05:26.432Z"}
+
+ ✓ |node| tests/integration/tasks/article-publish-batch-postgres.test.ts (12 tests) 23530ms
+     ✓ C'. 勾选「发布时暂不抓试读」：一个试读任务都不建，父任务结果记录跳过的本数  6178ms
+     ✓ E. 暂停后不再发布新文章，恢复后继续；中止后剩余条目标记为未尝试、已发布的保持，并收尾已发布部分  1099ms
+     ✓ F. 发布检查不通过的文章记为失败并带原因；重试失败项不会重复发布已发布的；条目重放走稳定请求编号  306ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  20:05:02
+   Duration  24.14s (transform 419ms, setup 0ms, import 534ms, tests 23.53s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-article-publish-batch-secrets.YMvJhq/integration-result.json
+  tests/integration/tasks/article-publish-batch-postgres.test.ts passed=12 skipped=0
+ARTICLE_PUBLISH_BATCH_INTEGRATION=PASS files=1 passed=12 skipped=0
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+ARTICLE_PUBLISH_BATCH_DICTIONARY_DRIFT=0
+ARTICLE_PUBLISH_BATCH_POSTGRES_VERIFICATION=PASS
+ARTICLE_PUBLISH_BATCH_DISPOSABLE_DATABASE_CLEANED=yes

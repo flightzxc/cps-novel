@@ -1,0 +1,25 @@
+{
+  "approvalRequired": "批准部署",
+  "host": "haiyue-vps",
+  "hstsMaxAge": 86400,
+  "nginxBeforeSha256": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe",
+  "nginxCandidateBytes": 18307,
+  "nginxCandidateSha256": "7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9",
+  "envBeforeSha256": "0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b",
+  "matrix": {
+    "clientRequests": 24,
+    "serverRequests": 6,
+    "automaticRedirectFollowing": false,
+    "ownerBrowserSeparate": true,
+    "monitoring": "未配置，跳过"
+  },
+  "sudoEntry": "Owner personally in interactive terminal; never captured",
+  "sequence": [
+    "upload_verify_unpack",
+    "nginx_readonly_precheck",
+    "owner_sudo_nginx_install",
+    "public_matrix",
+    "release_deploy"
+  ],
+  "disposableVolumePolicy": "original runners may remove only volumes created by this run; preserve all preexisting volumes, images, caches"
+}

@@ -1,0 +1,129 @@
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "cps_novel_plotnovel_20261018201739_65412", schema "public" at "127.0.0.1:51884"
+
+29 migrations found in prisma/migrations
+
+Applying migration `20260803090000_p1_initial_schema`
+Applying migration `20260804090000_p1_08_credential_status_parity`
+Applying migration `20260804140000_p1_08b_admin_auth_persistence`
+Applying migration `20260816160000_p2_06_5_tagging_v3`
+Applying migration `20260818120000_v020_foundation_shared`
+Applying migration `20260905090000_site_setting_carousel_config`
+Applying migration `20260906090000_p2_02b_article_template_cps_parity`
+Applying migration `20260907090000_p3_generic_task_catalog_scan_indexes`
+Applying migration `20260907091500_p3_drop_catalog_scan_task`
+Applying migration `20260909090000_c24_article_axes`
+Applying migration `20260910090000_c27_blog_article_foundation`
+Applying migration `20260911090000_c30_novel_rebind_foundation`
+Applying migration `20260912090000_l10n_article_template_locale_not_null`
+Applying migration `20260912100000_carousel_serving_source_check_fix`
+Applying migration `20260913120000_catalog_batch_parent`
+Applying migration `20260916090000_x10_task_control_paused_cancelled`
+Applying migration `20260918090000_preview_account_hold`
+Applying migration `20260924090000_p5a_catalog_position`
+Applying migration `20260926150000_periodic_sweep_skip_reason`
+Applying migration `20260927090000_side_effect_manual_review_guard`
+Applying migration `20260930100000_site_setting_yandex`
+Applying migration `20261005100000_worker_health_partial_indexes`
+Applying migration `20261008120000_revenue_account_level_dashboard`
+Applying migration `20261009120000_b38_novel_effective_tag`
+Applying migration `20261009150000_site_setting_site_search_enabled`
+Applying migration `20261010160000_canonical_tag_homepage_visible`
+Applying migration `20261014120000_code_mode_upstream_code_guard`
+Applying migration `20261017120000_revenue_book_country_breakdown`
+Applying migration `20261017180000_revenue_country_active_users`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260803090000_p1_initial_schema/
+    └─ migration.sql
+  └─ 20260804090000_p1_08_credential_status_parity/
+    └─ migration.sql
+  └─ 20260804140000_p1_08b_admin_auth_persistence/
+    └─ migration.sql
+  └─ 20260816160000_p2_06_5_tagging_v3/
+    └─ migration.sql
+  └─ 20260818120000_v020_foundation_shared/
+    └─ migration.sql
+  └─ 20260905090000_site_setting_carousel_config/
+    └─ migration.sql
+  └─ 20260906090000_p2_02b_article_template_cps_parity/
+    └─ migration.sql
+  └─ 20260907090000_p3_generic_task_catalog_scan_indexes/
+    └─ migration.sql
+  └─ 20260907091500_p3_drop_catalog_scan_task/
+    └─ migration.sql
+  └─ 20260909090000_c24_article_axes/
+    └─ migration.sql
+  └─ 20260910090000_c27_blog_article_foundation/
+    └─ migration.sql
+  └─ 20260911090000_c30_novel_rebind_foundation/
+    └─ migration.sql
+  └─ 20260912090000_l10n_article_template_locale_not_null/
+    └─ migration.sql
+  └─ 20260912100000_carousel_serving_source_check_fix/
+    └─ migration.sql
+  └─ 20260913120000_catalog_batch_parent/
+    └─ migration.sql
+  └─ 20260916090000_x10_task_control_paused_cancelled/
+    └─ migration.sql
+  └─ 20260918090000_preview_account_hold/
+    └─ migration.sql
+  └─ 20260924090000_p5a_catalog_position/
+    └─ migration.sql
+  └─ 20260926150000_periodic_sweep_skip_reason/
+    └─ migration.sql
+  └─ 20260927090000_side_effect_manual_review_guard/
+    └─ migration.sql
+  └─ 20260930100000_site_setting_yandex/
+    └─ migration.sql
+  └─ 20261005100000_worker_health_partial_indexes/
+    └─ migration.sql
+  └─ 20261008120000_revenue_account_level_dashboard/
+    └─ migration.sql
+  └─ 20261009120000_b38_novel_effective_tag/
+    └─ migration.sql
+  └─ 20261009150000_site_setting_site_search_enabled/
+    └─ migration.sql
+  └─ 20261010160000_canonical_tag_homepage_visible/
+    └─ migration.sql
+  └─ 20261014120000_code_mode_upstream_code_guard/
+    └─ migration.sql
+  └─ 20261017120000_revenue_book_country_breakdown/
+    └─ migration.sql
+  └─ 20261017180000_revenue_country_active_users/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+PLOTNOVEL_MIGRATION_COUNT=PASS applied=29
+PLOTNOVEL_GRANTS_REPLAY_IDEMPOTENT=PASS acl_digest=2a929a6e9c46b1c83bb537fb0a30f1bc
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.3
+
+ ✓ |node| tests/integration/plotnovel/catalog-routing-postgres.test.ts (8 tests) 584ms
+ ✓ |node| tests/integration/plotnovel/code-function-postgres.test.ts (20 tests) 1209ms
+       ✓ 规则与 JS isPromoReady 的口令码分支逐项一致（配置 × 语种 × 口令码 × 状态 矩阵：函数返回非 NULL ⟺ 口令码模式剧场下 isPromoReady）  353ms
+ ✓ |node| tests/integration/plotnovel/dedupe-postgres.test.ts (6 tests) 290ms
+ ✓ |node| tests/integration/plotnovel/drift-check-postgres.test.ts (9 tests) 261ms
+ ✓ |node| tests/integration/plotnovel/readiness-postgres.test.ts (13 tests) 2321ms
+       ✓ 口令码模式：U+0001–U+FFFF 每个字符单独作为 upstream_code（status ∈ fetched/pending，有无网址）  1690ms
+ ✓ |node| tests/integration/plotnovel/rehome-postgres.test.ts (15 tests) 1194ms
+
+ Test Files  6 passed (6)
+      Tests  71 passed (71)
+   Start at  20:17:42
+   Duration  7.01s (transform 397ms, setup 0ms, import 813ms, tests 5.86s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-plotnovel-secrets.bW4Opj/integration-result.json
+  tests/integration/plotnovel/catalog-routing-postgres.test.ts passed=8 skipped=0
+  tests/integration/plotnovel/rehome-postgres.test.ts passed=15 skipped=0
+  tests/integration/plotnovel/readiness-postgres.test.ts passed=13 skipped=0
+  tests/integration/plotnovel/dedupe-postgres.test.ts passed=6 skipped=0
+  tests/integration/plotnovel/code-function-postgres.test.ts passed=20 skipped=0
+  tests/integration/plotnovel/drift-check-postgres.test.ts passed=9 skipped=0
+PLOTNOVEL_INTEGRATION=PASS files=6 passed=71 skipped=0
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+PLOTNOVEL_DICTIONARY_DRIFT=0
+PLOTNOVEL_DISPOSABLE_DATABASE_CLEANED=yes
+PLOTNOVEL_THEATER_POSTGRES_VERIFICATION=PASS

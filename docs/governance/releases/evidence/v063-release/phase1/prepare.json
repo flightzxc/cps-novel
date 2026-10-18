@@ -1,0 +1,18 @@
+[
+  [
+    "npm-ci",
+    [
+      "npm",
+      "ci"
+    ]
+  ],
+  [
+    "prisma-generate",
+    [
+      "npx",
+      "--no-install",
+      "prisma",
+      "generate"
+    ]
+  ]
+]

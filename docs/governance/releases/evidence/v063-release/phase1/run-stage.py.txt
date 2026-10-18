@@ -1,0 +1,19 @@
+import datetime,json,os,pathlib,subprocess,sys,time
+root=pathlib.Path.cwd();base=root/'.tmp/v063-release';env=os.environ.copy()
+env.update({k:'http://127.0.0.1:7899' for k in ['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy']})
+env.update({'NO_PROXY':'localhost,127.0.0.1,::1','no_proxy':'localhost,127.0.0.1,::1','NEXT_PROBE_STRICT':'1','CI':'1','GIT_SSH_COMMAND':'ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2'})
+stage=pathlib.Path(sys.argv[1]);results=[]
+for name,command in json.loads(stage.read_text()):
+ while os.getloadavg()[0]>18:
+  print('LOAD_WAIT name=%s load=%.2f limit=18'%(name,os.getloadavg()[0]),flush=True);time.sleep(15)
+ log=base/(name+'.log')
+ if log.exists():raise RuntimeError('refuse overwriting log: '+str(log))
+ started=datetime.datetime.now(datetime.timezone.utc).isoformat();start=time.monotonic()
+ print('STEP_START name=%s load=%.2f'%(name,os.getloadavg()[0]),flush=True)
+ with log.open('x') as output:
+  os.chmod(log,0o600);p=subprocess.Popen(command,cwd=root,env=env,stdout=output,stderr=subprocess.STDOUT)
+  while p.poll() is None:time.sleep(2)
+ row={'name':name,'command':command,'started_at':started,'exit':p.returncode,'seconds':round(time.monotonic()-start,3),'log':str(log)};results.append(row)
+ (base/(stage.stem+'-result.json')).write_text(json.dumps(results,ensure_ascii=False,indent=2))
+ print('STEP_END name=%s exit=%s seconds=%.1f'%(name,p.returncode,row['seconds']),flush=True)
+ if p.returncode:sys.exit(p.returncode if 0<p.returncode<256 else 1)

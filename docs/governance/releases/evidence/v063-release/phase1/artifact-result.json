@@ -1,0 +1,58 @@
+[
+  {
+    "name": "github-final-push",
+    "command": [
+      "python3",
+      ".tmp/v063-release/push-final.py.txt"
+    ],
+    "started_at": "2026-10-18T11:27:56.242430+00:00",
+    "exit": 0,
+    "seconds": 14.041,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/github-final-push.log"
+  },
+  {
+    "name": "docker-df-archive",
+    "command": [
+      "docker",
+      "system",
+      "df"
+    ],
+    "started_at": "2026-10-18T11:28:10.285002+00:00",
+    "exit": 0,
+    "seconds": 2.007,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/docker-df-archive.log"
+  },
+  {
+    "name": "archive-build",
+    "command": [
+      "/bin/bash",
+      ".tmp/v063-release/release-archive.sh.txt"
+    ],
+    "started_at": "2026-10-18T11:28:12.293640+00:00",
+    "exit": 0,
+    "seconds": 12.032,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/archive-build.log"
+  },
+  {
+    "name": "archive-verify",
+    "command": [
+      "python3",
+      ".tmp/v063-release/verify-archive.py.txt"
+    ],
+    "started_at": "2026-10-18T11:28:24.327050+00:00",
+    "exit": 0,
+    "seconds": 8.009,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/archive-verify.log"
+  },
+  {
+    "name": "archive-image-e2e",
+    "command": [
+      "/bin/bash",
+      ".tmp/v063-release/image-e2e.sh.txt"
+    ],
+    "started_at": "2026-10-18T11:28:32.336483+00:00",
+    "exit": 0,
+    "seconds": 14.041,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/archive-image-e2e.log"
+  }
+]
