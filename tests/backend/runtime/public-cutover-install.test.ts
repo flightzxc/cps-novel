@@ -297,9 +297,9 @@ describe('candidate shape check', () => {
     ['public', 'the www.pulsenovels.com 301', (t: string) => t.replaceAll('www.pulsenovels.com', 'www.example.test'), 'www_redirect'],
     ['public', 'the legacy public host 301', (t: string) => t.replaceAll('server_name www.bangbangji.cloud;', 'server_name www.example.test;'), 'legacy_public_redirect'],
     ['public', 'the legacy admin host 301', (t: string) => t.replaceAll('server_name zbcwf.bangbangji.cloud;', 'server_name zbcwf.example.test;'), 'legacy_admin_redirect'],
-    ['public', 'the administration auth_basic line itself', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', ''), 'admin_https_app'],
-    ['public', 'the administration auth_basic', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), 'admin_https_app'],
-    ['rehearsal', 'the administration auth_basic', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), 'admin_https_app'],
+    ['public', 'the administration auth_basic line itself', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', ''), 'admin_health_auth'],
+    ['public', 'the administration auth_basic', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), 'admin_health_auth'],
+    ['rehearsal', 'the administration auth_basic', (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), 'admin_health_auth'],
     ['rehearsal', 'the rehearsal realm', (t: string) => t.replaceAll('auth_basic "CPS Novel Rehearsal";', 'auth_basic off;'), 'public_rehearsal_auth'],
     ['public', 'public openness', (t: string) => t.replaceAll('auth_basic off;', 'auth_basic "CPS Novel Rehearsal";'), 'public_open'],
     ['public', 'the public robots value', (t: string) => t.replace('map $host $cps_public_robots { default ""; }', 'map $host $cps_public_robots { default "noindex"; }'), 'robots_value'],
@@ -308,6 +308,43 @@ describe('candidate shape check', () => {
     ['public', 'a resolved token', (t: string) => `${t}\n# __LEFTOVER__\n`, 'tokens_resolved'],
   ] as const)('%s: flags a missing %s', (mode, _what, tamper, code) => {
     expect(checkNginxCandidate(tamper(render(mode)), mode)).toContain(code);
+  });
+
+  // Admin edge gate (Owner 2026-10-18): only the three health paths keep Basic
+  // Auth; the console paths must reach the app without it. Tampering happens
+  // inside the admin TLS server only (its access_log line is unique to it).
+  const ADMIN_TLS = '    access_log /var/log/nginx/cps-novel-admin.access.log cps_edge_json;\n';
+  const ADMIN_REALM = '        auth_basic "CPS Novel Administration";\n        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;\n';
+  const inAdmin = (from: string, to: string) => (t: string) => {
+    const start = t.indexOf(ADMIN_TLS);
+    const at = t.indexOf(from, start);
+    expect(start, 'admin TLS server').toBeGreaterThan(-1);
+    expect(at, `admin anchor ${from}`).toBeGreaterThan(-1);
+    return t.slice(0, at) + to + t.slice(at + from.length);
+  };
+  const regate = (header: string) => inAdmin(header, header + ADMIN_REALM);
+  describe.each(['public', 'rehearsal'])('admin edge gate (%s)', mode => {
+    it('the real render keeps exactly the health locations behind Basic Auth', () => {
+      const rendered = render(mode);
+      const admin = rendered.slice(rendered.indexOf(ADMIN_TLS), rendered.indexOf('\n}\n', rendered.indexOf(ADMIN_TLS)));
+      expect(admin.split('auth_basic "CPS Novel Administration";').length - 1).toBe(2);
+      expect(checkNginxCandidate(rendered, mode)).toEqual([]);
+    });
+    it.each([
+      ['Basic Auth back on /login', regate('    location = /login {\n'), ['admin_console_open']],
+      ['Basic Auth back on the admin page regex', regate('|channel-accounts|two-factor)(?:/|$) {\n'), ['admin_console_open']],
+      ['Basic Auth back on /api/admin/', regate('    location ^~ /api/admin/ {\n'), ['admin_console_open']],
+      ['Basic Auth back on = /api/admin', regate('    location = /api/admin {\n'), ['admin_console_open']],
+      ['Basic Auth back on /_next/static/', regate('    location ^~ /_next/static/ {\n'), ['admin_console_open']],
+      ['a server-level realm the console locations would inherit', inAdmin(ADMIN_TLS, `${ADMIN_TLS}    auth_basic "CPS Novel Administration";\n`), ['admin_console_open']],
+      ['an admin page dropped from the console regex', inAdmin('|revenue|', '|'), ['admin_console_open']],
+      ['auth_basic off on /login', inAdmin('    location = /login {\n', '    location = /login {\n        auth_basic off;\n'), ['admin_console_open', 'admin_auth_not_disabled']],
+      ['the realm on = /api/health', inAdmin(`    location = /api/health {\n${ADMIN_REALM}`, '    location = /api/health {\n'), ['admin_health_auth']],
+      ['the realm on the worker/backup health regex', inAdmin(`    location ~ ^/api/health/(?:worker|backup)$ {\n${ADMIN_REALM}`, '    location ~ ^/api/health/(?:worker|backup)$ {\n'), ['admin_health_auth']],
+      ['an open ^~ /api/ location that shadows the health regex', inAdmin(ADMIN_TLS, `${ADMIN_TLS}    location ^~ /api/ {\n        proxy_pass http://cps_novel_edge_web;\n    }\n`), ['admin_health_auth']],
+    ] as const)('flags %s', (_what, tamper, codes) => {
+      expect(checkNginxCandidate(tamper(render(mode)), mode)).toEqual(codes);
+    });
   });
   it('also knows the preprod and bootstrap-public shapes (installer --mode preprod / --bootstrap-public)', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'cutover-shapes-'));
@@ -336,7 +373,7 @@ describe('candidate shape check', () => {
       expect(ok.stdout).toMatch(/^NGINX_CANDIDATE=PASS mode=public bytes=\d+ sha256=[0-9a-f]{64}\n$/);
       const bad = cli(`${dir}/bad.conf`);
       expect(bad.status).toBe(65);
-      expect(bad.stdout).toBe('NGINX_CANDIDATE=FAIL mode=public missing=admin_https_app,admin_auth_not_disabled\n');
+      expect(bad.stdout).toBe('NGINX_CANDIDATE=FAIL mode=public missing=admin_health_auth,admin_auth_not_disabled\n');
       const empty = cli(`${dir}/empty.conf`);
       expect(empty.status).toBe(65);
       expect(empty.stdout).toContain('missing=candidate_empty');
@@ -433,8 +470,9 @@ describe('candidate gate: nothing under /etc/nginx is touched when the candidate
     { mode: 'public', args: ['--mode', 'public'], what: 'a missing server (no legacy-domain redirects)', tamper: (t: string) => t.replace('__REDIRECT_SERVERS__', ''), codes: 'www_redirect,legacy_public_redirect,legacy_admin_redirect' },
     { mode: 'public', args: ['--mode', 'public'], what: 'a missing :80 reject server', tamper: (t: string) => t.replace('server { listen 80 default_server; server_name _; return 444; }', ''), codes: 'reject_http_default' },
     { mode: 'public', args: ['--mode', 'public'], what: 'a missing unknown-Host TLS reject server', tamper: (t: string) => t.replace('listen 443 ssl http2 default_server;', 'listen 443 ssl http2;'), codes: 'reject_https_default' },
-    { mode: 'public', args: ['--mode', 'public'], what: 'the administration auth_basic line', tamper: (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', ''), codes: 'admin_https_app' },
-    { mode: 'rehearsal', args: ['--mode', 'rehearsal'], what: 'the administration auth_basic (rehearsal shape, replaced by auth_basic off)', tamper: (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), codes: 'admin_https_app,admin_auth_not_disabled' },
+    { mode: 'public', args: ['--mode', 'public'], what: 'the administration auth_basic line', tamper: (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', ''), codes: 'admin_health_auth' },
+    { mode: 'rehearsal', args: ['--mode', 'rehearsal'], what: 'the administration auth_basic (rehearsal shape, replaced by auth_basic off)', tamper: (t: string) => t.replaceAll('auth_basic "CPS Novel Administration";', 'auth_basic off;'), codes: 'admin_health_auth,admin_auth_not_disabled' },
+    { mode: 'public', args: ['--mode', 'public'], what: 'Basic Auth put back on the admin login page', tamper: (t: string) => t.replace('    location = /login {\n', '    location = /login {\n        auth_basic "CPS Novel Administration";\n        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;\n'), codes: 'admin_console_open' },
     { mode: 'public', args: ['--mode', 'public', '--hsts-max-age', '31536000'], what: 'the requested HSTS max-age', tamper: (t: string) => t.replace('map $host $cps_public_hsts { default "__PUBLIC_HSTS__"; }', 'map $host $cps_public_hsts { default ""; }'), codes: 'hsts_value' },
   ])('$mode: refuses $what with exit 65', ({ mode, args, tamper, codes }) => {
     const f = fixture(); try {

@@ -4,7 +4,7 @@ import { EmptyRow, Table, TBody, TD, TH, THead } from "@/components/ui/table";
 import type { RevenueCountryMetric, RevenueCountrySection } from "@/server/revenue";
 
 import { revenueHref } from "../_lib/breakdown-params";
-import { activeCountryUncoveredNotice, breakdownUncoveredNotice } from "../_lib/copy";
+import { activeCountryUncoveredNotice, breakdownUncoveredNotice, COUNTRY_DEDUP_NOTE } from "../_lib/copy";
 import { formatAverage, formatCount, formatRatioPercent, PLACEHOLDER } from "../_lib/format";
 
 /** 本区块链接要原样带上的页面状态（区间 + 按书区块的筛选 / 页码 / 单书）。 */
@@ -66,6 +66,9 @@ export function CountrySection({ section, links }: { section: RevenueCountrySect
           {activeSynced ? formatAverage(section.avgActiveUsersTotal) : ACTIVE_NOT_SYNCED} · {section.ranking.length} 个国家 / 地区
         </p>
       </div>
+      <p className="text-xs text-gray-500" data-testid="revenue-country-dedup-note">
+        {COUNTRY_DEDUP_NOTE}
+      </p>
 
       {section.uncoveredDays > 0 && (
         <p role="status" data-testid="revenue-country-uncovered" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">

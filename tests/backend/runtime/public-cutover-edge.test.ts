@@ -128,6 +128,63 @@ describe.each(['rehearsal','public'])('%s search location', mode => {
     expect(config.slice(fallbackAt, fallbackAt + 600)).not.toContain('cps_edge_search');
   });
 });
+// 后台门禁（Owner 2026-10-18）：后台登录页、页面、接口、静态资源不再挂 Basic Auth，只有健康检查接口仍挂。
+// 这里按模板原文逐个 location 核对（不复用 verify-nginx-candidate 的选路逻辑），用例名统一以 "admin edge gate" 开头，
+// 变异脚本按这个前缀选用例。
+describe.each(['rehearsal','public'])('%s admin edge gate', mode => {
+  const REALM = 'auth_basic "CPS Novel Administration";';
+  const HTPASSWD = 'auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;';
+  const adminServer = (config: string) => {
+    const start = config.indexOf('    access_log /var/log/nginx/cps-novel-admin.access.log cps_edge_json;\n');
+    expect(start, 'admin TLS server').toBeGreaterThan(-1);
+    return config.slice(config.lastIndexOf('\nserver {\n', start), config.indexOf('\n}\n', start));
+  };
+  const bodyOf = (server: string, header: string) => {
+    const at = server.indexOf(`\n    ${header} {\n`);
+    expect(at, header).toBeGreaterThan(-1);
+    expect(server.indexOf(`\n    ${header} {\n`, at + 1), `${header} appears once`).toBe(-1);
+    return server.slice(at, server.indexOf('\n    }', at));
+  };
+  const OPEN = ['location = /login', 'location ^~ /api/admin/', 'location = /api/admin',
+    'location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|two-factor)(?:/|$)',
+    'location ^~ /_next/static/'];
+  const GATED = ['location = /api/health', 'location ~ ^/api/health/(?:worker|backup)$'];
+  it('admin edge gate: console locations reach the app without any auth_basic directive', () => {
+    const server = adminServer(render(mode));
+    for (const header of OPEN) {
+      const body = bodyOf(server, header);
+      expect(body, header).toContain('proxy_pass http://cps_novel_edge_web;');
+      expect(body, header).not.toMatch(/auth_basic/);
+    }
+    // 没有 server 级的 auth_basic 让各 location 继承。
+    let serverLevel = server;
+    for (const header of [...OPEN, ...GATED]) serverLevel = serverLevel.replace(bodyOf(server, header), '');
+    expect(serverLevel).not.toMatch(/auth_basic/);
+    for (const snippet of ['edge-admin-security', 'edge-maintenance', 'preprod-proxy']) {
+      expect(text(`infra/preproduction/nginx/cps-novel-${snippet}.conf`), snippet).not.toMatch(/auth_basic/);
+    }
+  });
+  it('admin edge gate: the health endpoints keep the administration Basic Auth', () => {
+    const server = adminServer(render(mode));
+    for (const header of GATED) {
+      const body = bodyOf(server, header);
+      expect(body, header).toContain(REALM);
+      expect(body, header).toContain(HTPASSWD);
+      expect(body, header).toContain('proxy_pass http://cps_novel_edge_web;');
+    }
+    expect(server.split(REALM).length - 1).toBe(GATED.length);
+    expect(server).not.toMatch(/auth_basic\s+off;/);
+  });
+  it('admin edge gate: everything else on the admin host is unchanged (rate limits, security headers, 404 fallback)', () => {
+    const server = adminServer(render(mode));
+    expect(bodyOf(server, 'location = /login')).toContain('limit_req zone=cps_edge_admin_login burst=3 nodelay;');
+    for (const header of OPEN) expect(bodyOf(server, header), header).toContain('/etc/nginx/snippets/cps-novel-edge-maintenance.conf');
+    for (const header of [...OPEN, ...GATED]) expect(bodyOf(server, header), header).toContain('/etc/nginx/snippets/cps-novel-edge-admin-security.conf');
+    expect(server).toContain('    include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;\n');
+    expect(server).toContain('    location / {\n        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;\n        return 404;\n    }');
+    expect(text('infra/preproduction/nginx/cps-novel-edge-admin-security.conf')).toContain('add_header X-Robots-Tag "noindex, nofollow, noarchive" always;');
+  });
+});
 it('keeps preprod template and its rendered bytes identical to the approved baseline', () => {
   const before = execFileSync('git', ['show','02f9996:infra/preproduction/nginx/cps-novel-preprod.conf.template'], { encoding:'utf8' });
   expect(text('infra/preproduction/nginx/cps-novel-preprod.conf.template')).toBe(before);

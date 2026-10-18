@@ -190,7 +190,7 @@ curl --fail --config "$PREPROD_CURL_CONFIG" -sS https://zbcwf.pulsenovels.com/ap
 2026-10-05 第二段准备暴露的三个底层缺陷（软链目录下渲染出 0 字节站点文件、安装器不拦空候选、reload 返回后立即探测的竞态）已在安装器里修复；证据对应关系见 `PUBLIC_CUTOVER_EVIDENCE.md` 末尾“底层修复已落地（v0.5.11）”。`install-nginx.sh` 经 `--mode`、`--bootstrap-public`、`--restore-backup` 进入的路径现在自带：
 
 1. **软链安全的渲染**：渲染器按真实路径判断自己是不是 CLI 入口，脚本 root 取物理路径；在 `/opt/cps-novel/current` 下直接执行与在物理 release 目录下执行，渲染字节逐字节相同。渲染产物为空时 `render-nginx.sh` 自己就以 65 失败（`NGINX_RENDER=FAIL reason=empty_output`，原输出文件不动）。
-2. **候选门禁**（在写备份目录、`/etc/nginx` 文件、`nginx -t` 和 reload 之前）：候选必须非空，并按 `--mode` 具备应有的形状。public：公开主机与后台主机的 :80→https 301 与 :443 应用 server、后台 `auth_basic "CPS Novel Administration"` 与口令文件指令、公开主机开放（无 auth_basic 口令域）、`www.pulsenovels.com` 301、两个旧域名 301（:80 与 :443 各一）、:80 拒绝（444）、未知 Host 的 :443 拒绝（404）、robots 为空、HSTS 取值等于 `--hsts-max-age`。rehearsal：同一拓扑，公开主机为 rehearsal 口令域（`auth_basic "CPS Novel Rehearsal"`）、noindex、无 HSTS，不要求旧域名 301。不满足时只打印检查码（不打印候选内容），任何系统文件都未动。
+2. **候选门禁**（在写备份目录、`/etc/nginx` 文件、`nginx -t` 和 reload 之前）：候选必须非空，并按 `--mode` 具备应有的形状。public：公开主机与后台主机的 :80→https 301 与 :443 应用 server、后台口径（v0.6.3 起，Owner 2026-10-18：按请求路径逐条核对，`/api/health`、`/api/health/worker`、`/api/health/backup` 落到的 location 必须有 `auth_basic "CPS Novel Administration"` 与口令文件指令〔`admin_health_auth`〕，登录页、后台页面、后台接口、`/_next/static/` 落到的 location 及 server 级都不得有任何 `auth_basic`〔`admin_console_open`〕；v0.6.3 之前是整个后台都带该口令域）、公开主机开放（无 auth_basic 口令域）、`www.pulsenovels.com` 301、两个旧域名 301（:80 与 :443 各一）、:80 拒绝（444）、未知 Host 的 :443 拒绝（404）、robots 为空、HSTS 取值等于 `--hsts-max-age`。rehearsal：同一拓扑，公开主机为 rehearsal 口令域（`auth_basic "CPS Novel Rehearsal"`）、noindex、无 HSTS，不要求旧域名 301。不满足时只打印检查码（不打印候选内容），任何系统文件都未动。
 3. **安装后哈希核对**：站点文件与全部 snippet 的 SHA-256 必须等于候选/来源文件；不等则用本次备份回退并非零退出，且不一致的文件从未被 reload 加载。
 4. **reload 就绪等待**（成功安装、回退、`--restore-backup` 的 reload 均适用）：reload 前记录 nginx master PID 与子进程集合；reload 后最多 10 轮、每轮间隔 1 秒，要求 master PID 不变、出现 reload 前不存在的新子进程、reload 前的旧子进程已退出或进程标题为 `shutting down`、期望端口有 TCP 监听（site 模式 80+443，`--bootstrap-public` 仅 80，`--restore-backup` 不断言端口）。只用 `systemctl show`、`pgrep`、`ps`、`ss`，无需读 nginx 日志；不做业务 HTTP 探测，业务层验收仍由 `verify-release.sh` 与本手册各步骤负责。
 
@@ -244,12 +244,12 @@ curl -sS -D - -o /dev/null https://pulsenovels.com/indexnow-key.txt
 补充实际已发布小说、目录/章节、分类和真实推广短码样例，记录浏览器最终可达结果；推广入口本身通常是 3xx，不要求第一跳伪装成 200。逐项验收：
 
 - 公开页无需密码，HTML 的 canonical/hreflang/分享地址无旧域名；公开所有状态无 X-Robots-Tag，HSTS 为 86400 且无 includeSubDomains/preload。
-- 公开后台路径及 worker/backup 健康接口 404；后台登录先 401，带 Basic Auth 可达登录页，公开页面 404，所有响应保留 noindex。
+- 公开后台路径及 worker/backup 健康接口 404；后台登录先 401，带 Basic Auth 可达登录页，公开页面 404，所有响应保留 noindex。（切换当天口径。v0.6.3 起后台登录页、后台页面不再有 Basic Auth，匿名直达登录页；后台健康接口仍 401、带口令 200；见 [后台去门禁上线手册](ADMIN_EDGE_GATE_REMOVAL_RUNBOOK_2026-10-18.md)。）
 - www/旧域名 301，保留查询和路径；未知 Host HTTP 拒绝、HTTPS 404。
 - 实际页面引用的 `/_next/static/` URL 缓存一年 immutable；分享图 `image/png`、缓存一天、下载 SHA-256 与交付一致；`curl --compressed -D -` 验证 JS/CSS 等压缩。
 - robots/sitemap/key/health 为 no-store；配置 IndexNow key 前 key 为 404。
 - HTTPS 爬虫及并发复测符合预演记录，超过预算为 429，不出现 502；不得用 HTTP 301 当限流证据。
-- UptimeRobot 三条关键词监控：公开 `/api/health`、**后台** `/api/health/worker` 与 `/api/health/backup`（带 Basic Auth），全部绿。
+- UptimeRobot 三条关键词监控：公开 `/api/health`、**后台** `/api/health/worker` 与 `/api/health/backup`（带 Basic Auth；v0.6.3 去掉后台页面门禁后这两个接口仍带），全部绿。
 
 失败先开启维护，按影响范围回退；不能以 HTTP 200 单独证明业务正确。
 

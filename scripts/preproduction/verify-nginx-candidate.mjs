@@ -32,6 +32,68 @@ function parseServers(text) {
   }));
 }
 
+// Admin host edge gate (Owner 2026-10-18): the console itself is no longer
+// behind nginx Basic Auth -- only the monitoring-only health endpoints are.
+// Checked per request path, by selecting the location nginx itself would pick,
+// so a new location that shadows one of these paths (e.g. an unauthenticated
+// `^~ /api/` in front of the health regex) is caught too, not only an edit
+// inside the expected location body.
+const ADMIN_GATED_PATHS = Object.freeze(['/api/health', '/api/health/worker', '/api/health/backup']);
+const ADMIN_OPEN_PATHS = Object.freeze([
+  '/login', '/dashboard', '/novels/book', '/revenue', '/settings', '/two-factor', '/two-factor/challenge',
+  '/api/admin', '/api/admin/tasks', '/_next/static/chunks/app.js',
+]);
+const AUTH_DIRECTIVE = /(?:^|[\s;{])auth_basic(?:_user_file)?\s/;
+
+// Full-line comments only: the templates never put a comment after a
+// directive, and a comment may legitimately quote braces (`{2}`).
+const stripComments = text => text.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+
+/** Top-level `location` blocks of one server body, plus its server-level text. */
+function parseLocations(serverRaw) {
+  const text = stripComments(serverRaw);
+  const locations = [];
+  let serverLevel = '';
+  let cursor = 0;
+  const head = /(?:^|[\s;{}])location\s+(=|\^~|~\*|~)?\s*("(?:[^"\\]|\\.)*"|[^\s{]+)\s*\{/g;
+  for (let match; (match = head.exec(text));) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0, quote = false, end = -1;
+    for (let i = open; i < text.length; i++) {
+      const c = text[i];
+      if (quote) { if (c === '\\') i++; else if (c === '"') quote = false; continue; }
+      if (c === '"') quote = true;
+      else if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) { end = i; break; }
+    }
+    if (end < 0) break;
+    const raw = match[2].startsWith('"') ? match[2].slice(1, -1) : match[2];
+    locations.push({ modifier: match[1] ?? '', path: raw, body: text.slice(open + 1, end) });
+    serverLevel += text.slice(cursor, match.index);
+    cursor = end + 1;
+    head.lastIndex = end + 1;
+  }
+  serverLevel += text.slice(cursor);
+  return { locations, serverLevel };
+}
+
+// nginx's own order: an exact `=` match wins; otherwise the longest prefix,
+// which ends the search when it is `^~`; otherwise the first regex in file
+// order; otherwise that longest prefix.
+function selectLocation(locations, uri) {
+  const exact = locations.find(l => l.modifier === '=' && l.path === uri);
+  if (exact) return exact;
+  const prefix = locations.filter(l => (l.modifier === '' || l.modifier === '^~') && uri.startsWith(l.path))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+  if (prefix?.modifier === '^~') return prefix;
+  for (const l of locations) {
+    if (l.modifier !== '~' && l.modifier !== '~*') continue;
+    try { if (new RegExp(l.path, l.modifier === '~*' ? 'i' : '').test(uri)) return l; }
+    catch { return null; }
+  }
+  return prefix ?? null;
+}
+
 const onPort = (server, port) => server.listens.some(([address]) => new RegExp(`(?:^|:)${port}$`).test(address));
 const isDefault = server => server.listens.some(tokens => tokens.includes('default_server'));
 const certLines = name => [
@@ -93,10 +155,23 @@ export function checkNginxCandidate(text, mode, { hstsMaxAge = '86400' } = {}) {
   check('public_http_redirect', find(80, pub, [`return 301 https://${pub}$request_uri;`]));
   check('admin_http_redirect', find(80, admin, [`return 301 https://${admin}$request_uri;`]));
   check('public_https_app', find(443, pub, [PROXY, ...certLines(pubCert)]));
-  check('admin_https_app', find(443, admin, [PROXY, ADMIN_AUTH, HTPASSWD, ...certLines(adminCert)]));
+  check('admin_https_app', find(443, admin, [PROXY, ...certLines(adminCert)]));
 
   const publicBlock = block(443, pub)?.raw ?? '';
   const adminBlock = block(443, admin)?.raw ?? '';
+  const { locations: adminLocations, serverLevel: adminServerLevel } = parseLocations(adminBlock);
+  const served = path => {
+    const location = selectLocation(adminLocations, path);
+    return location && location.body.includes(PROXY) ? location.body : null;
+  };
+  check('admin_health_auth', adminBlock !== '' && ADMIN_GATED_PATHS.every(path => {
+    const body = served(path);
+    return body !== null && body.includes(ADMIN_AUTH) && body.includes(HTPASSWD);
+  }));
+  check('admin_console_open', adminBlock !== '' && !AUTH_DIRECTIVE.test(adminServerLevel) && ADMIN_OPEN_PATHS.every(path => {
+    const body = served(path);
+    return body !== null && !AUTH_DIRECTIVE.test(body);
+  }));
   check('admin_auth_not_disabled', adminBlock !== '' && !/auth_basic\s+off;/.test(adminBlock));
   if (live) {
     check('public_open', publicBlock.includes('auth_basic off;') && !/auth_basic\s+"/.test(publicBlock));

@@ -222,6 +222,25 @@ describe("国家分布（新用户 + 激活）", () => {
     expect(screen.queryByTestId("revenue-country-uncovered")).toBeNull();
   });
 
+  // B-49（Owner 2026-10-18）：国家报表按国家去重、日报全局去重，各国合计可能略大于当日总数。只改文案，不改数字。
+  it("口径说明：同一用户多国出现会在各国分别计数、各国合计可能略大于当日总数、占比以国家合计为分母（有数据和空数据都显示）", () => {
+    const NOTE =
+      "同一用户当天若在多个国家出现（如使用 VPN、跨境或换网），会在各国分别计数，因此各国合计可能略大于当日总数；国家占比以国家合计为分母。";
+    const { unmount } = render(<CountrySection section={countries()} links={LINKS} />);
+    expect(screen.getByTestId("revenue-country-dedup-note").textContent).toBe(NOTE);
+    // 说明不碰数字：排行与合计照旧（占比 4/9 = 44.44%，分母是国家合计 9）。
+    expect(screen.getByTestId("revenue-country-BR").textContent).toBe("1巴西(BR)444.44%2.29");
+    expect(screen.getByTestId("revenue-country-total").textContent).toBe("区间内新用户 9 · 日均激活 6.14 · 3 个国家 / 地区");
+    unmount();
+    render(
+      <CountrySection
+        section={countries({ ranking: [], newUsersTotal: 0, avgActiveUsersTotal: null, matrix: { columns: [], hasOther: false, rows: [] } })}
+        links={LINKS}
+      />,
+    );
+    expect(screen.getByTestId("revenue-country-dedup-note").textContent).toBe(NOTE);
+  });
+
   it("有未覆盖天时提示；没有数据时两张表都写“没有…国家数据”", () => {
     render(
       <CountrySection

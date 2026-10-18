@@ -10,6 +10,9 @@ execFileSync('git',['diff','--cached','--quiet']);
 mkdirSync('.tmp/public-cutover',{recursive:true});
 const contract=['test','--','--maxWorkers=4','tests/backend/runtime/public-cutover-edge.test.ts'];
 const installer=['test','--','--maxWorkers=4','tests/backend/runtime/public-cutover-install.test.ts'];
+const release=['test','--','--maxWorkers=4','tests/backend/runtime/public-cutover-release.test.ts'];
+const CANDIDATE='scripts/preproduction/verify-nginx-candidate.mjs';
+const ADMIN_REALM='        auth_basic "CPS Novel Administration";\n        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;\n';
 // PN-15 站内搜索 location：整段在模板里的原文，用来做"删掉整个 location"的变异（锚点不存在则报错，不会悄悄跳过）。
 const SITE_TEMPLATE='infra/preproduction/nginx/cps-novel-public.conf.template';
 const searchBlock=readFileSync(SITE_TEMPLATE,'utf8').match(/    location ~ "\^\/\(\?:\(\?:__SITE_LOCALES__\)\/\)\?search\$" \{\n[\s\S]*?\n    \}\n/)?.[0];
@@ -24,7 +27,17 @@ const mutations=[
  {name:'render_empty_guard_removed',file:'scripts/preproduction/render-nginx.sh',from:'if ! [[ -s "$temporary" ]]; then',to:'if false; then',cmd:'npm',args:[...installer,'-t','refuses an empty body']},
  {name:'gate_empty_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'  if ! [[ -s "$rendered" ]]; then',to:'  if false; then',cmd:'npm',args:[...installer,'-t','refuses an empty candidate']},
  {name:'gate_shape_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'    assert_candidate "$mode"',to:'    true',cmd:'npm',args:[...installer,'-t','candidate gate']},
- {name:'candidate_admin_auth_removed',file:'scripts/preproduction/verify-nginx-candidate.mjs',from:'[PROXY, ADMIN_AUTH, HTPASSWD, ...certLines(adminCert)]',to:'[PROXY, HTPASSWD, ...certLines(adminCert)]',cmd:'npm',args:[...installer,'-t','auth_basic line']},
+ // 后台门禁（Owner 2026-10-18）：健康检查仍要 Basic Auth、后台其余路径不得再挂——两个方向的候选检查、选路、模板、docker 矩阵、发版核验各自必须承重。
+ {name:'candidate_admin_health_auth_removed',file:CANDIDATE,from:'return body !== null && body.includes(ADMIN_AUTH) && body.includes(HTPASSWD);',to:'return body !== null;',cmd:'npm',args:[...installer,'-t','auth_basic line|admin edge gate']},
+ {name:'candidate_admin_console_open_removed',file:CANDIDATE,from:'return body !== null && !AUTH_DIRECTIVE.test(body);',to:'return body !== null;',cmd:'npm',args:[...installer,'-t','admin edge gate|admin login page']},
+ {name:'candidate_admin_server_level_realm_ignored',file:CANDIDATE,from:"adminBlock !== '' && !AUTH_DIRECTIVE.test(adminServerLevel) && ",to:"adminBlock !== '' && ",cmd:'npm',args:[...installer,'-t','admin edge gate']},
+ {name:'candidate_route_prefix_stop_ignored',file:CANDIDATE,from:"if (prefix?.modifier === '^~') return prefix;",to:'',cmd:'npm',args:[...installer,'-t','admin edge gate']},
+ {name:'template_admin_health_auth_removed',file:SITE_TEMPLATE,from:`    location ~ ^/api/health/(?:worker|backup)$ {\n${ADMIN_REALM}`,to:'    location ~ ^/api/health/(?:worker|backup)$ {\n',cmd:'npm',args:[...contract,'-t','admin edge gate']},
+ {name:'template_admin_login_auth_readded',file:SITE_TEMPLATE,from:'    location = /login {\n',to:`    location = /login {\n${ADMIN_REALM}`,cmd:'npm',args:[...contract,'-t','admin edge gate']},
+ {name:'matrix_admin_login_auth_readded',file:SITE_TEMPLATE,from:'    location = /login {\n',to:`    location = /login {\n${ADMIN_REALM}`,cmd:'/bin/bash',args:['scripts/preproduction/verify-nginx-matrix.sh','--mode','public'],needle:'public zbcwf.pulsenovels.com/login: 401'},
+ {name:'matrix_admin_health_auth_removed',file:SITE_TEMPLATE,from:`    location = /api/health {\n${ADMIN_REALM}        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;`,to:'    location = /api/health {\n        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;',cmd:'/bin/bash',args:['scripts/preproduction/verify-nginx-matrix.sh','--mode','public'],needle:'public zbcwf.pulsenovels.com/api/health: 200'},
+ {name:'release_admin_login_open_expectation_removed',file:'scripts/preproduction/verify-release.sh',from:'if [[ "$site_mode" == public && "$url" == "$ADMIN_CANONICAL_ORIGIN/login" ]]; then expected=200; fi',to:':',cmd:'npm',args:[...release,'-t','release verification']},
+ {name:'release_admin_login_status_unchecked',file:'scripts/preproduction/verify-release.sh',from:'"$ADMIN_CANONICAL_ORIGIN/login" ]]; then expected=200; fi',to:'"$ADMIN_CANONICAL_ORIGIN/login" ]]; then expected="$code"; fi',cmd:'npm',args:[...release,'-t','admin login gate']},
  {name:'hash_check_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'  if [[ "$got" != "$want" ]]; then',to:'  if false; then',cmd:'npm',args:[...installer,'-t','post-install hash check']},
  {name:'ready_wait_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'  wait_ready "$phase" "$@"',to:'  true',cmd:'npm',args:[...installer,'-t','reload readiness wait']},
  {name:'ready_listener_probe_removed',file:'scripts/preproduction/install-public-nginx.sh',from:'      port_listening "$port" || missing="$missing $port"',to:'      :',cmd:'npm',args:[...installer,'-t','443 is not listening']},
@@ -52,6 +65,7 @@ for(const m of mutations.filter(m=>!only.length||only.includes(m.name))){
   const output=`${result.stdout}${result.stderr}`;
   if(m.name==='public_noindex'&&!output.includes('public X-Robots-Tag leaked'))throw Error('matrix failed for a reason other than the intended noindex mutation');
   if(m.name!=='public_noindex'&&!output.includes('AssertionError'))throw Error(`mutation failed without a test assertion: ${m.name}`);
+  if(m.needle&&!output.includes(m.needle))throw Error(`mutation failed for a reason other than the intended one: ${m.name}`);
  }finally{
   writeFileSync(m.file,original);
   execFileSync('git',['diff','--quiet','--',m.file]);
