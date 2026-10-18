@@ -19,6 +19,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.6.3 —— 第一阶段准备中，尚未部署（2026-10-18 JST）
+
+- 版本类型 **PATCH**。基线 `f819b84611e08387c95df550546ffaa910a5ea29`（tree `3a5f80f734cb1f23680c120f34c7cdc364c2f2ee`），集成线 `integration/v0.6.3-2026-10-18`，发布分支 `release/v0.6.3-2026-10-18`；来源 `feat/v063-admin-gate-removal`，经 no-ff 合并，含后台门禁调整与 B-49。
+- 后台登录页、页面、接口及静态资源移除 nginx Basic Auth，依靠应用登录、人机验证、登录限速、5 次失败锁定与两步验证；三个健康检查接口仍保留口令。B-49 仅增加国家分布口径说明，来源为 v0.6.2 国家对账的 Owner 裁定。
+- 零新增迁移：迁移 **29 条**、表 **60 张**、字典 **1401 条 / active 1331 条**；grants、环境变量集合、compose、任务白名单不变。公开网址冻结；公开网址、canonical、hreflang、站点地图、robots 不变。
+- 第一阶段只在本地升版、运行完整门禁、推送 GitHub、构建及核验 linux/amd64 不可变归档，不连接生产。第二阶段须 Owner 明确“批准部署”；先从新版本 Final 目录安装 nginx，再部署应用，sudo 密码由 Owner 在交互终端亲自输入。PN-15 搜索独立限流随同模板生效，HSTS 保持 86400。
+- annotated tag、生成 CHANGELOG、唯一发版级开发日志与 Notion 同步回读留待部署验收后完成；第一阶段结果由后续发布记录补充。
+
 ### v0.6.2 —— 已部署，技术及业务验收PASS；Owner接受已知上游口径差异（2026-10-17）
 
 - 版本类型 **PATCH**（沿用 v0.5.11 收入看板与 v0.5.14 站内搜索含迁移的先例）。基线 `004c81c07e09868f695e4d5486d29dd602738be7`（tree `be3f7dbcb49d72256a02f29a1dff91976aaf1f5f`），集成线 `integration/v0.6.2-2026-10-17`，发布分支 `release/v0.6.2-2026-10-17`；来源 `feat/v062-revenue-book-country`，两次 no-ff 合并 `2114062c`、`004c81c0`。
@@ -528,6 +536,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.6.3` | 2026-10-18 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `release/v0.6.3-2026-10-18` | 第一阶段准备中，尚未部署 |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |
