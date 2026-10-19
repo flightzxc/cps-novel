@@ -1,3 +1,5 @@
+import type { PrismaClient } from "@prisma/client";
+
 import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
 
 import { prisma } from "@/app/api/admin/_lib/deps";
@@ -212,4 +214,42 @@ export async function readClaimEligibleChannelAppOptions(): Promise<readonly Cla
       accountName: account.accountName,
     })),
   }));
+}
+
+/**
+ * B-44（v0.6.4）：目录同步页"剧场"筛选的选项——每个 `channel_app`（渠道 × 来源 App）一项，
+ * 例如 MoboReader、PlotNovel。不按状态或能力过滤：停用的剧场下也可能有书，隐藏它只会让运营以为
+ * "没有这个剧场"（与上面 `readClaimEligibleChannelAppOptions` 注释里"看得见但标明原因"同一约定），
+ * 所以照列并标"（已停用）"。领取能力开没开不在这里表达——那由领取对话框按服务端算好的
+ * `claimCapabilityEnabled` 处理（B-44 第 3 条）。
+ *
+ * `db` 可注入，供真实 Postgres 用例以 `web_app` 角色跑同一条查询（channel / source_app /
+ * channel_app 三表的 SELECT 早已授给 web_app，见 `infra/postgres/grants.sql`）。
+ */
+export type CatalogTheaterOption = { readonly id: string; readonly label: string };
+
+export type CatalogTheaterRow = {
+  readonly id: string;
+  readonly status: string;
+  readonly channel: { readonly name: string };
+  readonly sourceApp: { readonly name: string };
+};
+
+/** 只有一个渠道时标签就是剧场名（"PlotNovel"）；多个渠道时加渠道名前缀，免得同名剧场分不清。 */
+export function buildCatalogTheaterOptions(rows: readonly CatalogTheaterRow[]): readonly CatalogTheaterOption[] {
+  const multipleChannels = new Set(rows.map((row) => row.channel.name)).size > 1;
+  return rows.map((row) => ({
+    id: row.id,
+    label: `${multipleChannels ? `${row.channel.name} · ` : ""}${row.sourceApp.name}${row.status === "active" ? "" : "（已停用）"}`,
+  }));
+}
+
+export async function readCatalogTheaterOptions(
+  db: Pick<PrismaClient, "channelApp"> = prisma,
+): Promise<readonly CatalogTheaterOption[]> {
+  const rows = await db.channelApp.findMany({
+    orderBy: [{ channel: { name: "asc" } }, { sourceApp: { name: "asc" } }, { id: "asc" }],
+    select: { id: true, status: true, channel: { select: { name: true } }, sourceApp: { select: { name: true } } },
+  });
+  return buildCatalogTheaterOptions(rows);
 }

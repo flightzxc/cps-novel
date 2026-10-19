@@ -19,7 +19,12 @@ export type SourceItemFilterValues = {
   /** 列表排序；缺席 = 默认（最后扫描时间）。 */
   readonly sort?: string;
   readonly pageSize?: string;
+  /** B-44：剧场（`channel_app.id`）；缺席 = 全部剧场。 */
+  readonly channelAppId?: string;
 };
+
+/** B-44：剧场下拉的选项（服务端 `readCatalogTheaterOptions` 读出，标签已拼好）。 */
+export type SourceItemTheaterOption = { readonly id: string; readonly label: string };
 
 /** 2026-10-06：上游上架时间预设（"近 1 年" = 365 天）；值是天数，换算成日期在服务端页面里做。 */
 const SOURCE_CREATED_PRESET_OPTIONS: ReadonlyArray<{ value: string; label: string }> = SOURCE_CREATED_PRESET_DAYS.map((days) => ({
@@ -64,14 +69,14 @@ const SOURCE_LOCALE_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string
  * `page` is not a field for the same reason novel-filters drops it: a new
  * filter invalidates whatever page number was showing.
  */
-export function SourceItemFilters({ values }: { values: SourceItemFilterValues }) {
+export function SourceItemFilters({ values, theaters = [] }: { values: SourceItemFilterValues; theaters?: readonly SourceItemTheaterOption[] }) {
   const router = useRouter();
   const formKey = JSON.stringify(values);
   function submit(form: HTMLFormElement) {
     const params = new URLSearchParams(Array.from(new FormData(form).entries()).map(([key, value]) => [key, String(value)]));
     params.delete("page");
-    // 新增的两项为空（全部/默认）时不进 URL，未使用时地址与改动前逐字一致。
-    for (const key of ["sourceCreatedWithin", "sort"]) if (params.get(key) === "") params.delete(key);
+    // 新增的几项为空（全部/默认）时不进 URL，未使用时地址与改动前逐字一致。
+    for (const key of ["sourceCreatedWithin", "sort", "channelAppId"]) if (params.get(key) === "") params.delete(key);
     router.push(`/catalog-sync?${params.toString()}`);
   }
   return (
@@ -87,6 +92,20 @@ export function SourceItemFilters({ values }: { values: SourceItemFilterValues }
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
           />
         </div>
+        {/* B-44：剧场筛选。切换剧场会清空勾选（剧场是快照的一部分），"全选建批次"也只含该剧场的书。 */}
+        <select
+          name="channelAppId"
+          defaultValue={values.channelAppId ?? ""}
+          aria-label="剧场"
+          className="rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+        >
+          <option value="">全部剧场</option>
+          {theaters.map((theater) => (
+            <option key={theater.id} value={theater.id}>
+              {theater.label}
+            </option>
+          ))}
+        </select>
         <select
           name="status"
           defaultValue={values.status ?? "pending"}

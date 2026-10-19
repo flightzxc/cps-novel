@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
+  channelAppWhere,
   deriveCatalogBatchPhase,
   type CatalogBatchContext,
   type CatalogBatchSummary,
@@ -34,7 +35,7 @@ export function catalogSelectionWhere(
   promoLinkStatusContext?: PromoLinkStatusContext,
 ): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { id: { in: [...selection.ids] }, deletedAt: null };
-  const { status, search, sourceLocale, promoLinkStatus, sourceCreatedFrom } = selection.filter;
+  const { status, search, sourceLocale, promoLinkStatus, sourceCreatedFrom, channelAppId } = selection.filter;
   return {
     deletedAt: null, status,
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
@@ -42,6 +43,8 @@ export function catalogSelectionWhere(
     ...promoLinkStatusIdConstraint(promoLinkStatus, promoLinkStatusContext),
     // 上架时间：与页面列表、worker 枚举共用同一个判定片段（全选一致性）。
     ...sourceCreatedAtRawWhere(sourceCreatedFrom),
+    // B-44 剧场：同上。
+    ...channelAppWhere(channelAppId),
   };
 }
 
@@ -101,19 +104,20 @@ export async function readCatalogBatchContext(db: PrismaClient, selection: Norma
   const channelIds = [...channelCounts.keys()];
   const channels: Array<{ id: string; status: string; capabilities: Array<{ status: string }>; channel: {
     code: string; name: string; status: string; channelAccounts: Array<{ id: string; accountName: string }>;
-  } }> = [];
+  }; sourceApp: { code: string; name: string } }> = [];
   for (let i = 0; i < channelIds.length; i += CATALOG_BATCH_CHUNK_SIZE) {
     channels.push(...await db.channelApp.findMany({
       where: { id: { in: channelIds.slice(i, i + CATALOG_BATCH_CHUNK_SIZE) } },
       select: { id: true, status: true, capabilities: { where: { capabilityKey: "claimPromo" }, select: { status: true } }, channel: { select: { code: true, name: true, status: true, channelAccounts: {
         where: { status: "active", deletedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, accountName: true },
-      } } } },
+      } } }, sourceApp: { select: { code: true, name: true } } },
     }));
   }
   return {
     submittedCount,
     channelGroups: channels.map((row) => ({
       channelAppId: row.id, channelCode: row.channel.code, channelName: row.channel.name,
+      sourceAppCode: row.sourceApp.code, sourceAppName: row.sourceApp.name,
       active: row.status === "active" && row.channel.status === "active",
       claimCapabilityEnabled: row.capabilities.some((capability) => capability.status === "enabled"),
       eligibleCount: channelCounts.get(row.id) ?? 0,

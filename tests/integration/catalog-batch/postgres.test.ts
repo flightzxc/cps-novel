@@ -28,6 +28,8 @@ import { createPublicRedirectCode } from "@/lib/redirect";
 import { prepareSideEffectIntent, transitionSideEffectIntent } from "@/lib/tasks/side-effect-intent";
 import { PROMO_CLAIM_INTENT_OPERATION_TYPE } from "@/lib/tasks/promo-claim-release";
 import { readSourceItemsPage, resolveSourceItemFilters } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
+import { readCatalogTheaterOptions } from "@/app/(admin)/catalog-sync/_lib/read-channel-apps";
+import { planPromoClaimTheaters } from "@/app/(admin)/catalog-sync/_lib/promo-claim-theater-skip";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
 import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -1548,5 +1550,107 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       expect(itemCount).toBe(SCALE_EXPECTED[preset]);
     },
     280_000,
+  );
+
+  // -------------------------------------------------------------------
+  // B-44（v0.6.4）：目录同步页"剧场"筛选 + 领取对话框自动跳过领取暂停的剧场。
+  // foundation 有两个剧场：channels[0] 当作 MoboReader（claimPromo 已开），channels[1] 当作
+  // PlotNovel（claimPromo registered_disabled，与生产 10-15 回关后的状态相同）。
+  // -------------------------------------------------------------------
+  async function seedTheaterFixture() {
+    const [mobo, plot] = [foundation.channels[0]!, foundation.channels[1]!];
+    await owner.channelCapability.create({ data: {
+      channelAppId: mobo.channelAppId, capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY, status: "enabled",
+      sideEffecting: true, evidenceLevel: "OWNER_APPROVED_WRITE_PROBE",
+    } });
+    await owner.channelCapability.create({ data: {
+      channelAppId: plot.channelAppId, capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY, status: "registered_disabled",
+      sideEffecting: true, evidenceLevel: "OWNER_APPROVED_WRITE_PROBE",
+    } });
+    const moboLinked = await seedCatalogRows(owner, { channelAppId: mobo.channelAppId, count: 3, prefix: "b44-mobo", status: "linked" });
+    const plotLinked = await seedCatalogRows(owner, { channelAppId: plot.channelAppId, count: 2, prefix: "b44-plot", status: "linked" });
+    const moboPending = await seedCatalogRows(owner, { channelAppId: mobo.channelAppId, count: 1, prefix: "b44-mobo-pending" });
+    await linkSources([...moboLinked, ...plotLinked]);
+    return { mobo, plot, moboLinked, plotLinked, moboPending };
+  }
+
+  it("B-44 剧场筛选：页面列表只含该剧场、与状态取交集；剧场下拉按 channel_app 列出 (web_app role)", async () => {
+    const { mobo, plot, moboLinked, plotLinked } = await seedTheaterFixture();
+    const page = (query: Parameters<typeof resolveSourceItemFilters>[0]) => readSourceItemsPage(resolveSourceItemFilters({ pageSize: "200", ...query }), web);
+
+    const all = await page({ status: "linked" });
+    expect(all.total).toBe(moboLinked.length + plotLinked.length);
+    const onlyPlot = await page({ status: "linked", channelAppId: plot.channelAppId });
+    expect(onlyPlot.total).toBe(plotLinked.length);
+    expect(new Set(onlyPlot.items.map((item) => item.id))).toEqual(new Set(plotLinked));
+    expect(onlyPlot.items.every((item) => item.channelAppId === plot.channelAppId)).toBe(true);
+    const moboPendingOnly = await page({ status: "pending", channelAppId: mobo.channelAppId });
+    expect(moboPendingOnly.items.every((item) => item.channelAppId === mobo.channelAppId && item.status === "pending")).toBe(true);
+    // 非法剧场参数按"全部剧场"处理，页面不报错。
+    expect((await page({ status: "linked", channelAppId: "not-a-uuid" })).total).toBe(all.total);
+
+    const options = await readCatalogTheaterOptions(web);
+    expect(options.map((option) => option.id).sort()).toEqual([mobo.channelAppId, plot.channelAppId].sort());
+    expect(options.map((option) => option.label).sort()).toEqual(["Catalog PG 0 · Catalog Source 0", "Catalog PG 1 · Catalog Source 1"]);
+  });
+
+  it("B-44 全选一致性：剧场 + 已建立书目 —— 页面 total = 批次上下文提交数 = worker selectedCount，别的剧场的书不入片 (web_app / worker_app role)", async () => {
+    const { mobo, moboLinked, plotLinked } = await seedTheaterFixture();
+    const filters = resolveSourceItemFilters({ status: "linked", channelAppId: mobo.channelAppId, pageSize: "200" });
+    const listed = await readSourceItemsPage(filters, web);
+    expect(listed.total).toBe(moboLinked.length);
+    const selection = normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "linked", channelAppId: mobo.channelAppId } });
+    const context = await readCatalogBatchContext(web, selection);
+    expect(context.submittedCount).toBe(listed.total);
+    expect(context.channelGroups.map((group) => group.channelAppId)).toEqual([mobo.channelAppId]);
+
+    const enqueued = await enqueueCatalogBatch(owner, {
+      operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+      channelAccounts: { [mobo.channelAppId]: mobo.accountId },
+    });
+    await materialize(enqueued.taskId);
+    const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+    expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: listed.total, submittedCount: listed.total });
+    const children = await owner.genericTask.findMany({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+    const enumerated = new Set(children.flatMap((child) => child.items.map((item) => item.targetId)));
+    expect(enumerated).toEqual(new Set(moboLinked));
+    for (const id of plotLinked) expect(enumerated.has(id)).toBe(false);
+  }, 120_000);
+
+  it.each(["explicit_ids", "all_filtered"] as const)(
+    "B-44 第 3 条（%s）：混选 MoboReader + 领取暂停的 PlotNovel，按服务端能力位收窄后，暂停剧场的书不进批次 (web_app / worker_app role)",
+    async (scope) => {
+      const { mobo, plot, moboLinked, plotLinked } = await seedTheaterFixture();
+      const original = scope === "explicit_ids"
+        ? normalizeCatalogSelection({ scope, ids: [...moboLinked, ...plotLinked] })
+        : normalizeCatalogSelection({ scope, filter: { status: "linked" } });
+      // 对话框读的就是这一份上下文：能力位由服务端（web_app 角色）算出，带剧场名。
+      const context = await readCatalogBatchContext(web, original);
+      const plotGroup = context.channelGroups.find((group) => group.channelAppId === plot.channelAppId)!;
+      expect(plotGroup).toMatchObject({ claimCapabilityEnabled: false, eligibleCount: plotLinked.length, sourceAppName: "Catalog Source 1" });
+      expect(context.channelGroups.find((group) => group.channelAppId === mobo.channelAppId)).toMatchObject({ claimCapabilityEnabled: true });
+
+      const itemTheaters = Object.fromEntries([
+        ...moboLinked.map((id) => [id, mobo.channelAppId]), ...plotLinked.map((id) => [id, plot.channelAppId]),
+      ]);
+      const plan = planPromoClaimTheaters(original, context.channelGroups, itemTheaters);
+      if (plan.kind !== "submit") throw new Error(`unexpected plan ${plan.kind}`);
+      expect(plan.skippedCount).toBe(plotLinked.length);
+
+      // 收窄后的选择照常通过服务端规范化（与 enqueuePromoLinkClaimAction 同一入口校验）。
+      const narrowed = normalizeCatalogSelection(plan.selection);
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection: narrowed, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [mobo.channelAppId]: mobo.accountId },
+      });
+      await materialize(enqueued.taskId);
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      // 暂停剧场的书连"已选"都不算：不会在结果里以"其它未提交"出现。
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", selectedCount: moboLinked.length, submittedCount: moboLinked.length });
+      expect((parent.result as { blockedReasonCounts?: Record<string, number> }).blockedReasonCounts ?? {}).toEqual({});
+      const items = await owner.genericTaskItem.findMany({ where: { task: { parentTaskId: enqueued.taskId } }, select: { targetId: true } });
+      expect(new Set(items.map((item) => item.targetId))).toEqual(new Set(moboLinked));
+    },
+    120_000,
   );
 });

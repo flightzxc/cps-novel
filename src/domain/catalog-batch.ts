@@ -24,6 +24,13 @@ export type CatalogFilterSnapshot = Readonly<{
   sourceLocale?: string;
   promoLinkStatus?: string;
   sourceCreatedFrom?: string;
+  /**
+   * B-44（v0.6.4）：目录同步页"剧场"筛选——`channel_app.id`（剧场 = 渠道 × 来源 App，例如
+   * MoboReader、PlotNovel）。键缺席 = 全部剧场，所以不带该键的历史 `all_filtered` 负载天然落到
+   * "全部"，不需要迁移；与其它键一样经 {@link channelAppWhere} 在页面列表、批次上下文/预估、
+   * worker 枚举三处共用同一判定（全选一致性）。
+   */
+  channelAppId?: string;
 }>;
 
 export type CatalogSelection =
@@ -36,6 +43,8 @@ export type NormalizedCatalogFilterSnapshot = Readonly<{
   sourceLocale?: string;
   promoLinkStatus?: PromoLinkStatusFilter;
   sourceCreatedFrom?: string;
+  /** 小写 UUID；缺席 = 全部剧场。 */
+  channelAppId?: string;
 }>;
 
 export type NormalizedCatalogSelection =
@@ -100,7 +109,20 @@ export function sourceCreatedAtRawWhere(
   return { sourceCreatedAtRaw: { gte: `${sourceCreatedFrom} 00:00:00`, lte: "9999-12-31 23:59:59" } };
 }
 
+/**
+ * B-44：剧场筛选的唯一判定片段，与 {@link sourceCreatedAtRawWhere} 同一纪律——页面列表、批次
+ * 上下文/预估、worker 枚举三处都展开这个函数的返回值。缺席 = 全部剧场，不加任何条件。
+ */
+export function channelAppWhere(channelAppId: string | undefined): { channelAppId?: string } {
+  return channelAppId ? { channelAppId } : {};
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** B-44：URL / 快照里的剧场 id 是否是合法 UUID（页面据此把非法值当"全部剧场"，不让页面报错）。 */
+export function isCatalogChannelAppId(value: string | undefined): value is string {
+  return typeof value === "string" && UUID.test(value.trim());
+}
 const STATUSES = new Set(["pending", "linked", "ignored", "stale"]);
 
 /**
@@ -147,6 +169,11 @@ export function normalizeCatalogSelection(selection: CatalogSelection, now: Date
   if (sourceCreatedFrom && (!isValidCatalogDateKey(sourceCreatedFrom) || sourceCreatedFrom > beijingDateKey(now))) {
     throw new CatalogSelectionInputError("filter_source_created_from_invalid");
   }
+  if (raw.channelAppId !== undefined && typeof raw.channelAppId !== "string") {
+    throw new CatalogSelectionInputError("filter_channel_app_invalid");
+  }
+  const channelAppId = raw.channelAppId?.trim().toLowerCase();
+  if (channelAppId && !UUID.test(channelAppId)) throw new CatalogSelectionInputError("filter_channel_app_invalid");
   // 键顺序固定（新键追加在最后）：`catalogBatchScopeHash` 对 selection 做
   // `JSON.stringify`，不带新键的历史快照序列化结果逐字不变。
   return Object.freeze({
@@ -157,6 +184,7 @@ export function normalizeCatalogSelection(selection: CatalogSelection, now: Date
       ...(sourceLocale ? { sourceLocale } : {}),
       ...(promoLinkStatus ? { promoLinkStatus: promoLinkStatus as PromoLinkStatusFilter } : {}),
       ...(sourceCreatedFrom ? { sourceCreatedFrom } : {}),
+      ...(channelAppId ? { channelAppId } : {}),
     }),
   });
 }
@@ -209,6 +237,13 @@ export type CatalogBatchContext = Readonly<{
     channelAppId: string;
     channelCode: string;
     channelName: string;
+    /**
+     * B-44：剧场（来源 App）的代码与名称，例如 `plotnovel` / `PlotNovel`。同一渠道下可以有多个
+     * 剧场，只看 `channelName` 分不出是哪个剧场；领取对话框据此写"已跳过 N 本（PlotNovel 领取暂停）"。
+     * 可选字段：既有测试 fixture 不用全部改，缺失时对话框退回 `channelName`。
+     */
+    sourceAppCode?: string;
+    sourceAppName?: string;
     active: boolean;
     claimCapabilityEnabled: boolean;
     eligibleCount: number;
