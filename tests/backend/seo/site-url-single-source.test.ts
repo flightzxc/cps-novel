@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -62,13 +62,43 @@ function nonCommentLines(file: string): Array<{ line: number; text: string }> {
 describe("site-url single source", () => {
   const files = SCAN_ROOTS.flatMap((root) => collectSourceFiles(root));
 
-  it("never mentions the CPS production domain in live code", () => {
-    const hits = files.flatMap((file) =>
+  // v0.6.4 B-50 (Owner 2026-10-19): `/drama/*` on the public host 301s to the short-drama site, so its
+  // domain has to appear once as a redirect *target*. That is the only sanctioned live mention: exactly
+  // these two lines (the proxy's constant and the probe's expected value), matched verbatim. Anything
+  // else — above all a site-URL fallback, which is what this guard exists for — still fails.
+  const ALLOWED_CPS_DOMAIN_LINES: ReadonlyArray<{ file: string; text: string }> = [
+    { file: "src/proxy.ts", text: 'export const DRAMA_SISTER_SITE_ORIGIN = "https://enpulsedrama.com";' },
+    {
+      file: "scripts/security/next-proxy-probe.mjs",
+      text: 'export const DRAMA_SISTER_SITE_ORIGIN_EXPECTED = "https://enpulsedrama.com";',
+    },
+  ];
+
+  function cpsDomainHits(): Array<{ file: string; line: number; text: string }> {
+    return files.flatMap((file) =>
       nonCommentLines(file)
         .filter(({ text }) => text.includes("enpulsedrama"))
-        .map(({ line }) => `${file}:${line}`),
+        .map(({ line, text }) => ({ file: relative(process.cwd(), file), line, text: text.trim() })),
     );
+  }
+
+  it("never mentions the CPS production domain in live code (except the B-50 redirect-target constants)", () => {
+    const hits = cpsDomainHits()
+      .filter((hit) => !ALLOWED_CPS_DOMAIN_LINES.some((allowed) => allowed.file === hit.file && allowed.text === hit.text))
+      .map((hit) => `${hit.file}:${hit.line}`);
     expect(hits).toEqual([]);
+  });
+
+  it("each allowed B-50 redirect-target line exists exactly once (the allowlist cannot rot or widen)", () => {
+    const hits = cpsDomainHits();
+    for (const allowed of ALLOWED_CPS_DOMAIN_LINES) {
+      expect(
+        hits.filter((hit) => hit.file === allowed.file && hit.text === allowed.text).length,
+        `${allowed.file}: ${allowed.text}`,
+      ).toBe(1);
+    }
+    // The single site-URL source itself must never be the place that mentions it.
+    expect(hits.some((hit) => hit.file === "src/lib/seo/site-url.ts")).toBe(false);
   });
 
   it("never reads NEXT_PUBLIC_SITE_URL in live code", () => {

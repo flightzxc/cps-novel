@@ -43,6 +43,46 @@ export const ADMIN_HOST_DEFAULT = "zbcwf.novel.test";
 export const NAVER_VERIFICATION_PATH = "/naver07aa70d2794ed3e5288b204fb467ee18.html";
 export const NAVER_VERIFICATION_SHA256 = "80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431";
 export const NAVER_VERIFICATION_GROUP = "public-host-static-verification-file";
+/** v0.6.4 B-50: public-host `/drama/*` -> 301 https://enpulsedrama.com (src/proxy.ts `buildDramaSisterSiteRedirectTarget`). */
+export const DRAMA_REDIRECT_GROUP = "drama-sister-site-redirect";
+// The one live-code mention of the short-drama domain in this file; tests/backend/seo/site-url-single-source.test.ts
+// allows exactly this line (and the matching constant in src/proxy.ts), nothing else.
+export const DRAMA_SISTER_SITE_ORIGIN_EXPECTED = "https://enpulsedrama.com";
+/**
+ * v0.6.4 B-51: GA loads on the public host only, never on the admin host (src/app/layout.tsx).
+ * scripts/run-next-proxy-probe-verification.sh seeds site_setting.ga4_measurement_id with this exact value
+ * (tests/backend/security/next-proxy-probe.test.ts pins that the two stay identical).
+ */
+export const GA_HOST_SPLIT_GROUP = "ga-public-host-only";
+export const PROBE_GA4_MEASUREMENT_ID = "G-PROBE00B51";
+const GA_SCRIPT_MARKER = `googletagmanager.com/gtag/js?id=${PROBE_GA4_MEASUREMENT_ID}`;
+
+// The RSC payload carries the <GoogleAnalytics> client component's props as JSON inside
+// `self.__next_f.push([1,"..."])` string literals, so the quotes arrive backslash-escaped.
+const GA_PROPS_IN_RSC_PAYLOAD = new RegExp(`\\\\?"gaId\\\\?":\\\\?"${PROBE_GA4_MEASUREMENT_ID}\\\\?"`);
+
+/**
+ * Public-host page HTML must carry GA for the seeded measurement ID: either the loader URL server-rendered into
+ * the document, or — for an unmatched-route 404, which Next answers with a bare `<html id="__next_error__">` shell
+ * and renders client-side from the RSC payload — the <GoogleAnalytics gaId> props inside that payload (the client
+ * then injects the same loader; that is how production GA records 404 views).
+ */
+export function expectGaLoaded(response) {
+  if (response.status >= 500 || response.status === 0) return `public page failed: ${classify(response)}`;
+  if (!/text\/html/i.test(response.headers["content-type"] ?? "")) return `expected an HTML page, got ${classify(response)}`;
+  if (response.body.includes(GA_SCRIPT_MARKER) || GA_PROPS_IN_RSC_PAYLOAD.test(response.body)) return null;
+  return `public page HTML carries neither the GA loader (${GA_SCRIPT_MARKER}) nor gaId=${PROBE_GA4_MEASUREMENT_ID} in the RSC payload`;
+}
+
+/** Admin-host page HTML must not carry GA at all (neither the loader nor the measurement ID). */
+export function expectGaAbsent(response) {
+  if (response.status !== 200) return `admin page should render 200, got ${classify(response)}`;
+  if (!/text\/html/i.test(response.headers["content-type"] ?? "")) return `expected an HTML page, got ${classify(response)}`;
+  if (response.body.includes("googletagmanager.com") || response.body.includes(PROBE_GA4_MEASUREMENT_ID)) {
+    return "admin-host page HTML loads GA";
+  }
+  return null;
+}
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 /** Real admin *pages* (the ones that exist as page.tsx) — see src/app/(admin)/**. */
@@ -656,6 +696,58 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
     headers: [["Accept-Language", "ja,en;q=0.5"], ["x-nextjs-data", "1"]],
     // With no data header the negotiator may or may not redirect; the invariant is only "never a Location-less 3xx".
     check: (r) => (REDIRECT_STATUSES.has(r.status) && !r.headers.location ? `root negotiation redirect lost its Location: ${classify(r)}` : null),
+  });
+
+  // ---- B-50 (Owner 2026-10-19): public-host `/drama/*` -> 301 to the short-drama site, same path + query.
+  //      The admin host must keep the proxy's bare 404 (RC-9), and any other Host must not be redirected. ----
+  add({
+    id: "drama-redirect/public-host-301",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "public",
+    target: "/drama/probe-title-p1234abcd?utm_source=chatgpt.com",
+    check: (r) => (r.status === 301
+      && r.headers.location === `${DRAMA_SISTER_SITE_ORIGIN_EXPECTED}/drama/probe-title-p1234abcd?utm_source=chatgpt.com`
+      && !r.headers["x-nextjs-redirect"]
+      ? null
+      : `public-host /drama/* should 301 to ${DRAMA_SISTER_SITE_ORIGIN_EXPECTED} with the same path and query, got ${classify(r)}`),
+  });
+  add({
+    id: "drama-redirect/admin-host-404",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "admin",
+    target: "/drama/probe-title-p1234abcd",
+    check: expectProxyDenialSignature,
+  });
+  add({
+    id: "drama-redirect/other-host-not-redirected",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "public",
+    hostHeader: "alias.invalid",
+    target: "/drama/probe-title-p1234abcd",
+    check: (r) => (REDIRECT_STATUSES.has(r.status) ? `a non-site Host must not be redirected: ${classify(r)}` : null),
+  });
+
+  // ---- B-51 (v0.6.4): GA on the public host only. Real server HTML, not a render of the layout in isolation. ----
+  for (const [name, target] of [["home", "/"], ["locale-home", "/ko"], ["browse", "/browse"], ["not-found", "/probe-not-a-page-b51"]]) {
+    add({
+      id: `ga/public-${name}-loads-ga`,
+      group: GA_HOST_SPLIT_GROUP,
+      noFollow: true,
+      hostRole: "public",
+      target,
+      check: expectGaLoaded,
+    });
+  }
+  add({
+    id: "ga/admin-login-no-ga",
+    group: GA_HOST_SPLIT_GROUP,
+    noFollow: true,
+    hostRole: "admin",
+    target: "/login",
+    check: expectGaAbsent,
   });
 
   // ---- Next-auth-shaped inputs (GHSA-xmf8 / GHSA-8fpg are next-auth advisories; this repo has no next-auth).

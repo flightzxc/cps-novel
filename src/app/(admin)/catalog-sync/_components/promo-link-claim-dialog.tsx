@@ -13,6 +13,13 @@ import {
   readCatalogBatchSummaryAction,
   readPromoClaimShardEstimateAction,
 } from "../_actions";
+import {
+  isClaimPausedGroup,
+  planPromoClaimTheaters,
+  promoClaimGroupTheaterName,
+  promoClaimSkipNotice,
+  type PromoClaimGroup,
+} from "../_lib/promo-claim-theater-skip";
 
 type Stage = "loading" | "form" | "submitting" | "counting" | "error";
 // 弹窗只关心摘要里的计数字段；新键（selectedCount 与三个生命周期计数）在老批次
@@ -60,19 +67,20 @@ function claimSummaryLines(summary: ClaimSummary): { readonly counts: readonly s
     : null;
   return { counts, notice };
 }
-type Group = CatalogBatchContext["channelGroups"][number] & {
-  active?: boolean;
-  claimCapabilityEnabled?: boolean;
-};
+type Group = PromoClaimGroup;
+const EMPTY_ITEM_CHANNEL_APP_IDS: Readonly<Record<string, string>> = Object.freeze({});
 
 export function PromoLinkClaimDialog({
   selection,
+  itemChannelAppIds = EMPTY_ITEM_CHANNEL_APP_IDS,
   promoClaimGranted,
   promoClaimBlockedReason,
   onClose,
   onSubmitted,
 }: {
   selection: CatalogSelection;
+  /** B-44：当前页每行的剧场（`id → channelAppId`），用来在勾选模式下排除领取暂停剧场的书。 */
+  itemChannelAppIds?: Readonly<Record<string, string>>;
   promoClaimGranted: boolean;
   promoClaimBlockedReason: string | null;
   onClose: () => void;
@@ -83,6 +91,9 @@ export function PromoLinkClaimDialog({
   const timerRef = useRef<number | null>(null);
   const pollRef = useRef<(id: string) => Promise<void>>(async () => {});
   const selectionRef = useRef(selection);
+  // B-44：打开对话框那一刻的选择与各行剧场，渲染期要读（算跳过哪些书），所以用 state 冻结而不是 ref。
+  const [openedSelection] = useState(selection);
+  const [openedItemChannelAppIds] = useState(itemChannelAppIds);
   const requestIdRef = useRef(crypto.randomUUID());
   const submittedRef = useRef(false);
   const frozenAccountsRef = useRef<Record<string, string> | null>(null);
@@ -102,21 +113,40 @@ export function PromoLinkClaimDialog({
     () => (context?.channelGroups ?? []) as readonly Group[],
     [context],
   );
-  const invalidGroup = useMemo(
-    () => groups.find((group) => group.active === false || group.claimCapabilityEnabled === false || !group.accounts.length),
-    [groups],
+  // B-44 第 3 条：领取暂停（claimPromo 能力未开）的剧场分组被跳过，不再整单拦下；
+  // 只有参与领取的分组才需要账户、才参与校验与预估。
+  const theaterPlan = useMemo(
+    () => (context ? planPromoClaimTheaters(openedSelection, groups, openedItemChannelAppIds) : null),
+    [context, groups, openedItemChannelAppIds, openedSelection],
   );
+  const claimGroups = useMemo(
+    () => (theaterPlan?.kind === "submit" ? theaterPlan.claimGroups : []),
+    [theaterPlan],
+  );
+  const submitSelection = theaterPlan?.kind === "submit" ? theaterPlan.selection : null;
+  const allPausedGroup = theaterPlan?.kind === "all_paused" ? groups[0] : undefined;
+  const invalidGroup = useMemo(
+    () => allPausedGroup ?? claimGroups.find((group) => group.active === false || !group.accounts.length),
+    [allPausedGroup, claimGroups],
+  );
+  const skipNotice = theaterPlan?.kind === "submit" && theaterPlan.skippedGroups.length > 0
+    ? promoClaimSkipNotice(theaterPlan.skippedGroups, theaterPlan.skippedCount)
+    : null;
+  const needsTheaterNotice = theaterPlan?.kind === "all_filtered_needs_theater"
+    ? `全选的书里有领取暂停的剧场（${Array.from(new Set(theaterPlan.skippedGroups.map(promoClaimGroupTheaterName))).join("、")}），可领取的剧场又不止一个：请先在「剧场」筛选里选定一个剧场再全选`
+    : null;
+  const blocked = Boolean(invalidGroup) || needsTheaterNotice !== null;
   const needsAccountChoice = useMemo(
-    () => groups.some((group) => group.accounts.length !== 1),
-    [groups],
+    () => claimGroups.some((group) => group.accounts.length !== 1),
+    [claimGroups],
   );
   const lifecycleEnabled = context?.lifecycleEnabled === true;
   // 所有还有资格条目的渠道分组都已经选好账户——单账户分组已经被默认值
   // 填好，只有多账户分组需要运营手动选择。在这之前不请求预估（请求了也只
   // 会是"还差几个账户没选"的半成品数字，容易误导）。
   const allAccountsChosen = useMemo(
-    () => groups.every((group) => group.eligibleCount === 0 || Boolean(accounts[group.channelAppId])),
-    [groups, accounts],
+    () => claimGroups.every((group) => group.eligibleCount === 0 || Boolean(accounts[group.channelAppId])),
+    [claimGroups, accounts],
   );
 
   useEffect(() => {
@@ -132,7 +162,8 @@ export function PromoLinkClaimDialog({
         }
         const defaults: Record<string, string> = {};
         result.data.channelGroups.forEach((group) => {
-          if (group.accounts.length === 1) defaults[group.channelAppId] = group.accounts[0]!.id;
+          // B-44：领取暂停的分组不分配账户——不进批次，也就不需要账户。
+          if (group.accounts.length === 1 && !isClaimPausedGroup(group)) defaults[group.channelAppId] = group.accounts[0]!.id;
         });
         setContext(result.data);
         setAccounts(defaults);
@@ -182,8 +213,8 @@ export function PromoLinkClaimDialog({
   }, [poll]);
 
   const submit = useCallback(async (): Promise<void> => {
-    if (!context || !promoClaimGranted || invalidGroup || taskId || submittedRef.current) return;
-    if (groups.some((group) => group.eligibleCount > 0 && !accounts[group.channelAppId])) {
+    if (!context || !submitSelection || !promoClaimGranted || blocked || taskId || submittedRef.current) return;
+    if (claimGroups.some((group) => group.eligibleCount > 0 && !accounts[group.channelAppId])) {
       setMessage("请为每个渠道选择账户");
       setStage("error");
       return;
@@ -194,7 +225,7 @@ export function PromoLinkClaimDialog({
     setStage("submitting");
     try {
       const result = await enqueuePromoLinkClaimAction({
-        selection: selectionRef.current,
+        selection: submitSelection,
         channelAccounts: frozenAccountsRef.current,
         requestId: requestIdRef.current,
       });
@@ -215,26 +246,27 @@ export function PromoLinkClaimDialog({
       setMessage("提交失败，请重试");
       setStage("error");
     }
-  }, [accounts, context, groups, invalidGroup, onSubmitted, poll, promoClaimGranted, taskId]);
+  }, [accounts, blocked, claimGroups, context, onSubmitted, poll, promoClaimGranted, submitSelection, taskId]);
 
   useEffect(() => {
     // 开关开启时不再自动提交——运营必须先看到"预计分 N 片、预计耗时 X 小时"
     // 再手动点击确认（下面的按钮可见性条件已经加了 `lifecycleEnabled`）。
     // 开关关闭（`lifecycleEnabled` 为 `false`）时这条判断逐字不变，单账户
     // 分组仍然自动提交一次。
-    if (context && stage === "form" && !needsAccountChoice && !invalidGroup && promoClaimGranted && !lifecycleEnabled && !submittedRef.current) {
+    // B-44：有被跳过的书时也不自动提交——先让运营看到"已跳过 N 本"再手动确认。
+    if (context && stage === "form" && !needsAccountChoice && !blocked && !skipNotice && promoClaimGranted && !lifecycleEnabled && !submittedRef.current) {
       void submit();
     }
-  }, [context, invalidGroup, lifecycleEnabled, needsAccountChoice, promoClaimGranted, stage, submit]);
+  }, [blocked, context, lifecycleEnabled, needsAccountChoice, promoClaimGranted, skipNotice, stage, submit]);
 
   useEffect(() => {
     // 保持"回到未选定状态时不显示上一次的旧预估"这条行为，但不在 effect 里
     // 同步 setState（react-hooks/set-state-in-effect）——真正的重置发生在
     // 触发 `allAccountsChosen` 变化的唯一位置：账户 <select> 的 onChange。
-    if (!context || !lifecycleEnabled || !allAccountsChosen || stage !== "form") return;
+    if (!context || !submitSelection || !lifecycleEnabled || !allAccountsChosen || stage !== "form") return;
     let cancelled = false;
     void readPromoClaimShardEstimateAction({
-      selection: selectionRef.current, channelAccounts: accounts, requestId: crypto.randomUUID(),
+      selection: submitSelection, channelAccounts: accounts, requestId: crypto.randomUUID(),
     }).then((result) => {
       if (cancelled || !mountedRef.current) return;
       if (result.ok) setEstimate(result.data);
@@ -243,13 +275,14 @@ export function PromoLinkClaimDialog({
       // "advisory only" 纪律：预估从来不是准入判断的一部分。
     });
     return () => { cancelled = true; };
-  }, [accounts, allAccountsChosen, context, lifecycleEnabled, stage]);
+  }, [accounts, allAccountsChosen, context, lifecycleEnabled, stage, submitSelection]);
 
   const summaryLines = summary ? claimSummaryLines(summary) : null;
 
   const canSubmit = Boolean(context)
+    && Boolean(submitSelection)
     && promoClaimGranted
-    && !invalidGroup
+    && !blocked
     && !taskId
     && stage !== "submitting"
     && (stage === "form" || stage === "error");
@@ -268,12 +301,22 @@ export function PromoLinkClaimDialog({
         {stage === "loading" && <p className="text-sm text-gray-600">正在读取所选条目…</p>}
         {invalidGroup && (
           <p role="alert" className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
-            {invalidGroup.accounts.length ? "该渠道当前未启用推广领取能力" : "该渠道没有可用账户"}
+            {allPausedGroup || invalidGroup.accounts.length ? "该渠道当前未启用推广领取能力" : "该渠道没有可用账户"}
           </p>
         )}
-        {needsAccountChoice && groups.map((group) => (
+        {needsTheaterNotice && (
+          <p role="alert" data-testid="promo-claim-needs-theater" className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+            {needsTheaterNotice}
+          </p>
+        )}
+        {skipNotice && !blocked && !taskId && (
+          <p data-testid="promo-claim-paused-theater-skip" className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+            {skipNotice}
+          </p>
+        )}
+        {needsAccountChoice && claimGroups.map((group) => (
           <label key={group.channelAppId} className="block text-sm text-gray-700">
-            {group.channelName}（{group.eligibleCount} 条）
+            {group.sourceAppName ? `${group.channelName} · ${group.sourceAppName}` : group.channelName}（{group.eligibleCount} 条）
             <select
               value={accounts[group.channelAppId] ?? ""}
               disabled={isFrozen}
@@ -325,7 +368,7 @@ export function PromoLinkClaimDialog({
           <button type="button" className={buttonClassName("secondary")} onClick={onClose} disabled={stage === "submitting"}>
             关闭
           </button>
-          {!taskId && (needsAccountChoice || stage === "error" || lifecycleEnabled) && (
+          {!taskId && (needsAccountChoice || stage === "error" || lifecycleEnabled || Boolean(skipNotice)) && (
             <button type="button" className={buttonClassName("primary")} disabled={!canSubmit} onClick={() => void submit()}>
               领取推广链接
             </button>

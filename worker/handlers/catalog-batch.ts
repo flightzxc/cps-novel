@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
+  channelAppWhere,
+  isCatalogChannelAppId,
   isValidCatalogDateKey,
   sourceCreatedAtRawWhere,
   type NormalizedCatalogSelection,
@@ -151,6 +153,11 @@ export function parsePayload(value: unknown): CatalogBatchPayload {
     && (typeof p.selection.filter.sourceCreatedFrom !== "string" || !isValidCatalogDateKey(p.selection.filter.sourceCreatedFrom))
   ) {
     throw new Error("catalog_batch_payload_invalid");
+  } else if (
+    // B-44 剧场筛选键（v0.6.4）：缺席 = 全部剧场（历史载荷）；一旦出现必须是合法 UUID。
+    p.selection.filter.channelAppId !== undefined && !isCatalogChannelAppId(p.selection.filter.channelAppId)
+  ) {
+    throw new Error("catalog_batch_payload_invalid");
   }
   for (const record of [p.channelAccounts, p.templateKeysByLocale]) {
     if (record !== undefined && (!record || typeof record !== "object" || Array.isArray(record)
@@ -294,6 +301,8 @@ function selectionWhere(
     // 上架时间（2026-10-06）：与目录同步页列表、批次上下文/预估共用同一个判定片段，
     // 是"全选一致性"的承重点——这里漏掉，页面看到的集合与枚举出的集合就会不一致。
     ...sourceCreatedAtRawWhere(f.sourceCreatedFrom),
+    // B-44（v0.6.4）剧场：同上，漏掉就会把别的剧场的书也枚举进批次。
+    ...channelAppWhere(f.channelAppId),
   };
 }
 

@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
 import {
+  channelAppWhere,
+  isCatalogChannelAppId,
   normalizeCatalogSelection,
   parseSourceCreatedPreset,
   resolveSourceCreatedFromPreset,
@@ -152,6 +154,12 @@ export type SourceItemFilters = {
   readonly sourceCreatedFrom?: string;
   /** 列表排序：`"source_created_desc"` = 上架时间新→旧；其它/缺席 = 默认（最后扫描时间）。只影响展示，不进入批次快照。 */
   readonly sort?: string;
+  /**
+   * B-44（v0.6.4）：剧场（`channel_app.id`）；缺席 = 全部剧场。与状态/语种/推广链接状态/上架时间
+   * 取交集，进入批次快照（`CatalogFilterSnapshot.channelAppId`）。非法值在
+   * {@link resolveSourceItemFilters} 里就被丢掉（按"全部剧场"处理），不会让页面报错。
+   */
+  readonly channelAppId?: string;
 };
 
 /** 页面 URL 查询参数：在 {@link SourceItemFilters} 之上多一个预设 `sourceCreatedWithin`（天数）。 */
@@ -165,13 +173,14 @@ export type SourceItemQueryParams = SourceItemFilters & { readonly sourceCreated
  * `sourceCreatedFrom` 不被采信（运营只能通过预设选，快照里的日期只由这里产生）。
  */
 export function resolveSourceItemFilters(params: SourceItemQueryParams, now: Date = new Date()): SourceItemFilters {
-  const { sourceCreatedWithin, sourceCreatedFrom: _ignored, sort, ...rest } = params;
+  const { sourceCreatedWithin, sourceCreatedFrom: _ignored, sort, channelAppId, ...rest } = params;
   void _ignored;
   const preset = parseSourceCreatedPreset(sourceCreatedWithin);
   return {
     ...rest,
     ...(preset ? { sourceCreatedFrom: resolveSourceCreatedFromPreset(preset, now) } : {}),
     ...(sort === SOURCE_ITEM_SORT_SOURCE_CREATED_DESC ? { sort } : {}),
+    ...(isCatalogChannelAppId(channelAppId) ? { channelAppId: channelAppId.trim().toLowerCase() } : {}),
   };
 }
 
@@ -185,9 +194,28 @@ export function canonicalCatalogFilter(filters: SourceItemFilters, now: Date = n
       sourceLocale: filters.sourceLocale,
       promoLinkStatus: filters.promoLinkStatus,
       sourceCreatedFrom: filters.sourceCreatedFrom,
+      channelAppId: filters.channelAppId,
     },
   }, now);
   return normalized.scope === "all_filtered" ? normalized.filter : { status: "pending" };
+}
+
+/**
+ * B-44（v0.6.4，Owner 2026-10-19 拍板"照 CPS：换页也清空"）：勾选的作用范围。页面把它当
+ * `<CatalogSyncClient key>`，任何一项变了，勾选就清空——不只是筛选条件，**排序、页码、每页条数**
+ * 也算。勾选因此永远只在"当前这一页、当前这个排序"里，看不见的勾选从结构上不可能存在。
+ *
+ * 2026-10-15 事故：key 只含筛选条件，改排序后默认排序下勾过的 100 本 MoboReader 隐身保留，
+ * 连同新勾的 33 本 PlotNovel 一起提交了 133 本。CPS 同步页（v8.7.3 `changdu-sync-panel.tsx`）
+ * 同样在改筛选、换剧场、翻页时清空勾选。要跨页领取，用工具栏的"选择符合当前筛选条件的全部 N 条"。
+ */
+export function catalogSelectionScopeKey(input: {
+  readonly filter: CatalogFilterSnapshot;
+  readonly sort: string | undefined;
+  readonly page: number;
+  readonly pageSize: number;
+}): string {
+  return JSON.stringify({ filter: input.filter, sort: input.sort ?? "", page: input.page, pageSize: input.pageSize });
 }
 
 const MAX_SEARCH_LENGTH = 200;
@@ -277,6 +305,8 @@ export async function readSourceItemsPage(
     ...promoLinkStatusIdConstraint(promoLinkStatus, promoLinkStatusContext),
     // 上架时间：与批次上下文/预估、worker 枚举共用同一个判定片段（全选一致性）。
     ...sourceCreatedAtRawWhere(canonical.sourceCreatedFrom),
+    // B-44 剧场：同上。
+    ...channelAppWhere(canonical.channelAppId),
   };
 
   // 默认排序不变。"上架时间（新→旧）"：原始字符串倒序（固定格式，字典序即时间序），

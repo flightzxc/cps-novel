@@ -20,6 +20,8 @@ export function CatalogSyncClient({ items, catalogGate, contentPublish, promoCla
   const [createOpen, setCreateOpen] = useState(false);
   const blockedReason = capabilityBlockReason("content:publish", contentPublish);
   const ids = useMemo(() => new Set(selection.scope === "explicit_ids" ? selection.ids : []), [selection]);
+  // B-44：领取对话框据此在勾选模式下排除领取暂停剧场的书（勾选只在当前页，所以当前页的行就够）。
+  const itemChannelAppIds = useMemo(() => Object.fromEntries(items.map((item) => [item.id, item.channelAppId])), [items]);
   const selectedOnPage = items.filter((item) => selection.scope === "all_filtered" || ids.has(item.id));
   const allPageSelected = items.length > 0 && selectedOnPage.length === items.length;
   const somePageSelected = selectedOnPage.length > 0 && !allPageSelected;
@@ -34,7 +36,7 @@ export function CatalogSyncClient({ items, catalogGate, contentPublish, promoCla
     {selection.scope === "all_filtered" && <p data-testid="all-filtered-selection">已选择符合当前筛选条件的全部 {total} 条 · <button onClick={() => setSelection({ scope: "explicit_ids", ids: [] })}>取消全选</button></p>}
     <Table><THead><tr><TH><input aria-label="选择当前页" type="checkbox" checked={allPageSelected} ref={(el) => { if (el) el.indeterminate = somePageSelected; }} onChange={togglePage} /></TH><TH>来源条目</TH><TH>语种识别</TH><TH>渠道</TH><TH>章节</TH><TH>状态</TH><TH>领取资格</TH><TH>最近可见</TH><TH>操作</TH></tr></THead><TBody>{items.map((item) => <tr key={item.id}><TD><input aria-label={`勾选 ${item.title}`} type="checkbox" checked={selection.scope === "all_filtered" || ids.has(item.id)} disabled={selection.scope === "all_filtered"} onChange={() => toggleItem(item.id)} /></TD><TD><b>{item.title}</b><p>{item.sourceAppName}（{item.sourceAppCode}）</p>{item.sourceCreatedAtRaw && <p data-testid={`source-created-at-${item.id}`}>上架 {item.sourceCreatedAtRaw}</p>}</TD><TD>{item.sourceLocale ?? "未识别"}<p>{item.sourceLanguageName ?? "未命名"}（{item.sourceLanguageCode}）</p></TD><TD>{item.channelName}（{item.channelCode}）</TD><TD>{item.totalChapterCount}</TD><TD><span data-testid={`source-item-status-${item.status}`}>{NOVEL_SOURCE_ITEM_STATUS_BADGES[item.status].label}</span></TD><TD><span data-testid={`promo-claim-eligibility-${item.promoClaimEligible ? "eligible" : "ineligible"}`}>{promoClaimEligibilityLabel(item.promoClaimEligible, item.promoClaimIneligibleReason)}</span></TD><TD>{formatDateTime(item.lastSeenAt)}</TD><TD><button onClick={() => setActiveItem(item)}>纳入书目</button></TD></tr>)}{!items.length && <EmptyRow colSpan={9}>没有符合条件的来源条目</EmptyRow>}</TBody></Table>
     {activeItem && <CreateContentDialog item={activeItem} contentPublishGranted={!blockedReason} contentPublishBlockedReason={blockedReason} onClose={() => setActiveItem(null)} />}
-    {claimOpen && <PromoLinkClaimDialog selection={selection} promoClaimGranted={promoClaimGranted} promoClaimBlockedReason={promoClaimBlockedReason} onClose={() => setClaimOpen(false)} onSubmitted={() => setSelection({ scope: "explicit_ids", ids: [] })} />}
+    {claimOpen && <PromoLinkClaimDialog selection={selection} itemChannelAppIds={itemChannelAppIds} promoClaimGranted={promoClaimGranted} promoClaimBlockedReason={promoClaimBlockedReason} onClose={() => setClaimOpen(false)} onSubmitted={() => setSelection({ scope: "explicit_ids", ids: [] })} />}
     {createOpen && <BatchCreateContentDialog selection={selection} contentPublishGranted={!blockedReason} contentPublishBlockedReason={blockedReason} onClose={() => setCreateOpen(false)} onSubmitted={() => setSelection({ scope: "explicit_ids", ids: [] })} />}
   </div>;
 }

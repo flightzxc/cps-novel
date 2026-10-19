@@ -11,8 +11,13 @@ import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
-import { readActiveChannelScanOptions } from "./_lib/read-channel-apps";
-import { canonicalCatalogFilter, readSourceItemsPage, resolveSourceItemFilters } from "./_lib/read-source-items";
+import { readActiveChannelScanOptions, readCatalogTheaterOptions } from "./_lib/read-channel-apps";
+import {
+  canonicalCatalogFilter,
+  catalogSelectionScopeKey,
+  readSourceItemsPage,
+  resolveSourceItemFilters,
+} from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +32,8 @@ type SearchParams = {
   /** 列表排序（`source_created_desc` = 上架时间新→旧）；只影响展示。 */
   sort?: string;
   pageSize?: string;
+  /** B-44：剧场（`channel_app.id`）；缺席或非法 = 全部剧场。 */
+  channelAppId?: string;
 };
 
 /**
@@ -69,10 +76,12 @@ export default async function CatalogSyncPage({
     sourceCreatedWithin,
     sort: params.sort,
     pageSize: params.pageSize,
+    channelAppId: params.channelAppId,
   });
   const page = granted ? await readSourceItemsPage(filters) : null;
   const canonicalFilter = canonicalCatalogFilter(filters);
   const channels = granted ? await readActiveChannelScanOptions() : [];
+  const theaters = granted ? await readCatalogTheaterOptions() : [];
 
   return (
     <AdminShell
@@ -100,11 +109,13 @@ export default async function CatalogSyncPage({
                 sort: filters.sort,
                 pageSize: String(page.pageSize),
               }}
+              theaters={theaters}
             />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <CatalogSyncClient
-                key={JSON.stringify(canonicalFilter)}
+                // B-44：筛选、排序、页码、每页条数任一变化都清空勾选（照 CPS 同步页）。
+                key={catalogSelectionScopeKey({ filter: canonicalFilter, sort: filters.sort, page: page.page, pageSize: page.pageSize })}
                 items={page.items}
                 catalogGate={{ featureEnabled: isNovelCatalogSyncEnabled() }}
                 contentPublish={contentPublish}
@@ -116,7 +127,7 @@ export default async function CatalogSyncPage({
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, promoLinkStatus: params.promoLinkStatus, sourceCreatedWithin, sort: filters.sort, pageSize: String(page.pageSize) }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, promoLinkStatus: params.promoLinkStatus, sourceCreatedWithin, sort: filters.sort, pageSize: String(page.pageSize), channelAppId: canonicalFilter.channelAppId }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}
