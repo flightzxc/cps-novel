@@ -43,6 +43,8 @@ export const ADMIN_HOST_DEFAULT = "zbcwf.novel.test";
 export const NAVER_VERIFICATION_PATH = "/naver07aa70d2794ed3e5288b204fb467ee18.html";
 export const NAVER_VERIFICATION_SHA256 = "80f6a3bc8eb3e65113a1a31e8d90c20fda4821983941a4048462d7cab49d8431";
 export const NAVER_VERIFICATION_GROUP = "public-host-static-verification-file";
+/** v0.6.4 B-50: public-host `/drama/*` -> 301 https://enpulsedrama.com (src/proxy.ts `buildDramaSisterSiteRedirectTarget`). */
+export const DRAMA_REDIRECT_GROUP = "drama-sister-site-redirect";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 /** Real admin *pages* (the ones that exist as page.tsx) — see src/app/(admin)/**. */
@@ -656,6 +658,38 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
     headers: [["Accept-Language", "ja,en;q=0.5"], ["x-nextjs-data", "1"]],
     // With no data header the negotiator may or may not redirect; the invariant is only "never a Location-less 3xx".
     check: (r) => (REDIRECT_STATUSES.has(r.status) && !r.headers.location ? `root negotiation redirect lost its Location: ${classify(r)}` : null),
+  });
+
+  // ---- B-50 (Owner 2026-10-19): public-host `/drama/*` -> 301 to the short-drama site, same path + query.
+  //      The admin host must keep the proxy's bare 404 (RC-9), and any other Host must not be redirected. ----
+  add({
+    id: "drama-redirect/public-host-301",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "public",
+    target: "/drama/probe-title-p1234abcd?utm_source=chatgpt.com",
+    check: (r) => (r.status === 301
+      && r.headers.location === "https://enpulsedrama.com/drama/probe-title-p1234abcd?utm_source=chatgpt.com"
+      && !r.headers["x-nextjs-redirect"]
+      ? null
+      : `public-host /drama/* should 301 to enpulsedrama.com with the same path and query, got ${classify(r)}`),
+  });
+  add({
+    id: "drama-redirect/admin-host-404",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "admin",
+    target: "/drama/probe-title-p1234abcd",
+    check: expectProxyDenialSignature,
+  });
+  add({
+    id: "drama-redirect/other-host-not-redirected",
+    group: DRAMA_REDIRECT_GROUP,
+    noFollow: true,
+    hostRole: "public",
+    hostHeader: "alias.invalid",
+    target: "/drama/probe-title-p1234abcd",
+    check: (r) => (REDIRECT_STATUSES.has(r.status) ? `a non-site Host must not be redirected: ${classify(r)}` : null),
   });
 
   // ---- Next-auth-shaped inputs (GHSA-xmf8 / GHSA-8fpg are next-auth advisories; this repo has no next-auth).

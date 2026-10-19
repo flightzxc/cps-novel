@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { isAdminPath } from "@/lib/site/admin-origin";
 
 import {
+  DRAMA_REDIRECT_GROUP,
   NAVER_VERIFICATION_GROUP,
   NAVER_VERIFICATION_PATH,
   NAVER_VERIFICATION_SHA256,
@@ -360,5 +361,64 @@ describe("v0.5.12 Naver site-verification file (public/naver07aa70d2794ed3e5288b
     ]);
     expect(parseRawResponse(chunked).bodySha256).toBe(NAVER_VERIFICATION_SHA256);
     expect(parseRawResponse(Buffer.from("HTTP/1.1 200 OK\r\nContent-", "latin1")).bodySha256).toBeNull();
+  });
+});
+
+describe("v0.6.4 B-50 /drama/* -> enpulsedrama.com probes", () => {
+  type DramaProbe = {
+    id: string;
+    hostRole: string;
+    hostHeader?: string;
+    target: string;
+    noFollow?: boolean;
+    check: (response: unknown) => string | null;
+  };
+  const dramaProbes = () =>
+    buildProbes({ buildId: "BUILD" }).filter(
+      (probe: { group: string }) => probe.group === DRAMA_REDIRECT_GROUP,
+    ) as DramaProbe[];
+  const byId = (id: string) => {
+    const probe = dramaProbes().find((candidate) => candidate.id === id);
+    if (!probe) throw new Error(`missing probe ${id}`);
+    return probe;
+  };
+  const answer = (status: number, headers: Record<string, string> = {}) => ({
+    status,
+    headers,
+    rawHeaders: [],
+    body: "",
+    bodySha256: null,
+  });
+
+  it("covers the public host, the admin host and a non-site Host, reading only the first answer", () => {
+    const probes = dramaProbes();
+    expect(probes.map((probe) => probe.id).sort()).toEqual([
+      "drama-redirect/admin-host-404",
+      "drama-redirect/other-host-not-redirected",
+      "drama-redirect/public-host-301",
+    ]);
+    for (const probe of probes) {
+      expect(probe.noFollow, probe.id).toBe(true);
+      expect(probe.target.startsWith("/drama/"), probe.id).toBe(true);
+    }
+    expect(byId("drama-redirect/admin-host-404").hostRole).toBe("admin");
+    expect(byId("drama-redirect/other-host-not-redirected").hostHeader).toBe("alias.invalid");
+  });
+
+  it("public-host verdict: only a 301 to the exact enpulsedrama.com URL (same path + query) passes", () => {
+    const { check } = byId("drama-redirect/public-host-301");
+    const exact = "https://enpulsedrama.com/drama/probe-title-p1234abcd?utm_source=chatgpt.com";
+    expect(check(answer(301, { location: exact }))).toBeNull();
+    expect(check(answer(308, { location: exact }))).toMatch(/should 301/);
+    expect(check(answer(301, { location: "https://enpulsedrama.com/drama/probe-title-p1234abcd" }))).toMatch(/should 301/);
+    expect(check(answer(301, { location: "https://novel.test/drama/probe-title-p1234abcd?utm_source=chatgpt.com" }))).toMatch(/should 301/);
+    expect(check(answer(404))).toMatch(/should 301/);
+  });
+
+  it("admin-host and other-host verdicts: a redirect fails both", () => {
+    const location = { location: "https://enpulsedrama.com/drama/probe-title-p1234abcd" };
+    expect(byId("drama-redirect/admin-host-404").check(answer(301, location))).not.toBeNull();
+    expect(byId("drama-redirect/other-host-not-redirected").check(answer(301, location))).toMatch(/must not be redirected/);
+    expect(byId("drama-redirect/other-host-not-redirected").check(answer(404))).toBeNull();
   });
 });

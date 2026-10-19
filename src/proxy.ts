@@ -108,6 +108,31 @@ export function buildDefaultLocaleRedirectTarget(pathname: string, search: strin
   return `${rest}${search}`;
 }
 
+/**
+ * B-50（Owner 2026-10-19 单独批准，作为"公开网址冻结"的例外）：ChatGPT 把短剧站
+ * enpulsedrama.com 的 `/drama/...` 路径安到了 pulsenovels.com 上，这些地址在海阅一直是
+ * 404（从没进过站点地图，也没被收录），在短剧站都是 200。这里把 `/drama` 与 `/drama/*`
+ * 永久跳到短剧站的同一路径。
+ *
+ * - 匹配与 Next 的 `/drama/:path*` 同义：`/drama` 本身和 `/drama/` 开头的路径都算，
+ *   `/dramas`、`/drama-x` 不算；区分大小写（短剧站路径全是小写，`/Drama/x` 维持原样 404）。
+ * - 路径原样拼接（`nextUrl.pathname` 是未解码的形态，百分号编码保持不变）；查询串原样带上，
+ *   与 Next 的 redirects 默认行为一致——ChatGPT 加的 `utm_source=chatgpt.com` 会跟到短剧站，
+ *   那边的 GA 能看到来源。
+ * - 目标主机是写死的短剧站正式域名，不取自请求，所以不构成开放跳转；路径一定以 `/drama`
+ *   开头，`/drama//evil.com` 这类形态拼出来仍在 enpulsedrama.com 上。
+ * - 带语种前缀的 `/xx/drama/` 不在本次范围内（GA 与日志都没见到）。
+ *
+ * 纯函数，不依赖 NextRequest/NextResponse，见 `tests/ui/drama-sister-site-redirect.test.ts`。
+ * 只在公开站主机上调用，见 `proxy()`。
+ */
+export const DRAMA_SISTER_SITE_ORIGIN = "https://enpulsedrama.com";
+
+export function buildDramaSisterSiteRedirectTarget(pathname: string, search: string): string | null {
+  if (pathname !== "/drama" && !pathname.startsWith("/drama/")) return null;
+  return `${DRAMA_SISTER_SITE_ORIGIN}${pathname}${search}`;
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const siteHost = resolveSiteHostSafely();
   const result = evaluateAdminHostAccess(
@@ -158,6 +183,16 @@ export function proxy(request: NextRequest): NextResponse {
   // itself further restricts to `pathname === "/"` and excludes bot UAs.
   const requestHost = normalizeRequestHost(request.headers.get("host"));
   if (requestHost !== null && requestHost === siteHost) {
+    // B-50: 只在公开站主机（生产即 SITE_URL 的 pulsenovels.com）上跳。主机名先经
+    // `normalizeRequestHost` 去端口、转小写，所以 `PulseNovels.com:443` 也算公开站。
+    // 后台主机上 `/drama/*` 不是后台路径，已在上面的 RC-9 隔离里 404；别名域名、
+    // 裸 IP、缺 Host 的请求不进这个分支，维持原样。
+    // 用 301：这些都是浏览器 GET，308 的"保留请求方法"用不上；跨域名永久迁移时 301
+    // 是各类客户端（含 App 内置浏览器、较老的爬虫）兼容性最好的写法，搜索引擎对两者
+    // 一视同仁。上面 `/en/*` 的 308 是同站的网址规范化，与这里不是一回事。
+    const dramaTarget = buildDramaSisterSiteRedirectTarget(request.nextUrl.pathname, request.nextUrl.search);
+    if (dramaTarget) return NextResponse.redirect(dramaTarget, 301);
+
     const negotiated = negotiateRootLocale(request);
     if (negotiated) return negotiated;
   }
