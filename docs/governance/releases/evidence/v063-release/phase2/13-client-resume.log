@@ -1,0 +1,24 @@
+MATRIX_CLIENT=PASS sequence=3 name=admin_dashboard_recheck status=404
+MATRIX_CLIENT=PASS sequence=4 name=admin_novels_streaming_redirect status=200
+MATRIX_CLIENT=PASS sequence=5 name=admin_tasks status=401
+MATRIX_CLIENT=PASS sequence=6 name=admin_static_1 status=200
+MATRIX_CLIENT=PASS sequence=7 name=admin_anonymous_health status=401
+MATRIX_CLIENT=PASS sequence=8 name=admin_anonymous_worker status=401
+MATRIX_CLIENT=PASS sequence=9 name=admin_anonymous_backup status=401
+MATRIX_CLIENT=PASS sequence=10 name=admin_authenticated_health status=200
+MATRIX_CLIENT=PASS sequence=11 name=admin_authenticated_worker status=200
+MATRIX_CLIENT=PASS sequence=12 name=admin_authenticated_backup status=200
+MATRIX_CLIENT=PASS sequence=13 name=admin_404_/ status=404
+MATRIX_CLIENT=PASS sequence=14 name=admin_404_/api/health-anything status=404
+MATRIX_CLIENT=PASS sequence=15 name=public_home status=200
+MATRIX_CLIENT=PASS sequence=16 name=public_ko status=200
+MATRIX_CLIENT=PASS sequence=17 name=public_book status=200
+MATRIX_CLIENT=PASS sequence=18 name=public_chapter_1 status=200
+MATRIX_CLIENT=PASS sequence=19 name=public_404_/dashboard status=404
+MATRIX_CLIENT=PASS sequence=20 name=public_404_/login status=404
+MATRIX_CLIENT=PASS sequence=21 name=public_404_/api/admin status=404
+MATRIX_CLIENT=PASS sequence=22 name=public_404_/api/health/worker status=404
+MATRIX_CLIENT=PASS sequence=23 name=public_health status=200
+MATRIX_CLIENT=PASS sequence=24 name=public_search status=404
+MATRIX_CLIENT_ALL=PASS requests=24
+CURL_CONFIG_TEMP_COPY_REMOVED=True

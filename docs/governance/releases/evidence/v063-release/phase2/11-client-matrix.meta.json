@@ -1,0 +1,10 @@
+{
+  "name": "11-client-matrix",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/client-matrix.py.txt"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792380838.4443789,
+  "finishedAt": 1792380849.9585469
+}

@@ -1,0 +1,33 @@
+{
+  "status": "STOPPED_MATRIX_FAILURE_NGINX_ROLLBACK_REQUIRED",
+  "at": "2026-10-19T03:35:08.740759+00:00",
+  "failedCheck": {
+    "sequence": 2,
+    "name": "admin_dashboard",
+    "host": "zbcwf.pulsenovels.com",
+    "path": "/dashboard",
+    "authenticated": false,
+    "at": "2026-10-19T03:34:06.916897+00:00",
+    "source": "client_proxy",
+    "followRedirects": false,
+    "status": 404,
+    "headers": {
+      "x-robots-tag": "noindex, nofollow, noarchive",
+      "strict-transport-security": "max-age=86400",
+      "content-type": "text/html; charset=utf-8"
+    },
+    "bodySha256": "32f8adc13e7ba05485eee65daff2d6c5f6f09402503ab8dda1f69a1340c3f7b6"
+  },
+  "expected": "anonymous /dashboard redirects to /login",
+  "clientRequestsUsed": 2,
+  "matrixBudget": 30,
+  "nginxBackup": "/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j",
+  "currentAppVersion": "0.6.2",
+  "currentAppFinal": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+  "envChanged": false,
+  "applicationDeployStarted": false,
+  "nginxRollback": "Owner sudo input required",
+  "temporaryCurlConfigRemoved": true,
+  "ownerBrowserLogin2fa": "PASS",
+  "cause": "not diagnosed; observed status mismatch retained"
+}

@@ -1,0 +1,11 @@
+import pathlib,hashlib,json,os,subprocess
+r=pathlib.Path('/opt/cps-novel/releases/6543af6876b1dda857ec6b28ae13df1e2c1a49c6');e=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v063/evidence')
+assert pathlib.Path('/opt/cps-novel/current').resolve().name=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+sha=hashlib.sha256(pathlib.Path('/etc/nginx/conf.d/cps-novel-preprod.conf').read_bytes()).hexdigest();assert sha=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+for name in ['nginx-install.log','nginx-backup-dir.txt','nginx-after.sha256','nginx-install-started.txt','owner-nginx-result.txt']:
+ p=e/name;print('EVIDENCE_FILE='+name+'\n'+p.read_text(),flush=True)
+assert 'OWNER_NGINX_STEP=PASS' in (e/'owner-nginx-result.txt').read_text()
+raw=pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_text();config=next((l.split('=',1)[1].strip('"\'') for l in raw.splitlines() if l.startswith('PREPROD_CURL_CONFIG=')),'/opt/cps-novel/shared/secrets/preprod-curl.conf')
+assert pathlib.Path(config).is_file();print('CURL_CONFIG_PATH='+config,flush=True)
+p=pathlib.Path('/var/log/nginx/error.log');print('NGINX_ERROR_LOG_READABLE='+str(os.access(p,os.R_OK)),flush=True)
+print('NGINX_OWNER_INSTALL_READBACK=PASS sha256='+sha,flush=True)

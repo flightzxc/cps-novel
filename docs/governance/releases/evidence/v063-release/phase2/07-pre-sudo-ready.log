@@ -1,0 +1,10 @@
+PRE_SUDO_TRAFFIC={"count": 0, "consecutiveWithinThreshold": 1, "at": "2026-10-19T01:49:39.582576+00:00"}
+PRE_SUDO_TRAFFIC={"count": 0, "consecutiveWithinThreshold": 2, "at": "2026-10-19T01:49:49.590002+00:00"}
+PRE_SUDO_TRAFFIC={"count": 0, "consecutiveWithinThreshold": 3, "at": "2026-10-19T01:49:59.596873+00:00"}
+BEGIN
+DO
+PUBLIC_CUTOVER_PAUSE_GATE=PASS
+COMMIT
+
+
+PRE_SUDO_READY=PASS {"final": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6", "backup": {"path": "/var/lib/cps-novel/backups/logical/cps-novel-v063-20261019T014706Z.dump", "sha256": "3d269590a223646976ea71a6339dc917b759d91e5bef73573b9376c0c771aa77", "bytes": 769842502}, "nginxBeforeSha256": "d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe", "candidateSha256": "7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9", "envUnchanged": true, "maintenanceOn": false, "checkedAt": "2026-10-19T01:49:59.722433+00:00"}

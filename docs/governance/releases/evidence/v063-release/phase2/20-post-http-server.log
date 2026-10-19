@@ -1,0 +1,10 @@
+MATRIX_CLIENT=PASS sequence=1 name=server_login status=200
+MATRIX_CLIENT=PASS sequence=2 name=server_anonymous_health status=401
+MATRIX_CLIENT=PASS sequence=3 name=server_anonymous_worker status=401
+MATRIX_CLIENT=PASS sequence=4 name=server_anonymous_backup status=401
+MATRIX_CLIENT=PASS sequence=5 name=post_authenticated_health status=200
+MATRIX_CLIENT=PASS sequence=6 name=post_authenticated_worker status=200
+MATRIX_CLIENT=PASS sequence=7 name=post_authenticated_backup status=200
+MATRIX_CLIENT=PASS sequence=8 name=post_dashboard status=404
+MATRIX_CLIENT=PASS sequence=9 name=post_novels status=200
+POST_HTTP_SERVER=PASS requests=9

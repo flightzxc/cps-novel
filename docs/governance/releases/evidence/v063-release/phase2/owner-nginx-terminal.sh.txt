@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set +x
+exec ssh -tt -o KexAlgorithms=curve25519-sha256 -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 haiyue-vps 'bash --noprofile --norc -c '"'"'set -euo pipefail
+set +x
+release_dir=/opt/cps-novel/releases/6543af6876b1dda857ec6b28ae13df1e2c1a49c6
+evidence=/opt/cps-novel/shared/artifacts/verified/v063/evidence
+cd "$release_dir"
+[ "$(git rev-parse HEAD)" = 6543af6876b1dda857ec6b28ae13df1e2c1a49c6 ] || exit 65
+[ "$(readlink -f /opt/cps-novel/current)" = /opt/cps-novel/releases/fbc00167f34cefde6d3f079f8573700ea9e86245 ] || exit 65
+[ -f "$evidence/PRE_SUDO_READY" ] || { echo "STOP: pre-sudo checks incomplete"; exit 65; }
+[ ! -e "$evidence/nginx-install.log" ] || { echo "STOP: installation log already exists"; exit 65; }
+[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d " " -f1)" = d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe ] || exit 65
+printf "Owner: enter sudo password personally at the following prompt.\n"
+sudo -k
+sudo -v
+date -u +%Y-%m-%dT%H:%M:%SZ > "$evidence/nginx-install-started.txt"
+PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --mode public --hsts-max-age 86400 | tee "$evidence/nginx-install.log"
+nginx_backup="$(sed -n "s/^NGINX_BACKUP=//p" "$evidence/nginx-install.log")"
+[ -n "$nginx_backup" ] || exit 65
+printf "%s\n" "$nginx_backup" > "$evidence/nginx-backup-dir.txt"
+grep -E "^NGINX_CANDIDATE=PASS mode=public " "$evidence/nginx-install.log"
+grep -E "^NGINX_READY=PASS phase=install round=[0-9]+ master=[0-9]+ listeners=80 443$" "$evidence/nginx-install.log"
+grep -E "^NGINX_INSTALL=PASS mode=public " "$evidence/nginx-install.log"
+sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | tee "$evidence/nginx-after.sha256"
+[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d " " -f1)" = 7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9 ] || exit 65
+for i in 1 2 3 4 5 6 7 8 9 10; do
+ code="$(curl --noproxy "*" --resolve zbcwf.pulsenovels.com:443:127.0.0.1 --silent --show-error --connect-timeout 5 --max-time 15 --output /dev/null --write-out "%{http_code}" https://zbcwf.pulsenovels.com/login)"
+ [ "$code" = 200 ] && break
+ sleep 1
+done
+[ "$code" = 200 ] || { echo "STOP: admin login status=$code"; exit 65; }
+printf "OWNER_NGINX_STEP=PASS backup=%s anonymous_login=200\n" "$nginx_backup" | tee "$evidence/owner-nginx-result.txt"
+printf "Application remains v0.6.2; wait for Codex to complete the public matrix before deploy.\n"
+'"'"''

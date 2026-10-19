@@ -1,0 +1,6 @@
+import pathlib,hashlib,json
+assert pathlib.Path('/opt/cps-novel/current').resolve().name=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+sha=hashlib.sha256(pathlib.Path('/etc/nginx/conf.d/cps-novel-preprod.conf').read_bytes()).hexdigest();assert sha=='d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe'
+envsha=hashlib.sha256(pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_bytes()).hexdigest();assert envsha=='0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b'
+evidence=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v063/evidence');assert (evidence/'PRE_SUDO_READY').is_file() and not (evidence/'nginx-install.log').exists()
+print('OWNER_HANDOFF_STATE=PASS nginx_unchanged=yes env_unchanged=yes current=0.6.2 install_not_started=yes')

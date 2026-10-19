@@ -1,0 +1,177 @@
+{
+  "status": "PASS",
+  "requests": 9,
+  "results": [
+    {
+      "sequence": 1,
+      "name": "server_login",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/login",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:53.634978+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "90f5a9ab0ad282917efd25a50dd4a81a869785391635775fe766b7d424c542e6",
+      "turnstileTextInHtml": true
+    },
+    {
+      "sequence": 2,
+      "name": "server_anonymous_health",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:53.709716+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 3,
+      "name": "server_anonymous_worker",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/worker",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:53.754277+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 4,
+      "name": "server_anonymous_backup",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/backup",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:53.793468+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 5,
+      "name": "post_authenticated_health",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": true,
+      "at": "2026-10-19T03:45:53.837815+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "bodySha256": "35f02346d9e632d17870ea5323740fcae74dfca8b8c17e1112059c8372826c22",
+      "healthStatus": {
+        "ok": true
+      },
+      "build": {
+        "version": "0.6.3",
+        "commit": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+        "builtAt": "2026-10-18T11:22:59Z"
+      }
+    },
+    {
+      "sequence": 6,
+      "name": "post_authenticated_worker",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/worker",
+      "authenticated": true,
+      "at": "2026-10-19T03:45:53.881423+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "bodySha256": "32dd2b2207fb59c806aae289cec17e38bb692d5559c36658695c0be870bc3220",
+      "healthStatus": {
+        "workerStatus": "ok"
+      }
+    },
+    {
+      "sequence": 7,
+      "name": "post_authenticated_backup",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/backup",
+      "authenticated": true,
+      "at": "2026-10-19T03:45:53.927944+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "bodySha256": "4b2cb369e29e99e82e09d8bcfe9dc78ab8cfa94fbeb52e4ce36f18eeb8ab17d7",
+      "healthStatus": {
+        "backupStatus": "ok"
+      }
+    },
+    {
+      "sequence": 8,
+      "name": "post_dashboard",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/dashboard",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:53.980828+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 404,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "8bf86236ae127e4a235a0ed2600b2631a4d82d88e1aa58b1b17f51ff770fb801"
+    },
+    {
+      "sequence": 9,
+      "name": "post_novels",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/novels",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:54.040062+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "6d9c7de28ced6a47aeffd37338b476719de11be7e05e01ade74a188f771be8ed"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "12-nginx-reconfirmed",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/nginx-install-readback.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792381300.8776991,
+  "finishedAt": 1792381304.242346
+}

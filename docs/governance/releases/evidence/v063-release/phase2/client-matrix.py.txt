@@ -1,0 +1,65 @@
+import pathlib,subprocess,json,os,re,hashlib,html,urllib.parse,datetime
+out=pathlib.Path('.tmp/v063-release/phase2');ledger=out/'matrix-client-requests.jsonl';results=[];assert not ledger.exists()
+baseline=json.loads((out/'baseline.json').read_text());book=baseline['data']['sampleBookPath'];expected_search=int(next(l.split('=',1)[1] for l in (out/'10-search-state.log').read_text().splitlines() if l.startswith('SEARCH_EXPECTED_STATUS=')))
+config=out/'preprod-curl.private.conf';assert not config.exists();config.touch(mode=0o600)
+ssh=['-o','KexAlgorithms=curve25519-sha256','-o','ConnectTimeout=20','-o','BatchMode=yes']
+try:
+ subprocess.run(['scp','-q',*ssh,'haiyue-vps:/opt/cps-novel/shared/secrets/preprod-curl.conf',str(config)],check=True);os.chmod(config,0o600)
+ def probe(name,host,path,expected,auth=False,kind='normal'):
+  n=len(results)+1;assert n<=24
+  row={'sequence':n,'name':name,'host':host,'path':path,'authenticated':auth,'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':'client_proxy','followRedirects':False}
+  with ledger.open('a') as f:f.write(json.dumps(row)+'\n')
+  headers=out/'matrix-headers.private.txt';url='https://'+host+urllib.parse.quote(path,safe='/%?=&-')
+  args=['curl']+(['--config',str(config)] if auth else [])+['--silent','--show-error','--compressed','--proxy','http://127.0.0.1:7899','--noproxy','','--retry','0','--connect-timeout','15','--max-time','45','--dump-header',str(headers),'--write-out','\n%{http_code}',url]
+  r=subprocess.run(args,capture_output=True);assert r.returncode==0,('curl_exit',name,r.returncode)
+  body,status=r.stdout.rsplit(b'\n',1);status=int(status);h={}
+  for line in headers.read_text().splitlines():
+   if line.startswith('HTTP/'):h={}
+   elif ':' in line:
+    k,v=line.split(':',1);h[k.lower()]=v.strip()
+  safe={k:h[k] for k in ['www-authenticate','x-robots-tag','strict-transport-security','location','content-type'] if k in h}
+  row.update({'status':status,'headers':safe,'bodySha256':hashlib.sha256(body).hexdigest()});results.append(row);(out/'matrix-client-results.json').write_text(json.dumps({'status':'RUNNING','results':results},indent=2)+'\n')
+  assert status in expected,(name,status,expected)
+  if kind=='login':
+   assert 'www-authenticate' not in h and h.get('x-robots-tag')=='noindex, nofollow, noarchive'
+   assert h.get('strict-transport-security')=='max-age=86400'
+   row['turnstileTextInHtml']=b'turnstile' in body.lower()
+  if kind=='dashboard':
+   location=urllib.parse.urlsplit(urllib.parse.urljoin(url,h.get('location','')));assert location.hostname=='zbcwf.pulsenovels.com' and location.path=='/login'
+   assert 'www-authenticate' not in h
+  if kind=='api':assert 'www-authenticate' not in h and 'json' in h.get('content-type','');json.loads(body)
+  if kind=='health_anonymous':assert h.get('www-authenticate')=='Basic realm="CPS Novel Administration"'
+  if kind=='health_authenticated':
+   data=json.loads(body);row['healthStatus']={k:data[k] for k in ['ok','workerStatus','backupStatus'] if k in data}
+   if path=='/api/health':assert data.get('ok') is True
+   if path=='/api/health/worker':assert data.get('workerStatus')=='ok'
+   if path=='/api/health':
+    assert data['build']['version']=='0.6.2' and data['build']['commit']=='fbc00167f34cefde6d3f079f8573700ea9e86245';row['build']=data['build']
+  if kind=='public_page':assert 'x-robots-tag' not in h and h.get('strict-transport-security')=='max-age=86400'
+  if kind=='public_health':
+   data=json.loads(body);assert data['build']['version']=='0.6.2' and data['build']['commit']=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+  print('MATRIX_CLIENT=PASS sequence=%s name=%s status=%s'%(n,name,status),flush=True)
+  return body
+ body=probe('admin_login','zbcwf.pulsenovels.com','/login',[200],kind='login')
+ assets=[]
+ for value in re.findall(r'(?:src|href)="([^"<>]+)"',body.decode()):
+  value=html.unescape(value)
+  if value.startswith('/_next/static/') and value not in assets:assets.append(value)
+ assert len(assets)>=3,'login_actual_static_assets_lt_3'
+ (out/'matrix-static-paths.json').write_text(json.dumps(assets[:3],indent=2)+'\n')
+ probe('admin_dashboard','zbcwf.pulsenovels.com','/dashboard',[301,302,303,307,308],kind='dashboard')
+ probe('admin_tasks','zbcwf.pulsenovels.com','/api/admin/tasks',[401,403],kind='api')
+ for i,path in enumerate(assets[:3],1):probe('admin_static_'+str(i),'zbcwf.pulsenovels.com',path,[200])
+ for path in ['/api/health','/api/health/worker','/api/health/backup']:probe('admin_anonymous_'+path.rsplit('/',1)[-1],'zbcwf.pulsenovels.com',path,[401],kind='health_anonymous')
+ for path in ['/api/health','/api/health/worker','/api/health/backup']:probe('admin_authenticated_'+path.rsplit('/',1)[-1],'zbcwf.pulsenovels.com',path,[200],auth=True,kind='health_authenticated')
+ for path in ['/','/api/health-anything']:probe('admin_404_'+path,'zbcwf.pulsenovels.com',path,[404])
+ for name,path in [('public_home','/'),('public_ko','/ko'),('public_book',book),('public_chapter_1',book+'/chapter/1')]:probe(name,'pulsenovels.com',path,[200],kind='public_page')
+ for path in ['/dashboard','/login','/api/admin','/api/health/worker']:probe('public_404_'+path,'pulsenovels.com',path,[404])
+ probe('public_health','pulsenovels.com','/api/health',[200],kind='public_health')
+ probe('public_search','pulsenovels.com','/search?q=a',[expected_search])
+ assert len(results)==24
+ (out/'matrix-client-results.json').write_text(json.dumps({'status':'PASS','requests':24,'results':results,'staticAssetsChecked':3,'ownerBrowserAcceptance':'separate','searchExpectedFromUnchangedApplicationFlag':expected_search},indent=2)+'\n')
+ print('MATRIX_CLIENT_ALL=PASS requests=24',flush=True)
+finally:
+ config.unlink(missing_ok=True);(out/'matrix-headers.private.txt').unlink(missing_ok=True)
+ print('CURL_CONFIG_TEMP_COPY_REMOVED='+str(not config.exists()),flush=True)

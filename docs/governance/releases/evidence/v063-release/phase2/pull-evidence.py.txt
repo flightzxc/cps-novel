@@ -1,0 +1,8 @@
+import pathlib,subprocess,json,base64
+p=pathlib.Path('.tmp/v063-release/phase2');dest=p/'remote-evidence';dest.mkdir(exist_ok=True)
+r=subprocess.run(['ssh','-o','KexAlgorithms=curve25519-sha256','-o','ConnectTimeout=20','-o','BatchMode=yes','haiyue-vps','python3','-'],input=(p/'pull-remote-evidence.py.txt').read_bytes(),capture_output=True,check=True)
+rows=json.loads(r.stdout)
+for name,content in rows.items():
+ assert pathlib.Path(name).name==name and '.private.' not in name
+ (dest/name).write_bytes(base64.b64decode(content))
+print('REMOTE_EVIDENCE_PULL=PASS files='+str(len(rows)))

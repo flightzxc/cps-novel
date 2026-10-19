@@ -1,0 +1,7 @@
+{
+  "action": "Owner terminal launcher generation",
+  "initialError": "bash -n: unmatched quote",
+  "productionExecutionBeforeRepair": false,
+  "repair": "shell quote both command layers using shlex; validate outer and remote scripts with bash -n",
+  "validation": "PASS"
+}

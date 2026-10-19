@@ -1,0 +1,7 @@
+MATRIX_CLIENT=PASS sequence=1 name=post_public_home status=200
+MATRIX_CLIENT=PASS sequence=2 name=post_public_book status=200
+MATRIX_CLIENT=PASS sequence=3 name=post_public_chapter status=200
+MATRIX_CLIENT=PASS sequence=4 name=post_public_404_/login status=404
+MATRIX_CLIENT=PASS sequence=5 name=post_public_404_/dashboard status=404
+MATRIX_CLIENT=PASS sequence=6 name=post_public_health status=200
+POST_PUBLIC=PASS requests=6

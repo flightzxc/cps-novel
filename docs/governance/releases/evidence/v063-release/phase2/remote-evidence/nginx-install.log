@@ -1,0 +1,5 @@
+NGINX_RENDER=PASS
+NGINX_CANDIDATE=PASS mode=public bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+NGINX_BACKUP=/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j
+NGINX_READY=PASS phase=install round=2 master=787 listeners=80 443
+NGINX_INSTALL=PASS mode=public bootstrap_public=0 backup_dir=/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j

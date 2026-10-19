@@ -1,0 +1,7 @@
+MATRIX_CLIENT=PASS sequence=1 name=server_login status=200
+MATRIX_CLIENT=PASS sequence=2 name=server_anonymous_health status=401
+MATRIX_CLIENT=PASS sequence=3 name=server_anonymous_worker status=401
+MATRIX_CLIENT=PASS sequence=4 name=server_anonymous_backup status=401
+MATRIX_CLIENT=PASS sequence=5 name=server_health_authenticated status=200
+MATRIX_CLIENT=PASS sequence=6 name=server_static status=200
+MATRIX_SERVER_ALL=PASS requests=6

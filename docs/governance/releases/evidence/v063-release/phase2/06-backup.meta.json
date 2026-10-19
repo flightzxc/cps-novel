@@ -1,0 +1,11 @@
+{
+  "name": "06-backup",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/backup.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792374423.4673622,
+  "finishedAt": 1792374520.5543811
+}

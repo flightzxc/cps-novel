@@ -1,0 +1,27 @@
+NGINX_BEFORE_SHA256=d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe
+NGINX_SNIPPET=PASS name=cps-novel-preprod-security
+NGINX_SNIPPET=PASS name=cps-novel-preprod-protected
+NGINX_SNIPPET=PASS name=cps-novel-preprod-protected-nomaintenance
+NGINX_SNIPPET=PASS name=cps-novel-preprod-proxy
+NGINX_SNIPPET=PASS name=cps-novel-edge-public-security
+NGINX_SNIPPET=PASS name=cps-novel-edge-admin-security
+NGINX_SNIPPET=PASS name=cps-novel-edge-maintenance
+NGINX_RENDER=PASS
+NGINX_CANDIDATE=PASS mode=public bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+
+
+NGINX_DIFF=PASS removed=10 added=26 added_noncomment=12 search_only=yes
+NGINX_SEARCH_ADDED=limit_req_zone $binary_remote_addr zone=cps_edge_search_ip:10m rate=20r/m;
+NGINX_SEARCH_ADDED=limit_req_zone $server_name zone=cps_edge_search_all:1m rate=3r/s;
+NGINX_SEARCH_ADDED=location ~ "^/(?:(?:en|es|pt-BR|id|vi|th|ja|ko|zh-Hant|ar|fr|de|pl|cs|ru)/)?search$" {
+NGINX_SEARCH_ADDED=auth_basic off;
+NGINX_SEARCH_ADDED=include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+NGINX_SEARCH_ADDED=include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+NGINX_SEARCH_ADDED=limit_req zone=cps_edge_search_ip burst=10 nodelay;
+NGINX_SEARCH_ADDED=limit_req zone=cps_edge_search_all burst=10 nodelay;
+NGINX_SEARCH_ADDED=limit_req zone=cps_edge_bot_page burst=2 nodelay;
+NGINX_SEARCH_ADDED=proxy_pass http://cps_novel_edge_web;
+NGINX_SEARCH_ADDED=include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+NGINX_SEARCH_ADDED=}
+ADMIN_LOGIN_BEFORE=PASS anonymous_status=401 path=server_loopback_tls
+NGINX_PRECHECK=PASS

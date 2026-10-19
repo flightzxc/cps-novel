@@ -1,0 +1,40 @@
+{
+  "status": "RUNNING",
+  "results": [
+    {
+      "sequence": 1,
+      "name": "admin_login",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/login",
+      "authenticated": false,
+      "at": "2026-10-19T03:34:03.903335+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "d0d7683f788df6abdf2b2d29d9d26d3a001a991240938fb024fc6a3632cd0ceb",
+      "turnstileTextInHtml": true
+    },
+    {
+      "sequence": 2,
+      "name": "admin_dashboard",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/dashboard",
+      "authenticated": false,
+      "at": "2026-10-19T03:34:06.916897+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 404,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "32f8adc13e7ba05485eee65daff2d6c5f6f09402503ab8dda1f69a1340c3f7b6"
+    }
+  ]
+}

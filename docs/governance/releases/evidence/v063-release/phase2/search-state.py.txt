@@ -1,0 +1,5 @@
+import subprocess,json
+q="BEGIN READ ONLY; SELECT site_search_enabled FROM site_setting WHERE id=1; COMMIT;"
+r=subprocess.run(['docker','exec','-i','-e','PGOPTIONS=-c default_transaction_read_only=on','cps-novel-postgres-1','psql','-X','-v','ON_ERROR_STOP=1','-U','postgres','-d','cps_novel','-At'],input=q,text=True,capture_output=True,check=True)
+print(r.stdout);assert '\nt\n' in '\n'+r.stdout or '\nf\n' in '\n'+r.stdout
+print('SEARCH_EXPECTED_STATUS='+('200' if '\nt\n' in '\n'+r.stdout else '404'))

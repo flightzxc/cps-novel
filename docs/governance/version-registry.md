@@ -19,7 +19,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.3 —— 第一阶段完成，尚未部署（2026-10-18 JST）
+### v0.6.3 —— 已部署，自动核验PASS；Owner收尾核验进行中（2026-10-19 JST）
 
 - 版本类型 **PATCH**。基线 `f819b84611e08387c95df550546ffaa910a5ea29`（tree `3a5f80f734cb1f23680c120f34c7cdc364c2f2ee`），集成线 `integration/v0.6.3-2026-10-18`，发布分支 `release/v0.6.3-2026-10-18`；来源 `feat/v063-admin-gate-removal`，经 no-ff 合并，含后台门禁调整与 B-49。
 - 后台登录页、页面、接口及静态资源移除 nginx Basic Auth，依靠应用登录、人机验证、登录限速、5 次失败锁定与两步验证；三个健康检查接口仍保留口令。B-49 仅增加国家分布口径说明，来源为 v0.6.2 国家对账的 Owner 裁定。
@@ -28,6 +28,9 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - annotated tag、生成 CHANGELOG、唯一发版级开发日志与 Notion 同步回读留待部署验收后完成；第一阶段结果由后续发布记录补充。
 
 - 第一阶段实测完成：Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6` / tree `c5f7680d71642cf36c725b05dcaf9f5501b9709e`；全量11528通过/0失败/无Unhandled，37运行器、27条nginx变异、三模式矩阵及最终归档端到端通过。public@86400候选18307字节，SHA256 `7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9`；归档SHA256 `271b4763615c2d50258029dbd6a341a8e2ffd8b31d15df75bccf3a1c224dcbfc`。GitHub已推送Final；未连接生产，等待Owner“批准部署”。完整证据见[发布记录](releases/v0.6.3-preproduction.md)。
+
+- 第二阶段已获Owner明确批准并完成：Owner亲自sudo重装nginx，public@86400候选18307字节/SHA7199de10…生效；后台移除Basic Auth、健康检查保留，PN-15搜索独立限流随模板生效。首次/dashboard错误预期导致STOP，Owner判为手册错误、明确不回滚；实际404无WWW，真实/novels流式登录跳转200通过。首停证据保留，手册只改文档。
+- 客户机累计24＋服务器6共30次通过（主控另4次单独记录）；Owner无痕登录和两步验证通过，UptimeRobot未配置跳过。原RELEASE=PASS/EXIT=0，维护12:44:11–12:44:59 JST，47.828281秒，env只改版本两行/cmp PASS。29finished/0rolled_back、60表、迁移checksum一致，五应用healthy、postgres容器ID不变、六服务error/permission denied0；投影0/0/0、IndexNow无熔断/429/积压、依赖/写闸/白名单/备份PASS，公开页抽查PASS。nginx root日志计数、国家说明目测及运营通知待Owner回执；tag/CHANGELOG/唯一开发日志/Notion在收尾验收后完成。
 
 ### v0.6.2 —— 已部署，技术及业务验收PASS；Owner接受已知上游口径差异（2026-10-17）
 
@@ -538,7 +541,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.3` | 2026-10-18 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 第一阶段完成，尚未部署 |
+| `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已部署，自动核验PASS；Owner收尾核验进行中 |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
 | `v0.6.0` | 2026-10-14 15:51:08 | MINOR | PlotNovel 口令码模式与数据库层收紧；迁移27、表58、字典1349/active1279；开通另行执行 | Final `493eb23b034b0410780228535b3e293e4ee91f9a`；`release/v0.6.0-2026-10-14`；[记录](releases/v0.6.0-preproduction.md) | 已部署正式站；A～F PASS；PlotNovel未开通；Notion同步读回PASS |

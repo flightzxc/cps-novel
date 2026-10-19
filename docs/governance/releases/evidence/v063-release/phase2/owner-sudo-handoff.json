@@ -1,0 +1,31 @@
+{
+  "status": "owner_must_launch_in_visible_codex_terminal",
+  "interactiveProcessSessionId": null,
+  "prompt": "[sudo] password for deploy:",
+  "nginxInstalled": false,
+  "applicationDeployed": false,
+  "currentVersion": "0.6.2",
+  "envChanged": false,
+  "maintenanceOn": false,
+  "releaseDirectory": "/opt/cps-novel/releases/6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+  "artifactDirectory": "/opt/cps-novel/shared/artifacts/verified/v063",
+  "preSudoChecks": "PASS",
+  "backup": {
+    "path": "/var/lib/cps-novel/backups/logical/cps-novel-v063-20261019T014706Z.dump",
+    "sha256": "3d269590a223646976ea71a6339dc917b759d91e5bef73573b9376c0c771aa77",
+    "bytes": 769842502,
+    "listVerified": true,
+    "checksumVerified": true
+  },
+  "pausedAt": "2026-10-19T01:50:37.165872+00:00",
+  "passwordCaptured": false,
+  "nextAction": "Owner runs the prepared launcher in the visible Codex terminal, then enters sudo password personally",
+  "codexTerminalOpenStatus": "queued",
+  "codexTerminalPromptVisibility": "not_confirmed; app snapshot currently empty",
+  "computerUseCodexControl": "denied by tool safety restriction",
+  "ownerMustVerifyPromptBeforeTyping": true,
+  "priorProcessSessionId": 20848,
+  "priorProcessStatus": "closed; SSH timed out without password input",
+  "nativeTerminalScreenshot": "local zsh prompt; no sudo prompt",
+  "verifiedAt": "2026-10-19T03:28:12.698595+00:00"
+}

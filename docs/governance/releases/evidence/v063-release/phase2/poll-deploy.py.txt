@@ -1,0 +1,6 @@
+import pathlib,json
+p=pathlib.Path('/opt/cps-novel/logs/release-v0.6.3-6543af6.log')
+print(p.read_text()[-16000:] if p.exists() else 'DEPLOY_LOG_PENDING')
+for suffix in ['.timeline.json','.exit.json']:
+ q=p.with_suffix(suffix)
+ if q.exists():print(q.name+'='+q.read_text())

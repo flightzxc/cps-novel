@@ -1,0 +1,47 @@
+import pathlib,subprocess,json,re,hashlib,urllib.parse,datetime
+out=pathlib.Path("/opt/cps-novel/shared/artifacts/verified/v063/evidence");ledger=out/"post-http-server-requests.jsonl";results=[];assert not ledger.exists()
+config=pathlib.Path("/opt/cps-novel/shared/secrets/preprod-curl.conf")
+def probe(name,host,path,expected,auth=False,kind='normal'):
+ n=len(results)+1;assert n<=9
+ row={'sequence':n,'name':name,'host':host,'path':path,'authenticated':auth,'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':'server_tls_loopback','followRedirects':False}
+ with ledger.open('a') as f:f.write(json.dumps(row)+'\n')
+ headers=out/'matrix-headers.private.txt';url='https://'+host+urllib.parse.quote(path,safe='/%?=&-')
+ args=['curl']+(['--config',str(config)] if auth else [])+['--silent','--show-error','--compressed','--resolve',host+':443:127.0.0.1','--noproxy','*','--retry','0','--connect-timeout','15','--max-time','45','--dump-header',str(headers),'--write-out','\n%{http_code}',url]
+ r=subprocess.run(args,capture_output=True);assert r.returncode==0,('curl_exit',name,r.returncode)
+ body,status=r.stdout.rsplit(b'\n',1);status=int(status);h={}
+ for line in headers.read_text().splitlines():
+  if line.startswith('HTTP/'):h={}
+  elif ':' in line:
+   k,v=line.split(':',1);h[k.lower()]=v.strip()
+ safe={k:h[k] for k in ['www-authenticate','x-robots-tag','strict-transport-security','location','content-type'] if k in h}
+ row.update({'status':status,'headers':safe,'bodySha256':hashlib.sha256(body).hexdigest()});results.append(row);(out/'post-http-server-results.json').write_text(json.dumps({'status':'RUNNING','results':results},indent=2)+'\n')
+ assert status in expected,(name,status,expected)
+ if kind=='login':
+  assert 'www-authenticate' not in h and h.get('x-robots-tag')=='noindex, nofollow, noarchive'
+  assert h.get('strict-transport-security')=='max-age=86400'
+  row['turnstileTextInHtml']=b'turnstile' in body.lower()
+ if kind=='dashboard':
+  location=urllib.parse.urlsplit(urllib.parse.urljoin(url,h.get('location','')));assert location.hostname=='zbcwf.pulsenovels.com' and location.path=='/login'
+  assert 'www-authenticate' not in h
+ if kind=='api':assert 'www-authenticate' not in h and 'json' in h.get('content-type','');json.loads(body)
+ if kind=='health_anonymous':assert h.get('www-authenticate')=='Basic realm="CPS Novel Administration"'
+ if kind=='health_authenticated':
+  data=json.loads(body);row['healthStatus']={k:data[k] for k in ['ok','workerStatus','backupStatus'] if k in data}
+  if path=='/api/health':assert data.get('ok') is True
+  if path=='/api/health/worker':assert data.get('workerStatus')=='ok'
+  if path=='/api/health':
+   assert data['build']['version']=='0.6.3' and data['build']['commit']=='6543af6876b1dda857ec6b28ae13df1e2c1a49c6';row['build']=data['build']
+ if kind=='public_page':assert 'x-robots-tag' not in h and h.get('strict-transport-security')=='max-age=86400'
+ if kind=='public_health':
+  data=json.loads(body);assert data['build']['version']=='0.6.3' and data['build']['commit']=='6543af6876b1dda857ec6b28ae13df1e2c1a49c6'
+ print('MATRIX_CLIENT=PASS sequence=%s name=%s status=%s'%(n,name,status),flush=True)
+ return body
+probe('server_login','zbcwf.pulsenovels.com','/login',[200],kind='login')
+for path in ['/api/health','/api/health/worker','/api/health/backup']:probe('server_anonymous_'+path.rsplit('/',1)[-1],'zbcwf.pulsenovels.com',path,[401],kind='health_anonymous')
+for path in ['/api/health','/api/health/worker','/api/health/backup']:probe('post_authenticated_'+path.rsplit('/',1)[-1],'zbcwf.pulsenovels.com',path,[200],auth=True,kind='health_authenticated')
+probe('post_dashboard','zbcwf.pulsenovels.com','/dashboard',[404])
+body=probe('post_novels','zbcwf.pulsenovels.com','/novels',[200]);assert b'NEXT_REDIRECT;replace;/login?next=%2Fnovels' in body
+assert all('www-authenticate' not in x['headers'] for x in results if x['status']!=401)
+assert len(results)==9
+(out/'post-http-server-results.json').write_text(json.dumps({'status':'PASS','requests':9,'results':results},indent=2)+'\n')
+print('POST_HTTP_SERVER=PASS requests=9')

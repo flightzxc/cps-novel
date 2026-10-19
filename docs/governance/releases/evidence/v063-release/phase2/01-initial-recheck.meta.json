@@ -1,0 +1,11 @@
+{
+  "name": "01-initial-recheck",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/remote-initial.py.txt"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792374054.6838741,
+  "finishedAt": 1792374058.123135
+}

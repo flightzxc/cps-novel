@@ -1,0 +1,10 @@
+{
+  "name": "21-post-public",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/post-public.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792381549.742753,
+  "finishedAt": 1792381557.929159
+}

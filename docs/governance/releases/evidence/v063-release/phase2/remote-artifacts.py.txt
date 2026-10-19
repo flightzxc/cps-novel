@@ -1,0 +1,21 @@
+import pathlib,subprocess,json,hashlib
+final='6543af6876b1dda857ec6b28ae13df1e2c1a49c6';staging=pathlib.Path('/opt/cps-novel/shared/artifacts/staging/v063');root=pathlib.Path('/opt/cps-novel/releases')/final;old=pathlib.Path('/opt/cps-novel/current').resolve();assert old.name=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+subprocess.run(['sha256sum','-c','SHA256SUMS'],cwd=staging,check=True)
+assert not root.exists(),root
+subprocess.run(['git','clone','--shared','--no-checkout',str(old),str(root)],check=True)
+bundle=staging/'cps-novel-code-6543af6.bundle'
+subprocess.run(['git','-C',str(root),'bundle','verify',str(bundle)],check=True)
+subprocess.run(['git','-C',str(root),'fetch',str(bundle),'release/v0.6.3-2026-10-18'],check=True)
+subprocess.run(['git','-C',str(root),'checkout','--detach',final],check=True)
+run=lambda a:subprocess.check_output(a,text=True).strip()
+assert run(['git','-C',str(root),'rev-parse','HEAD'])==final
+assert run(['git','-C',str(root),'rev-parse','HEAD^{tree}'])=='c5f7680d71642cf36c725b05dcaf9f5501b9709e'
+assert not run(['git','-C',str(root),'status','--porcelain=v1'])
+print('REMOTE_CHECKOUT=PASS Final='+final+' tree=c5f7680d71642cf36c725b05dcaf9f5501b9709e',flush=True)
+subprocess.run([str(root/'scripts/preproduction/verify-release-archive.sh'),'--manifest',str(staging/(final+'.json')),'--expected-archive-sha256','271b4763615c2d50258029dbd6a341a8e2ffd8b31d15df75bccf3a1c224dcbfc','--approved-commit',final,'--load'],check=True)
+print('REMOTE_ARTIFACTS=PASS')
+
+verified=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v063');assert not verified.exists();verified.parent.mkdir(exist_ok=True);staging.rename(verified)
+for p in verified.iterdir():
+ if p.is_file():p.chmod(0o600)
+print('ARTIFACT_VERIFIED_DIR='+str(verified))

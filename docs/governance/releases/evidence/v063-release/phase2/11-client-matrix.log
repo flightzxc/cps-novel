@@ -1,0 +1,9 @@
+MATRIX_CLIENT=PASS sequence=1 name=admin_login status=200
+CURL_CONFIG_TEMP_COPY_REMOVED=True
+Traceback (most recent call last):
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/phase2/client-matrix.py.txt", line 50, in <module>
+    probe('admin_dashboard','zbcwf.pulsenovels.com','/dashboard',[301,302,303,307,308],kind='dashboard')
+  File "/Users/chenweifeng/Documents/cps海阅/release-v0.6.3/.tmp/v063-release/phase2/client-matrix.py.txt", line 22, in probe
+    assert status in expected,(name,status,expected)
+           ^^^^^^^^^^^^^^^^^^
+AssertionError: ('admin_dashboard', 404, [301, 302, 303, 307, 308])

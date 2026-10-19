@@ -1,0 +1,2 @@
+{"sequence": 1, "name": "admin_login", "host": "zbcwf.pulsenovels.com", "path": "/login", "authenticated": false, "at": "2026-10-19T03:34:03.903335+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 2, "name": "admin_dashboard", "host": "zbcwf.pulsenovels.com", "path": "/dashboard", "authenticated": false, "at": "2026-10-19T03:34:06.916897+00:00", "source": "client_proxy", "followRedirects": false}

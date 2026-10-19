@@ -1,0 +1,95 @@
+--- /etc/nginx/conf.d/cps-novel-preprod.conf
++++ /opt/cps-novel/shared/artifacts/verified/v063/evidence/nginx-public-86400.conf
+@@ -13,6 +13,11 @@
+ # @BOT_PAGE_BURST=2
+ # @BOT_GO_RATE=1r/m
+ # @BOT_GO_BURST=1
++# PN-15 站内搜索（Owner 2026-10-09）：搜索有自己的两层限流（每 IP + 全站），不占页面额度。
++# @SEARCH_IP_RATE=20r/m
++# @SEARCH_IP_BURST=10
++# @SEARCH_ALL_RATE=3r/s
++# @SEARCH_ALL_BURST=10
+ # @STATIC_RATE=50r/s
+ # @STATIC_BURST=200
+ map $http_user_agent $cps_training_bot {
+@@ -36,6 +41,8 @@
+ limit_conn_zone $server_name zone=cps_edge_go_conn:10m;
+ limit_req_zone $binary_remote_addr zone=cps_edge_go_rate:10m rate=10r/s;
+ limit_req_zone $cps_training_bot zone=cps_edge_bot_page:10m rate=10r/m;
++limit_req_zone $binary_remote_addr zone=cps_edge_search_ip:10m rate=20r/m;
++limit_req_zone $server_name zone=cps_edge_search_all:1m rate=3r/s;
+ limit_req_zone $cps_training_bot zone=cps_edge_bot_go:10m rate=1r/m;
+ limit_req_zone $binary_remote_addr zone=cps_edge_static:10m rate=50r/s;
+ limit_req_zone $binary_remote_addr zone=cps_edge_admin_general:10m rate=30r/s;
+@@ -200,6 +207,20 @@
+         proxy_pass http://cps_novel_edge_web;
+         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+     }
++    # PN-15 站内搜索：只匹配 /search 与 /{语种}/search（不带末尾斜杠；/searchx、/search/foo、/novel/…、/browse 都不匹配）。
++    # 🔴 正则必须加引号：不加引号时 `{2}` 之类会被 nginx 当成块分隔符，`nginx -t` 直接失败（CPS 压测时踩过）。
++    # 🔴 只挂搜索自己的两层限流 + 训练类爬虫限流，不挂任何 cps_edge_page_* / cps_edge_prefetch_* 的区或并发限制：
++    #    刷搜索最多吃满搜索自己的额度，读者看书的额度不受影响。必须放在页面正则与 `location /` 之前。
++    location ~ "^/(?:(?:en|es|pt-BR|id|vi|th|ja|ko|zh-Hant|ar|fr|de|pl|cs|ru)/)?search$" {
++        auth_basic off;
++        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
++        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
++        limit_req zone=cps_edge_search_ip burst=10 nodelay;
++        limit_req zone=cps_edge_search_all burst=10 nodelay;
++        limit_req zone=cps_edge_bot_page burst=2 nodelay;
++        proxy_pass http://cps_novel_edge_web;
++        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
++    }
+     location ~ ^/(?:en|es|pt-BR|id|vi|th|ja|ko|zh-Hant|ar|fr|de|pl|cs|ru)(?:/(?:novel|browse|category|blog)(?:/|$)|/?$) {
+         auth_basic off;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+@@ -245,9 +266,12 @@
+         default_type text/plain;
+         try_files $uri =404;
+     }
++    # 后台门禁（Owner 2026-10-18）：登录页、后台页面、后台接口、静态资源不再挂 nginx Basic Auth，
++    # 后台只靠应用登录这一关（Turnstile、下面的登录限速、应用层失败 5 次锁 15 分钟、两步验证）。
++    # 🔴 只有健康检查接口（= /api/health 与 worker/backup 两个子路由）仍挂 Basic Auth：它们不给人用，
++    #    外部监控按设计带口令访问。noindex 等安全头、限速、维护页、兜底 404 都不变。
++    #    verify-nginx-candidate.mjs 按请求路径逐条核对这两类口径，安装前不符即拒装。
+     location = /login {
+-        auth_basic "CPS Novel Administration";
+-        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+         include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+         limit_req zone=cps_edge_admin_login burst=3 nodelay;
+@@ -276,8 +300,6 @@
+         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+     }
+     location ^~ /api/admin/ {
+-        auth_basic "CPS Novel Administration";
+-        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+         include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+         limit_req zone=cps_edge_admin_api burst=60 nodelay;
+@@ -285,8 +307,6 @@
+         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+     }
+     location = /api/admin {
+-        auth_basic "CPS Novel Administration";
+-        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+         include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+         limit_req zone=cps_edge_admin_api burst=60 nodelay;
+@@ -294,8 +314,6 @@
+         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+     }
+     location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|two-factor)(?:/|$) {
+-        auth_basic "CPS Novel Administration";
+-        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+         include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+         limit_req zone=cps_edge_admin_api burst=60 nodelay;
+@@ -303,8 +321,6 @@
+         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+     }
+     location ^~ /_next/static/ {
+-        auth_basic "CPS Novel Administration";
+-        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+         include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+         limit_req zone=cps_edge_admin_general burst=100 nodelay;

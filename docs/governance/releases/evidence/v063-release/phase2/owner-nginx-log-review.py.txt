@@ -1,0 +1,16 @@
+import pathlib,re,json,datetime
+since=datetime.datetime.fromisoformat('2026-10-19T03:29:40+00:00');files=[];bad=[];total=0
+for p in [pathlib.Path('/var/log/nginx/error.log.1'),pathlib.Path('/var/log/nginx/error.log')]:
+ if not p.exists():continue
+ files.append(str(p))
+ for line in p.read_text(errors='replace').splitlines():
+  m=re.match(r'(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})',line)
+  if not m:continue
+  # nginx uses host-local time; interpret through local system timezone
+  at=datetime.datetime.strptime(m[1],'%Y/%m/%d %H:%M:%S').astimezone(datetime.timezone.utc)
+  if at>=since:
+   total+=1
+   if re.search(r'\[(?:emerg|crit)\]',line):bad.append(at.isoformat())
+result={'since':since.isoformat(),'files':files,'linesSince':total,'emergCritCount':len(bad),'checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+print('NGINX_ERROR_REVIEW='+json.dumps(result));assert files and not bad
+print('NGINX_EMERG_CRIT=PASS count=0')

@@ -1,0 +1,6 @@
+{"sequence": 1, "name": "post_public_home", "host": "pulsenovels.com", "path": "/", "authenticated": false, "at": "2026-10-19T03:45:49.774908+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 2, "name": "post_public_book", "host": "pulsenovels.com", "path": "/novel/contract-baby-and-billionaire-pg15q11wz", "authenticated": false, "at": "2026-10-19T03:45:51.312834+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 3, "name": "post_public_chapter", "host": "pulsenovels.com", "path": "/novel/contract-baby-and-billionaire-pg15q11wz/chapter/1", "authenticated": false, "at": "2026-10-19T03:45:52.568130+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 4, "name": "post_public_404_/login", "host": "pulsenovels.com", "path": "/login", "authenticated": false, "at": "2026-10-19T03:45:54.483243+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 5, "name": "post_public_404_/dashboard", "host": "pulsenovels.com", "path": "/dashboard", "authenticated": false, "at": "2026-10-19T03:45:56.301402+00:00", "source": "client_proxy", "followRedirects": false}
+{"sequence": 6, "name": "post_public_health", "host": "pulsenovels.com", "path": "/api/health", "authenticated": false, "at": "2026-10-19T03:45:57.129659+00:00", "source": "client_proxy", "followRedirects": false}

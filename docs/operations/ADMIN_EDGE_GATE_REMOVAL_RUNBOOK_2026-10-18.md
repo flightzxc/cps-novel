@@ -104,7 +104,7 @@ done
 | 请求 | 期望 |
 | --- | --- |
 | 后台 `/login` 匿名 | **200**，就是登录页（能看到人机验证组件）；**没有** `WWW-Authenticate`；有 `X-Robots-Tag: noindex, nofollow, noarchive`；`Strict-Transport-Security: max-age=86400` |
-| 后台 `/dashboard` 匿名 | 不再是 401；由应用把未登录的人带到登录页（浏览器最终停在 `/login`） |
+| 后台 `/novels` 匿名 | **200** 的流式加载壳，含 `NEXT_REDIRECT;replace;/login?next=%2Fnovels`，meta refresh 到 `/login?next=%2Fnovels`；没有书目数据，也没有 `WWW-Authenticate`。不自动跟随跳转 |
 | 后台 `/api/admin/tasks` 匿名 | 由应用自己拒绝：401 或 403 的 JSON，**不是 200**，没有 `WWW-Authenticate: Basic` |
 | 后台登录页实际引用的一个 `/_next/static/…` 文件匿名 | 200 |
 | 后台 `/api/health`、`/api/health/worker`、`/api/health/backup` 匿名 | **仍是 401**，`WWW-Authenticate: Basic realm="CPS Novel Administration"` |
@@ -116,6 +116,8 @@ done
 | 公开站 `/search?q=a` | 与安装前同样的应用响应（新增的只是独立限流） |
 | 浏览器无痕打开后台登录页 | 不弹浏览器口令框，直接是登录页；Owner 正常登录并完成两步验证 |
 | UptimeRobot 三条关键词监控 | 绿（后台两条本来就带口令，不受影响） |
+
+2026-10-19 Owner 裁定：原矩阵 `/dashboard` 行的预期写错。该路径是后台侧栏置灰的“仪表盘”占位模块，应用路由尚未实现，已登录访问同样为 404；nginx 为它预留路径。匿名 `/dashboard` 应为 **404 且没有 `WWW-Authenticate`**，以后仪表盘上线再改为未登录跳转登录页。本次用真实 `/novels` 路由验证上述流式登录跳转，保留首次 STOP 证据；Owner 明确决定不回滚、继续剩余矩阵与部署 D / 核验 E。
 
 任何一条不符：按第四节"只回 nginx"恢复，不进入第 3 步。
 

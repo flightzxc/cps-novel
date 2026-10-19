@@ -1,0 +1,120 @@
+{
+  "status": "PASS",
+  "requests": 6,
+  "results": [
+    {
+      "sequence": 1,
+      "name": "server_login",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/login",
+      "authenticated": false,
+      "at": "2026-10-19T03:42:46.502614+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "8ba2fa7b3a2d81a1f3b411c89933cfd61f1d99a52365fc75b38ecb5a2ebfc064",
+      "turnstileTextInHtml": true
+    },
+    {
+      "sequence": 2,
+      "name": "server_anonymous_health",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": false,
+      "at": "2026-10-19T03:42:46.552296+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 3,
+      "name": "server_anonymous_worker",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/worker",
+      "authenticated": false,
+      "at": "2026-10-19T03:42:46.583650+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 4,
+      "name": "server_anonymous_backup",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health/backup",
+      "authenticated": false,
+      "at": "2026-10-19T03:42:46.624733+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 401,
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a"
+    },
+    {
+      "sequence": 5,
+      "name": "server_health_authenticated",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": true,
+      "at": "2026-10-19T03:42:46.665187+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "bodySha256": "19aa44131dc24b1dadb5b9401a9201ea9ffcc419024657eccc7deab02ad1ee01",
+      "healthStatus": {
+        "ok": true
+      },
+      "build": {
+        "version": "0.6.2",
+        "commit": "fbc00167f34cefde6d3f079f8573700ea9e86245",
+        "builtAt": "2026-10-17T09:13:28Z"
+      }
+    },
+    {
+      "sequence": 6,
+      "name": "server_static",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/_next/static/chunks/1rztdupyh0xr_.css",
+      "authenticated": false,
+      "at": "2026-10-19T03:42:46.714705+00:00",
+      "source": "server_tls_loopback",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/css; charset=UTF-8"
+      },
+      "bodySha256": "806bd78ca22f7f3cf4c857ab516c402c593804aa7494b2faba29e2896432e858"
+    }
+  ]
+}

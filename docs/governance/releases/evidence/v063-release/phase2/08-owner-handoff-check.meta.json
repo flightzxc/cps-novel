@@ -1,0 +1,11 @@
+{
+  "name": "08-owner-handoff-check",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/owner-handoff-check.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792380459.8879712,
+  "finishedAt": 1792380464.026096
+}

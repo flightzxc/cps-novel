@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-19T03:41:40.850979+00:00",
+  "decision": "Owner explicitly: no rollback; continue D and E after corrected matrix passes",
+  "originalStopSha256": "2a844ca03a01c7ac6ca2215c9febdb83c2b84949f6f2164fa05715e33855c33b",
+  "dashboard": "unimplemented disabled placeholder; 404 without WWW-Authenticate accepted",
+  "novels": "200 streaming shell; NEXT_REDIRECT;replace;/login?next=%2Fnovels and meta refresh; no catalogue data or WWW-Authenticate",
+  "controllerAdditionalAnonymousRequests": {
+    "count": 4,
+    "paths": [
+      "/dashboard",
+      "/novels",
+      "/novels",
+      "/login"
+    ],
+    "source": "Owner report"
+  },
+  "ownerLoginAnd2FA": "passed previously",
+  "originalEvidencePreserved": true
+}

@@ -1,0 +1,11 @@
+{
+  "name": "09-nginx-install-readback",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/nginx-install-readback.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792380637.499325,
+  "finishedAt": 1792380640.737133
+}

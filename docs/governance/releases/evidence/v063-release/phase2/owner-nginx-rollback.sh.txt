@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set +x
+exec ssh -tt -o KexAlgorithms=curve25519-sha256 -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 haiyue-vps 'bash --noprofile --norc -c '"'"'set -euo pipefail
+set +x
+cd /opt/cps-novel/current
+evidence=/opt/cps-novel/shared/artifacts/verified/v063/evidence
+[ "$(git rev-parse HEAD)" = fbc00167f34cefde6d3f079f8573700ea9e86245 ] || exit 65
+[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d " " -f1)" = 7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9 ] || exit 65
+[ ! -e "$evidence/nginx-restore.log" ] || { echo "STOP: restore log already exists"; exit 65; }
+printf "Owner: enter sudo password personally to restore nginx only.\n"
+sudo -k
+sudo -v
+PREPROD_OWNER_SUDO_APPROVED=YES scripts/preproduction/install-nginx.sh --restore-backup /opt/cps-novel/shared/nginx-backups/install.4gcrgw4j | tee "$evidence/nginx-restore.log"
+sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | tee "$evidence/nginx-restored.sha256"
+[ "$(sha256sum /etc/nginx/conf.d/cps-novel-preprod.conf | cut -d " " -f1)" = d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe ] || exit 65
+for i in 1 2 3 4 5 6 7 8 9 10; do
+ code="$(curl --noproxy "*" --resolve zbcwf.pulsenovels.com:443:127.0.0.1 --silent --show-error --connect-timeout 5 --max-time 15 --output /dev/null --write-out "%{http_code}" https://zbcwf.pulsenovels.com/login)"
+ [ "$code" = 401 ] && break
+ sleep 1
+done
+[ "$code" = 401 ] || { echo "STOP: restored login status=$code"; exit 65; }
+printf "NGINX_ONLY_ROLLBACK=PASS anonymous_login=401 application=0.6.2 env=unchanged\n" | tee "$evidence/owner-nginx-rollback-result.txt"
+'"'"''

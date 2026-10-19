@@ -1,0 +1,11 @@
+{
+  "name": "10-search-state",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/search-state.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792380746.930701,
+  "finishedAt": 1792380750.407455
+}

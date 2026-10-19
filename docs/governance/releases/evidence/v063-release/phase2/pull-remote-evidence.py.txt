@@ -1,0 +1,9 @@
+import pathlib,json,base64
+root=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v063/evidence');rows={}
+for p in sorted(root.iterdir()):
+ if p.is_file() and '.private.' not in p.name and p.name!='PRE_SUDO_READY':rows[p.name]=base64.b64encode(p.read_bytes()).decode()
+base=pathlib.Path('/opt/cps-novel/logs/release-v0.6.3-6543af6.log')
+for p in [base,base.with_suffix('.timeline.json'),base.with_suffix('.exit.json'),base.with_suffix('.started')]:
+ assert p.exists();rows[p.name]=base64.b64encode(p.read_bytes()).decode()
+assert json.loads(base.with_suffix('.exit.json').read_text())['exit']==0
+print(json.dumps(rows))

@@ -1,0 +1,22 @@
+EVIDENCE_FILE=nginx-install.log
+NGINX_RENDER=PASS
+NGINX_CANDIDATE=PASS mode=public bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+NGINX_BACKUP=/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j
+NGINX_READY=PASS phase=install round=2 master=787 listeners=80 443
+NGINX_INSTALL=PASS mode=public bootstrap_public=0 backup_dir=/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j
+
+EVIDENCE_FILE=nginx-backup-dir.txt
+/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j
+
+EVIDENCE_FILE=nginx-after.sha256
+7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9  /etc/nginx/conf.d/cps-novel-preprod.conf
+
+EVIDENCE_FILE=nginx-install-started.txt
+2026-10-19T03:29:40Z
+
+EVIDENCE_FILE=owner-nginx-result.txt
+OWNER_NGINX_STEP=PASS backup=/opt/cps-novel/shared/nginx-backups/install.4gcrgw4j anonymous_login=200
+
+CURL_CONFIG_PATH=/opt/cps-novel/shared/secrets/preprod-curl.conf
+NGINX_ERROR_LOG_READABLE=False
+NGINX_OWNER_INSTALL_READBACK=PASS sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9

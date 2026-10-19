@@ -1,0 +1,103 @@
+{
+  "status": "PASS",
+  "requests": 6,
+  "results": [
+    {
+      "sequence": 1,
+      "name": "post_public_home",
+      "host": "pulsenovels.com",
+      "path": "/",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:49.774908+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "33f4b324937e40f9c7c5868bf9bc170d65ddc6bccd66692bb16338faf705aacb"
+    },
+    {
+      "sequence": 2,
+      "name": "post_public_book",
+      "host": "pulsenovels.com",
+      "path": "/novel/contract-baby-and-billionaire-pg15q11wz",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:51.312834+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "fee3529e955e51f95bcbd35e300b43aa3e4c1238b2dafe7f7e7fa500c6b7da5a"
+    },
+    {
+      "sequence": 3,
+      "name": "post_public_chapter",
+      "host": "pulsenovels.com",
+      "path": "/novel/contract-baby-and-billionaire-pg15q11wz/chapter/1",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:52.568130+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodySha256": "6defb8119a8df08b2d51059cf0e94c3efcb31a16163ba85536edda39d12aa8bb"
+    },
+    {
+      "sequence": 4,
+      "name": "post_public_404_/login",
+      "host": "pulsenovels.com",
+      "path": "/login",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:54.483243+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 404,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "766c1d6bcb81d3e983fb7adbc19c616d7fc01dafb7893738edc242e2adc59c07"
+    },
+    {
+      "sequence": 5,
+      "name": "post_public_404_/dashboard",
+      "host": "pulsenovels.com",
+      "path": "/dashboard",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:56.301402+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 404,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      },
+      "bodySha256": "766c1d6bcb81d3e983fb7adbc19c616d7fc01dafb7893738edc242e2adc59c07"
+    },
+    {
+      "sequence": 6,
+      "name": "post_public_health",
+      "host": "pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": false,
+      "at": "2026-10-19T03:45:57.129659+00:00",
+      "source": "client_proxy",
+      "followRedirects": false,
+      "status": 200,
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "bodySha256": "8beead1e333650838bfb2fb331272adf7a28c913384ebb2e92c9286685503264"
+    }
+  ],
+  "budget": "post-deploy verification, separate from 30 pre-deploy matrix requests"
+}

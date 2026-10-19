@@ -1,0 +1,19 @@
+import pathlib,subprocess,hashlib,json,datetime,time
+root=pathlib.Path('/opt/cps-novel/releases/6543af6876b1dda857ec6b28ae13df1e2c1a49c6');evidence=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v063/evidence')
+assert pathlib.Path('/opt/cps-novel/current').resolve().name=='fbc00167f34cefde6d3f079f8573700ea9e86245'
+assert hashlib.sha256(pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_bytes()).hexdigest()=='0f894ccb77e9f24584e92a8b889d70a3b74a73e4b1a0716956e3b146b3e4778b'
+assert hashlib.sha256(pathlib.Path('/etc/nginx/conf.d/cps-novel-preprod.conf').read_bytes()).hexdigest()=='d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe'
+assert not pathlib.Path('/opt/cps-novel/shared/maintenance/enabled').exists()
+stable=0
+for i in range(18):
+ count=len(subprocess.check_output(['ss','-Htn','state','established','( sport = :80 or sport = :443 )'],text=True).strip().splitlines());stable=stable+1 if count<=2 else 0
+ print('PRE_SUDO_TRAFFIC='+json.dumps({'count':count,'consecutiveWithinThreshold':stable,'at':datetime.datetime.now(datetime.timezone.utc).isoformat()}),flush=True)
+ if stable==3:break
+ if i<17:time.sleep(10)
+assert stable==3,'LOW_TRAFFIC_WINDOW_NOT_READY'
+q="BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\nDO $$ BEGIN\nIF EXISTS (SELECT 1 FROM generic_task b WHERE b.status IN ('pending','processing') AND EXISTS (SELECT 1 FROM generic_task s WHERE s.parent_task_id=b.id AND s.task_type='promo_link.claim.v1')) OR EXISTS (SELECT 1 FROM generic_task WHERE task_type='promo_link.claim.v1' AND status IN ('pending','processing')) OR EXISTS (SELECT 1 FROM side_effect_intent WHERE status IN ('prepared','claim_retry_blocked')) OR EXISTS (SELECT 1 FROM generic_task_item WHERE status='processing') OR EXISTS (SELECT 1 FROM channel_sync_task_item WHERE status='processing') THEN RAISE EXCEPTION 'PUBLIC_CUTOVER_PAUSE_GATE=FAIL'; END IF;\nIF EXISTS (SELECT 1 FROM generic_task WHERE (task_type LIKE 'article.publish.%' OR task_type LIKE 'article.generate.%') AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'ARTICLE_INFLIGHT=FAIL'; END IF;\nIF EXISTS (SELECT 1 FROM generic_task WHERE task_type='moboreader.preview_refresh.v1' AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'PREVIEW_INFLIGHT=FAIL'; END IF;\nIF EXISTS (SELECT 1 FROM generic_task WHERE task_type='changdu.revenue_sync.v1' AND status IN ('pending','processing')) THEN RAISE EXCEPTION 'REVENUE_INFLIGHT=FAIL'; END IF;\nEND $$;\nSELECT 'PUBLIC_CUTOVER_PAUSE_GATE=PASS';\nCOMMIT;\n"
+r=subprocess.run(['docker','exec','-i','-e','PGOPTIONS=-c default_transaction_read_only=on','cps-novel-postgres-1','psql','-X','-v','ON_ERROR_STOP=1','-U','postgres','-d','cps_novel','-At'],input=q,text=True,capture_output=True);print(r.stdout,flush=True);print(r.stderr,flush=True);assert r.returncode==0
+backup={'path': '/var/lib/cps-novel/backups/logical/cps-novel-v063-20261019T014706Z.dump', 'sha256': '3d269590a223646976ea71a6339dc917b759d91e5bef73573b9376c0c771aa77', 'bytes': 769842502}
+ready={'final':root.name,'backup':backup,'nginxBeforeSha256':'d2825477d359d905a77ebabaa3cfcb3200ab938379ed955d418a07b4e32a0dfe','candidateSha256':'7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9','envUnchanged':True,'maintenanceOn':False,'checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+marker=evidence/'PRE_SUDO_READY';assert not marker.exists();marker.write_text(json.dumps(ready,indent=2)+'\n');marker.chmod(0o600)
+print('PRE_SUDO_READY=PASS '+json.dumps(ready),flush=True)
