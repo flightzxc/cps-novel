@@ -19,6 +19,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.6.4 —— 第一阶段准备中，尚未部署（2026-10-20 JST）
+
+- 版本类型 **PATCH**。基线 `0f5fe7e06297211972aabcb43c5b8502349afe73`（tree `e574127f442c7cacafecee8770d5d3dda9bec428`），集成线 `integration/v0.6.4-2026-10-19`，发布分支 `release/v0.6.4-2026-10-20`；来源 `feat/v064-drama-ga-theater`，经 `7cc19ece` no-ff 合并，`0f5fe7e0` 登记 B-50 冻结例外。
+- B-50：仅公开站 SITE_URL 主机的 `/drama` 与 `/drama/*` 301 到 `https://enpulsedrama.com` 同路径并保留查询串，后台不跳；Owner 2026-10-19 单独批准，已登记 AI_WORKFLOW.md。B-51：后台子域名不加载 Google Analytics。B-44：领取推广链接页按剧场筛选；排序与翻页清空勾选；领取时自动跳过已暂停剧场并提示，运营确认后才提交。
+- 零新增迁移：迁移 **29 条**、表 **60 张**、字典 **1401 条 / active 1331 条**；grants、环境变量集合、compose、nginx、后台路由及任务白名单不变。除 B-50 已批准例外，公开网址、canonical、hreflang、站点地图、robots 冻结保持。
+- 第一阶段只在本地升版、运行完整门禁、推送 GitHub、构建及核验 linux/amd64 不可变归档，不连接远程主机。第二阶段须 Owner 明确“批准部署”，仅限 haiyue-vps 低流量窗口；不安装 nginx、不使用 sudo，目标机只改两个版本变量。
+- annotated tag、生成 CHANGELOG、唯一发版级开发日志与 Notion 同步回读留待部署验收后完成；第一阶段结果由后续发布记录补充。
+
 ### v0.6.3 —— 已正式收官，技术及Owner/运营验收PASS（2026-10-19）
 
 - **PATCH**，annotated `v0.6.3` 固定Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6` / tree `c5f7680d71642cf36c725b05dcaf9f5501b9709e`。发布分支`release/v0.6.3-2026-10-18`；治理提交不改变工件身份。镜像`cps-novel:0.6.3-6543af6`，linux/amd64；归档253039881字节/SHA256 `271b4763615c2d50258029dbd6a341a8e2ffd8b31d15df75bccf3a1c224dcbfc`。
@@ -538,6 +546,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.6.4` | 2026-10-20 | PATCH | B-50 公开站短剧误入 301、B-51 后台不加载 GA、B-44 剧场筛选及暂停剧场自动跳过；零迁移 | `release/v0.6.4-2026-10-20` | 第一阶段准备中，尚未部署 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |
