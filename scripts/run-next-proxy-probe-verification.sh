@@ -139,10 +139,13 @@ docker exec -i "$container_name" psql --no-psqlrc -U next_probe_admin -d "$datab
   <infra/postgres/grants.sql >/dev/null
 # Minimal data: public pages refuse to render (500) without a default OG image, and
 # the brand name comes from the site_setting singleton row created by the migrations.
+# ga4_measurement_id feeds the B-51 "GA on the public host only" probes; it must equal
+# PROBE_GA4_MEASUREMENT_ID in scripts/security/next-proxy-probe.mjs (pinned by a unit test).
 docker exec -i "$container_name" psql --no-psqlrc -v ON_ERROR_STOP=1 -U next_probe_admin -d "$database_name" >/dev/null <<SQL
 UPDATE site_setting
    SET site_name = 'Probe Site',
-       default_og_image = 'https://${PROBE_PUBLIC_HOST:-novel.test}/brand/og-default.png'
+       default_og_image = 'https://${PROBE_PUBLIC_HOST:-novel.test}/brand/og-default.png',
+       ga4_measurement_id = 'G-PROBE00B51'
  WHERE id = 1;
 SQL
 printf 'PROBE_DATABASE=READY name=%s port=%s\n' "$database_name" "$host_port"

@@ -8,6 +8,8 @@ import { isAdminPath } from "@/lib/site/admin-origin";
 
 import {
   DRAMA_REDIRECT_GROUP,
+  GA_HOST_SPLIT_GROUP,
+  PROBE_GA4_MEASUREMENT_ID,
   NAVER_VERIFICATION_GROUP,
   NAVER_VERIFICATION_PATH,
   NAVER_VERIFICATION_SHA256,
@@ -19,6 +21,8 @@ import {
   classify,
   expectAdminApiUnauthenticated,
   expectAdminPageUnauthenticated,
+  expectGaAbsent,
+  expectGaLoaded,
   expectNaverVerificationFile,
   expectNoContentServed,
   expectProxyDenialSignature,
@@ -420,5 +424,60 @@ describe("v0.6.4 B-50 /drama/* -> enpulsedrama.com probes", () => {
     expect(byId("drama-redirect/admin-host-404").check(answer(301, location))).not.toBeNull();
     expect(byId("drama-redirect/other-host-not-redirected").check(answer(301, location))).toMatch(/must not be redirected/);
     expect(byId("drama-redirect/other-host-not-redirected").check(answer(404))).toBeNull();
+  });
+});
+
+describe("v0.6.4 B-51 GA public-host-only probes", () => {
+  const html = (status: number, body: string) => ({
+    status,
+    headers: { "content-type": "text/html; charset=utf-8" },
+    rawHeaders: [],
+    body,
+    bodySha256: null,
+  });
+  const loader = `<link rel="preload" href="https://www.googletagmanager.com/gtag/js?id=${PROBE_GA4_MEASUREMENT_ID}" as="script"/>`;
+
+  it("the runner seeds exactly the measurement ID the probes look for, and it passes the CPS GA4 format", () => {
+    const runner = readFileSync(resolve(process.cwd(), "scripts/run-next-proxy-probe-verification.sh"), "utf8");
+    expect(runner).toContain(`ga4_measurement_id = '${PROBE_GA4_MEASUREMENT_ID}'`);
+    expect(PROBE_GA4_MEASUREMENT_ID).toMatch(/^G-[A-Z0-9]{6,12}$/);
+  });
+
+  it("probes public pages (English root, a locale tree, a listing, the 404) and the admin login page", () => {
+    const probes = buildProbes({ buildId: "BUILD" }).filter(
+      (probe: { group: string }) => probe.group === GA_HOST_SPLIT_GROUP,
+    ) as Array<{ id: string; hostRole: string; target: string; noFollow?: boolean }>;
+    expect(probes.map((probe) => `${probe.hostRole} ${probe.target}`).sort()).toEqual([
+      "admin /login",
+      "public /",
+      "public /browse",
+      "public /ko",
+      "public /probe-not-a-page-b51",
+    ]);
+    for (const probe of probes) expect(probe.noFollow, probe.id).toBe(true);
+  });
+
+  it("expectGaLoaded: only an HTML answer carrying the seeded GA loader passes", () => {
+    expect(expectGaLoaded(html(200, `<html><head>${loader}</head></html>`))).toBeNull();
+    expect(expectGaLoaded(html(404, `<html>${loader}</html>`))).toBeNull();
+    expect(expectGaLoaded(html(200, "<html><head></head></html>"))).toMatch(/carries neither/);
+    expect(expectGaLoaded(html(200, "<html>googletagmanager.com/gtag/js?id=G-OTHER0001</html>"))).toMatch(/carries neither/);
+    // Unmatched-route 404: bare error shell, GA props only inside the RSC payload (escaped JSON in a JS string).
+    const payload = (id: string) =>
+      `<html id="__next_error__"><head></head><body></body></html><script>self.__next_f.push([1,"5:[\\"$\\",\\"$L1\\",null,{\\"gaId\\":\\"${id}\\"}]"])</script>`;
+    expect(expectGaLoaded(html(404, payload(PROBE_GA4_MEASUREMENT_ID)))).toBeNull();
+    expect(expectGaLoaded(html(404, payload("G-PROBE00B5")))).toMatch(/carries neither/);
+    expect(expectGaLoaded(html(404, payload(`${PROBE_GA4_MEASUREMENT_ID}9`)))).toMatch(/carries neither/);
+    expect(expectGaLoaded(html(404, '<html id="__next_error__"><head></head><body></body></html>'))).toMatch(/carries neither/);
+    expect(expectGaLoaded(html(500, loader))).toMatch(/failed/);
+    expect(expectGaLoaded({ ...html(200, loader), headers: { "content-type": "application/json" } })).toMatch(/expected an HTML page/);
+  });
+
+  it("expectGaAbsent: any trace of GA on an admin page fails; a clean 200 HTML page passes", () => {
+    expect(expectGaAbsent(html(200, "<html><head></head><body>login</body></html>"))).toBeNull();
+    expect(expectGaAbsent(html(200, `<html>${loader}</html>`))).toMatch(/loads GA/);
+    expect(expectGaAbsent(html(200, "<script>gtag('config', 'G-PROBE00B51')</script>"))).toMatch(/loads GA/);
+    expect(expectGaAbsent(html(200, '<script src="https://www.googletagmanager.com/gtag/js?id=G-X"></script>'))).toMatch(/loads GA/);
+    expect(expectGaAbsent(html(404, ""))).toMatch(/should render 200/);
   });
 });

@@ -45,6 +45,41 @@ export const NAVER_VERIFICATION_SHA256 = "80f6a3bc8eb3e65113a1a31e8d90c20fda4821
 export const NAVER_VERIFICATION_GROUP = "public-host-static-verification-file";
 /** v0.6.4 B-50: public-host `/drama/*` -> 301 https://enpulsedrama.com (src/proxy.ts `buildDramaSisterSiteRedirectTarget`). */
 export const DRAMA_REDIRECT_GROUP = "drama-sister-site-redirect";
+/**
+ * v0.6.4 B-51: GA loads on the public host only, never on the admin host (src/app/layout.tsx).
+ * scripts/run-next-proxy-probe-verification.sh seeds site_setting.ga4_measurement_id with this exact value
+ * (tests/backend/security/next-proxy-probe.test.ts pins that the two stay identical).
+ */
+export const GA_HOST_SPLIT_GROUP = "ga-public-host-only";
+export const PROBE_GA4_MEASUREMENT_ID = "G-PROBE00B51";
+const GA_SCRIPT_MARKER = `googletagmanager.com/gtag/js?id=${PROBE_GA4_MEASUREMENT_ID}`;
+
+// The RSC payload carries the <GoogleAnalytics> client component's props as JSON inside
+// `self.__next_f.push([1,"..."])` string literals, so the quotes arrive backslash-escaped.
+const GA_PROPS_IN_RSC_PAYLOAD = new RegExp(`\\\\?"gaId\\\\?":\\\\?"${PROBE_GA4_MEASUREMENT_ID}\\\\?"`);
+
+/**
+ * Public-host page HTML must carry GA for the seeded measurement ID: either the loader URL server-rendered into
+ * the document, or — for an unmatched-route 404, which Next answers with a bare `<html id="__next_error__">` shell
+ * and renders client-side from the RSC payload — the <GoogleAnalytics gaId> props inside that payload (the client
+ * then injects the same loader; that is how production GA records 404 views).
+ */
+export function expectGaLoaded(response) {
+  if (response.status >= 500 || response.status === 0) return `public page failed: ${classify(response)}`;
+  if (!/text\/html/i.test(response.headers["content-type"] ?? "")) return `expected an HTML page, got ${classify(response)}`;
+  if (response.body.includes(GA_SCRIPT_MARKER) || GA_PROPS_IN_RSC_PAYLOAD.test(response.body)) return null;
+  return `public page HTML carries neither the GA loader (${GA_SCRIPT_MARKER}) nor gaId=${PROBE_GA4_MEASUREMENT_ID} in the RSC payload`;
+}
+
+/** Admin-host page HTML must not carry GA at all (neither the loader nor the measurement ID). */
+export function expectGaAbsent(response) {
+  if (response.status !== 200) return `admin page should render 200, got ${classify(response)}`;
+  if (!/text\/html/i.test(response.headers["content-type"] ?? "")) return `expected an HTML page, got ${classify(response)}`;
+  if (response.body.includes("googletagmanager.com") || response.body.includes(PROBE_GA4_MEASUREMENT_ID)) {
+    return "admin-host page HTML loads GA";
+  }
+  return null;
+}
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 /** Real admin *pages* (the ones that exist as page.tsx) — see src/app/(admin)/**. */
@@ -690,6 +725,26 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
     hostHeader: "alias.invalid",
     target: "/drama/probe-title-p1234abcd",
     check: (r) => (REDIRECT_STATUSES.has(r.status) ? `a non-site Host must not be redirected: ${classify(r)}` : null),
+  });
+
+  // ---- B-51 (v0.6.4): GA on the public host only. Real server HTML, not a render of the layout in isolation. ----
+  for (const [name, target] of [["home", "/"], ["locale-home", "/ko"], ["browse", "/browse"], ["not-found", "/probe-not-a-page-b51"]]) {
+    add({
+      id: `ga/public-${name}-loads-ga`,
+      group: GA_HOST_SPLIT_GROUP,
+      noFollow: true,
+      hostRole: "public",
+      target,
+      check: expectGaLoaded,
+    });
+  }
+  add({
+    id: "ga/admin-login-no-ga",
+    group: GA_HOST_SPLIT_GROUP,
+    noFollow: true,
+    hostRole: "admin",
+    target: "/login",
+    check: expectGaAbsent,
   });
 
   // ---- Next-auth-shaped inputs (GHSA-xmf8 / GHSA-8fpg are next-auth advisories; this repo has no next-auth).

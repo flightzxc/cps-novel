@@ -93,6 +93,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   let locale = PUBLIC_SITE_LOCALE;
   // 运营 V2（Owner 2026-09-30）：Yandex 只在公开站输出，后台站（admin host）不输出。
+  // B-51（v0.6.4）：GA 同理——后台站的任何页面（含登录、两步验证）都不加载 GA，免得后台
+  // 浏览混进运营看的 GA 报表。复用这里已有的同一个判断：本布局本来就是 force-dynamic、
+  // 本来就读 headers()，不新增任何动态 API，公开页的渲染方式不变。
   // 读不到请求头时按"不是后台站"处理（与上面 locale 读取失败时回落到默认值同一姿态）。
   let adminHostRequest = false;
   try {
@@ -129,7 +132,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {yandexNoscript ? <noscript dangerouslySetInnerHTML={{ __html: yandexNoscript }} /> : null}
         {children}
       </body>
-      {settings.ga4MeasurementId ? <GoogleAnalytics gaId={settings.ga4MeasurementId} /> : null}
+      {settings.ga4MeasurementId && !adminHostRequest ? <GoogleAnalytics gaId={settings.ga4MeasurementId} /> : null}
     </html>
   );
 }
