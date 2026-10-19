@@ -1,0 +1,10 @@
+{
+  "name": "26-owner-nginx-readback",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/pull-evidence.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792382746.619783,
+  "finishedAt": 1792382751.5367901
+}

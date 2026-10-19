@@ -1,0 +1,2 @@
+NGINX_ERROR_REVIEW={"since": "2026-10-19T03:29:40+00:00", "files": ["/var/log/nginx/error.log.1", "/var/log/nginx/error.log"], "linesSince": 0, "emergCritCount": 0, "checkedAt": "2026-10-19T04:05:13.518301+00:00"}
+NGINX_EMERG_CRIT=PASS count=0

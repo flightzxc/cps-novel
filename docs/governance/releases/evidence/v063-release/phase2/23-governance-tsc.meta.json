@@ -1,0 +1,10 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "typecheck"
+  ],
+  "exitCode": 0,
+  "seconds": 2.2086777687072754,
+  "commit": "b84946b24019831cbcad3f01df3a769477fd93bf"
+}

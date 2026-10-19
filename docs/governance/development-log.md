@@ -39,6 +39,21 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-10-19 12:45 - codex（GPT-6，正式发版执行；JST / +0800为11:45）
+
+**变更类型**：海阅 v0.6.3 **PATCH** 正式站部署，仅haiyue-vps；Owner明确批准，原RELEASE=PASS/EXIT=0，技术验收D/E全PASS。annotated v0.6.3固定Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，tree `c5f7680d71642cf36c725b05dcaf9f5501b9709e`，后续治理提交不改变镜像身份。
+
+**背景**：Owner 10-18决定“很多公司后台只靠登录密码”，移除后台nginx Basic Auth，让运营直接应用登录；人机验证、登录限速、5次失败锁定、两步验证保留，三个健康检查仍有口令。B-49来自v0.6.2国家逐日对账Owner接受的上游口径差异，只增加说明，不改统计。基线f819b84611e08387c95df550546ffaa910a5ea29，经no-ff合入来源feat/v063-admin-gate-removal。
+
+**变更内容**：后台登录页/页面/接口/静态资源去掉nginx Basic Auth；国家分布注明同一用户跨国家可能分别计数、国家占比以国家合计为分母。Owner亲自sudo从新Final目录重装nginx，public@86400候选18307字节/SHA7199de10…生效，备份install.4gcrgw4j。PN-15的/search独立限流10-09已合入模板，本次重装才在生产生效，不改网址；应用站内搜索开关仍false。HSTS保持86400，本次不提级。
+
+**影响范围**：零新增迁移，29条/60表、字典1401/active1331/drift0；grants、环境变量集合、compose和任务白名单不变，线上env只改两个版本字段、其余cmp PASS。公开网址、canonical、hreflang、站点地图、robots冻结保持。没有新增数据库写脚本或重跑业务同步。
+
+**验证方式**：全量11528通过/0失败/无Unhandled、37运行器、严格探针1742、三模式nginx矩阵/27条变异、最终归档镜像端到端PASS。第二阶段累计客户端24＋服务器6=30通过；首次/dashboard404因手册错误预期STOP，Owner裁定它为置灰未开发占位，404无WWW即通过、不回滚；真实/novels200流式壳含NEXT_REDIRECT及meta refresh到/login?next=%2Fnovels、无书目数据/WWW。保留首次STOP、主控另4次单独记数，手册只改文档。原部署维护47.828281秒（12:44:11.367349–12:44:59.195630 JST），29迁移无pending、原流程单事务grants成功；health0.6.3/Final/metadata passed、五应用healthy、postgresID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429等待/积压、依赖/写闸/白名单/备份PASS。部署后后台9项及外部6项PASS；Owner只读nginx error.log.1/error.log回读，安装以来新增行0、emerg/crit0。Owner无痕无口令框、应用登录/两步验证已确认；UptimeRobot未配置跳过。原CHANGELOG生成器core.abbrev=7、提交后tsc/lint及Git/Notion回读收据见发布记录。
+
+**后续待办**：Owner目测/revenue国家说明，并通知运营新登录方式（待回执，不记为PASS）。tag固定Final，回滚应用必须先回nginx；兼容标志须Owner另批，本次未回滚。完整[发布记录](releases/v0.6.3-preproduction.md)与[第二阶段证据](releases/evidence/v063-release/phase2/)。
+
+
 ### 2026-10-17 21:48 - codex（GPT-6，正式发版执行；JST / +0800为20:48）
 
 **变更类型**：海阅 v0.6.2 **PATCH** 正式站部署，仅haiyue-vps；Owner本会话明确“批准部署”，原RELEASE=PASS/exit0，维护OFF。后台能力已部署，Owner已完成同步并裁定业务验收PASS；国家明细合计=国家接口total（15/15），已知上游跨接口口径差异接受，原停点关闭。

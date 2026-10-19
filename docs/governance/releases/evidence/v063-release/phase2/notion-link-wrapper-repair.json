@@ -1,0 +1,5 @@
+{
+  "initial": "functions V8 has no global URL; read-only link preparation raised ReferenceError before calling any link mutation",
+  "repair": "normalize relative path segments directly; preserve all preexisting Notion history",
+  "releaseGatesUnaffected": true
+}

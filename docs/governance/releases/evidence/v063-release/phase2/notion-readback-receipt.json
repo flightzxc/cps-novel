@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+  "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "readbackAt": "2026-10-19T04:09:40.532Z",
+  "fourLocations": [
+    "current_snapshot",
+    "version_table",
+    "formal_release_journal",
+    "unique_development_log_mirror"
+  ],
+  "artifactFinal": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+  "technicalAcceptance": "PASS",
+  "ownerCountryCopyAndOperationsNotice": "pending receipt; not claimed passed",
+  "historicalRulesTemplatesPreserved": true,
+  "originalInnerContentCharacters": 311211,
+  "strippedReadbackCharacters": 311211,
+  "historyComparison": "exact equality after removing only v063 additions; trimEnd ignored",
+  "newJournalHeadingsNested": true,
+  "newRelativeLinksResolvedToGithub": true,
+  "fullPageCharacters": 324212,
+  "unknownBlocks": 0,
+  "truncated": false
+}

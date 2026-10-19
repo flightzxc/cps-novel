@@ -1,0 +1,15 @@
+{
+  "ownerStatement": "Owner personally entered sudo for read-only nginx error review; PASS count=0",
+  "remoteReadback": "PASS",
+  "result": {
+    "since": "2026-10-19T03:29:40+00:00",
+    "files": [
+      "/var/log/nginx/error.log.1",
+      "/var/log/nginx/error.log"
+    ],
+    "linesSince": 0,
+    "emergCritCount": 0,
+    "checkedAt": "2026-10-19T04:05:13.518301+00:00"
+  },
+  "readBackAt": "2026-10-19T04:06:11.840364+00:00"
+}

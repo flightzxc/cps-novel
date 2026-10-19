@@ -1,0 +1,22 @@
+{
+  "status": "all succeeded",
+  "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+  "tasks": [
+    {
+      "id": "task_c528981e2de6459ab86ec186ec39c35c",
+      "scope": "current snapshot and version row"
+    },
+    {
+      "id": "task_d1b27593f4424ec3b4b69abea5388710",
+      "scope": "formal release journal and unique development log mirror"
+    },
+    {
+      "id": "task_89e310ca71da4f3e8f1967a9c57dd13d",
+      "scope": "new journal heading levels and script inline-code formatting"
+    },
+    {
+      "id": "task_a34c8a67ed2b459081c4759a01c61078",
+      "scope": "resolve new relative evidence links to GitHub"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "lint"
+  ],
+  "exitCode": 0,
+  "seconds": 12.003729820251465,
+  "commit": "b84946b24019831cbcad3f01df3a769477fd93bf"
+}
