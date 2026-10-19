@@ -3,7 +3,8 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-19 · 共 1378 个 commit
+生成时间：2026-10-19 · 共 1379 个 commit
+- `22c94f5` 2026-10-19 治理（v0.6.3）：补齐 nginx 日志验收与正式发布台账、日志及 Notion 回读  — _codex · GPT-6_
 - `b84946b` 2026-10-19 治理（v0.6.3）：记录部署 D 与自动核验 E，按 Owner 裁定修正后台路由矩阵  — _codex · GPT-6_
 - `2a2171d` 2026-10-18 发布：交付海阅 v0.6.3 第一阶段归档与完整门禁证据  — _codex · GPT-6_
 

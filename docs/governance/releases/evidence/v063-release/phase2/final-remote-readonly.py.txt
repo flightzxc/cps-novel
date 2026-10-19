@@ -1,0 +1,15 @@
+import subprocess,json,pathlib,hashlib
+final='6543af6876b1dda857ec6b28ae13df1e2c1a49c6'
+run=lambda args:subprocess.check_output(args,text=True).strip()
+assert run(['hostname'])=='haiyue-vps'
+assert pathlib.Path('/opt/cps-novel/current').resolve().name==final
+assert not pathlib.Path('/opt/cps-novel/shared/maintenance/enabled').exists()
+health=json.loads(run(['docker','exec','cps-novel-web-1','wget','-qO-','http://127.0.0.1:3000/api/health']));assert health['ok'] and health['build']['version']=='0.6.3' and health['build']['commit']==final and health['metadataConsistency']['status']=='passed'
+for service in ['web','worker','worker-light','scheduler','backup-timer','postgres']:
+ info=json.loads(run(['docker','inspect','cps-novel-'+service+'-1']))[0];assert info['State']['Health']['Status']=='healthy'
+ if service=='postgres':assert info['Id']=='691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e'
+ print('FINAL_SERVICE=PASS service='+service+' health=healthy')
+assert hashlib.sha256(pathlib.Path('/etc/nginx/conf.d/cps-novel-preprod.conf').read_bytes()).hexdigest()=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+assert hashlib.sha256(pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_bytes()).hexdigest()=='2da417dbc7ec25e5e0fc4d62885c3fd4b66a8530a877917198bcccb74b3e66f1'
+print('FINAL_HEALTH='+json.dumps(health))
+print('FINAL_REMOTE_READ_ONLY=PASS final='+final+' maintenance=off nginx=candidate env=approved')

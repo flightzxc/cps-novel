@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "source": "Owner direct statement in this conversation",
+  "ownerStatement": "运营已经确认无误，可以收官了",
+  "recordedAt": "2026-10-19T05:40:47.305440+00:00",
+  "scope": "Close remaining country-copy visual acceptance and operations-notice items in context of previous request",
+  "countryCopyAcceptance": "PASS per Owner operations confirmation",
+  "operationsNotice": "PASS per Owner operations confirmation",
+  "releaseClosureAuthorized": true,
+  "agentPerformedAuthenticatedBrowserActions": false,
+  "final": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+  "tagUnchanged": "v0.6.3"
+}

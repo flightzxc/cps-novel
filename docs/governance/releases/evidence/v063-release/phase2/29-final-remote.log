@@ -1,0 +1,8 @@
+FINAL_SERVICE=PASS service=web health=healthy
+FINAL_SERVICE=PASS service=worker health=healthy
+FINAL_SERVICE=PASS service=worker-light health=healthy
+FINAL_SERVICE=PASS service=scheduler health=healthy
+FINAL_SERVICE=PASS service=backup-timer health=healthy
+FINAL_SERVICE=PASS service=postgres health=healthy
+FINAL_HEALTH={"ok": true, "status": "healthy", "build": {"version": "0.6.3", "commit": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6", "builtAt": "2026-10-18T11:22:59Z"}, "featureFlags": {}, "metadataConsistency": {"status": "passed", "runtimeClaims": {"version": "0.6.3", "commit": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6"}}, "database": {"status": "passed", "reason": null, "durationMs": 1}, "reasons": []}
+FINAL_REMOTE_READ_ONLY=PASS final=6543af6876b1dda857ec6b28ae13df1e2c1a49c6 maintenance=off nginx=candidate env=approved

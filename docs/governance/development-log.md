@@ -51,7 +51,7 @@
 
 **验证方式**：全量11528通过/0失败/无Unhandled、37运行器、严格探针1742、三模式nginx矩阵/27条变异、最终归档镜像端到端PASS。第二阶段累计客户端24＋服务器6=30通过；首次/dashboard404因手册错误预期STOP，Owner裁定它为置灰未开发占位，404无WWW即通过、不回滚；真实/novels200流式壳含NEXT_REDIRECT及meta refresh到/login?next=%2Fnovels、无书目数据/WWW。保留首次STOP、主控另4次单独记数，手册只改文档。原部署维护47.828281秒（12:44:11.367349–12:44:59.195630 JST），29迁移无pending、原流程单事务grants成功；health0.6.3/Final/metadata passed、五应用healthy、postgresID不变、六服务error/permission denied0，投影0/0/0、IndexNow无熔断/429等待/积压、依赖/写闸/白名单/备份PASS。部署后后台9项及外部6项PASS；Owner只读nginx error.log.1/error.log回读，安装以来新增行0、emerg/crit0。Owner无痕无口令框、应用登录/两步验证已确认；UptimeRobot未配置跳过。原CHANGELOG生成器core.abbrev=7、提交后tsc/lint及Git/Notion回读收据见发布记录。
 
-**后续待办**：Owner目测/revenue国家说明，并通知运营新登录方式（待回执，不记为PASS）。tag固定Final，回滚应用必须先回nginx；兼容标志须Owner另批，本次未回滚。完整[发布记录](releases/v0.6.3-preproduction.md)与[第二阶段证据](releases/evidence/v063-release/phase2/)。
+**后续待办**：无本版剩余验收待办。Owner最终确认“运营已经确认无误，可以收官了”，国家说明及运营通知关闭，技术及Owner/运营验收全部PASS；本次仅补记本唯一发版条目。tag固定Final，回滚应用必须先回nginx；兼容标志须Owner另批，本次未回滚。完整[发布记录](releases/v0.6.3-preproduction.md)与[第二阶段证据](releases/evidence/v063-release/phase2/)。
 
 
 ### 2026-10-17 21:48 - codex（GPT-6，正式发版执行；JST / +0800为20:48）

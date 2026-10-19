@@ -1,0 +1,11 @@
+{
+  "name": "29-final-remote",
+  "command": [
+    "python3",
+    ".tmp/v063-release/phase2/remote-client.py.txt",
+    ".tmp/v063-release/phase2/final-remote-readonly.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792383040.105521,
+  "finishedAt": 1792383045.175405
+}

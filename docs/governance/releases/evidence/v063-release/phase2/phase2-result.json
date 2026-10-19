@@ -1,5 +1,5 @@
 {
-  "status": "deployed_technical_acceptance_pass_owner_country_copy_and_operations_notice_pending",
+  "status": "RELEASE_COMPLETE",
   "final": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
   "tree": "c5f7680d71642cf36c725b05dcaf9f5501b9709e",
   "releaseExit": 0,
@@ -69,11 +69,11 @@
     "emergCritCount": 0,
     "checkedAt": "2026-10-19T04:05:13.518301+00:00"
   },
-  "countryCopyAcceptance": "pending Owner",
+  "countryCopyAcceptance": "PASS per Owner final operations confirmation",
   "rollbackPerformed": false,
   "originalStopEvidencePreserved": true,
   "governance": {
-    "tag": "annotated v0.6.3 fixed Final locally; remote push after post-commit checks",
+    "tag": "annotated v0.6.3 remote verified: ff41b262f2f18a5fcb514936b31b21b77e4d928a -> Final",
     "changelog": "original generator core.abbrev=7 complete",
     "runbookCorrection": "written",
     "notion": {
@@ -88,10 +88,46 @@
       ]
     },
     "developmentLog": "single release entry complete",
-    "registry": "PATCH deployed technical acceptance PASS",
-    "releaseRecord": "complete; Owner country copy and operations notice pending",
-    "postCommitChecksAndRemotePush": "perform after this governance commit; receipts retained locally"
+    "registry": "PATCH release complete",
+    "releaseRecord": "release closed; technical and Owner/operations acceptance PASS",
+    "postCommitChecksAndRemotePush": "22c94f57 tsc/lint exit0 and branch/tag verified; final Owner-governance commit follows same discipline",
+    "notionOwnerFinal": {
+      "status": "PASS",
+      "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+      "url": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+      "readbackAt": "2026-10-19T05:41:45.715Z",
+      "ownerStatement": "运营已经确认无误，可以收官了",
+      "fourLocations": [
+        "current_snapshot",
+        "version_table",
+        "formal_release_journal",
+        "unique_development_log_mirror"
+      ],
+      "remainingAcceptanceItems": 0,
+      "unrelatedHistoryPreserved": true,
+      "preservationCheck": "reverse only 10 authorized replacements; exact equality of full original content (trimEnd)",
+      "beforeCharacters": 323683,
+      "afterCharacters": 323856,
+      "final": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+      "tagObjectUnchanged": "ff41b262f2f18a5fcb514936b31b21b77e4d928a",
+      "productionConnectionsThisCloseout": 0,
+      "taskId": "task_91d7d6b3506d4d4e9f78f4a77b43b58f"
+    }
   },
   "technicalAcceptance": "PASS",
-  "operationsNotice": "pending Owner"
+  "operationsNotice": "PASS per Owner final operations confirmation",
+  "ownerFinalAcceptance": {
+    "status": "PASS",
+    "source": "Owner direct statement in this conversation",
+    "ownerStatement": "运营已经确认无误，可以收官了",
+    "recordedAt": "2026-10-19T05:40:47.305440+00:00",
+    "scope": "Close remaining country-copy visual acceptance and operations-notice items in context of previous request",
+    "countryCopyAcceptance": "PASS per Owner operations confirmation",
+    "operationsNotice": "PASS per Owner operations confirmation",
+    "releaseClosureAuthorized": true,
+    "agentPerformedAuthenticatedBrowserActions": false,
+    "final": "6543af6876b1dda857ec6b28ae13df1e2c1a49c6",
+    "tagUnchanged": "v0.6.3"
+  },
+  "pendingItems": []
 }
