@@ -1,0 +1,49 @@
+PHASE1=PASS not_deployed=yes
+FINAL=50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+TREE=b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae
+TYPECHECK=PASS errors=0
+LINT=PASS errors=0 warnings=16
+FULL_TEST=PASS passed=11616 skipped=884 failed=0 unhandled=0
+RUNNERS=PASS count=37
+BUILD_ROUTES=PASS dynamic=100 static=2 same_as_v063=yes
+NGINX_MUTATIONS=PASS count=27
+MIGRATIONS=29 TABLE_COUNT=60 DICTIONARY_TOTAL=1401 DICTIONARY_ACTIVE=1331
+ARCHIVE_SHA256=a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77
+OCI_TARGET=sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004
+OCI_PLATFORM_MANIFEST=sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004
+OCI_CONFIG=sha256:406196968055798bfea6e5804459f242e959cab06c461d900b694cbb97b68f4c
+NGINX_PUBLIC_86400 bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+archive-build.log: ARCHIVE_BUILD=PASS
+archive-image-e2e.log: E2E_MIGRATIONS=PASS applied=29
+archive-image-e2e.log: INDEXNOW_STATUS_HELP=PASS
+archive-image-e2e.log: RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+archive-image-e2e.log: IMAGE_HEALTH=PASS {"ok":true,"status":"healthy","build":{"version":"0.6.4","commit":"50e3e06a413fe2b8ead4ad05ce8fc75733321e45","builtAt":"2026-10-19T16:32:00Z"},"featureFlags":{},"metadataConsistency":{"status":"passed","runtimeClaims":{"version":"0.6.4","commit":"50e3e06a413fe2b8ead4ad05ce8fc75733321e45"}},"database":{"status":"passed","reason":null,"durationMs":152},"reasons":[]}
+archive-image-e2e.log: IMAGE_E2E=PASS
+archive-verify.log: VERIFY_OFFLINE=PASS
+archive-verify.log: VERIFY=PASS
+archive-verify.log: ARCHIVE_INDEPENDENT_SHA256=PASS sha256=a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77
+audit.log: AUDIT=PASS mode=production critical=0 high=4 high_names=@prisma/config,deepmerge-ts,effect,prisma
+audit.log: AUDIT=PASS mode=full critical=0 high=11 high_names=@next/eslint-plugin-next,@prisma/config,brace-expansion,braces,deepmerge-ts,effect,eslint-config-next,fast-glob,js-yaml,micromatch,prisma
+b21.log: B21_MEASUREMENT=PASS
+brand.log: RUNTIME_IMAGE_DEPS=PASS dev_entries_absent=522 forbidden=vitest,tinypool,@vitest/* required=node_modules/prisma/package.json,node_modules/.bin/prisma,node_modules/@prisma/client/package.json,node_modules/.prisma/client/index.js,node_modules/next/package.json
+brand.log: BRAND_IMAGE=PASS image=cps-novel:cutover-local-50e3e06 status=200 content_type=image/png sha256=c4a4a7f4d89a6bce6a3bbf6b50c965cfce53982f85c8aed76be17367731627fb
+compose.log: COMPOSE_VARIABLES=PASS file=docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/production-like/docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/preproduction/docker-compose.yml added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=.env.example added=0 removed=0
+compose.log: COMPOSE_VARIABLES=PASS file=infra/preproduction/preprod.env.example added=0 removed=0
+compose.log: COMPOSE_RENDER=PASS mode=root services=5
+compose.log: COMPOSE_RENDER=PASS mode=production-like services=7
+compose.log: COMPOSE_RENDER=PASS mode=preproduction services=6
+compose.log: COMPOSE_ALL=PASS
+github-final-push.log: GITHUB_FINAL_PUSH=PASS commit=50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+nginx-candidate.log: NGINX_CANDIDATE=PASS mode=public bytes=18307 sha256=7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9
+nginx-matrix.log: NGINX_MATRIX=PASS
+nginx-matrix.log: NGINX_MATRIX=PASS mode=rehearsal
+nginx-matrix.log: NGINX_MATRIX=PASS mode=public
+nginx-matrix.log: NGINX_MATRIX_ALL=PASS
+public-cutover-mutations.log: PUBLIC_CUTOVER_MUTATIONS=PASS
+run-next-proxy-probe-verification.log: NEXT_PROXY_PROBE=PASS next=16.3.8 probes=1750 known_findings=0
+run-next-proxy-probe-verification.log: NEXT_PROXY_PROBE_VERIFICATION=PASS next=16.3.8
+run-p1-06-postgres-verification.log: TABLE_COUNT=60
+run-p1-06-postgres-verification.log: DICTIONARY_DRIFT=0_OF_1331

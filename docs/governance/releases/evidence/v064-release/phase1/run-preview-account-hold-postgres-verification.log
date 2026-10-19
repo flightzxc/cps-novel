@@ -1,0 +1,22 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.4
+
+stderr | tests/integration/tasks/preview-account-hold-postgres.test.ts > Preview read failure · category lands on the failed item (real Postgres, worker_app) > getchapterinfo validation failure: item is failed, error.detail carries the category, no chapter text is stored
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"d5c35cb8-ec13-449d-949f-75f999d55681","itemId":"50283dcb-2a52-4127-87ca-b94f6ea5359c","workerId":"b36-probe","errorKind":"upstream_preview_read_failed","attempt":1,"source":"handler","occurredAt":"2026-10-19T16:27:33.284Z"}
+
+stderr | tests/integration/tasks/preview-account-hold-postgres.test.ts > Preview read failure · category lands on the failed item (real Postgres, worker_app) > getbydataid failure and the read-only diagnostic query an operator will run
+{"family":"channel_sync","taskType":"moboreader.preview_refresh.v1","taskId":"26bf22e9-8eb4-4855-88e9-ea1b6d37704f","itemId":"42daf1d0-5d91-4795-9e11-c019da2da7e0","workerId":"b36-probe","errorKind":"upstream_material_read_failed","attempt":1,"source":"handler","occurredAt":"2026-10-19T16:27:33.295Z"}
+
+ ✓ |node| tests/integration/tasks/preview-account-hold-postgres.test.ts (7 tests) 138ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  01:27:32
+   Duration  571ms (transform 263ms, setup 0ms, import 354ms, tests 138ms, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-preview-hold-secrets.oFE0bB/integration-result.json
+PREVIEW_HOLD_INTEGRATION=PASS passed=7 skipped=0 filtered=false
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+PREVIEW_HOLD_DICTIONARY_DRIFT=0
+PREVIEW_HOLD_POSTGRES_VERIFICATION=PASS
+PREVIEW_HOLD_DISPOSABLE_DATABASE_CLEANED=yes

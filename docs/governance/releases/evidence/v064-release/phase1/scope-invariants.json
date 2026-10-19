@@ -1,0 +1,12 @@
+{
+  "prisma": "unchanged",
+  "infra/postgres": "unchanged",
+  "docker-compose.yml": "unchanged",
+  "infra/production-like/docker-compose.yml": "unchanged",
+  "infra/preproduction/docker-compose.yml": "unchanged",
+  "infra/preproduction/nginx": "unchanged",
+  "migrations": 29,
+  "dictionaryTotal": 1401,
+  "dependencyChanges": 0,
+  "developmentWorktreeUntouched": true
+}

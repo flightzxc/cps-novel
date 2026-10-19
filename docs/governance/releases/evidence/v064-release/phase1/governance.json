@@ -1,0 +1,18 @@
+[
+  [
+    "governance-typecheck",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "governance-lint",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ]
+]

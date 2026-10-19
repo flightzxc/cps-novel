@@ -1,0 +1,12 @@
+import hashlib, json, pathlib, subprocess
+base=pathlib.Path('.tmp/v064-release')
+identity=json.loads((base/'identity.json').read_text())
+directory=pathlib.Path('.tmp/preproduction-archive').resolve()
+manifest=directory/(identity['final']+'.json')
+data=json.loads(manifest.read_text())
+archive=directory/data['archive_filename']
+digest=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
+assert digest==data['archive_sha256']
+subprocess.run(['/bin/bash','scripts/preproduction/verify-release-archive.sh','--manifest',str(manifest),'--approved-commit',identity['final'],'--expected-archive-sha256',digest,'--load'],check=True)
+(base/'archive-manifest.json').write_text(manifest.read_text())
+print('ARCHIVE_INDEPENDENT_SHA256=PASS sha256='+digest)

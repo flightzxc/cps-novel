@@ -1,0 +1,103 @@
+[
+  {
+    "name": "compose",
+    "command": [
+      "/bin/bash",
+      ".tmp/v064-release/compose-check.sh.txt"
+    ],
+    "started_at": "2026-10-19T16:32:00.523960+00:00",
+    "exit": 0,
+    "seconds": 2.007,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/compose.log"
+  },
+  {
+    "name": "audit",
+    "command": [
+      "python3",
+      ".tmp/v064-release/audit-check.py.txt"
+    ],
+    "started_at": "2026-10-19T16:32:02.531754+00:00",
+    "exit": 0,
+    "seconds": 10.038,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/audit.log"
+  },
+  {
+    "name": "b21",
+    "command": [
+      "/bin/bash",
+      "scripts/measure-tagging-task-memory.sh"
+    ],
+    "started_at": "2026-10-19T16:32:12.570166+00:00",
+    "exit": 0,
+    "seconds": 62.185,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/b21.log"
+  },
+  {
+    "name": "nginx-matrix",
+    "command": [
+      "/bin/bash",
+      "scripts/preproduction/verify-nginx-matrix.sh"
+    ],
+    "started_at": "2026-10-19T16:33:14.756482+00:00",
+    "exit": 0,
+    "seconds": 46.143,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/nginx-matrix.log"
+  },
+  {
+    "name": "public-cutover-mutations",
+    "command": [
+      "node",
+      "scripts/preproduction/verify-public-cutover-mutations.mjs"
+    ],
+    "started_at": "2026-10-19T16:34:00.901174+00:00",
+    "exit": 0,
+    "seconds": 54.141,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/public-cutover-mutations.log"
+  },
+  {
+    "name": "mutation-restored",
+    "command": [
+      "git",
+      "diff",
+      "--exit-code"
+    ],
+    "started_at": "2026-10-19T16:34:55.044387+00:00",
+    "exit": 0,
+    "seconds": 2.011,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/mutation-restored.log"
+  },
+  {
+    "name": "nginx-candidate",
+    "command": [
+      "/bin/bash",
+      ".tmp/v064-release/nginx-candidate.sh.txt"
+    ],
+    "started_at": "2026-10-19T16:34:57.056489+00:00",
+    "exit": 0,
+    "seconds": 2.007,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/nginx-candidate.log"
+  },
+  {
+    "name": "docker-df-brand",
+    "command": [
+      "docker",
+      "system",
+      "df"
+    ],
+    "started_at": "2026-10-19T16:34:59.063976+00:00",
+    "exit": 0,
+    "seconds": 2.011,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/docker-df-brand.log"
+  },
+  {
+    "name": "brand",
+    "command": [
+      "/bin/bash",
+      "scripts/preproduction/verify-brand-image.sh"
+    ],
+    "started_at": "2026-10-19T16:35:01.076180+00:00",
+    "exit": 0,
+    "seconds": 449.307,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/brand.log"
+  }
+]

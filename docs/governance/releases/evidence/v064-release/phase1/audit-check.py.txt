@@ -1,0 +1,16 @@
+import json, os, pathlib, subprocess
+base=pathlib.Path('.tmp/v064-release')
+for name,args in [('production',['--omit=dev']),('full',[])]:
+    p=subprocess.run(['npm','audit',*args,'--json'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    if p.returncode not in (0,1):
+        raise RuntimeError('audit command failed '+name)
+    data=json.loads(p.stdout)
+    if 'error' in data: raise RuntimeError('audit registry error '+name)
+    (base/('audit-'+name+'.json')).write_text(json.dumps(data,indent=2))
+    counts=data['metadata']['vulnerabilities']
+    assert counts['critical']==0,counts
+    highs=sorted(n for n,v in data['vulnerabilities'].items() if v['severity']=='high')
+    if name=='production':
+        assert highs==['@prisma/config','deepmerge-ts','effect','prisma'],highs
+        assert counts['high']==4,counts
+    print('AUDIT=PASS mode=%s critical=%s high=%s high_names=%s'%(name,counts['critical'],counts['high'],','.join(highs)))

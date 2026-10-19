@@ -1,0 +1,26 @@
+[
+  {
+    "name": "npm-ci-repaired",
+    "command": [
+      "npm",
+      "ci"
+    ],
+    "started_at": "2026-10-19T16:09:42.383415+00:00",
+    "exit": 0,
+    "seconds": 10.006,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/npm-ci-repaired.log"
+  },
+  {
+    "name": "prisma-generate-repaired",
+    "command": [
+      "npx",
+      "--no-install",
+      "prisma",
+      "generate"
+    ],
+    "started_at": "2026-10-19T16:09:52.392835+00:00",
+    "exit": 0,
+    "seconds": 2.008,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/prisma-generate-repaired.log"
+  }
+]

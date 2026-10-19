@@ -1,0 +1,18 @@
+[
+  [
+    "npm-ci-repaired",
+    [
+      "npm",
+      "ci"
+    ]
+  ],
+  [
+    "prisma-generate-repaired",
+    [
+      "npx",
+      "--no-install",
+      "prisma",
+      "generate"
+    ]
+  ]
+]

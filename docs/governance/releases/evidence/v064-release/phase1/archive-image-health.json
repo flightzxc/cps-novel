@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "healthy",
+  "build": {
+    "version": "0.6.4",
+    "commit": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45",
+    "builtAt": "2026-10-19T16:32:00Z"
+  },
+  "featureFlags": {},
+  "metadataConsistency": {
+    "status": "passed",
+    "runtimeClaims": {
+      "version": "0.6.4",
+      "commit": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45"
+    }
+  },
+  "database": {
+    "status": "passed",
+    "reason": null,
+    "durationMs": 152
+  },
+  "reasons": []
+}

@@ -1,0 +1,6 @@
+{
+  "issue": "六文件升版包装器的全文替换误改iconv-lite的0.6.3，Python断言失败后外层shell未启用set-e仍提交；提交未推送、未构建。",
+  "rejected_local_commit": "c9008d4513a7feaf4951f6d5ba0554ecb9f8a4f3",
+  "fix": "从基线恢复lockfile，仅更新根版本及packages空键版本；本地amend后重跑npm ci与generate；后续shell显式set-e。",
+  "dependency_changes": 0
+}

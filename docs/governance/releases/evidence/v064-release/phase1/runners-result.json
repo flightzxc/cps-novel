@@ -1,0 +1,409 @@
+[
+  {
+    "name": "run-add-admin-identity-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-add-admin-identity-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:13:48.735539+00:00",
+    "exit": 0,
+    "seconds": 6.013,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-add-admin-identity-postgres-verification.log"
+  },
+  {
+    "name": "run-article-blog-rebind-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-article-blog-rebind-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:13:54.749510+00:00",
+    "exit": 0,
+    "seconds": 12.018,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-article-blog-rebind-postgres-verification.log"
+  },
+  {
+    "name": "run-article-publish-batch-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-article-publish-batch-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:14:06.768783+00:00",
+    "exit": 0,
+    "seconds": 26.021,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-article-publish-batch-postgres-verification.log"
+  },
+  {
+    "name": "run-article-template-version-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-article-template-version-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:14:32.791130+00:00",
+    "exit": 0,
+    "seconds": 6.01,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-article-template-version-postgres-verification.log"
+  },
+  {
+    "name": "run-catalog-batch-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-catalog-batch-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:14:38.801836+00:00",
+    "exit": 0,
+    "seconds": 22.03,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-catalog-batch-postgres-verification.log"
+  },
+  {
+    "name": "run-effective-tag-projection-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-effective-tag-projection-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:15:00.832757+00:00",
+    "exit": 0,
+    "seconds": 12.017,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-effective-tag-projection-postgres-verification.log"
+  },
+  {
+    "name": "run-indexnow-sweep-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-indexnow-sweep-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:15:12.850886+00:00",
+    "exit": 0,
+    "seconds": 26.039,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-indexnow-sweep-postgres-verification.log"
+  },
+  {
+    "name": "run-next-proxy-probe-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-next-proxy-probe-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:15:38.891396+00:00",
+    "exit": 0,
+    "seconds": 14.028,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-next-proxy-probe-verification.log"
+  },
+  {
+    "name": "run-novel-article-decouple-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-novel-article-decouple-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:15:52.920838+00:00",
+    "exit": 0,
+    "seconds": 6.011,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-novel-article-decouple-postgres-verification.log"
+  },
+  {
+    "name": "run-p1-05b-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-p1-05b-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:15:58.932351+00:00",
+    "exit": 0,
+    "seconds": 306.447,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-p1-05b-postgres-verification.log"
+  },
+  {
+    "name": "run-p1-06-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-p1-06-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:21:05.382427+00:00",
+    "exit": 0,
+    "seconds": 292.468,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-p1-06-postgres-verification.log"
+  },
+  {
+    "name": "run-p1-08b-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-p1-08b-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:25:57.853357+00:00",
+    "exit": 0,
+    "seconds": 22.043,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-p1-08b-postgres-verification.log"
+  },
+  {
+    "name": "run-p2-02b-article-template-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-p2-02b-article-template-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:26:19.897422+00:00",
+    "exit": 0,
+    "seconds": 8.01,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-p2-02b-article-template-postgres-verification.log"
+  },
+  {
+    "name": "run-p2-04-admin-content-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-p2-04-admin-content-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:26:27.908532+00:00",
+    "exit": 0,
+    "seconds": 4.005,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-p2-04-admin-content-postgres-verification.log"
+  },
+  {
+    "name": "run-phase-b-entity-fix-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-phase-b-entity-fix-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:26:31.914710+00:00",
+    "exit": 0,
+    "seconds": 8.017,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-phase-b-entity-fix-postgres-verification.log"
+  },
+  {
+    "name": "run-phase-d-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-phase-d-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:26:39.932379+00:00",
+    "exit": 0,
+    "seconds": 24.047,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-phase-d-postgres-verification.log"
+  },
+  {
+    "name": "run-phase-d-role-password-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-phase-d-role-password-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:03.980245+00:00",
+    "exit": 0,
+    "seconds": 6.012,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-phase-d-role-password-postgres-verification.log"
+  },
+  {
+    "name": "run-plotnovel-theater-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-plotnovel-theater-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:09.993805+00:00",
+    "exit": 0,
+    "seconds": 12.019,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-plotnovel-theater-postgres-verification.log"
+  },
+  {
+    "name": "run-preprod-db-contract-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-preprod-db-contract-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:22.013739+00:00",
+    "exit": 0,
+    "seconds": 8.014,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-preprod-db-contract-verification.log"
+  },
+  {
+    "name": "run-preview-account-hold-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-preview-account-hold-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:30.028188+00:00",
+    "exit": 0,
+    "seconds": 4.011,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-preview-account-hold-postgres-verification.log"
+  },
+  {
+    "name": "run-preview-opening-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-preview-opening-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:34.039986+00:00",
+    "exit": 0,
+    "seconds": 6.016,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-preview-opening-postgres-verification.log"
+  },
+  {
+    "name": "run-promo-claim-batch-control-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-promo-claim-batch-control-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:40.056671+00:00",
+    "exit": 0,
+    "seconds": 6.003,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-promo-claim-batch-control-postgres-verification.log"
+  },
+  {
+    "name": "run-promo-claim-release-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-promo-claim-release-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:46.061006+00:00",
+    "exit": 0,
+    "seconds": 6.014,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-promo-claim-release-postgres-verification.log"
+  },
+  {
+    "name": "run-public-list-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-public-list-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:27:52.075725+00:00",
+    "exit": 0,
+    "seconds": 72.094,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-public-list-postgres-verification.log"
+  },
+  {
+    "name": "run-publication-preview-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-publication-preview-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:29:04.171399+00:00",
+    "exit": 0,
+    "seconds": 22.025,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-publication-preview-postgres-verification.log"
+  },
+  {
+    "name": "run-revenue-dashboard-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-revenue-dashboard-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:29:26.197892+00:00",
+    "exit": 0,
+    "seconds": 8.016,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-revenue-dashboard-postgres-verification.log"
+  },
+  {
+    "name": "run-site-search-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-site-search-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:29:34.214796+00:00",
+    "exit": 0,
+    "seconds": 6.01,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-site-search-postgres-verification.log"
+  },
+  {
+    "name": "run-sitemap-refresh-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-sitemap-refresh-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:29:40.225889+00:00",
+    "exit": 0,
+    "seconds": 36.059,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-sitemap-refresh-postgres-verification.log"
+  },
+  {
+    "name": "run-tagging-auto-preview-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-tagging-auto-preview-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:30:16.286648+00:00",
+    "exit": 0,
+    "seconds": 14.02,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-tagging-auto-preview-postgres-verification.log"
+  },
+  {
+    "name": "run-tagging-public-auto-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-tagging-public-auto-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:30:30.308193+00:00",
+    "exit": 0,
+    "seconds": 44.072,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-tagging-public-auto-postgres-verification.log"
+  },
+  {
+    "name": "run-task-claim-control-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-task-claim-control-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:14.381890+00:00",
+    "exit": 0,
+    "seconds": 6.005,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-task-claim-control-postgres-verification.log"
+  },
+  {
+    "name": "run-tkd-repair-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-tkd-repair-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:20.388169+00:00",
+    "exit": 0,
+    "seconds": 4.012,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-tkd-repair-postgres-verification.log"
+  },
+  {
+    "name": "run-worker-health-index-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-worker-health-index-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:24.401362+00:00",
+    "exit": 0,
+    "seconds": 10.018,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-worker-health-index-postgres-verification.log"
+  },
+  {
+    "name": "run-worker-light-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-worker-light-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:34.420573+00:00",
+    "exit": 0,
+    "seconds": 6.009,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-worker-light-postgres-verification.log"
+  },
+  {
+    "name": "run-x2-postgres-hardening-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-x2-postgres-hardening-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:40.430391+00:00",
+    "exit": 0,
+    "seconds": 2.007,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-x2-postgres-hardening-verification.log"
+  },
+  {
+    "name": "run-x6-site-setting-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-x6-site-setting-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:42.440013+00:00",
+    "exit": 0,
+    "seconds": 8.014,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-x6-site-setting-postgres-verification.log"
+  },
+  {
+    "name": "run-x9-postgres-verification",
+    "command": [
+      "/bin/bash",
+      "scripts/run-x9-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-19T16:31:50.455155+00:00",
+    "exit": 0,
+    "seconds": 10.023,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/run-x9-postgres-verification.log"
+  }
+]

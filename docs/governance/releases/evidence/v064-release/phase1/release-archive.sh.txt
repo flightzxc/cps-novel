@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+final="$(node -p 'require("./.tmp/v064-release/identity.json").final')"
+APPROVED_GIT_COMMIT="$final" RELEASE_TARGET_PLATFORM=linux/amd64 scripts/preproduction/build-release-archive.sh
