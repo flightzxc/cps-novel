@@ -45,6 +45,9 @@ export const NAVER_VERIFICATION_SHA256 = "80f6a3bc8eb3e65113a1a31e8d90c20fda4821
 export const NAVER_VERIFICATION_GROUP = "public-host-static-verification-file";
 /** v0.6.4 B-50: public-host `/drama/*` -> 301 https://enpulsedrama.com (src/proxy.ts `buildDramaSisterSiteRedirectTarget`). */
 export const DRAMA_REDIRECT_GROUP = "drama-sister-site-redirect";
+// The one live-code mention of the short-drama domain in this file; tests/backend/seo/site-url-single-source.test.ts
+// allows exactly this line (and the matching constant in src/proxy.ts), nothing else.
+export const DRAMA_SISTER_SITE_ORIGIN_EXPECTED = "https://enpulsedrama.com";
 /**
  * v0.6.4 B-51: GA loads on the public host only, never on the admin host (src/app/layout.tsx).
  * scripts/run-next-proxy-probe-verification.sh seeds site_setting.ga4_measurement_id with this exact value
@@ -704,10 +707,10 @@ export function buildProbes({ publicHost = PUBLIC_HOST_DEFAULT, adminHost = ADMI
     hostRole: "public",
     target: "/drama/probe-title-p1234abcd?utm_source=chatgpt.com",
     check: (r) => (r.status === 301
-      && r.headers.location === "https://enpulsedrama.com/drama/probe-title-p1234abcd?utm_source=chatgpt.com"
+      && r.headers.location === `${DRAMA_SISTER_SITE_ORIGIN_EXPECTED}/drama/probe-title-p1234abcd?utm_source=chatgpt.com`
       && !r.headers["x-nextjs-redirect"]
       ? null
-      : `public-host /drama/* should 301 to enpulsedrama.com with the same path and query, got ${classify(r)}`),
+      : `public-host /drama/* should 301 to ${DRAMA_SISTER_SITE_ORIGIN_EXPECTED} with the same path and query, got ${classify(r)}`),
   });
   add({
     id: "drama-redirect/admin-host-404",
