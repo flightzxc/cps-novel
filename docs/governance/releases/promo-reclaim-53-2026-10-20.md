@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：v0.6.5部署技术验收已通过；甲阶段原mine_identity_mismatch经主控查实为定位规则问题。仅在ops分支修正，待本次主控复核通过后从captureBaseline重启甲阶段。金丝雀继续暂停，余48本仍须Owner“批准重领”。本轮不连接生产、不提交领码；失败书不重试。
+当前Owner 2026-10-21裁定：金丝雀5本改由Codex薄脚本提交，转交即授权这5本；但新增submit-canary须本次主控复核通过后才能用于生产。其余48本仍须Owner另说“批准重领”。甲阶段已通过，冻结基线不变；本轮仅本地实现、冒烟、推送复核，不连接生产或提交领码。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -10,7 +10,7 @@
 
 所有命令只用web容器原生web_app连接，不接受连接覆盖参数；production必须cwd=/app、metadata版本0.6.5与Final一致。actor显式固定为10-15相同的 `71f0e655-0640-4f07-bcbb-041f027fa7cb`，并核对username=admin、role=super_admin、status=active。账户取近期同一管理员后台领码批次中MoboReader的账户，冻结入甲阶段快照、清单并输出核对；不猜选账户。权限不足立即停，不改grants或切换角色。
 
-## 甲阶段与命令
+## 甲阶段与原命令（10-20历史；当前金丝雀执行者及命令见10-21小节）
 
 先部署验收，再以证据中的phase-a-capture包装器执行只读快照。附录C历史查询限定MoboReader app `85c2fb3e-28f8-476a-83f2-9647e2206192`，53个前缀必须与附录B逐项一致。逐本检查linked/novel关联、无带码链接、无在途领码条目、无任何意图；Contract不在范围。冻结完整53 ID、金丝雀5 ID、剩余48 ID摘要、actor/账户以及635条PlotNovel人工复核记录摘要。
 
@@ -67,3 +67,21 @@
 真实库夹具复用原辅助函数，并按主控提供的两本MINE完整身份构造同剧场重名；另以同前缀跨语种、同语种跨前缀干扰行验证两个约束独立必要，四条件多行也拒绝。要求trim退回精确比较的变异必须红，恢复后git diff --quiet；locale与prefix删除也以真实数据行为验证歧义停手。门禁及diff见本次mine-location-fix证据。本次推送供主控复核，未获复核通过前不重启生产captureBaseline，不执行金丝雀。
 
 本次代码提交`c1ca68182ff598d38bf285a52a6996e04ce6d7c7`，脚本SHA256 `08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15`。tsc0、lint0error/16既有warning；真实web_app冒烟及还原后完整冒烟均18/18，skipped0/无Unhandled/42501；trim、locale、prefix三种变异均红后还原并git diff --quiet。现有拒绝码、临期审计、plan→submit→status和635条基线守卫均通过，字典drift0。主控复核材料：[核心diff](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/script-diff.txt)、[完整diff](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/review-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/summary.txt)、[复核包](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/controller-review.txt)。本轮未连接生产，待主控复核通过后才从captureBaseline重启甲阶段。
+
+## Owner 10-21：Codex金丝雀提交扩展（当前）
+
+Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结的五本；不再要求运营后台提交。该授权在本次主控复核通过后即可执行，无须再向Owner重复申请这五本；复核前不得提交。旧文的“运营提交”交接说明作为历史保留，由本节替代。已部署Final/发布分支、grants、运行角色、公开网址均不变。
+
+`submit-canary --baseline <甲阶段JSON> --baseline-sha256 <原始文件摘要> --actor-id <固定admin ID> --confirm PROMO_RECLAIM_CANARY_5`：CLI不接受可覆盖的ID列表，只用原文件canaryIds；调用层还须数组恰好5个、不重复、与baseline的canaryIds完全一致、逐一匹配CANARY_PREFIXES。requestId固定`promo-reclaim-53-2026-10-20-canary`，独立于48本的`promo-reclaim-53-2026-10-20`；baseline自身原requestId不修改。通过同一个submitSelection调用原enqueueCatalogBatch，照抄的账户校验20行、enabled双闸、临期审计完全复用；提交前以web_app只读事务检查无其它领码在途、五本四项条件与635摘要。已有同requestId时保留原五本输入，返回原批次，不重复创建或补领失败书。
+
+`status --baseline <甲JSON> --baseline-sha256 <摘要> --actor-id <ID> --request-id <固定requestId>`：按requestId查询金丝雀5本或剩余48本，输出requestId、task和对应行；只允许上述两个固定requestId。原`status --manifest <48清单> --actor-id <ID>`兼容保留（默认48的requestId），也可显式传同一requestId。只读status不授予48本提交权限；一个请求的在途任务仍会阻止另一个请求的plan/submit/status，保持独占窗口。金丝雀终态后，48的plan仍排除固定五本，即使五本已经有码/有意图，也不得把它们回加。
+
+本次真实库新增冒烟覆盖：精确五本与独立requestId、重放幂等/临期审计一次；短缺/重复/外来ID及错误确认/摘要拒绝；前置条件及其它在途拒绝；金丝雀与48均与按钮绑定/凭据拒绝码相同；模拟金丝雀已结束后可同时按各自requestId读进度，48的plan仍为原48。模拟终态只由一次性夹具写入，不调上游。双向变异去掉“必须等于冻结五本”校验，必须行为变红、还原并git diff --quiet。
+
+### 复核通过后的执行约定（尚未执行）
+
+- 先核对新版ops HEAD/脚本SHA、线上0.6.5/Final、原生web容器web_app，以及原冻结baseline SHA256 `244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d`。固定actor `71f0e655-0640-4f07-bcbb-041f027fa7cb`、账户 `53f03fd8-951d-433e-ac66-784e82496a84`，不换角色、不改grants、不读raw_payload；原635摘要 `f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454`。
+- 在提交前只读确认无其它领码任务/条目，记录UTC窗口起点及意图基线；请Owner/运营在整个窗口不提交其它领码批次。只执行一次submit-canary，保留实际requestId/taskId；不自动重放、不新建失败重试批次。
+- 用status指定canary requestId等待五本全部终态，期间若429/熔断/permission denied、意图>1、未决/转人工或名单变化立即停。结束前再查无其它在途，记录窗口终点（同一半开区间）。
+- MINE必须already_available、意图0；其余成功书有码有网址，失败安全列原因；逐本标为“按意图记录推定的每本getcode上限”。宿主机只读采集窗口upstream_call，getcode总事件数必须等于新增意图总数，getvideoinfo仅报窗口总数。确认635摘要不变及六服务error/permission denied均0。
+- 回报即停，余48本绝不自动提交，仍等Owner明确“批准重领”。本次复核材料中的未来生产步骤不表示已经执行。

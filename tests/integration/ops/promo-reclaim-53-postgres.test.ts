@@ -24,6 +24,8 @@ const plotApp = "00de5521-d075-4472-87eb-cc5d1732f4d0";
 const actor = "71f0e655-0640-4f07-bcbb-041f027fa7cb";
 const mineTarget = "c838c281-c9ba-482a-aa80-05792e8fdc4a";
 const mineIndonesian = "63172440-a1bb-4df2-a920-75f1a7b40a44";
+const canaryRequest = "promo-reclaim-53-2026-10-20-canary";
+const remainingRequest = "promo-reclaim-53-2026-10-20";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 let dir: string, account: string, channel: string, otherChannel: string, ids: string[], m: { ids: string[]; allIds: string[]; accountId: string };
 const env = () => ({ ...process.env, DATABASE_URL: process.env.PROMO_RECLAIM_WEB_DATABASE_URL,
@@ -43,6 +45,9 @@ function inline(code: string) {
 }
 function manifest() { const s = readFileSync(path.join(dir, "manifest.json"), "utf8"); return { file: path.join(dir, "manifest.json"), digest: hash(s) }; }
 function submitArgs() { const x = manifest(); return ["submit", "--actor-id", actor, "--manifest", x.file, "--manifest-sha256", x.digest, "--confirm", "PROMO_RECLAIM_48"]; }
+function baseline() { const file = path.join(dir, "baseline.json"), bytes = readFileSync(file, "utf8"); return { file, digest: hash(bytes), data: JSON.parse(bytes) as { canaryIds: string[] } }; }
+function canaryArgs() { const x = baseline(); return ["submit-canary", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--confirm", "PROMO_RECLAIM_CANARY_5"]; }
+function baselineStatus(requestId: string) { const x = baseline(); return cli(["status", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--request-id", requestId]); }
 async function seed() {
   await truncateCatalogDatabase(owner);
   account = randomUUID(); channel = randomUUID(); otherChannel = randomUUID();
@@ -118,6 +123,69 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
     expect(cli(submitArgs()).data.code).toBe("other_claim_inflight");
     expect(cli(["status", "--actor-id", actor, "--manifest", manifest().file]).data.code).toBe("other_claim_inflight");
   });
+  it("submit-canary fixes five IDs, replays once, isolates request IDs and preserves the remaining plan after completion", async () => {
+    const five = baseline().data.canaryIds;
+    expect(five).toHaveLength(5); expect(five.map(id => id.slice(0, 8)).sort()).toEqual(["17f20eb7", "191da4c8", "4265a05f", "49e254d4", "c838c281"]);
+    const first = cli(canaryArgs()); expect(first.exit, JSON.stringify(first.data)).toBe(0);
+    expect(first.data.requestId).toBe(canaryRequest); expect(first.data.duplicate).toBe(false); expect(first.data.enabled).toBe(true);
+    expect(first.data.channelAccounts).toEqual({ [app]: account });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: first.data.taskId }, select: { params: true } });
+    const params = task.params as { selection: { scope: string; ids: string[] }; requestId: string };
+    expect(params.requestId).toBe(canaryRequest); expect(params.selection.scope).toBe("explicit_ids"); expect([...params.selection.ids].sort()).toEqual([...five].sort());
+    const again = cli(canaryArgs()); expect(again.exit).toBe(0); expect(again.data.duplicate).toBe(true); expect(again.data.taskId).toBe(first.data.taskId);
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(1);
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: remainingRequest } } })).toBe(0);
+    expect(await owner.operationAudit.count({ where: { action: "promo_link_claim.credential_expiring_soon", requestId: canaryRequest } })).toBe(1);
+    const pending = baselineStatus(canaryRequest); expect(pending.exit).toBe(0); expect(pending.data.requestId).toBe(canaryRequest); expect(pending.data.rows).toHaveLength(5);
+    // Existing quiet-window rule still blocks the 48 plan while canaries run.
+    const blocked = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
+    expect(blocked.data.code).toBe("other_claim_inflight");
+    // Simulated terminal worker results only: no upstream/adapter is invoked.
+    await owner.genericTask.update({ where: { id: first.data.taskId }, data: { status: "completed" } });
+    await owner.genericTaskItem.updateMany({ where: { taskId: first.data.taskId }, data: { status: "success" } });
+    await owner.genericTask.create({ data: { parentTaskId: first.data.taskId, taskType: "promo_link.claim.v1", operationScopeHash: hash("canary-terminal"), requestToken: "canary-terminal", status: "completed", items: { create: five.map(id => ({ targetType: "novel_source_item", targetId: id, payload: { novelSourceItemId: id }, status: "success", result: { decision: id === mineTarget ? "already_available" : "claimed" } })) } } });
+    for (const id of five) {
+      await addCode(id);
+      if (id !== mineTarget) await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-" + id), idempotencyKey: hash("canary-idem-" + id), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: id, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: id } } });
+    }
+    const beforeAudit = await owner.operationAudit.count();
+    const done = baselineStatus(canaryRequest); expect(done.exit).toBe(0); expect(done.data.counts).toEqual({ success: 4, already_available: 1, failed: 0 });
+    expect(done.data.databaseRole).toBe("web_app"); expect(done.data.transactionReadOnly).toBe("on");
+    expect(done.data.rows.every((x: { promoCodePresent: boolean; promoUrlPresent: boolean }) => x.promoCodePresent && x.promoUrlPresent)).toBe(true);
+    expect(done.data.rows.find((x: { id: string }) => x.id === mineTarget).getcodeUpperBoundByIntent).toBe(0);
+    const notSubmitted = baselineStatus(remainingRequest); expect(notSubmitted.exit).toBe(0); expect(notSubmitted.data.requestId).toBe(remainingRequest); expect(notSubmitted.data.rows).toHaveLength(48); expect(notSubmitted.data.task).toBeNull();
+    expect(await owner.operationAudit.count()).toBe(beforeAudit);
+    const planned = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
+    expect(planned.exit, JSON.stringify(planned.data)).toBe(0); expect(planned.data.ids).toEqual(m.ids); expect(planned.data.ids.some((id: string) => five.includes(id))).toBe(false);
+    const replay = cli(canaryArgs()); expect(replay.exit).toBe(0); expect(replay.data.duplicate).toBe(true);
+    const remaining = cli(submitArgs()); expect(remaining.exit).toBe(0); expect(remaining.data.requestId).toBe(remainingRequest); expect(remaining.data.taskId).not.toBe(first.data.taskId);
+  });
+  it("rejects canary phrase, hash and request ID errors before submission", async () => {
+    for (const phrase of ["wrong", "PROMO_RECLAIM_48"]) { const args = canaryArgs(); args[args.indexOf("--confirm") + 1] = phrase; expect(cli(args).data.code).toBe("confirmation_refused"); }
+    const args = canaryArgs(); args[args.indexOf("--baseline-sha256") + 1] = "0".repeat(64); expect(cli(args).data.code).toBe("manifest_sha256_mismatch");
+    expect(baselineStatus("unknown-request").data.code).toBe("request_id_refused");
+    const tampered = JSON.parse(readFileSync(baseline().file, "utf8")); tampered.canaryIds[0] = m.ids[0];
+    const bytes = JSON.stringify(tampered); const file = path.join(dir, "tampered-baseline.json"); writeFileSync(file, bytes);
+    expect(cli(["submit-canary", "--actor-id", actor, "--baseline", file, "--baseline-sha256", hash(bytes), "--confirm", "PROMO_RECLAIM_CANARY_5"]).data.code).toBe("canary_scope_invalid");
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
+  });
+  it.each(["short", "duplicate", "outsider"])("rejects canary ID selections outside the frozen five: %s", async kind => {
+    const selected = [...baseline().data.canaryIds];
+    if (kind === "short") selected.pop();
+    if (kind === "duplicate") selected[0] = selected[1];
+    if (kind === "outsider") selected[0] = m.ids[0];
+    const result = inline(`return ops.submitCanary(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(selected)},${JSON.stringify(actor)},'PROMO_RECLAIM_CANARY_5');`);
+    expect(result.exit, JSON.stringify(result.data)).toBe(64); expect(result.data.code).toBe("canary_ids_invalid");
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
+  });
+  it.each(["existing_code", "historical_intent", "not_linked", "inflight_item", "other_inflight"])("rechecks canary prerequisites before enqueue: %s", async kind => {
+    if (kind === "existing_code") await addCode(mineTarget);
+    if (kind === "historical_intent") await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-existing"), idempotencyKey: hash("canary-existing-idem"), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: mineTarget, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: mineTarget } } });
+    if (kind === "not_linked") await owner.novelSourceItem.update({ where: { id: mineTarget }, data: { status: "pending" } });
+    if (kind === "inflight_item" || kind === "other_inflight") await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", operationScopeHash: hash(kind), requestToken: kind, status: kind === "inflight_item" ? "completed" : "pending", ...(kind === "inflight_item" ? { items: { create: { targetType: "novel_source_item", targetId: mineTarget, payload: { novelSourceItemId: mineTarget } } } } : {}) } });
+    const result = cli(canaryArgs()); expect(result.exit).toBe(64); expect(result.data.code).toBe(["inflight_item", "other_inflight"].includes(kind) ? "other_claim_inflight" : "submit_preconditions_failed");
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
+  });
   it("uses genuine read-only web_app transactions and rejects another role", () => {
     const ro = inline("return ops.readOnly(db,async tx=>{await tx.$executeRawUnsafe(\"CREATE TABLE forbidden_ops_write (id int)\");return true;});");
     expect(ro.exit).toBe(64);
@@ -169,7 +237,9 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
     if (kind === "account_disabled") await owner.channelAccount.update({ where: { id: account }, data: { status: "disabled" } });
     if (kind === "credential_never_validated") await owner.channelAccountCredential.updateMany({ where: { channelAccountId: account }, data: { lastValidatedAt: null } });
     const x = cli(submitArgs()); expect(x.exit).toBe(64); expect(x.data.code).toBe(kind === "credential_never_validated" ? "credential_never_validated" : "channel_account_binding_invalid");
+    const canary = cli(canaryArgs()); expect(canary.exit).toBe(64); expect(canary.data.code).toBe(x.data.code);
     expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: "promo-reclaim-53-2026-10-20" } } })).toBe(0);
+    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
   });
   it("rejects wrong manifest hash, phrase and actor before connecting", () => {
     const a = submitArgs(); a[a.indexOf("--manifest-sha256") + 1] = "0".repeat(64); expect(cli(a).data.code).toBe("manifest_sha256_mismatch");
