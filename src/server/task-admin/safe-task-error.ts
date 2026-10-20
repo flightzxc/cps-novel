@@ -57,13 +57,13 @@ const SAFE_ERROR_LABELS: Readonly<Record<string, string>> = Object.freeze({
   request_timeout: "上游请求超时",
   upstream_http_error: "上游 HTTP 请求失败",
   malformed_payload: "上游返回数据格式异常",
-  claim_readback_title_unavailable: "推广链接回读标题不可用",
+  claim_readback_title_unavailable: "推广链接回读标题不可用", // 历史记录展示用，新代码不再产生
   claim_source_fields_missing: "推广链接领取缺少来源字段",
   claim_readback_unavailable: "推广链接回读能力不可用",
-  claim_readback_target_missing: "推广链接回读目标不存在",
-  claim_readback_ambiguous: "推广链接回读目标不唯一",
-  claim_readback_locator_stale: "推广链接回读定位信息已过期",
-  claim_readback_target_not_located: "推广链接回读未定位到目标",
+  claim_readback_target_missing: "推广链接回读目标不存在", // 历史记录展示用，新代码不再产生
+  claim_readback_ambiguous: "推广链接回读身份不一致",
+  claim_readback_locator_stale: "推广链接回读定位信息已过期", // 历史记录展示用，新代码不再产生
+  claim_readback_target_not_located: "推广链接回读未定位到目标", // 历史记录展示用，新代码不再产生
   lease_lost_before_claim: "领取推广链接前任务租约已丢失",
   task_system_hold: "任务因批次级系统性故障被系统自动停止",
   finalize_failed: "任务结果落库失败",

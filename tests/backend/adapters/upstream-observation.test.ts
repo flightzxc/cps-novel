@@ -51,9 +51,17 @@ const claimRequest: ClaimPromoRequest = {
   seriesId: "124235322",
   projectType: 1,
   language: 3,
-  name: "The Exact Target Title",
   offerType: "read",
 };
+
+/** getvideoinfo success envelope echoing `claimRequest`'s identity. */
+function videoInfoBody(kocCode = "239FFB") {
+  return {
+    status: true,
+    code: 200,
+    data: { agencyId: 3366, seriesId: "124235322", language: 3, projectType: 1, kocCode, publicUrl: null, homeLink: null },
+  };
+}
 
 function listBooksBody() {
   return { data: { totalCount: 0, list: [] } };
@@ -343,7 +351,7 @@ describe("createPromoLinkClaimAdapter — onUpstreamObservation", () => {
     await expect(adapter.claimPromo(claimRequest, "jwt-token")).resolves.toMatchObject({ upstreamCode: "239FFB" });
   });
 
-  it("reports endpoint 'getcode' for claimPromo and 'getlistpc' for readPromoAfterClaim, with real gateway headers", async () => {
+  it("reports endpoint 'getcode' for claimPromo and 'getvideoinfo' for readPromoAfterClaim, with real gateway headers", async () => {
     const observations: UpstreamCallObservation[] = [];
     // Attach a gateway header to prove it survives claimPromo's dispatch too.
     const claimFetchWithHeaders = vi.fn(async () => new Response(JSON.stringify({
@@ -352,15 +360,13 @@ describe("createPromoLinkClaimAdapter — onUpstreamObservation", () => {
     const claimAdapter = createPromoLinkClaimAdapter({ fetchImpl: claimFetchWithHeaders, onUpstreamObservation: (o) => observations.push(o) });
     await claimAdapter.claimPromo(claimRequest, "jwt-token");
 
-    const readbackFetch = vi.fn(async () => jsonResponse({
-      status: true, code: 200, data: { totalCount: 0, list: [] },
-    })) as unknown as typeof fetch;
+    const readbackFetch = vi.fn(async () => jsonResponse(videoInfoBody())) as unknown as typeof fetch;
     const readbackAdapter = createPromoLinkClaimAdapter({ fetchImpl: readbackFetch, onUpstreamObservation: (o) => observations.push(o) });
     await readbackAdapter.readPromoAfterClaim!(claimRequest, "jwt-token");
 
     expect(observations).toHaveLength(2);
     expect(observations[0]).toMatchObject({ endpoint: "getcode", outcome: "ok", gatewayHeaders: { "x-ratelimit-limit": "30" } });
-    expect(observations[1]).toMatchObject({ endpoint: "getlistpc", outcome: "ok" });
+    expect(observations[1]).toMatchObject({ endpoint: "getvideoinfo", outcome: "ok" });
   });
 
   it("emits http_error/timeout/transport_error for claimPromo, matching the frozen no-retry contract", async () => {
@@ -580,17 +586,11 @@ describe("safeObserve (a throwing onUpstreamObservation must never change the ad
     });
   });
 
-  it("getlistpc (readback) success still resolves normally when the observation callback throws", async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      status: true, code: 200, data: { totalCount: 0, list: [] },
-    }), { status: 200 })) as unknown as typeof fetch;
+  it("getvideoinfo (readback) success still resolves normally when the observation callback throws", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(videoInfoBody("")), { status: 200 })) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl, onUpstreamObservation: throwingObservation });
 
-    await expect(adapter.readPromoAfterClaim!(claimRequest, "jwt-token")).resolves.toEqual({
-      status: "target_not_located",
-      reason: "title_no_match",
-      totalCount: 0,
-    });
+    await expect(adapter.readPromoAfterClaim!(claimRequest, "jwt-token")).resolves.toEqual({ status: "missing" });
   });
 
   it("a getcode HTTP error still throws the original error type/classification (ambiguous flag unchanged) when the observation callback throws", async () => {
