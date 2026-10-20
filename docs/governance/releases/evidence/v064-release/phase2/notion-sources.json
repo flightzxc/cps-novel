@@ -1,0 +1,117 @@
+{
+  "governance": {
+    "governanceHead": "994d552f2a360bcbdecf28b856ba1a27c91d4ceb",
+    "remoteRefs": {
+      "refs/heads/release/v0.6.4-2026-10-20": "994d552f2a360bcbdecf28b856ba1a27c91d4ceb",
+      "refs/tags/v0.6.4": "b15731356068560b08bef743218a6d69cc8e546c",
+      "refs/tags/v0.6.4^{}": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45"
+    },
+    "typecheckExit": 0,
+    "lintExit": 0,
+    "worktreeClean": true
+  },
+  "repo": "https://github.com/flightzxc/cps-novel",
+  "snapshot": "### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）\n\n- **PATCH**，Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` / tree `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae`，annotated `v0.6.4`固定Final；发布分支`release/v0.6.4-2026-10-20`，治理提交不改变工件身份。镜像`cps-novel:0.6.4-50e3e06`，linux/amd64；归档253595910字节/SHA256 `a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77`。\n- B-50公开站/drama及/drama/*301到短剧站同路径并保留查询串，属于Owner10-19单独批准、已登记的网址冻结例外；B-51后台不加载GA；B-44剧场筛选、排序/翻页清空勾选、领取自动跳过暂停剧场并提示，三项代码已部署。公开网址其余冻结，nginx/compose/后台路由/任务白名单不变，不装nginx、不用sudo。\n- Owner本会话“批准部署”，仅haiyue-vps；原RELEASE=PASS/EXIT=0，维护10:40:20–10:41:08 JST、48.048026秒。env仅改两版本行、cmp PASS，备份及restore-list/checksum PASS；零新增迁移，29finished/0rolled_back、60表、字典1401/active1331/drift0，名称checksum一致，原流程单事务grants。\n- health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变；六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压、四应用Next16.3.8及无测试依赖、写闸白名单和备份定时器PASS。nginx SHA256 `7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9`保持。\n- B-50指定URL301及两个负向404、已发布小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康接口匿名401/认证200，公开health正确。外部13/15次，全走指定代理且不跟随跳转，密钥和编号不输出。\n- 第一阶段全量11616通过、真实库全量11626通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异及最终镜像端到端PASS。tag/生成CHANGELOG/唯一日志及本地证据已补齐；Notion待本地治理门禁与推送后同步回读。**运营/catalog-sync与Owner GA实时报告待回执，不能登记为业务全部验收或正式收官。** [发布记录](releases/v0.6.4-preproduction.md)。\n\n",
+  "developmentLog": "### 2026-10-20 10:41 - codex（GPT-6，正式发版执行；JST / +0800为09:41）\n\n**变更类型**：海阅 v0.6.4 **PATCH** 正式站部署，仅haiyue-vps；Owner明确“批准部署”，原RELEASE=PASS/EXIT=0，技术验收PASS；Owner/运营交互验收待回执。annotated v0.6.4固定Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`，tree `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae`，治理提交不改变工件身份。\n\n**背景**：B-50来源已确认ChatGPT把短剧路径安到本站域名；10-17至18的ChatGPT来源20次浏览中15次（75%）落在/drama404。Owner10-19原话：“同意推荐：现在选 a，运营在 GA 报表里加过滤；登记触发器，满足条件时把 b2（应用层跳转）并入当轮发版。”本轮符合下一版顺带条件，例外已登记AI_WORKFLOW.md。B-51为后台停止加载GA。B-44来自运营反馈；Owner10-19选定“照 CPS 换页即清空”和“自动跳过并提示”。来源feat/v064-drama-ga-theater经no-ff合并7cc19ece，0f5fe7e0登记冻结例外。\n\n**变更内容**：公开站/drama和/drama/*301到enpulsedrama.com同路径并保留查询串，后台及近似路径不跳；后台子域名不输出GA；/catalog-sync按剧场筛选，排序/翻页清空勾选，领取跳过领取暂停剧场（当前PlotNovel）并提示，运营确认才提交。\n\n**影响范围**：三项均为应用层改动，零新增迁移，29条/60表、字典1401/active1331/drift0；grants、环境变量集合、compose、nginx、后台路由、任务白名单不变。env备份后只改APP_VERSION/NEXT_PUBLIC_BUILD_VERSION、其余cmp PASS；不装nginx、不用sudo，除B-50已批准例外外公开网址冻结。没有额外领码、业务同步、回填或手写写入SQL。\n\n**验证方式**：全量11616通过、真实库全量11626通过、零失败/无Unhandled；37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异、audit和最终镜像归档端到端PASS。第二阶段维护48.048026秒（10:40:20.270148–10:41:08.318174 JST），在线备份及restore-list/checksum通过，29迁移无pending、原流程grants成功；health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变、六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压，Next16.3.8、无vitest/tinypool、写闸/白名单/备份和nginx哈希通过。外部13/15次全部经代理：B-50精确301和两个负向404、小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康匿名401/认证200。第一阶段版本编辑包装器误替换已在推送前纠正，依赖未变，原证据保留。\n\n**后续待办**：运营/catalog-sync确认剧场下拉、排序翻页清空、混选后提示跳过PlotNovel，验收到对话框关闭，不提交领码；Owner GA实时报告确认后台浏览不再新增zbcwf；运营可撤掉每周/drama流量触发器。Notion待本地治理门禁和推送后同步回读，人工未回执前不登记正式收官。回滚目标v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，先恢复本次env备份；兼容标志须Owner另批。完整[发布记录](releases/v0.6.4-preproduction.md)与[第二阶段证据](releases/evidence/v064-release/phase2/)。\n\n",
+  "record": "# v0.6.4 PATCH 发布记录\n\n## 当前状态：已部署正式站，技术验收PASS；Owner/运营验收待回执\n\n第一阶段交付时（历史）：仅本地升版、门禁、GitHub推送、不可变归档及本地镜像端到端核验。未连接远程主机，三项功能尚未上线。第二阶段须Owner明确说“批准部署”，仅限haiyue-vps低流量窗口。本版不安装nginx，不需要sudo。\n\n| 身份 | 固定值 |\n| --- | --- |\n| 集成基线 | `0f5fe7e06297211972aabcb43c5b8502349afe73` / tree `e574127f442c7cacafecee8770d5d3dda9bec428` |\n| Final | `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` |\n| tree | `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae` |\n| 发布分支 | `release/v0.6.4-2026-10-20`；后续治理HEAD不改变工件Final |\n| 镜像 | `cps-novel:0.6.4-50e3e06` / linux/amd64 |\n| 归档 | `/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/preproduction-archive/cps-novel-0.6.4-50e3e06.tar.zst`；253595910字节 |\n| 归档SHA256 | `a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77` |\n| OCI target | `sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004` |\n| OCI platform manifest | `sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004` |\n| OCI config | `sha256:406196968055798bfea6e5804459f242e959cab06c461d900b694cbb97b68f4c` |\n| nginx public@86400 | 18307字节；SHA256 `7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9` |\n\n## 范围与第一阶段实测\n\n- B-50：仅SITE_URL主机的`/drama`和`/drama/*`以301跳到`https://enpulsedrama.com`同路径并保留查询串；后台主机不跳，近似路径与语种前缀不扩展。此为Owner 10-19单独批准、已登记AI_WORKFLOW.md的网址冻结例外。B-51：后台子域名不加载GA。B-44：按剧场筛选，排序/翻页清空勾选，领取自动跳过暂停剧场并提示，确认后才提交。\n- 沿v0.6.3同六文件升版，PATCH；零新增迁移，29迁移/60表/字典1401/active1331/drift0。依赖、Prisma、grants、compose、nginx、后台路由及任务白名单不变，环境变量集合added0/removed0。除B-50批准例外，公开网址、canonical、hreflang、sitemap和robots冻结。\n- npm ci和Prisma generate通过，node_modules为真实目录。tsc零错误、lint零错误/16警告；全量11616通过/884条件跳过/零失败/无Unhandled。p1-05b真实库全量11626通过，无Unhandled；37原运行器全绿，禁止整文件跳过的原断言保留。严格代理探针Next16.3.8、1750 probes、known_findings0。\n- build通过，路由逐项与v0.6.3一致：100个ƒ、2个○。nginx三模式矩阵及27条变异PASS且还原，候选哈希与交接一致。B21、RUNTIME_IMAGE_DEPS、BRAND_IMAGE通过；三套compose渲染及变量集合通过。\n- 生产audit零critical、恰好4项high（@prisma/config、deepmerge-ts、effect、prisma）；全量audit零critical。不执行audit fix。\n- Final推送GitHub并回读一致；原归档构建器、独立SHA256及原消费端--load核验通过。最终瘦身镜像临时库29迁移、单事务grants、effective-tag 0/0/0、IndexNow help退出0、health0.6.4/Final/metadataConsistency passed；Next16.3.8，无vitest/tinypool。\n- 本轮重型任务持指定锁串行，负载阈值18，构建前记录docker system df；不删除既有镜像、卷和缓存，仅原运行器清理自己本轮临时资源。只读参考仓前后HEAD/status一致；交付前释放锁。\n\n升版包装器首次全文替换误改lockfile的iconv-lite同号版本，Python断言失败后外层shell未启用set-e仍本地提交。已从基线恢复lockfile、仅更新两个根版本字段，在推送和构建前amend纠正，重新npm ci/generate通过；依赖变化0。原始及修正结果均保留，后续外层shell显式set-e。详见[包装修复](evidence/v064-release/phase1/wrapper-repair.json)。\n\n原始结论：[phase1-summary.txt](evidence/v064-release/phase1/phase1-summary.txt)；机器交付：[phase1-final-result.json](evidence/v064-release/phase1/phase1-final-result.json)。证据脚本全部为.txt；原日志保留在本地.tmp，提交副本脱敏并核对JSON及SHA256清单。治理提交后须重新tsc/lint零错误才推送；工件始终固定Final。\n\n## 第二阶段执行口径（已获Owner“批准部署”并执行）\n\n1. 仅haiyue-vps低流量窗口，上传归档、校验和、manifest以及Final代码至新的不可变目录；核验归档及OCI引用链后原消费端load。沿v0.6.3应用部署流程，不执行其nginx安装步骤。\n2. PUBLIC_CUTOVER_PAUSE_GATE通过，article.publish.*、article.generate.*、changdu.revenue_sync.v1、promo_link.claim.*无pending/processing；有在途任务则停下询问Owner。线上29迁移名称/checksum匹配，nginx SHA256仍为`7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9`。在线逻辑备份并pg_restore --list核对。\n3. env改前SHA256必须为`2da417dbc7ec25e5e0fc4d62885c3fd4b66a8530a877917198bcccb74b3e66f1`，不符即停。先备份，仅改APP_VERSION=0.6.4与NEXT_PUBLIC_BUILD_VERSION=v0.6.4，脱敏diff及cmp证明其余字节不变。\n4. 从Final目录执行`APPROVED_GIT_COMMIT=<Final> PREPROD_APPROVED_MIGRATION=YES scripts/preproduction/release.sh deploy --manifest <manifest>`。本版无新迁移，只由原流程检查并重放grants；不手写生产SQL。记录维护起止及耗时。\n5. 核对health0.6.4/Final/metadataConsistency passed、五应用healthy、postgres容器ID不变、29finished/0rolled_back、nginx哈希不变。effective-tag 0/0/0、IndexNow熔断关闭/无429/积压0、四应用无vitest/tinypool/Next16.3.8、写闸不变、BACKUP_TIMER=RUNNING；逐服务error及permission denied计数0。\n6. 外部请求经`--proxy http://127.0.0.1:7899`，默认13次、总计不超过15次，不跟随跳转：B-50三项（`https://pulsenovels.com/drama/the-housewifes-comeback-drama-p8mkirtiv?utm_source=chatgpt.com`返回301，Location为`https://enpulsedrama.com/drama/the-housewifes-comeback-drama-p8mkirtiv?utm_source=chatgpt.com`；后台`https://zbcwf.pulsenovels.com/drama/x`返回404；公开`https://pulsenovels.com/dramas`返回404）；已发布小说200；公开首页含GA、后台/login200无WWW且无GA；后台`/api/health`、`/api/health/worker`、`/api/health/backup`匿名401/带preprod-curl.conf200共六次；公开health一项。复用首页及login响应，GA编号只报存在/缺席，不输出。Basic Auth配置只经curl --config使用。\n\n## 第一阶段交付时的Owner/运营验收、回滚及治理安排（历史）\n\n- 运营在/catalog-sync确认剧场下拉（全部/MoboReader/PlotNovel），勾选后改排序或翻页归零；全部剧场混选两家的书，领取对话框提示“已跳过N本（PlotNovel领取暂停）”，且不自动提交。验收到此关闭，不提交领码。\n- Owner在GA实时报告浏览后台确认不再新增zbcwf主机事件；运营可撤掉每周看/drama浏览量触发器，上线后该路径直接301。\n- 回滚目标v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，零迁移、schema相同、不涉及nginx。必须由Owner在回滚时另行明确批准SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES；先恢复本次env备份，再从v0.6.3不可变目录执行原rollback，不自行设置兼容标志。\n- 第一阶段治理完成：PATCH台账、发布记录、脱敏证据；尚待部署验收后：annotated v0.6.4指向Final、原生成器core.abbrev=7的CHANGELOG、唯一发版日志、Notion同步回读。每次治理提交后tsc/lint零错误才推送。\n- 正式日志保留B-50 Owner 10-19原话：“同意推荐：现在选 a，运营在 GA 报表里加过滤；登记触发器，满足条件时把 b2（应用层跳转）并入当轮发版。”原始依据在仓库外《排查_GA出现drama路径_2026-10-19.md》；ChatGPT来源20次浏览中15次（75%）落在/drama404。B-44记录运营反馈及Owner“照CPS换页即清空”“自动跳过并提示”的选择；B-51记录后台停止上报GA。\n- Notion按先本地、再同步、再回读顺序；连接失败时交付完整交接提示词并如实登记，不冒称已同步。正式开发日志只追加本版一条。\n\n\n## 第二阶段实测（2026-10-20 JST）\n\nOwner在本会话明确“批准部署”，仅操作haiyue-vps。三项代码已部署；技术验收PASS，运营页面交互与Owner GA实时报告待人工回执。本轮没有仓库门禁失败或线上异常。\n\n- 部署前只读：current/health为v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`；env及nginx SHA256与交接完全一致，暂停闸与preflight PASS，指定发布/生成/收入同步/推广领取任务均无pending或processing。首次流量3/3后自然降为1/0/0取得窗口；最后复核重新取得低流量窗口，不暂停或取消任务。\n- 上传归档及代码增量bundle，全部运输文件SHA256通过；新不可变目录`/opt/cps-novel/releases/50e3e06a413fe2b8ead4ad05ce8fc75733321e45`的HEAD/tree与Final完全一致。原消费端核验归档、OCI引用链并load，target/config与第一阶段一致；工件目录`/opt/cps-novel/shared/artifacts/verified/v064`。\n- 在线逻辑备份`/var/lib/cps-novel/backups/logical/cps-novel-v064-20261020T013646Z.dump`，777201984字节、SHA256 `1a742a5fd0c5df8b742cbf469badfac10d9fa3cc31ed6634320704dbc953680f`；原backup-logical.sh、pg_restore --list、checksum及部署前复核全部PASS。没有恢复或回填生产数据。\n- env备份`/opt/cps-novel/shared/env/preprod.env.bak-v064-20261020T014005Z`，改前SHA256 `2da417dbc7ec25e5e0fc4d62885c3fd4b66a8530a877917198bcccb74b3e66f1`，改后`431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494`。仅APP_VERSION从0.6.3改0.6.4、NEXT_PUBLIC_BUILD_VERSION从v0.6.3改v0.6.4，脱敏diff及其余字节cmp PASS，写闸和白名单保持。\n- 原`release.sh deploy`得到`RELEASE=PASS / EXIT=0`；维护10:40:20.270148–10:41:08.318174 JST，**48.048026秒**；完成10:41:09.520856 JST（+0800为09:41:09.520856）。无新增迁移，原流程检查29条均已应用并单事务重放grants；没有手写写入SQL。\n- health为0.6.4/Final，metadataConsistency及database passed；五应用healthy，postgres健康且ID仍`691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。29finished/0rolled_back、60表，迁移名称/checksum一致；四应用Next16.3.8、无vitest/tinypool及运行依赖检查PASS。effective-tag missing0/extra0/changed0，IndexNow熔断关闭、无429等待/积压/死信，写闸及白名单不变，BACKUP_TIMER=RUNNING。\n- B-50三项全部PASS：指定ChatGPT来源长URL返回301，Location的路径与查询串原样保留且目标为enpulsedrama.com；后台/drama/x404；公开/dramas404。已发布小说返回200。B-51公开首页GA存在，后台/login200、无WWW-Authenticate，HTML不含googletagmanager或公开GA编号；编号和Turnstile站点密钥未输出。\n- 三个后台健康接口匿名401、经原preprod-curl.conf认证200；公开health为新Final。验收外部请求**13/15**，全部经客户机127.0.0.1:7899代理、不跟随跳转。原机curl通过临时SSH本地回环转发使用该代理，认证配置始终留原机，仅经curl --config使用；转发随SSH退出关闭，没有改nginx、compose或持久网络配置。\n- 六服务web/worker/worker-light/scheduler/backup-timer/postgres自部署开始至2026-10-20T01:47:11.177632+00:00的error及permission denied均0。最终只读复核current、health、env、nginx和postgres身份保持预期，维护关闭。本版不装nginx，不使用sudo，不改变公开网址冻结例外之外的行为。\n\n原始结果见[phase2-summary.txt](evidence/v064-release/phase2/phase2-summary.txt)，机器结果见[phase2-result.json](evidence/v064-release/phase2/phase2-result.json)。第一阶段曾修复的升版包装器问题保留；本轮辅助tag缺席查询改用git tag --list判空，不影响门禁或生产状态。\n\n## 第二阶段治理与剩余人工验收\n\nannotated `v0.6.4`固定Final，CHANGELOG使用原生成器与core.abbrev=7生成；本地PATCH台账、本发布记录、唯一发版级开发日志和脱敏证据已补齐。Notion待本地治理提交门禁及推送后同步当前快照、版本表、正式手账与唯一日志镜像，并回读核验。每次治理提交后都先tsc/lint零错误再推送；治理HEAD不改变工件Final，不重建镜像或重启服务。\n\n剩余验收交Owner与运营：①/catalog-sync剧场下拉、改排序/翻页清空勾选、混选后跳过PlotNovel并提示；验收到对话框后关闭，不提交领码；②Owner查看GA实时报告，后台浏览不再新增zbcwf主机事件；③运营可撤掉每周/drama流量触发器。尚未收到人工回执，不登记为业务验收全部PASS或正式收官。\n\n回滚仅v0.6.3 Final及其不可变目录，先恢复本次env备份；SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES仍须Owner在回滚时另行明确批准，本次没有执行回滚。\n",
+  "phase2": {
+    "status": "deployed_technical_pass_owner_operator_acceptance_pending",
+    "final": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45",
+    "tree": "b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae",
+    "branch": "release/v0.6.4-2026-10-20",
+    "target": "haiyue-vps",
+    "image": "cps-novel:0.6.4-50e3e06",
+    "releaseExit": 0,
+    "maintenanceOn": "2026-10-20T01:40:20.270148+00:00",
+    "maintenanceOff": "2026-10-20T01:41:08.318174+00:00",
+    "maintenanceSeconds": 48.048026,
+    "finishedAt": "2026-10-20T01:41:09.520856+00:00",
+    "backup": {
+      "path": "/var/lib/cps-novel/backups/logical/cps-novel-v064-20261020T013646Z.dump",
+      "sha256": "1a742a5fd0c5df8b742cbf469badfac10d9fa3cc31ed6634320704dbc953680f",
+      "bytes": 777201984,
+      "restoreList": "PASS"
+    },
+    "env": {
+      "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v064-20261020T014005Z",
+      "beforeSha256": "2da417dbc7ec25e5e0fc4d62885c3fd4b66a8530a877917198bcccb74b3e66f1",
+      "afterSha256": "431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494",
+      "otherBytesCmp": "PASS",
+      "allowlists": "UNCHANGED"
+    },
+    "services": [
+      {
+        "service": "web",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "worker-light",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "scheduler",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "backup-timer",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      },
+      {
+        "service": "postgres",
+        "healthy": true,
+        "error": 0,
+        "permissionDenied": 0
+      }
+    ],
+    "runtimeCheckedUntil": "2026-10-20T01:47:11.177632+00:00",
+    "postgresIdUnchanged": true,
+    "migrationCount": 29,
+    "tableCount": 60,
+    "migrationChecksumsUnchanged": true,
+    "nginxSha256": "7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9",
+    "externalHttpRequests": 13,
+    "httpBudget": 15,
+    "B50": "PASS",
+    "B51": "PASS",
+    "effectiveTag": {
+      "missing": 0,
+      "extra": 0,
+      "changed": 0
+    },
+    "indexnow": {
+      "breakerOpen": false,
+      "rateLimitWaiting": false,
+      "dueUrls": 0,
+      "deadLetters": 0
+    },
+    "sudoUsed": false,
+    "nginxInstalled": false,
+    "manualProductionWriteSql": false,
+    "businessAcceptance": {
+      "catalogSyncOperator": "pending",
+      "ownerGaRealtime": "pending",
+      "operatorDramaTriggerRetirement": "pending"
+    },
+    "governance": {
+      "annotatedTag": "local_then_push_after_checks",
+      "changelog": "generated",
+      "versionRegistry": "updated",
+      "developmentLog": "one_release_entry",
+      "notion": "pending_sync"
+    }
+  }
+}

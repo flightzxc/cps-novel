@@ -1,0 +1,11 @@
+{
+  "governanceHead": "994d552f2a360bcbdecf28b856ba1a27c91d4ceb",
+  "remoteRefs": {
+    "refs/heads/release/v0.6.4-2026-10-20": "994d552f2a360bcbdecf28b856ba1a27c91d4ceb",
+    "refs/tags/v0.6.4": "b15731356068560b08bef743218a6d69cc8e546c",
+    "refs/tags/v0.6.4^{}": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45"
+  },
+  "typecheckExit": 0,
+  "lintExit": 0,
+  "worktreeClean": true
+}

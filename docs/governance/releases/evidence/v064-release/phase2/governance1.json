@@ -1,0 +1,18 @@
+[
+  [
+    "gov1-typecheck",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "gov1-lint",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ]
+]

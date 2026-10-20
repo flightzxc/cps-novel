@@ -51,7 +51,7 @@
 
 **验证方式**：全量11616通过、真实库全量11626通过、零失败/无Unhandled；37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异、audit和最终镜像归档端到端PASS。第二阶段维护48.048026秒（10:40:20.270148–10:41:08.318174 JST），在线备份及restore-list/checksum通过，29迁移无pending、原流程grants成功；health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变、六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压，Next16.3.8、无vitest/tinypool、写闸/白名单/备份和nginx哈希通过。外部13/15次全部经代理：B-50精确301和两个负向404、小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康匿名401/认证200。第一阶段版本编辑包装器误替换已在推送前纠正，依赖未变，原证据保留。
 
-**后续待办**：运营/catalog-sync确认剧场下拉、排序翻页清空、混选后提示跳过PlotNovel，验收到对话框关闭，不提交领码；Owner GA实时报告确认后台浏览不再新增zbcwf；运营可撤掉每周/drama流量触发器。Notion待本地治理门禁和推送后同步回读，人工未回执前不登记正式收官。回滚目标v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，先恢复本次env备份；兼容标志须Owner另批。完整[发布记录](releases/v0.6.4-preproduction.md)与[第二阶段证据](releases/evidence/v064-release/phase2/)。
+**后续待办**：运营/catalog-sync确认剧场下拉、排序翻页清空、混选后提示跳过PlotNovel，验收到对话框关闭，不提交领码；Owner GA实时报告确认后台浏览不再新增zbcwf；运营可撤掉每周/drama流量触发器。Notion四处已同步并回读PASS（2026-10-20T01:57:57.349Z），原历史逐字保留、未知块0；人工未回执前不登记正式收官。回滚目标v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，先恢复本次env备份；兼容标志须Owner另批。完整[发布记录](releases/v0.6.4-preproduction.md)与[第二阶段证据](releases/evidence/v064-release/phase2/)。
 
 ### 2026-10-19 12:45 - codex（GPT-6，正式发版执行；JST / +0800为11:45）
 

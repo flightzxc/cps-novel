@@ -26,7 +26,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - Owner本会话“批准部署”，仅haiyue-vps；原RELEASE=PASS/EXIT=0，维护10:40:20–10:41:08 JST、48.048026秒。env仅改两版本行、cmp PASS，备份及restore-list/checksum PASS；零新增迁移，29finished/0rolled_back、60表、字典1401/active1331/drift0，名称checksum一致，原流程单事务grants。
 - health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变；六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压、四应用Next16.3.8及无测试依赖、写闸白名单和备份定时器PASS。nginx SHA256 `7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9`保持。
 - B-50指定URL301及两个负向404、已发布小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康接口匿名401/认证200，公开health正确。外部13/15次，全走指定代理且不跟随跳转，密钥和编号不输出。
-- 第一阶段全量11616通过、真实库全量11626通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异及最终镜像端到端PASS。tag/生成CHANGELOG/唯一日志及本地证据已补齐；Notion待本地治理门禁与推送后同步回读。**运营/catalog-sync与Owner GA实时报告待回执，不能登记为业务全部验收或正式收官。** [发布记录](releases/v0.6.4-preproduction.md)。
+- 第一阶段全量11616通过、真实库全量11626通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异及最终镜像端到端PASS。tag/生成CHANGELOG/唯一日志及本地证据已完成并推送回读；Notion四处同步回读PASS（2026-10-20T01:57:57.349Z），原历史保留、未知块0。**运营/catalog-sync与Owner GA实时报告待回执，不能登记为业务全部验收或正式收官。** [发布记录](releases/v0.6.4-preproduction.md)。
 
 ### v0.6.3 —— 已正式收官，技术及Owner/运营验收PASS（2026-10-19）
 

@@ -91,10 +91,13 @@
     "operatorDramaTriggerRetirement": "pending"
   },
   "governance": {
-    "annotatedTag": "local_then_push_after_checks",
-    "changelog": "generated",
+    "annotatedTag": "pushed_and_read_back_Final",
+    "changelog": "generated_and_pushed",
     "versionRegistry": "updated",
     "developmentLog": "one_release_entry",
-    "notion": "pending_sync"
+    "notion": "PASS",
+    "notionReceipt": "notion-readback.json",
+    "deploymentGovernanceHead": "994d552f2a360bcbdecf28b856ba1a27c91d4ceb",
+    "notionUrl": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204"
   }
 }

@@ -21,3 +21,5 @@ SERVICE=worker-light healthy=yes error=0 permission_denied=0
 SERVICE=scheduler healthy=yes error=0 permission_denied=0
 SERVICE=backup-timer healthy=yes error=0 permission_denied=0
 SERVICE=postgres healthy=yes error=0 permission_denied=0
+GIT_TAG=PASS peeled=50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+NOTION_SYNC=PASS four_sections=yes historical_content_preserved=yes unknown_blocks=0

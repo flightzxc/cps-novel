@@ -1,0 +1,26 @@
+[
+  {
+    "name": "gov1-typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-20T01:55:02.074727+00:00",
+    "exit": 0,
+    "seconds": 4.012,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/phase2/gov1-typecheck.log"
+  },
+  {
+    "name": "gov1-lint",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-20T01:55:06.088691+00:00",
+    "exit": 0,
+    "seconds": 14.024,
+    "log": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.4/.tmp/v064-release/phase2/gov1-lint.log"
+  }
+]
