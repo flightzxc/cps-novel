@@ -1,0 +1,14 @@
+[
+  {
+    "name": "existing-code",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true
+  },
+  {
+    "name": "binding-check",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true
+  }
+]

@@ -36,6 +36,12 @@ printf "ALTER ROLE analyst_ro PASSWORD '%s';\n" "$analyst_password" >>"$secret_d
 printf "ALTER ROLE backup_role PASSWORD '%s';\n" "$backup_password" >>"$secret_dir/role-passwords.sql"
 
 cd "$project_root"
+# The image bundles tsx globally; the host project intentionally has no tsx
+# dependency. Prime the same pinned version in npm's external cache, then the
+# fixture's child invocations run offline. No package/lockfile changes.
+npm --proxy http://127.0.0.1:7899 --https-proxy http://127.0.0.1:7899 exec --yes --package=tsx@4.21.0 -- tsx --version > "$secret_dir/tsx-version"
+grep -Fx 'tsx v4.21.0' "$secret_dir/tsx-version" >/dev/null
+echo 'OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes'
 docker image inspect postgres:16.14 >/dev/null
 docker run -d \
   --name "$container_name" \

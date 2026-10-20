@@ -39,3 +39,9 @@
 保留permission-stop.json作为历史。薄脚本不读novel_source_item.raw_payload，不预检agencyId/seriesId/language；MINE只按MoboReader剧场、精确标题MINE、附录B前缀c838c281三项同时匹配且恰好1行。身份字段由原worker在调用上游前校验，缺失时claim_source_fields_missing。生产seriesId等额外核对从postgres容器psql，以PGOPTIONS默认只读并显式BEGIN READ ONLY单独取证，不进入清单或提交路径。side_effect_intent的所需列在当前grants已授权web_app；真实web_app冒烟验证，禁止扩大权限或换运行角色。
 
 本地首次完整门禁：tsc0、lint0error/16既有warning、真实web_app CLI冒烟14/14通过，skipped0、无Unhandled、42501/permission_denied_stop0；54行书目payload形态断言通过。包含精确MINE定位、无raw_payload读取、外来根领码任务在重放/status时拒绝。两组变异与最终收据随后补齐。
+
+## 第一阶段脚本交付
+
+代码提交 `9e8e2ee7586adec48436ca30596f62f1e245f57e`，脚本SHA256 `64bff7823aca3229421aa01e9b5dd89d7aa30faffc2e28e5a6b157f90bbdfd3e`。原校验函数20行逐字一致；[逐行对照](evidence/promo-reclaim-53-2026-10-20/account-validation-lines.txt)。真实web_app冒烟14/14、无跳过/Unhandled/42501，54行payload形态断言通过。两组变异均行为变红后还原、git diff --quiet，最终完整冒烟再14/14通过。tsc0、lint0error/16既有warning；治理提交后再做提交后检查与GitHub回读。
+
+[原始结论](evidence/promo-reclaim-53-2026-10-20/summary.txt)、[门禁收据](evidence/promo-reclaim-53-2026-10-20/gates.json)、[变异](evidence/promo-reclaim-53-2026-10-20/mutations.json)、[夹具修正](evidence/promo-reclaim-53-2026-10-20/fixture-repair.json)、[权限修正](evidence/promo-reclaim-53-2026-10-20/permission-repair.json)。历史权限停点原样保留；原始失败日志保存在本地.tmp/promo-reclaim-53，不混作当前结果。未连接生产，仍须主控复核。

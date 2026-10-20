@@ -1,0 +1,22 @@
+import json,os,pathlib,subprocess,time
+root=pathlib.Path.cwd();b=root/'.tmp/promo-reclaim-53';p=root/'scripts/ops/promo-reclaim-53.ts';original=p.read_text()
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+mutations=[('existing-code', '    promoLinks: { none: { upstreamCodePresent: true } },\n', '', 'existing code is excluded'),
+ ('binding-check','    if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");','    void binding;', 'uses the button error')]
+rows=[]
+try:
+ for name,needle,replacement,test in mutations:
+  assert original.count(needle)==1
+  while os.getloadavg()[0]>18:time.sleep(15)
+  p.write_text(original.replace(needle,replacement,1))
+  env=dict(os.environ,PROMO_RECLAIM_TEST_FILTER=test)
+  with (b/('mutation-'+name+'.log')).open('x') as out:
+   run=subprocess.run(['/bin/bash','scripts/run-promo-reclaim-postgres-verification.sh'],env=env,stdout=out,stderr=subprocess.STDOUT)
+  log=(b/('mutation-'+name+'.log')).read_text()
+  assert run.returncode!=0 and 'AssertionError' in log and 'failed' in log,(name,'did not fail behavior assertion')
+  p.write_text(original);assert subprocess.run(['git','diff','--quiet']).returncode==0
+  rows.append({'name':name,'redExit':run.returncode,'behaviorAssertionRed':True,'restoredDiffQuiet':True})
+  print('OPS_MUTATION=PASS name='+name+' red=yes restored_diff_quiet=yes',flush=True)
+finally:p.write_text(original)
+(b/'mutations.json').write_text(json.dumps(rows,indent=2))
+print('OPS_MUTATIONS=PASS count=2',flush=True)
