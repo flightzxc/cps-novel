@@ -1,0 +1,18 @@
+-- Separate evidence only, after deployment approval; never fed into submit.
+-- Host invocation (only after locating the approved postgres container):
+-- docker exec -i -e 'PGOPTIONS=-c default_transaction_read_only=on' "$pg" \
+--   psql -X -v ON_ERROR_STOP=1 -U postgres -d cps_novel < this_file
+BEGIN READ ONLY;
+SELECT current_user, current_setting('default_transaction_read_only') AS default_read_only,
+       current_setting('transaction_read_only') AS transaction_read_only, clock_timestamp() AS observed_at;
+-- Exactly MoboReader + exact MINE + appendix-B ID prefix; no full raw payloads,
+-- promo codes, URLs, credentials, or request/response bodies are selected.
+SELECT id, title, channel_app_id, status,
+       raw_payload->>'agencyId' AS agency_id,
+       raw_payload->>'seriesId' AS series_id,
+       raw_payload->>'language' AS language,
+       (raw_payload->>'seriesId' = '131539322') AS mine_series_matches_handoff
+FROM novel_source_item
+WHERE channel_app_id = '85c2fb3e-28f8-476a-83f2-9647e2206192'::uuid
+  AND title = 'MINE' AND id::text LIKE 'c838c281-%';
+COMMIT;

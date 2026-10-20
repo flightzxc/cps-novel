@@ -1,0 +1,37 @@
+[
+  {
+    "name": "typecheck-ready",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-20T08:57:06.621027+00:00",
+    "exit": 0,
+    "seconds": 4.009,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/typecheck-ready.log"
+  },
+  {
+    "name": "lint-ready",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-20T08:57:10.631047+00:00",
+    "exit": 0,
+    "seconds": 14.021,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/lint-ready.log"
+  },
+  {
+    "name": "smoke-ready",
+    "command": [
+      "/bin/bash",
+      "scripts/run-promo-reclaim-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-20T08:57:24.653165+00:00",
+    "exit": 0,
+    "seconds": 38.07,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/smoke-ready.log"
+  }
+]
