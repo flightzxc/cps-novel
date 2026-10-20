@@ -22,6 +22,8 @@ const prefixes = source.match(/PREFIXES = `([^`]+)`/)![1].split(/\s+/).sort();
 const app = "85c2fb3e-28f8-476a-83f2-9647e2206192";
 const plotApp = "00de5521-d075-4472-87eb-cc5d1732f4d0";
 const actor = "71f0e655-0640-4f07-bcbb-041f027fa7cb";
+const mineTarget = "c838c281-c9ba-482a-aa80-05792e8fdc4a";
+const mineIndonesian = "63172440-a1bb-4df2-a920-75f1a7b40a44";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 let dir: string, account: string, channel: string, otherChannel: string, ids: string[], m: { ids: string[]; allIds: string[]; accountId: string };
 const env = () => ({ ...process.env, DATABASE_URL: process.env.PROMO_RECLAIM_WEB_DATABASE_URL,
@@ -58,16 +60,18 @@ async function seed() {
   ids = [];
   for (let n = 0; n < prefixes.length; n++) {
     const prefix = prefixes[n];
-    const id = prefix + seeded[n].slice(8); ids.push(id);
+    const id = prefix === "c838c281" ? mineTarget : prefix + seeded[n].slice(8); ids.push(id);
     await owner.novelSourceItem.update({ where: { id: seeded[n] }, data: {
-      id, title: prefix === "c838c281" ? "MINE" : prefix,
-      ...(prefix === "c838c281" ? { rawPayload: { agencyId: 3366, seriesId: "131539322", language: 3 } } : {}),
+      id, title: prefix === "c838c281" ? "MINE " : prefix,
+      ...(prefix === "c838c281" ? { externalBookId: "1274862844", sourceLocale: "en", rawPayload: { agencyId: 3366, seriesId: "131539322", language: 3 } } : {}),
     } });
   }
+  const [indonesianId] = await seedBooks(owner, app, 1, "ops-mine-indonesian");
+  await owner.novelSourceItem.update({ where: { id: indonesianId }, data: { id: mineIndonesian, title: "MINE", sourceLocale: "id", sourceLanguageCode: "11", externalBookId: "5531080", rawPayload: { agencyId: 3366, seriesId: "2946414", language: 11 } } });
   const [foreignId] = await seedBooks(owner, plotApp, 1, "ops-contract");
   const foreign = await owner.novelSourceItem.update({ where: { id: foreignId }, data: { title: "Contract" } });
-  const shapes = await owner.novelSourceItem.findMany({ where: { id: { in: [...ids, foreign.id] } }, select: { description: true, rawPayload: true } });
-  expect(shapes).toHaveLength(54);
+  const shapes = await owner.novelSourceItem.findMany({ where: { id: { in: [...ids, foreign.id, mineIndonesian] } }, select: { description: true, rawPayload: true } });
+  expect(shapes).toHaveLength(55);
   expect(shapes.every(row => {
     const raw = row.rawPayload as Record<string, unknown>;
     return row.description.length > 0 && typeof raw.agencyId === "number" && typeof raw.seriesId === "string" && raw.seriesId.length > 0 && typeof raw.language === "number";
@@ -121,17 +125,36 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
     const result = processResult([`--tsconfig=${path.join(root, "tsconfig.json")}`, "-e", alternate]);
     expect(result.exit).toBe(64); expect(result.data.code).toBe("web_app_readonly_required");
   });
-  it("locates MINE only by theater, exact title and appendix prefix; raw payload is Web-inaccessible", async () => {
-    const mineId = ids.find(id => id.startsWith("c838c281-"))!;
+  it("locates trimmed English MINE among two theater namesakes; raw payload is Web-inaccessible", async () => {
+    const namesakes = await owner.novelSourceItem.findMany({ where: { channelAppId: app, title: { contains: "MINE" } }, select: { id: true, title: true, sourceLocale: true }, orderBy: { id: "asc" } });
+    expect(namesakes).toEqual([{ id: mineIndonesian, title: "MINE", sourceLocale: "id" }, { id: mineTarget, title: "MINE ", sourceLocale: "en" }]);
+    const captured = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
+    expect(captured.exit).toBe(0); expect(captured.data.canaryIds).toContain(mineTarget);
+    expect(captured.data.allIds).not.toContain(mineIndonesian);
     const privilege = inline("const rows=await db.$queryRawUnsafe(\"SELECT has_column_privilege(current_user,'novel_source_item','raw_payload','SELECT') AS allowed\");return {allowed:rows[0].allowed};");
     expect(privilege.exit).toBe(0); expect(privilege.data.allowed).toBe(false);
     expect(source).not.toMatch(/raw_payload|rawPayload/);
-    await owner.novelSourceItem.update({ where: { id: mineId }, data: { title: "MINE " } });
-    const mismatch = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
-    expect(mismatch.exit).toBe(64); expect(mismatch.data.code).toBe("mine_identity_mismatch");
-    await owner.novelSourceItem.update({ where: { id: mineId }, data: { title: "MINE", rawPayload: {} } });
+    await owner.novelSourceItem.update({ where: { id: mineTarget }, data: { rawPayload: {} } });
     const withoutIdentity = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
     expect(withoutIdentity.exit).toBe(0); // Identity validation belongs to the worker.
+  });
+  it.each(["locale", "prefix"])("stops when MINE's required %s identity is absent", async kind => {
+    await owner.novelSourceItem.update({ where: { id: mineTarget }, data: kind === "locale" ? { sourceLocale: "id" } : { id: randomUUID() } });
+    const mismatch = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
+    expect(mismatch.exit).toBe(64); expect(mismatch.data.code).toBe("mine_identity_mismatch");
+  });
+  it("keeps MINE unique with cross-locale and cross-prefix lookalikes", async () => {
+    const decoys = await seedBooks(owner, app, 2, "ops-mine-guard-decoy");
+    await owner.novelSourceItem.update({ where: { id: decoys[0] }, data: { id: "c838c281" + decoys[0].slice(8), title: "MINE", sourceLocale: "id" } });
+    await owner.novelSourceItem.update({ where: { id: decoys[1] }, data: { title: "MINE", sourceLocale: "en" } });
+    const captured = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
+    expect(captured.exit, JSON.stringify(captured.data)).toBe(0); expect(captured.data.canaryIds).toContain(mineTarget);
+  });
+  it("stops when two rows satisfy every MINE condition", async () => {
+    const [decoy] = await seedBooks(owner, app, 1, "ops-mine-duplicate");
+    await owner.novelSourceItem.update({ where: { id: decoy }, data: { id: "c838c281" + decoy.slice(8), title: " MINE ", sourceLocale: "en" } });
+    const mismatch = inline(`return ops.captureBaseline(db,${JSON.stringify(actor)});`);
+    expect(mismatch.exit).toBe(64); expect(mismatch.data.code).toBe("mine_identity_mismatch");
   });
   it("existing code is excluded and causes the exact 48 plan to fail closed", async () => {
     await addCode(m.ids[0]);

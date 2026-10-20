@@ -160,10 +160,11 @@ export async function captureBaseline(db: PrismaClient, actorId: string, now = n
   return readOnly(db, async tx => {
     await context(tx, actorId);
     const allIds = await candidateIds(tx);
-    // Owner 2026-10-20: locate by three Web-readable fields only. The worker
+    // Owner 2026-10-20 correction: trim title + English locale + appendix prefix,
+    // within MoboReader, using only Web-readable columns. The worker
     // validates agencyId/seriesId/language before making any upstream call.
-    const mine = await tx.novelSourceItem.findMany({ where: { channelAppId: APP, title: "MINE" }, select: { id: true } });
-    const matchedMine = mine.filter(row => row.id.startsWith("c838c281-"));
+    const mine = await tx.novelSourceItem.findMany({ where: { channelAppId: APP, title: { contains: "MINE" } }, select: { id: true, title: true, sourceLocale: true } });
+    const matchedMine = mine.filter(row => row.title.trim() === "MINE" && row.sourceLocale === "en" && row.id.startsWith("c838c281-"));
     check(matchedMine.length === 1 && allIds.includes(matchedMine[0].id), "mine_identity_mismatch");
     const canaryIds = allIds.filter(x => CANARY_PREFIXES.includes(x.slice(0, 8)));
     const manual = await manualSnapshot(tx);
