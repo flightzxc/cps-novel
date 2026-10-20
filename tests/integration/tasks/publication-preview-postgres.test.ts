@@ -36,7 +36,7 @@ async function account(channelId: string) {
 async function seed(ordinal = 0, accountId = foundation.account, published = false) {
   const suffix = randomUUID().replaceAll("-", "");
   const novel = await owner.novel.create({ data: { businessId: suffix, title: `Novel ${ordinal}`, description: "Fixture", locale: "en", slug: suffix, status: published ? "published" : "ready" } });
-  const source = await owner.novelSourceItem.create({ data: { novelId: novel.id, channelAppId: foundation.app, externalBookId: suffix, externalAgencyId: "agency", sourceLanguageCode: "2", title: novel.title, description: "Fixture", status: "linked",
+  const source = await owner.novelSourceItem.create({ data: { novelId: novel.id, channelAppId: foundation.app, externalBookId: suffix, externalAgencyId: "3366", sourceLanguageCode: "2", title: novel.title, description: "Fixture", status: "linked",
     rawPayload: { agencyId: 3366, seriesId: suffix, language: "2", projectType: 1, allEpis: 3, payEpisFrom: 2 } } });
   const promo = await owner.promoLink.create({ data: { novelId: novel.id, novelSourceItemId: source.id, channelAppId: foundation.app, channelAccountId: accountId, offerType: "read", publicRedirectCode: suffix, idempotencyKey: suffix.padEnd(64, "0"), webUrl: "https://local.example/read", status: "fetched" } });
   const article = await owner.article.create({ data: { novelId: novel.id, promoLinkId: promo.id, locale: "en", slug: suffix, publicPageShortId: suffix.slice(0, 12), title: novel.title, body: "Fixture body", status: published ? "published" : "draft", publishedAt: published ? new Date() : null } });
