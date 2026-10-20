@@ -19,6 +19,13 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.6.5 —— PATCH 发布准备，已合入但尚未部署（2026-10-20）
+
+- 基线 `58cdb94da40e3103ddc4ebba7c267ce0c23b905e` / tree `0948319541fc29610e109b0a1a3a5473a359f172`，发布分支 `release/v0.6.5-2026-10-20`。版本类型 **PATCH**。
+- 领码前确认、领码后核对、异常恢复改用 `getvideoinfo` 按编号精确回读，修复短书名候选超过100条无法领码；getcode 请求、错误分类、意图状态机及绝不重复调用约束不变。
+- 零新增迁移：29 条迁移、60 表、字典1401/active1331；grants、环境变量集合、compose、nginx、后台路由及任务白名单不变。公开网址冻结，不需要sudo。
+- 第一阶段仅本地门禁、GitHub推送与不可变归档；Owner“批准部署”后才连接haiyue-vps。金丝雀由运营提交，余48本另待Owner“批准重领”及主控复核ops脚本。逐本getcode仅报告意图上限，日志只报告窗口总调用数。
+
 ### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）
 
 - **PATCH**，Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` / tree `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae`，annotated `v0.6.4`固定Final；发布分支`release/v0.6.4-2026-10-20`，治理提交不改变工件身份。镜像`cps-novel:0.6.4-50e3e06`，linux/amd64；归档253595910字节/SHA256 `a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77`。
@@ -547,6 +554,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | release/v0.6.5-2026-10-20 | 已合入但尚未部署；第一阶段准备 |
 | `v0.6.4` | 2026-10-20 09:41:09 | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
