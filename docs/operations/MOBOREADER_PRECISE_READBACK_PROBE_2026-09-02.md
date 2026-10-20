@@ -348,3 +348,75 @@ CPS（`changdu-getvideoinfo.ts`，参照基线 `3a76877`）对短剧（`projectT
 候选集合"书 × 语种版本"展开这一 `projectType=2`（单语种短剧）不会遇到的形状。这是上游
 API 本身对两个 `projectType` 的能力差异，不是本仓选择绕开 CPS 既有机制；已在
 `docs/governance/port-registry.md` 登记 N-14，判 `JUSTIFIED_DEVIATION`。
+
+## 14. 2026-10-20 修订（Owner 批准）：改用 getvideoinfo 精确回读
+
+### 14.1 为什么改
+
+领推广码前后，系统要先在上游确认目标书、看有没有码。旧做法是按书名调 `getlistpc` 搜索，只读第 1 页
+（100 行）。书名短或常见（例如 "MINE"、"Love"）时，上游模糊匹配会返回几百到几千行，第 1 页装不下，
+被判为 `candidate_set_incomplete`，这些书就一直领不到码（生产上约 53 本）。书名只是"可变的定位线索"，
+却成了领码能否继续的关键路径，这个设计本身就有问题。
+
+CPS 短剧（同一个畅读上游）的做法是调 `POST /api/v1/res/getvideoinfo`，按编号精确查一本，不依赖书名，
+也没有候选集合。§13.3 当时判断小说线（`projectType=1`）用不了这条路径，依据是 09-02 的 P-1 探针
+（六个 promo 键全部 `KEY_ABSENT`）。今天的复测推翻了这个前提。
+
+### 14.2 复测证据
+
+2026-10-20，Owner 批准了一次生产只读复测：共 3 次只读请求，**0 次 getcode**（没有任何写操作）。
+原始记录在仓库外：`产品原型及文档/cps海阅/证据_getvideoinfo小说复测_2026-10-20/`（这里只引用路径，不复制内容）。
+
+- 对 MoboReader 一本已有码的小说书，`getvideoinfo` 返回 `data` 对象；`agencyId / seriesId /
+  language / projectType` 四项身份回显与请求逐项一致；返回的码和网址与本地已领到的记录一致。
+- MINE（过去因书名过短而卡住的书）：上游其实已经有码，可以直接读到。
+- PlotNovel 口令码剧场的书：有 `kocCode`，但 `publicUrl / homeLink / onlineUrl` 都是空。
+  口令码剧场本来就不发网址，所以"没有网址"不是异常。
+- 09-02 的 P-1 现象（成功响应但没有 `data` record）这次没有复现。推测与当时借用目录适配器的
+  请求构造有关，**原因未确定**。因此请求形状被锁死为今天复测通过的形状（见 14.3），不允许
+  随意增删字段或请求头。
+
+### 14.3 新合同
+
+请求：`POST /api/v1/res/getvideoinfo`，请求头只带 `authorization: Bearer <token>` 与
+`content-type: application/json`（不带 `areainterface` / `browserlang`），请求体键恰好 4 个：
+`{ agencyId: number, seriesId: string, projectType: number, language: number }`。
+`agencyId`、`language` 取自书目行 `rawPayload`，转成安全整数；`seriesId` 转成字符串；`projectType`
+取渠道应用（`channel_app.project_type`）。任何一项无法转换，在发出任何请求之前以
+`claim_source_fields_missing` 失败。`getcode` 的请求体、请求头、错误分类完全不变。
+
+判定规则：
+
+1. 外层不是 `status === true && code === 200`，或 `data` 不是普通对象：抛
+   `malformed_payload`（非歧义、不可重试），与以前回读解析失败的分类一致。
+2. `data` 里的四项身份必须全部存在且非空，并与请求逐项相等（按字符串比较）：
+   任一项缺失 → `ambiguous / identity_field_missing`；任一项不一致 → `ambiguous / identity_mismatch`。
+3. 口令码 `kocCode` 去空白后非空 → `found`（`webUrl = publicUrl ?? homeLink`，`appUrl = homeLink`）。
+   **不要求有网址**——这是与 CPS 的一处刻意差异（CPS 要求必须有 `publicUrl`），否则 PlotNovel
+   这类只有码的书会永远读不到。
+4. `kocCode` 为空或缺失 → `missing`（码还没生成）。
+
+领码前确认（pre-read）、领码后核对（post-claim confirmation）、异常恢复（readback-only recovery）三处
+共用这一套读法。有限重试策略（可重试读错误；领码后 `missing` 或码不一致时重试）保持不变；
+`getcode` 仍然绝不重复调用，领码后码必须与 `getcode` 返回一致，不一致仍进人工复核。
+
+限速：`getvideoinfo` 作为"未跟踪（untracked）端点"走现有限速门——按端点限速关闭时用共享间隔
+`MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS`；开启时用 `defaultIntervalMs` 加主机间隔。没有新增环境变量。
+
+### 14.4 删除了什么（不留兼容层，也不保留 getlistpc 回退）
+
+- 请求里的 `name`、`MOBOREADER_PROMO_MAX_CANDIDATES`、`MOBOREADER_PROMO_READBACK_COORDINATE`。
+- 候选集完整性判定与 `candidate_set_incomplete`、`identity_not_unique`；`target_not_located`、
+  `target_missing` 两个结果状态；回读结果里的 `totalCount / returnedCount`。
+- handler 里"标题为 0 行 → 重读 DB 标题 → 再试一次 → `locator_stale`"的流程，以及 claim 前
+  "标题为空就失败"（`claim_readback_title_unavailable`）的检查。
+- 失败证据里的 `readbackTotalCount / readbackReturnedCount`。历史失败行里旧错误码
+  （`claim_readback_title_unavailable / locator_stale / target_not_located / target_missing`）仍保留
+  后台中文展示文案，仅供显示历史数据，新代码不再产生。
+
+### 14.5 与旧节的关系
+
+§11 第 1、2 条（标题作为定位线索、`getlistpc` 取第 1 页 100 行并做完整性判断）与 §12（标题改名恢复路径）
+由本节取代。§11 第 3–6 条的"四维唯一身份"精神保留，改写为"回显四维必须全部一致"：
+四项缺一不可、逐项相等，缺失或不一致都 fail closed 为 `ambiguous`，绝不放宽。
+§13 的"候选集合完整性"修订随 `getlistpc` 回读一并失去适用对象。旧各节正文一字不改，保留为历史记录。
