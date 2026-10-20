@@ -109,6 +109,9 @@ function makePayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The shape real catalog rows carry: numeric agencyId/language, string seriesId. */
+const NUMERIC_RAW = { agencyId: 3366, seriesId: "series-1", language: 3 } as const;
+
 function seedFoundation(db: FakePromoLinkClaimHandlerDb, options: { rawPayload?: unknown; capabilityStatus?: string; capabilitySideEffecting?: boolean } = {}) {
   db.seedChannelApp({ id: "app-1", status: "active", channelStatus: "active", channelId: "channel-1", projectType: 1 });
   db.seedChannelAccount({ id: "account-1", channelId: "channel-1", status: "active", deletedAt: null });
@@ -679,7 +682,7 @@ describe("P0-S5 promo-link claim handler — capability disabled gate", () => {
 describe("P0-S5 promo-link claim handler — frozen novel claim contract", () => {
   it("path 1: adapter success confirms the intent and writes PromoLink.status=fetched, origin=claimed", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -701,11 +704,10 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
     expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(2);
     expect(adapter.readPromoAfterClaim).toHaveBeenNthCalledWith(1, {
-      agencyId: "agency-1",
+      agencyId: 3366,
       seriesId: "series-1",
-      language: "en",
+      language: 3,
       projectType: 1,
-      name: "Exact Target Title",
       offerType: "read",
     }, expect.any(String), expect.any(AbortSignal));
     expect([...db.intents.values()][0]).toMatchObject({ status: "prepared" });
@@ -720,7 +722,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("fault injection: retries transient pre-read failures within the read-only budget, then calls getcode once", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -762,7 +764,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("fault injection: aborts a read-only retry wait on lease loss and never reaches getcode", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -791,20 +793,15 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     expect(db.intents.size).toBe(0);
   });
 
-  it("fails closed before getcode when the authoritative identity is not unique", async () => {
+  it("fails closed before getcode when the pre-read identity echo does not match (claim_readback_ambiguous)", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
     const adapter: PromoLinkClaimAdapter = {
       claimPromo: vi.fn(),
-      readPromoAfterClaim: vi.fn().mockResolvedValue({
-        status: "ambiguous",
-        reason: "identity_not_unique",
-        totalCount: 7,
-        returnedCount: 7,
-      }),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "ambiguous", reason: "identity_mismatch" }),
     };
     const sleep = vi.fn(async () => undefined);
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), {
@@ -823,18 +820,132 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
       status: "failed",
       error: {
         code: "claim_readback_ambiguous",
-        message: expect.stringContaining("totalCount=7"),
+        message: expect.stringContaining("identity_mismatch"),
       },
     });
+    expect((outcome as { error: { message: string } }).error.message).not.toMatch(/totalCount|returnedCount/);
     expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
     expect(adapter.claimPromo).not.toHaveBeenCalled();
     expect(db.intents.size).toBe(0);
   });
 
-  it("records incomplete post-mutation candidate counts before routing to manual review", async () => {
+  it("fails closed before getcode when the pre-read identity echo is missing a field", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "ambiguous", reason: "identity_field_missing" }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "claim_readback_ambiguous", message: expect.stringContaining("identity_field_missing") },
+    });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.size).toBe(0);
+  });
+
+  it("pre-read found short-circuits to already_available: no intent, no getcode", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: NUMERIC_RAW,
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const existing: ClaimPromoResult = { upstreamCode: "ALREADY-THERE", webUrl: null, appUrl: null };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "found", promo: existing }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "already_available" } });
+    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(1);
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.size).toBe(0);
+    await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    expect(db.promoLinkByIdempotencyKey(idempotencyKey)).toMatchObject({
+      status: "fetched",
+      origin: "upstream_existing",
+      upstreamCode: "ALREADY-THERE",
+      webUrl: null,
+    });
+  });
+
+  it.each([
+    ["a non-numeric agencyId", { agencyId: "agency-1", seriesId: "series-1", language: 3 }],
+    ["a fractional agencyId", { agencyId: 33.5, seriesId: "series-1", language: 3 }],
+    ["a non-numeric language", { agencyId: 3366, seriesId: "series-1", language: "en" }],
+    ["a blank language", { agencyId: 3366, seriesId: "series-1", language: "  " }],
+    ["a missing seriesId", { agencyId: 3366, language: 3 }],
+  ] as const)("fails claim_source_fields_missing with zero upstream requests when rawPayload has %s", async (_label, rawPayload) => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload, capabilityStatus: "enabled" });
+    seedActiveCredential(db);
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn(),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "claim_source_fields_missing" } });
+    expect(adapter.readPromoAfterClaim).not.toHaveBeenCalled();
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.size).toBe(0);
+  });
+
+  it("claims normally when the catalog title is empty — readback no longer depends on the title", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: NUMERIC_RAW,
+      capabilityStatus: "enabled",
+    });
+    db.sourceItems.get("source-1")!.title = "";
+    seedActiveCredential(db);
+    const claimResult: ClaimPromoResult = { upstreamCode: "NO-TITLE-CODE", webUrl: null, appUrl: null };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn().mockResolvedValue(claimResult),
+      readPromoAfterClaim: vi.fn()
+        .mockResolvedValueOnce({ status: "missing" })
+        .mockResolvedValueOnce({ status: "found", promo: claimResult }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "claimed" } });
+    expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
+    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(2);
+  });
+
+  it("records the ambiguous reason (no counts) before routing a post-claim identity mismatch to manual review", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -847,12 +958,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
       claimPromo: vi.fn().mockResolvedValue(claimResult),
       readPromoAfterClaim: vi.fn()
         .mockResolvedValueOnce({ status: "missing" })
-        .mockResolvedValueOnce({
-          status: "ambiguous",
-          reason: "candidate_set_incomplete",
-          totalCount: 109,
-          returnedCount: 100,
-        }),
+        .mockResolvedValueOnce({ status: "ambiguous", reason: "identity_mismatch" }),
     };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
     const outcome = await handler({
@@ -865,21 +971,57 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
     expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
     expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(2);
-    expect([...db.intents.values()][0]).toMatchObject({
+    const intent = [...db.intents.values()][0];
+    expect(intent).toMatchObject({
       status: "manual_review_required",
       responseShape: {
         failureCategory: "readback_unconfirmed",
+        readbackConfirmed: false,
         readbackStatus: "ambiguous",
-        readbackReason: "candidate_set_incomplete",
-        readbackTotalCount: 109,
-        readbackReturnedCount: 100,
+        readbackReason: "identity_mismatch",
       },
+    });
+    expect(intent.responseShape).not.toHaveProperty("readbackTotalCount");
+    expect(intent.responseShape).not.toHaveProperty("readbackReturnedCount");
+  });
+
+  it("routes a post-claim readback whose code differs from getcode's to manual review and never calls getcode twice", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: NUMERIC_RAW,
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const claimResult: ClaimPromoResult = { upstreamCode: "CLAIMED-CODE", webUrl: null, appUrl: null };
+    const otherPromo: ClaimPromoResult = { upstreamCode: "SOMEONE-ELSES-CODE", webUrl: null, appUrl: null };
+    const readPromoAfterClaim = vi.fn()
+      .mockResolvedValueOnce({ status: "missing" })
+      .mockResolvedValue({ status: "found", promo: otherPromo });
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn().mockResolvedValue(claimResult),
+      readPromoAfterClaim,
+    };
+    const sleep = vi.fn(async () => undefined);
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: RETRY_ENV, adapter, sleep });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
+    expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
+    // 1 pre-read + 3 bounded post-claim reads (RETRY_ENV attempts = 3).
+    expect(readPromoAfterClaim).toHaveBeenCalledTimes(4);
+    expect([...db.intents.values()][0]).toMatchObject({
+      status: "manual_review_required",
+      responseShape: { failureCategory: "readback_unconfirmed", readbackStatus: "promo_code_mismatch" },
     });
   });
 
   it("fault injection: enters manual terminal only after post-claim promo visibility exhausts its read-only budget", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -921,7 +1063,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("fault injection: retries a stale post-claim code and confirms only the claimed code", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -958,114 +1100,9 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes the mutable title once when it drifts between getcode and post-claim readback", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
-      capabilityStatus: "enabled",
-    });
-    seedActiveCredential(db);
-    const claimResult: ClaimPromoResult = {
-      upstreamCode: "REALCODE-AFTER-RENAME",
-      webUrl: "https://eng.moboreader.com/promo/renamed",
-      appUrl: null,
-    };
-    const readPromoAfterClaim = vi.fn()
-      .mockResolvedValueOnce({ status: "missing" })
-      .mockResolvedValueOnce({ status: "target_not_located", reason: "title_no_match", totalCount: 0 })
-      .mockRejectedValueOnce(new PromoLinkClaimAdapterError("upstream_http_error", true, false, 503))
-      .mockResolvedValueOnce({ status: "found", promo: claimResult });
-    const adapter: PromoLinkClaimAdapter = {
-      claimPromo: vi.fn().mockImplementation(async () => {
-        db.sourceItems.get("source-1")!.title = "Renamed Target Title";
-        return claimResult;
-      }),
-      readPromoAfterClaim,
-    };
-    const sleep = vi.fn(async () => undefined);
-    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: RETRY_ENV, adapter, sleep });
-    const outcome = await handler({
-      lease: { ...baseLease(), payload: makePayload() },
-      mode: "apply",
-      signal: new AbortController().signal,
-      heartbeat: async () => true,
-    });
-
-    expect(outcome).toMatchObject({ status: "success", result: { decision: "claimed" } });
-    expect(readPromoAfterClaim).toHaveBeenCalledTimes(4);
-    expect(readPromoAfterClaim).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: "Exact Target Title" }), expect.any(String), expect.any(AbortSignal));
-    expect(readPromoAfterClaim).toHaveBeenNthCalledWith(2, expect.objectContaining({ name: "Exact Target Title" }), expect.any(String), expect.any(AbortSignal));
-    expect(readPromoAfterClaim).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: "Renamed Target Title" }), expect.any(String), expect.any(AbortSignal));
-    expect(readPromoAfterClaim).toHaveBeenNthCalledWith(4, expect.objectContaining({ name: "Renamed Target Title" }), expect.any(String), expect.any(AbortSignal));
-    expect(sleep).toHaveBeenCalledTimes(1);
-    expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not confuse two zero-row locator reads with a located row whose promo is missing", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
-      capabilityStatus: "enabled",
-    });
-    seedActiveCredential(db);
-    const adapter: PromoLinkClaimAdapter = {
-      claimPromo: vi.fn(),
-      readPromoAfterClaim: vi.fn().mockResolvedValue({
-        status: "target_not_located",
-        reason: "title_no_match",
-        totalCount: 0,
-      }),
-    };
-    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
-    const outcome = await handler({
-      lease: { ...baseLease(), payload: makePayload() },
-      mode: "apply",
-      signal: new AbortController().signal,
-      heartbeat: async () => true,
-    });
-
-    expect(outcome).toMatchObject({
-      status: "failed",
-      error: { code: "claim_readback_locator_stale" },
-    });
-    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(2);
-    expect(adapter.claimPromo).not.toHaveBeenCalled();
-    expect(db.intents.size).toBe(0);
-  });
-
-  it("does not confuse zero authoritative matches with promo absence", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
-      capabilityStatus: "enabled",
-    });
-    seedActiveCredential(db);
-    const adapter: PromoLinkClaimAdapter = {
-      claimPromo: vi.fn(),
-      readPromoAfterClaim: vi.fn().mockResolvedValue({
-        status: "target_missing",
-        reason: "identity_no_match",
-        totalCount: 4,
-        returnedCount: 4,
-      }),
-    };
-    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
-    const outcome = await handler({
-      lease: { ...baseLease(), payload: makePayload() },
-      mode: "apply",
-      signal: new AbortController().signal,
-      heartbeat: async () => true,
-    });
-
-    expect(outcome).toMatchObject({
-      status: "failed",
-      error: { code: "claim_readback_target_missing", message: expect.stringContaining("totalCount=4") },
-    });
-    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(1);
-    expect(adapter.claimPromo).not.toHaveBeenCalled();
-    expect(db.intents.size).toBe(0);
-  });
-
   it("path 2: a classified, non-ambiguous upstream failure fails the item and confirms the intent as failed", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1091,7 +1128,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("path 3: an ambiguous outcome (ex: timeout) is never retried automatically and routes to manual review", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1122,7 +1159,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("path 3b (Phase 1 observability): a malformed getcode envelope carries its non-sensitive envelopeStatus/envelopeCode into the manual-review intent trail, never the response message", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1168,7 +1205,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("fault injection: retries only readback after an ambiguous getcode timeout and atomically recovers", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1215,7 +1252,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("a prior unconfirmed intent exhausts read-only recovery before manual review and never repeats getcode", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1257,7 +1294,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("keeps an already manual intent outside automatic readback and adjudication", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1297,7 +1334,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("recovers a prepared intent by readback only and confirms it atomically with PromoLink", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1352,7 +1389,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("recovers a claim_retry_blocked intent (crash window before manual review) by readback only and confirms it atomically with PromoLink", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1417,7 +1454,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("routes a claim_retry_blocked intent whose readback cannot locate the promo to manual review without another getcode", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1458,7 +1495,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("rolls back the PromoLink write when intent confirmation cannot commit", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);
@@ -1488,7 +1525,7 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
 
   it("loses ownership before mutation, leaves prepared intent, and retries by readback only", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      rawPayload: NUMERIC_RAW,
       capabilityStatus: "enabled",
     });
     seedActiveCredential(db);

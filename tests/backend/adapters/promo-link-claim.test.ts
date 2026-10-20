@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   MOBOREADER_PROMO_ENDPOINTS,
-  MOBOREADER_PROMO_MAX_CANDIDATES,
   PromoLinkClaimAdapterError,
   createPromoLinkClaimAdapter,
   type ClaimPromoRequest,
@@ -13,7 +12,6 @@ const request: ClaimPromoRequest = {
   seriesId: "124235322",
   projectType: 1,
   language: 3,
-  name: "The Exact Target Title",
   offerType: "read",
 };
 
@@ -22,6 +20,26 @@ function jsonResponse(value: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** A well-formed getvideoinfo success envelope echoing the `request` identity. */
+function readbackEnvelope(dataOverrides: Record<string, unknown> = {}) {
+  return {
+    status: true,
+    code: 200,
+    message: "操作成功",
+    data: {
+      agencyId: 3366,
+      seriesId: "124235322",
+      language: 3,
+      projectType: 1,
+      kocCode: "239FFB",
+      publicUrl: "https://eng.moboreader.com/1M4mpB/239FFB",
+      homeLink: "https://eng.moboreader.com/book/239FFB",
+      onlineUrl: "",
+      ...dataOverrides,
+    },
+  };
 }
 
 describe("MoboReader promo claim adapter — frozen Book A contract", () => {
@@ -54,251 +72,227 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
       language: 3,
     });
     expect(String(init.body)).not.toContain("offerType");
+    // Regression: getcode's frozen header set is unchanged by the
+    // getvideoinfo readback migration.
+    expect(init.headers).toEqual({
+      authorization: "Bearer jwt-token",
+      "content-type": "application/json",
+      areainterface: "cn",
+      browserlang: "cn",
+    });
   });
 
-  it("uses title only to locate and selects one four-dimensional match from a complete multi-row candidate set", async () => {
+  it("sends exactly the 4-key getvideoinfo body with only the two allowed headers", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope())) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toMatchObject({ status: "found" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(MOBOREADER_PROMO_ENDPOINTS.readback).toBe("/api/v1/res/getvideoinfo");
+    expect(url).toBe("https://kocserver-cn.cdreader.com/api/v1/res/getvideoinfo");
+    expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("error");
+    expect(Object.keys(init.headers).sort()).toEqual(["authorization", "content-type"]);
+    expect(init.headers).toEqual({ authorization: "Bearer jwt-token", "content-type": "application/json" });
+    const body = JSON.parse(String(init.body));
+    expect(Object.keys(body).sort()).toEqual(["agencyId", "language", "projectType", "seriesId"]);
+    expect(body).toEqual({ agencyId: 3366, seriesId: "124235322", projectType: 1, language: 3 });
+    expect(typeof body.agencyId).toBe("number");
+    expect(typeof body.language).toBe("number");
+    expect(typeof body.seriesId).toBe("string");
+  });
+
+  it("takes projectType from the request, converts string/number scalars, and sends seriesId as a string", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({ projectType: 2, seriesId: "777" }))) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+    const loose: ClaimPromoRequest = {
+      agencyId: "3366",
+      seriesId: 777,
+      projectType: 2,
+      language: "3",
+      offerType: "read",
+    };
+
+    await expect(adapter.readPromoAfterClaim!(loose, "jwt-token")).resolves.toMatchObject({ status: "found" });
+    const [, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(String(init.body))).toEqual({ agencyId: 3366, seriesId: "777", projectType: 2, language: 3 });
+  });
+
+  it("does not dispatch when an identity scalar cannot be converted", async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!({ ...request, agencyId: "abc" }, "jwt-token")).rejects.toThrow();
+    await expect(adapter.readPromoAfterClaim!({ ...request, language: 1.5 }, "jwt-token")).rejects.toThrow();
+    await expect(adapter.readPromoAfterClaim!({ ...request, seriesId: "  " }, "jwt-token")).rejects.toThrow();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns found with code and links when the four identity echoes match", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope())) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "found",
+      promo: {
+        upstreamCode: "239FFB",
+        webUrl: "https://eng.moboreader.com/1M4mpB/239FFB",
+        appUrl: "https://eng.moboreader.com/book/239FFB",
+      },
+    });
+  });
+
+  it("falls back to homeLink for webUrl when publicUrl is empty", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({ publicUrl: "" }))) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "found",
+      promo: {
+        upstreamCode: "239FFB",
+        webUrl: "https://eng.moboreader.com/book/239FFB",
+        appUrl: "https://eng.moboreader.com/book/239FFB",
+      },
+    });
+  });
+
+  it("returns found with null URLs for a code-only (PlotNovel-shaped) response — a URL is not required", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({
+      kocCode: "123456",
+      publicUrl: "",
+      homeLink: "",
+      onlineUrl: "",
+    }))) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "found",
+      promo: { upstreamCode: "123456", webUrl: null, appUrl: null },
+    });
+  });
+
+  it("also treats a code-only response with the URL fields absent or null as found", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       status: true,
       code: 200,
-      data: {
-        totalCount: 3,
-        list: [
-          {
-            agencyId: 3366,
-            seriesId: "other-series",
-            language: 3,
-            projectType: 1,
-            kocCode: null,
-          },
-          {
-            agencyId: 3366,
-            seriesId: "124235322",
-            language: 3,
-            projectType: 1,
-            title: "A renamed title is not authority",
-            kocCode: "239FFB",
-            publicUrl: "https://eng.moboreader.com/1M4mpB/239FFB",
-            homeLink: "https://eng.moboreader.com/book/239FFB",
-          },
-          {
-            agencyId: 9999,
-            seriesId: "124235322",
-            language: 3,
-            projectType: 1,
-            kocCode: null,
-          },
-        ],
-      },
+      data: { agencyId: 3366, seriesId: "124235322", language: 3, projectType: 1, kocCode: "123456", publicUrl: null },
     })) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toMatchObject({
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
       status: "found",
-      promo: { upstreamCode: "239FFB" },
+      promo: { upstreamCode: "123456", webUrl: null, appUrl: null },
     });
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe(`https://kocserver-cn.cdreader.com${MOBOREADER_PROMO_ENDPOINTS.readback}`);
-    expect(JSON.parse(String(init.body))).toEqual({
-      name: "The Exact Target Title",
-      orderType: 1,
-      pageIndex: 1,
-      pageSize: 100,
-      projectType: 1,
-    });
-    expect(MOBOREADER_PROMO_MAX_CANDIDATES).toBe(100);
   });
 
-  it("strictly distinguishes a located row with no promo from title lookup failure", async () => {
-    const responses = [
-      {
-        status: true,
-        code: 200,
-        data: {
-          totalCount: 1,
-          list: [{ agencyId: 3366, seriesId: "124235322", language: 3, projectType: 1, kocCode: null }],
-        },
-      },
-      { status: true, code: 200, data: { totalCount: 0, list: [] } },
-    ];
-    const fetchImpl = vi.fn(async () => jsonResponse(responses.shift())) as unknown as typeof fetch;
+  it.each([
+    ["empty string", { kocCode: "" }],
+    ["whitespace only", { kocCode: "   " }],
+    ["null", { kocCode: null }],
+  ] as const)("returns missing when kocCode is %s (code not generated yet)", async (_label, overrides) => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope(overrides))) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
     await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({ status: "missing" });
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "target_not_located",
-      reason: "title_no_match",
-      totalCount: 0,
-    });
   });
 
-  it("fails closed when the returned page is not shorter than pageSize and never scans another page", async () => {
-    // 2026-09-11 Owner-approved revision: totalCount is no longer part of the
-    // completeness test (see MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md
-    // §13). A list shorter than pageSize is now the only signal of
-    // completeness, so this fixture pins the boundary that still must fail
-    // closed: exactly pageSize (100) rows returned, regardless of the
-    // declared totalCount.
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: {
-        totalCount: 1,
-        list: Array.from({ length: MOBOREADER_PROMO_MAX_CANDIDATES }, (_, index) => ({
-          agencyId: 3366,
-          seriesId: `other-${index}`,
-          language: 3,
-          projectType: 1,
-          kocCode: null,
-        })),
-      },
-    })) as unknown as typeof fetch;
+  it("returns missing when kocCode is absent entirely", async () => {
+    const envelope = readbackEnvelope();
+    delete (envelope.data as Record<string, unknown>).kocCode;
+    const fetchImpl = vi.fn(async () => jsonResponse(envelope)) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "ambiguous",
-      reason: "candidate_set_incomplete",
-      totalCount: 1,
-      returnedCount: 100,
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(JSON.parse(String(init.body)).pageIndex).toBe(1);
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({ status: "missing" });
   });
 
-  it("fails closed above MAX_CANDIDATES even if an upstream payload over-delivers every row", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: {
-        totalCount: 101,
-        list: Array.from({ length: 101 }, (_, index) => ({
-          agencyId: 3366,
-          seriesId: `other-${index}`,
-          language: 3,
-          projectType: 1,
-          kocCode: null,
-        })),
-      },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+  it.each(["agencyId", "seriesId", "language", "projectType"] as const)(
+    "reports identity_field_missing when the %s echo is absent",
+    async (field) => {
+      const envelope = readbackEnvelope();
+      delete (envelope.data as Record<string, unknown>)[field];
+      const fetchImpl = vi.fn(async () => jsonResponse(envelope)) as unknown as typeof fetch;
+      const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "ambiguous",
-      reason: "candidate_set_incomplete",
-      totalCount: 101,
-      returnedCount: 101,
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
+      await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+        status: "ambiguous",
+        reason: "identity_field_missing",
+      });
+    },
+  );
 
-  it("applies the completeness assertion to a non-array list", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list: null },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+  it.each(["agencyId", "seriesId", "language", "projectType"] as const)(
+    "reports identity_field_missing when the %s echo is blank or null",
+    async (field) => {
+      const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({ [field]: field === "seriesId" ? "  " : null }))) as unknown as typeof fetch;
+      const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "ambiguous",
-      reason: "candidate_set_incomplete",
-      totalCount: 1,
-      returnedCount: null,
-    });
-  });
+      await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+        status: "ambiguous",
+        reason: "identity_field_missing",
+      });
+    },
+  );
 
   it.each([
     ["agencyId", 9999],
     ["seriesId", "different-series"],
     ["language", 7],
     ["projectType", 2],
-  ] as const)("reports target missing when a complete candidate set has no %s identity match", async (field, value) => {
-    const row = {
-      agencyId: 3366,
-      seriesId: "124235322",
-      language: 3,
-      projectType: 1,
-      kocCode: "239FFB",
-      [field]: value,
-    };
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list: [row] },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "target_missing",
-      reason: "identity_no_match",
-      totalCount: 1,
-      returnedCount: 1,
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  it.each(["agencyId", "seriesId", "language", "projectType"] as const)(
-    "fails closed when any candidate row omits %s",
-    async (field) => {
-      const row: Record<string, unknown> = {
-        agencyId: 3366,
-        seriesId: "124235322",
-        language: 3,
-        projectType: 1,
-        kocCode: "239FFB",
-      };
-      delete row[field];
-      const fetchImpl = vi.fn(async () => jsonResponse({
-        status: true,
-        code: 200,
-        data: { totalCount: 1, list: [row] },
-      })) as unknown as typeof fetch;
-      const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-      await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-        status: "ambiguous",
-        reason: "identity_field_missing",
-        totalCount: 1,
-        returnedCount: 1,
-      });
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it("fails closed when more than one row has the authoritative identity", async () => {
-    const matchingRow = {
-      agencyId: 3366,
-      seriesId: "124235322",
-      language: 3,
-      projectType: 1,
-      kocCode: "239FFB",
-    };
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 2, list: [matchingRow, { ...matchingRow }] },
-    })) as unknown as typeof fetch;
+  ] as const)("reports identity_mismatch when the %s echo differs from the request, even with a code present", async (field, value) => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({ [field]: value }))) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
     await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
       status: "ambiguous",
-      reason: "identity_not_unique",
-      totalCount: 2,
-      returnedCount: 2,
+      reason: "identity_mismatch",
     });
+  });
+
+  it("accepts identity echoes whose JSON type differs from the request (string vs number)", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackEnvelope({
+      agencyId: "3366",
+      seriesId: 124235322,
+      language: "3",
+      projectType: "1",
+    }))) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toMatchObject({ status: "found" });
+  });
+
+  it.each([
+    ["status false", { status: false, code: 200, data: readbackEnvelope().data }],
+    ["code 500", { status: true, code: 500, data: readbackEnvelope().data }],
+    ["status string", { status: "true", code: 200, data: readbackEnvelope().data }],
+    ["code string", { status: true, code: "200", data: readbackEnvelope().data }],
+    ["status/code missing", { data: readbackEnvelope().data }],
+  ] as const)("throws non-ambiguous malformed_payload when the outer envelope is not a success (%s)", async (_label, envelope) => {
+    const fetchImpl = vi.fn(async () => jsonResponse(envelope)) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).rejects.toMatchObject({
+      code: "malformed_payload",
+      retryable: false,
+      ambiguous: false,
+    } satisfies Partial<PromoLinkClaimAdapterError>);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("does not dispatch when the locating title is unavailable", async () => {
-    const fetchImpl = vi.fn() as unknown as typeof fetch;
+  it.each([
+    ["null", null],
+    ["array", [readbackEnvelope().data]],
+    ["string", "oops"],
+    ["missing", undefined],
+  ] as const)("throws non-ambiguous malformed_payload when data is %s", async (_label, data) => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ status: true, code: 200, data })) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
-    await expect(adapter.readPromoAfterClaim!({ ...request, name: "   " }, "jwt-token")).resolves.toEqual({
-      status: "target_not_located",
-      reason: "title_unavailable",
-      totalCount: null,
-    });
-    expect(fetchImpl).not.toHaveBeenCalled();
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).rejects.toMatchObject({
+      code: "malformed_payload",
+      retryable: false,
+      ambiguous: false,
+    } satisfies Partial<PromoLinkClaimAdapterError>);
   });
 
   it.each([408, 429, 503])(
@@ -331,8 +325,8 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("classifies a malformed readback as non-ambiguous and never mutates", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ status: false, code: 500, data: null })) as unknown as typeof fetch;
+  it("classifies an unparsable readback body as non-ambiguous", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not json", { status: 200 })) as unknown as typeof fetch;
     const adapter = createPromoLinkClaimAdapter({ fetchImpl });
 
     await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).rejects.toMatchObject({
@@ -378,114 +372,5 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
       ambiguous: false,
     } satisfies Partial<PromoLinkClaimAdapterError>);
     expect(fetchImpl).not.toHaveBeenCalled();
-  });
-});
-
-describe("MoboReader promo claim adapter — 2026-09-11 Owner-approved readback completeness revision", () => {
-  // Real upstream shape from the X8 轮 2b read-only probe (ar:1/11, de:1/14,
-  // es:1/12 — MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md §13): getlistpc's
-  // totalCount counts a title match once, but list enumerates every language
-  // edition of the same seriesId family. Fixtures below reproduce that shape
-  // with the target's own identity dimensions (agencyId=3366, seriesId
-  // "124235322", language 3, projectType 1) so the four-dimensional matcher
-  // — not totalCount — is what decides the outcome.
-  function familyRow(overrides: Partial<Record<string, unknown>> = {}) {
-    return {
-      agencyId: 3366,
-      seriesId: "124235322",
-      language: 3,
-      projectType: 1,
-      kocCode: "AR1DE2ES3",
-      publicUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
-      homeLink: "https://eng.moboreader.com/book/AR1DE2ES3",
-      ...overrides,
-    };
-  }
-
-  function familySiblings(count: number) {
-    return Array.from({ length: count }, (_, index) => ({
-      agencyId: 3366,
-      seriesId: `family-series-${index}`,
-      language: index + 10,
-      projectType: 1,
-      kocCode: null,
-    }));
-  }
-
-  it("still finds a single row when totalCount undercounts a 1/1 non-family book (EN fixture)", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list: [familyRow()] },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "found",
-      promo: {
-        upstreamCode: "AR1DE2ES3",
-        webUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
-        appUrl: "https://eng.moboreader.com/book/AR1DE2ES3",
-      },
-    });
-  });
-
-  it("finds the sole four-dimensional match in a 12-row language-family candidate set (ar/de/es probe shape), correctly excluding a same-seriesId decoy in a different language", async () => {
-    // The decoy shares agencyId+seriesId+projectType with the target row but
-    // not language — it pins that `language` is load-bearing in the
-    // four-dimensional match, not just agencyId+seriesId+projectType.
-    const languageDecoy = familyRow({ language: 99, kocCode: "DECOY_MUST_NOT_MATCH" });
-    const list = [familyRow(), languageDecoy, ...familySiblings(10)];
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "found",
-      promo: {
-        upstreamCode: "AR1DE2ES3",
-        webUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
-        appUrl: "https://eng.moboreader.com/book/AR1DE2ES3",
-      },
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports target_missing when a complete 12-row family candidate set has zero four-dimensional matches", async () => {
-    // No row shares the target's seriesId — the whole family is siblings.
-    const list = familySiblings(12);
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "target_missing",
-      reason: "identity_no_match",
-      totalCount: 1,
-      returnedCount: 12,
-    });
-  });
-
-  it("reports identity_not_unique when two rows in a complete 12-row family share the target identity", async () => {
-    const list = [familyRow(), familyRow({ kocCode: "DUPLICATE" }), ...familySiblings(10)];
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      status: true,
-      code: 200,
-      data: { totalCount: 1, list },
-    })) as unknown as typeof fetch;
-    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
-
-    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
-      status: "ambiguous",
-      reason: "identity_not_unique",
-      totalCount: 1,
-      returnedCount: 12,
-    });
   });
 });

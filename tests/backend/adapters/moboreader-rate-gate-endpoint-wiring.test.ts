@@ -182,11 +182,18 @@ describe("createMoboreaderReadAdapter: RC-4 endpoint wiring", () => {
 
 describe("createPromoLinkClaimAdapter: RC-4 endpoint wiring", () => {
   const claimRequest: ClaimPromoRequest = {
-    agencyId: 3366, seriesId: "124235322", projectType: 1, language: 3, name: "Title", offerType: "read",
+    agencyId: 3366, seriesId: "124235322", projectType: 1, language: 3, offerType: "read",
   };
 
   function successBody() {
     return { data: { kocCode: "239FFB", publicUrl: null, homeLink: null }, code: 200, message: "ok", status: true };
+  }
+
+  function readbackBody() {
+    return {
+      data: { agencyId: 3366, seriesId: "124235322", language: 3, projectType: 1, kocCode: "239FFB", publicUrl: null, homeLink: null },
+      code: 200, message: "ok", status: true,
+    };
   }
 
   it("claimPromo passes 'getcode' (not the raw path) to wait()", async () => {
@@ -197,12 +204,27 @@ describe("createPromoLinkClaimAdapter: RC-4 endpoint wiring", () => {
     expect(waits).toEqual(["getcode"]);
   });
 
-  it("readPromoAfterClaim passes 'getlistpc' — the SAME wire endpoint name the catalog adapter uses for its own getlistpc calls", async () => {
+  it("readPromoAfterClaim passes 'getvideoinfo' — an untracked endpoint, no longer the catalog's tracked 'getlistpc' queue", async () => {
     const { gate, waits } = recordingGate();
-    const fetchImpl = vi.fn(async () => jsonResponse({ data: { totalCount: 0, list: [] }, code: 200, message: "ok", status: true }));
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackBody()));
     const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: gate });
     await adapter.readPromoAfterClaim!(claimRequest, "jwt-token");
-    expect(waits).toEqual(["getlistpc"]);
+    expect(waits).toEqual(["getvideoinfo"]);
+  });
+
+  it("the promo adapter only ever requests getcode (tracked) and getvideoinfo (untracked) — never getlistpc", async () => {
+    const { gate, waits } = recordingGate();
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => jsonResponse(
+      String(url).endsWith("/getcode") ? successBody() : readbackBody(),
+    ));
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: gate });
+    await adapter.claimPromo(claimRequest, "jwt-token");
+    await adapter.readPromoAfterClaim!(claimRequest, "jwt-token");
+    expect(waits).toEqual(["getcode", "getvideoinfo"]);
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://kocserver-cn.cdreader.com/api/v1/res/getcode",
+      "https://kocserver-cn.cdreader.com/api/v1/res/getvideoinfo",
+    ]);
   });
 
   it("calls observe() with getcode's response status/headers, even when getcode's own error classification stays ambiguous", async () => {
@@ -249,9 +271,9 @@ describe("createPromoLinkClaimAdapter: RC-4 endpoint wiring", () => {
       expect(fetchImpl).not.toHaveBeenCalled();
     });
 
-    it("[mutation target] readback (getlistpc): abort fired DURING the gate wait -> fetch never called", async () => {
+    it("[mutation target] readback (getvideoinfo): abort fired DURING the gate wait -> fetch never called", async () => {
       const controller = new AbortController();
-      const fetchImpl = vi.fn(async () => jsonResponse({ data: { totalCount: 0, list: [] }, code: 200, message: "ok", status: true }));
+      const fetchImpl = vi.fn(async () => jsonResponse(readbackBody()));
       const abortDuringWaitGate: MoboreaderRateGate = {
         wait: async () => { controller.abort(); return undefined; },
       };

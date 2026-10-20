@@ -62,7 +62,7 @@ async function run() {
 
   const prisma = new PrismaClient();
   let capabilityEnabledBySmoke = false;
-  const network = { total: 0, getlistpc: 0, getcode: 0 };
+  const network = { total: 0, getlistpc: 0, getvideoinfo: 0, getcode: 0 };
   let selectedSeriesId: string | null = null;
   const guardedFetch: typeof fetch = async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -70,9 +70,23 @@ async function run() {
     if (init?.method !== "POST" || init.redirect !== "error") blocked("transport_contract_violation");
     network.total += 1;
     if (url.pathname === "/api/v1/res/getlistpc") {
+      // Catalog selection only; promo readback no longer uses getlistpc.
       network.getlistpc += 1;
-      if (network.getlistpc > 2) blocked("readback_budget_exceeded");
+      if (network.getlistpc > 1) blocked("catalog_budget_exceeded");
       if (body.name !== "" || body.orderType !== 1 || body.pageIndex !== 1 || body.pageSize !== 10 || body.projectType !== 1) {
+        blocked("catalog_coordinate_violation");
+      }
+    } else if (url.pathname === "/api/v1/res/getvideoinfo") {
+      network.getvideoinfo += 1;
+      if (network.getvideoinfo > 1) blocked("readback_budget_exceeded");
+      if (
+        selectedSeriesId === null
+        || body.seriesId !== selectedSeriesId
+        || typeof body.agencyId !== "number"
+        || typeof body.language !== "number"
+        || body.projectType !== 1
+        || Object.keys(body).sort().join(",") !== "agencyId,language,projectType,seriesId"
+      ) {
         blocked("readback_coordinate_violation");
       }
     } else if (url.pathname === "/api/v1/res/getcode") {
@@ -264,7 +278,9 @@ async function run() {
       blocked("smoke_promolink_not_fetched");
     }
     if (!intent || intent.status !== "confirmed") blocked("smoke_intent_not_confirmed");
-    if (network.total !== 3 || network.getlistpc !== 2 || network.getcode !== 1) blocked("network_budget_mismatch");
+    if (network.total !== 3 || network.getlistpc !== 1 || network.getvideoinfo !== 1 || network.getcode !== 1) {
+      blocked("network_budget_mismatch");
+    }
 
     const rerun = await createPromoLinkClaimTask(prisma, {
       channelAccountId: ACCOUNT_ID,

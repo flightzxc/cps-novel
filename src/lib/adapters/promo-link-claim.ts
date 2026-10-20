@@ -2,24 +2,28 @@
  * MoboReader novel promo-claim contract.
  *
  * Mutation frozen from the Owner-approved Book A browser probe on
- * 2026-08-31; exact-target readback frozen by
- * `docs/operations/MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md`:
+ * 2026-08-31:
  *
  *   POST /api/v1/res/getcode
  *     { agencyId, seriesId, projectType: 1, language }
  *
- * Exact-target readback uses:
+ * Exact-target readback (2026-10-20 Owner-approved revision, see
+ * `docs/operations/MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md` §14)
+ * is a point lookup by identity, the same call CPS 短剧 uses:
  *
- *   POST /api/v1/res/getlistpc
- *     { name: <current catalog title>, orderType: 1, pageIndex: 1,
- *       projectType: 1, pageSize: 100 }
+ *   POST /api/v1/res/getvideoinfo
+ *     { agencyId: number, seriesId: string, projectType: number,
+ *       language: number }
  *
- * `name` is only a mutable locator. A complete candidate set is required,
- * then `{ agencyId, seriesId, language, projectType }` selects the sole
- * authoritative row. There is no fallback page scan.
+ * The response `data` object echoes all four identity fields; they must
+ * all be present and equal to the request, otherwise the readback is
+ * ambiguous. A non-blank `kocCode` is `found` (URLs are optional: the
+ * PlotNovel code-only theater has a code and no URL); a blank one is
+ * `missing`. There is no title lookup, no candidate set, no page scan and
+ * no getlistpc fallback.
  *
  * Each adapter method performs one HTTP dispatch. The worker may make
- * bounded, read-only repetitions of getlistpc, but it never repeats
+ * bounded, read-only repetitions of getvideoinfo, but it never repeats
  * getcode. A claim timeout, connection reset, abort after dispatch, HTTP
  * 408/429/5xx, or malformed success response is ambiguous and must enter
  * readback-only recovery. Upstream idempotency remains unverified.
@@ -38,22 +42,21 @@ const MOBOREADER_ORIGIN = "https://kocserver-cn.cdreader.com";
 
 export const MOBOREADER_PROMO_ENDPOINTS = Object.freeze({
   claim: "/api/v1/res/getcode",
-  readback: "/api/v1/res/getlistpc",
+  readback: "/api/v1/res/getvideoinfo",
 });
 
 /**
  * Lookup for observation events: reports the *wire* endpoint name
- * (`"getcode"` / `"getlistpc"`), not this module's internal `claim`/
- * `readback` aliases — the readback call dispatches to the very same
- * `getlistpc` upstream endpoint the catalog/Preview adapter uses
- * (`MOBOREADER_READ_ENDPOINTS.getlistpc` in `./moboreader.ts`), so its
- * observation events must be identifiable as `getlistpc` calls too, not a
- * third, adapter-local name. `post()` allowlists every dispatched path
- * against `MOBOREADER_PROMO_ENDPOINTS`'s values, so this always resolves.
+ * (`"getcode"` / `"getvideoinfo"`), not this module's internal `claim`/
+ * `readback` aliases. `getvideoinfo` is deliberately NOT one of the rate
+ * gate's tracked endpoints (`MOBOREADER_RATE_GATE_TRACKED_ENDPOINTS`): it
+ * paces on the shared/default interval. `post()` allowlists every
+ * dispatched path against `MOBOREADER_PROMO_ENDPOINTS`'s values, so this
+ * always resolves.
  */
 const MOBOREADER_PROMO_ENDPOINT_NAMES_BY_PATH: ReadonlyMap<string, string> = new Map([
   [MOBOREADER_PROMO_ENDPOINTS.claim, "getcode"],
-  [MOBOREADER_PROMO_ENDPOINTS.readback, "getlistpc"],
+  [MOBOREADER_PROMO_ENDPOINTS.readback, "getvideoinfo"],
 ]);
 
 function promoEndpointName(path: string): string {
@@ -61,13 +64,6 @@ function promoEndpointName(path: string): string {
 }
 
 export const MOBOREADER_PROMO_TIMEOUT_MS = 15_000;
-/** P-10 proved that getlistpc delivers 100 rows when 100 are requested. */
-export const MOBOREADER_PROMO_MAX_CANDIDATES = 100;
-export const MOBOREADER_PROMO_READBACK_COORDINATE = Object.freeze({
-  orderType: 1,
-  pageIndex: 1,
-  pageSize: MOBOREADER_PROMO_MAX_CANDIDATES,
-});
 
 export type PromoLinkClaimAdapterErrorCode =
   | "transport_error"
@@ -106,8 +102,6 @@ export interface ClaimPromoRequest {
   seriesId: string | number;
   projectType: number;
   language: string | number;
-  /** Current catalog title; used only as getlistpc's locating coordinate. */
-  name: string;
   /** Local-only persistence dimension; never sent upstream. */
   offerType: string;
 }
@@ -122,18 +116,7 @@ export interface ClaimPromoResult {
 export type ReadPromoAfterClaimResult =
   | { status: "found"; promo: ClaimPromoResult }
   | { status: "missing" }
-  | {
-    status: "target_not_located";
-    reason: "title_unavailable" | "title_no_match" | "locator_stale";
-    totalCount: null | 0;
-  }
-  | { status: "target_missing"; reason: "identity_no_match"; totalCount: number; returnedCount: number }
-  | {
-    status: "ambiguous";
-    reason: "candidate_set_incomplete" | "identity_field_missing" | "identity_not_unique";
-    totalCount: number;
-    returnedCount: number | null;
-  };
+  | { status: "ambiguous"; reason: "identity_field_missing" | "identity_mismatch" };
 
 export interface PromoLinkClaimAdapter {
   claimPromo(request: ClaimPromoRequest, token: string, signal?: AbortSignal): Promise<ClaimPromoResult>;
@@ -254,85 +237,83 @@ function hasIdentityValue(value: unknown): boolean {
     || (typeof value === "number" && Number.isFinite(value));
 }
 
-function candidateRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
+/**
+ * Converts an identity scalar to the safe integer getvideoinfo expects, or
+ * `null` when it is not one (blank string, non-integer text, NaN/Infinity,
+ * unsafe magnitude). Shared by the worker (to fail before any upstream
+ * request) and by the readback request builder below.
+ */
+export function toSafeIntegerIdentity(value: unknown): number | null {
+  if (typeof value === "number") return Number.isSafeInteger(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!/^-?\d+$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function parseReadbackResponse(value: unknown, request: ClaimPromoRequest): ReadPromoAfterClaimResult {
+/** `seriesId` is sent as a string; blank text / non-finite numbers are not an identity. */
+export function toSeriesIdentity(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+type ReadbackRequestBody = {
+  agencyId: number;
+  seriesId: string;
+  projectType: number;
+  language: number;
+};
+
+function buildReadbackBody(request: ClaimPromoRequest): ReadbackRequestBody {
+  const agencyId = toSafeIntegerIdentity(request.agencyId);
+  const seriesId = toSeriesIdentity(request.seriesId);
+  const language = toSafeIntegerIdentity(request.language);
+  const projectType = toSafeIntegerIdentity(request.projectType);
+  // The worker rejects these before any upstream request
+  // (`claim_source_fields_missing`); reaching here is a caller bug.
+  if (agencyId === null || seriesId === null || language === null || projectType === null) {
+    throw new Error("Invalid MoboReader readback identity");
+  }
+  // Exactly these four keys, in this order: the shape verified by the
+  // 2026-10-20 read-only retest (and identical to CPS's getvideoinfo call).
+  return { agencyId, seriesId, projectType, language };
+}
+
+function parseReadbackResponse(value: unknown, body: ReadbackRequestBody): ReadPromoAfterClaimResult {
   const envelope = asRecord(value, false);
   if (envelope.status !== true || envelope.code !== 200) {
     throw new PromoLinkClaimAdapterError("malformed_payload", false, false);
   }
   const data = asRecord(envelope.data, false);
-  if (!Number.isSafeInteger(data.totalCount) || (data.totalCount as number) < 0) {
-    throw new PromoLinkClaimAdapterError("malformed_payload", false, false);
+  if (
+    !hasIdentityValue(data.agencyId)
+    || !hasIdentityValue(data.seriesId)
+    || !hasIdentityValue(data.language)
+    || !hasIdentityValue(data.projectType)
+  ) {
+    return { status: "ambiguous", reason: "identity_field_missing" };
   }
-  const totalCount = data.totalCount as number;
-  const list = data.list;
-  // 2026-09-11 Owner-approved revision (see MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md,
-  // "2026-09-11 修订" section): getlistpc's `totalCount` counts a title
-  // match once, but `list` enumerates every language edition of the same
-  // seriesId family (P-7 gap; 3/3 read-only probe evidence, ar/de/es).
-  // `totalCount` is therefore no longer a hard completeness condition.
-  // Completeness now means "structurally unpaginated": the response was
-  // not truncated by pageSize. `totalCount` (declaredTotalCount) and the
-  // actual row count (returnedCount) are still recorded on every branch
-  // below for audit, regardless of whether they agree.
-  const complete = Array.isArray(list) && list.length < MOBOREADER_PROMO_MAX_CANDIDATES;
-  if (!complete) {
-    return {
-      status: "ambiguous",
-      reason: "candidate_set_incomplete",
-      totalCount,
-      returnedCount: Array.isArray(list) ? list.length : null,
-    };
+  if (
+    !sameIdentityValue(data.agencyId, body.agencyId)
+    || !sameIdentityValue(data.seriesId, body.seriesId)
+    || !sameIdentityValue(data.language, body.language)
+    || !sameIdentityValue(data.projectType, body.projectType)
+  ) {
+    return { status: "ambiguous", reason: "identity_mismatch" };
   }
-  if (totalCount === 0) {
-    return { status: "target_not_located", reason: "title_no_match", totalCount: 0 };
-  }
-
-  const rows = list.map(candidateRecord);
-  if (rows.some((row) => (
-    !row
-    || !hasIdentityValue(row.agencyId)
-    || !hasIdentityValue(row.seriesId)
-    || !hasIdentityValue(row.language)
-    || !hasIdentityValue(row.projectType)
-  ))) {
-    return {
-      status: "ambiguous",
-      reason: "identity_field_missing",
-      totalCount,
-      returnedCount: list.length,
-    };
-  }
-  const matches = (rows as Array<Record<string, unknown>>).filter((row) => (
-    sameIdentityValue(row.agencyId, request.agencyId)
-    && sameIdentityValue(row.seriesId, request.seriesId)
-    && sameIdentityValue(row.language, request.language)
-    && sameIdentityValue(row.projectType, request.projectType)
-  ));
-  if (matches.length === 0) {
-    return { status: "target_missing", reason: "identity_no_match", totalCount, returnedCount: list.length };
-  }
-  if (matches.length > 1) {
-    return {
-      status: "ambiguous",
-      reason: "identity_not_unique",
-      totalCount,
-      returnedCount: list.length,
-    };
-  }
-  const row = matches[0];
-  const upstreamCode = nonBlank(row.kocCode);
+  const upstreamCode = nonBlank(data.kocCode);
+  // Blank kocCode: the code has not been generated yet. URLs are NOT
+  // required (PlotNovel code-only theater has a code and no URL) — do not
+  // copy CPS's publicUrl requirement.
   if (!upstreamCode) return { status: "missing" };
   return {
     status: "found",
     promo: {
       upstreamCode,
-      webUrl: nonBlank(row.publicUrl) ?? nonBlank(row.homeLink),
-      appUrl: nonBlank(row.homeLink),
+      webUrl: nonBlank(data.publicUrl) ?? nonBlank(data.homeLink),
+      appUrl: nonBlank(data.homeLink),
     },
   };
 }
@@ -391,7 +372,8 @@ export function createPromoLinkClaimAdapter(
     // Wait-only pacing door — see `PromoLinkClaimAdapterOptions.rateGate`.
     // No retry semantics live here or below; a single dispatch, exactly as
     // before RC-3. RC-4: `endpoint` lets a per-endpoint gate queue getcode
-    // and getlistpc-readback separately; the legacy/no-op gates ignore it.
+    // and the (untracked) getvideoinfo readback separately; the legacy/no-op
+    // gates ignore it.
     const gateWaitStartedAt = observationNow();
     const gateWaitInfo = await rateGate.wait(endpoint);
     const gateWaitMs = observationNow() - gateWaitStartedAt;
@@ -421,12 +403,19 @@ export function createPromoLinkClaimAdapter(
       const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
         method: "POST",
         redirect: "error",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          areainterface: "cn",
-          browserlang: "cn",
-        },
+        headers: path === MOBOREADER_PROMO_ENDPOINTS.readback
+          // getvideoinfo: exactly the two headers the 2026-10-20 retest and
+          // CPS use. getcode keeps its frozen header set below.
+          ? {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          }
+          : {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            areainterface: "cn",
+            browserlang: "cn",
+          },
         body: JSON.stringify(body),
         signal: scoped.signal,
       });
@@ -531,17 +520,9 @@ export function createPromoLinkClaimAdapter(
       return parseClaimResponse(await post(MOBOREADER_PROMO_ENDPOINTS.claim, payload, token, signal, true));
     },
     async readPromoAfterClaim(request, token, signal) {
-      const name = request.name.trim();
-      if (!name) {
-        return { status: "target_not_located", reason: "title_unavailable", totalCount: null };
-      }
-      const payload = {
-        ...MOBOREADER_PROMO_READBACK_COORDINATE,
-        name,
-        projectType: request.projectType,
-      };
+      const payload = buildReadbackBody(request);
       const response = await post(MOBOREADER_PROMO_ENDPOINTS.readback, payload, token, signal, false);
-      return parseReadbackResponse(response, request);
+      return parseReadbackResponse(response, payload);
     },
   };
   return Object.freeze(adapter);

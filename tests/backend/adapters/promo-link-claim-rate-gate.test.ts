@@ -11,6 +11,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MOBOREADER_PROMO_ENDPOINTS,
+  createMoboreaderPerEndpointRateGate,
+  createMoboreaderRateGate,
   createPromoLinkClaimAdapter,
   type ClaimPromoRequest,
 } from "@/lib/adapters";
@@ -20,7 +22,6 @@ const request: ClaimPromoRequest = {
   seriesId: "124235322",
   projectType: 1,
   language: 3,
-  name: "The Exact Target Title",
   offerType: "read",
 };
 
@@ -29,6 +30,16 @@ function jsonResponse(value: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** getvideoinfo success envelope echoing `request`'s identity (code not yet generated). */
+function readbackBody() {
+  return {
+    data: { agencyId: 3366, seriesId: "124235322", language: 3, projectType: 1, kocCode: "" },
+    code: 200,
+    message: "ok",
+    status: true,
+  };
 }
 
 function successBody() {
@@ -61,17 +72,46 @@ describe("createPromoLinkClaimAdapter rateGate (RC-3, wait-only)", () => {
     expect(calls).toEqual(["gate", "fetch"]); // gate resolves strictly before dispatch
   });
 
-  it("awaits the gate before dispatching readPromoAfterClaim (getlistpc readback)", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      data: { totalCount: 0, list: [] },
-      code: 200,
-      message: "ok",
-      status: true,
-    }));
-    const wait = vi.fn(async () => undefined);
+  it("awaits the gate before dispatching readPromoAfterClaim (getvideoinfo readback), naming the endpoint 'getvideoinfo'", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(readbackBody()));
+    const wait = vi.fn(async (endpoint?: string) => { void endpoint; });
     const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: { wait } });
     await adapter.readPromoAfterClaim!(request, "jwt-token");
     expect(wait).toHaveBeenCalledTimes(1);
+    expect(wait).toHaveBeenCalledWith("getvideoinfo");
+  });
+
+  it("paces getvideoinfo as an UNTRACKED endpoint on the default interval (per-endpoint gate ON)", async () => {
+    let clock = 0;
+    const sleeps: number[] = [];
+    const gate = createMoboreaderPerEndpointRateGate({
+      endpointIntervalMs: { getlistpc: 1_000, getcode: 5_000 },
+      defaultIntervalMs: 2_000,
+      hostMinGapMs: 0,
+      remainingFloor: { getlistpc: 0, getcode: 0 },
+      rateWindowMaxWaitMs: 60_000,
+      cooldownAnomalyThresholdMs: 120_000,
+      now: () => clock,
+      sleep: async (ms) => { sleeps.push(ms); clock += ms; },
+    });
+    await gate.wait("getvideoinfo");
+    clock += 500;
+    await gate.wait("getvideoinfo");
+    // 2000ms default interval minus the 500ms already elapsed — NOT getcode's 5000ms.
+    expect(sleeps).toEqual([1_500]);
+  });
+
+  it("paces getvideoinfo on the shared interval (per-endpoint gate OFF)", async () => {
+    let clock = 0;
+    const sleeps: number[] = [];
+    const gate = createMoboreaderRateGate({
+      minIntervalMs: 1_100,
+      now: () => clock,
+      sleep: async (ms) => { sleeps.push(ms); clock += ms; },
+    });
+    await gate.wait("getvideoinfo");
+    await gate.wait("getvideoinfo");
+    expect(sleeps).toEqual([1_100]);
   });
 
   it("getcode still dispatches exactly once on a retryable-shaped upstream status — the gate adds no retry", async () => {
@@ -97,7 +137,7 @@ describe("createPromoLinkClaimAdapter rateGate (RC-3, wait-only)", () => {
       fetchImpl: async (url) => {
         const isClaim = String(url).includes(MOBOREADER_PROMO_ENDPOINTS.claim);
         order.push(isClaim ? "claim" : "readback");
-        return jsonResponse(isClaim ? successBody() : { data: { totalCount: 0, list: [] }, code: 200, message: "ok", status: true });
+        return jsonResponse(isClaim ? successBody() : readbackBody());
       },
       rateGate: { wait },
     });

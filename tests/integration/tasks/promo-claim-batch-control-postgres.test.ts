@@ -153,7 +153,8 @@ async function seedFoundation(db: PrismaClient): Promise<Foundation> {
 }
 
 /** 同 `promo-claim-release-postgres.test.ts` 的 `seedBooks`——一次性把新建的 `novel_source_item` 全部链到各自新建的 `Novel` 行。 */
-// raw_payload 里的 agencyId/seriesId/language 是真实领取 handler（buildClaimPromoRequest）必需的三个上游定位字段。
+// raw_payload 里的 agencyId/seriesId/language 是真实领取 handler（buildClaimPromoRequest）必需的三个上游定位字段；
+// getvideoinfo 回读要求 agencyId/language 为整数，seriesId 非空。
 async function seedBooks(db: PrismaClient, channelAppId: string, count: number, prefix: string): Promise<string[]> {
   const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     INSERT INTO novel_source_item (
@@ -162,7 +163,7 @@ async function seedBooks(db: PrismaClient, channelAppId: string, count: number, 
     )
     SELECT gen_random_uuid(), ${channelAppId}::uuid, ${prefix} || '-' || n::text, 'en', 'en',
            ${prefix} || ' title ' || n::text, 'promo claim batch control fixture', 'pending',
-           jsonb_build_object('fixture', ${prefix}, 'agencyId', 'agency-1', 'seriesId', ${prefix} || '-series-' || n::text, 'language', 'en'),
+           jsonb_build_object('fixture', ${prefix}, 'agencyId', 3366, 'seriesId', ${prefix} || '-series-' || n::text, 'language', 3),
            transaction_timestamp()
     FROM generate_series(1, ${count}) AS n
     RETURNING id
@@ -372,13 +373,13 @@ function createCountingUpstream(): { adapter: PromoLinkClaimAdapter; calls: { cl
   const adapter: PromoLinkClaimAdapter = {
     async claimPromo(request) {
       calls.claimPromo += 1;
-      const code = `UP-${request.name.replaceAll(" ", "-")}`;
-      codes.set(request.name, code);
+      const code = `UP-${String(request.seriesId)}`;
+      codes.set(String(request.seriesId), code);
       return promoFor(code);
     },
     async readPromoAfterClaim(request) {
       calls.readPromoAfterClaim += 1;
-      const code = codes.get(request.name);
+      const code = codes.get(String(request.seriesId));
       return code ? { status: "found", promo: promoFor(code) } : { status: "missing" };
     },
   };

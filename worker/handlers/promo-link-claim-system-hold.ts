@@ -36,7 +36,7 @@
  * Every transient upstream class (`transport_error`, `request_timeout`,
  * `upstream_http_error`, `malformed_payload` —
  * `src/lib/adapters/promo-link-claim.ts`) and every per-row data-quality
- * class (`claim_source_fields_missing`, `claim_readback_target_missing`,
+ * class (`claim_source_fields_missing`, `claim_readback_ambiguous`,
  * etc.) is deliberately excluded: per-item retry (a fresh explicit task) is
  * already the correct recovery for those, and this module must never stand
  * in for it.

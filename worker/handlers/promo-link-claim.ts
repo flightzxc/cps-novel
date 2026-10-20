@@ -37,6 +37,8 @@ import {
   classifyClaimPromoFailure,
   createPromoLinkClaimAdapter,
   moboreaderUpstreamRateGate,
+  toSafeIntegerIdentity,
+  toSeriesIdentity,
   type ClaimPromoRequest,
   type ClaimPromoResult,
   type ClassifiedClaimFailure,
@@ -166,7 +168,7 @@ export function safeHostname(url: string | null | undefined): string | null {
 // ---------------------------------------------------------------------
 
 interface ClaimScope {
-  source: { id: string; novelId: string; title: string; rawPayload: unknown };
+  source: { id: string; novelId: string; rawPayload: unknown };
   app: { id: string; channelId: string; projectType: number };
   account: { id: string };
   capabilityEnabled: boolean;
@@ -177,7 +179,7 @@ interface ClaimScope {
 async function loadClaimScope(db: PrismaClient, payload: PromoLinkClaimPayload): Promise<ClaimScope> {
   const source = await db.novelSourceItem.findUnique({
     where: { id: payload.novelSourceItemId },
-    select: { id: true, novelId: true, channelAppId: true, deletedAt: true, status: true, title: true, rawPayload: true },
+    select: { id: true, novelId: true, channelAppId: true, deletedAt: true, status: true, rawPayload: true },
   });
   if (!source || source.deletedAt || source.status !== "linked" || !source.novelId || source.channelAppId !== payload.channelAppId) {
     throw new Error("claim_source_binding_missing");
@@ -209,7 +211,7 @@ async function loadClaimScope(db: PrismaClient, payload: PromoLinkClaimPayload):
     select: { id: true, status: true, publicRedirectCode: true },
   });
   return {
-    source: { id: source.id, novelId: source.novelId, title: source.title, rawPayload: source.rawPayload },
+    source: { id: source.id, novelId: source.novelId, rawPayload: source.rawPayload },
     app,
     account,
     capabilityEnabled: capability?.status === "enabled" && capability.sideEffecting === true,
@@ -523,7 +525,6 @@ function claimRequestScalar(value: unknown): string | number | null {
 
 function buildClaimPromoRequest(
   rawPayload: unknown,
-  name: string,
   projectType: number,
   offerType: string,
 ): ClaimPromoRequest | null {
@@ -533,7 +534,18 @@ function buildClaimPromoRequest(
   const seriesId = claimRequestScalar(row.seriesId);
   const language = claimRequestScalar(row.language);
   if (agencyId === null || seriesId === null || language === null) return null;
-  return { agencyId, seriesId, projectType, language, name: name.trim(), offerType };
+  // getvideoinfo (pre-read / post-claim confirmation / recovery) sends
+  // agencyId and language as safe integers and seriesId as a string. Refuse
+  // here, before any upstream request, anything that cannot be converted.
+  if (
+    toSafeIntegerIdentity(agencyId) === null
+    || toSafeIntegerIdentity(language) === null
+    || toSafeIntegerIdentity(projectType) === null
+    || toSeriesIdentity(seriesId) === null
+  ) {
+    return null;
+  }
+  return { agencyId, seriesId, projectType, language, offerType };
 }
 
 /** SideEffectIntent identity for one specific worker attempt — see this file's header for why it is per-(task, item, attemptCount), not per-PromoLink. */
@@ -575,14 +587,11 @@ function readbackFailureEvidence(
   if (result.status === "missing") {
     return { readbackConfirmed: false, readbackStatus: "promo_missing" };
   }
-  const evidence: Record<string, string | number | null | boolean> = {
+  return {
     readbackConfirmed: false,
     readbackStatus: result.status,
     readbackReason: result.reason,
-    readbackTotalCount: result.totalCount,
   };
-  if ("returnedCount" in result) evidence.readbackReturnedCount = result.returnedCount;
-  return evidence;
 }
 
 /**
@@ -658,27 +667,19 @@ async function claimViaAdapter(
     };
   }
 
-  if (!scope.source.title.trim()) {
-    return {
-      status: "failed",
-      error: { code: "claim_readback_title_unavailable", message: "The exact-target readback title is unavailable" },
-      protectedWrite: async () => undefined,
-    };
-  }
   const builtRequest = buildClaimPromoRequest(
     scope.source.rawPayload,
-    scope.source.title,
     scope.app.projectType,
     payload.offerType,
   );
   if (!builtRequest) {
     return {
       status: "failed",
-      error: { code: "claim_source_fields_missing", message: "NovelSourceItem raw_payload is missing agencyId/seriesId/language" },
+      error: { code: "claim_source_fields_missing", message: "NovelSourceItem raw_payload is missing or has invalid agencyId/seriesId/language" },
       protectedWrite: async () => undefined,
     };
   }
-  let request: ClaimPromoRequest = builtRequest;
+  const request: ClaimPromoRequest = builtRequest;
 
   if (!adapter.readPromoAfterClaim) {
     return {
@@ -696,12 +697,14 @@ async function claimViaAdapter(
   }
 
   /**
-   * Transport/visibility layer for one title coordinate. Only retryable
-   * read errors (429/5xx/timeout/network) are repeated. After mutation,
-   * `missing` and a stale promo code are also repeated because getlistpc may
-   * lag getcode. Structural contract failures return immediately.
+   * Bounded read-only getvideoinfo repetition. Only retryable read errors
+   * (429/5xx/timeout/network) are repeated. After mutation, `missing` and a
+   * stale promo code are also repeated because getvideoinfo may lag
+   * getcode. Structural contract failures return immediately. Shared by
+   * pre-read, post-claim confirmation, and readback-only recovery; getcode
+   * is never involved.
    */
-  const readCoordinate = async (
+  const readback = async (
     options: ExactReadbackOptions,
   ): Promise<ReadPromoAfterClaimResult> => {
     for (let attempt = 1; attempt <= readbackPolicy.attempts; attempt += 1) {
@@ -729,32 +732,6 @@ async function claimViaAdapter(
       if (signal.aborted) throw new Error("readback_retry_aborted");
     }
     throw new Error("readback_retry_loop_exhausted_without_result");
-  };
-
-  /**
-   * Semantic locator layer shared by pre-read, post-claim confirmation, and
-   * readback-only recovery. A zero-row result reloads the mutable title and
-   * retries that coordinate exactly once. Each coordinate independently
-   * receives the bounded read-only policy above; getcode is never involved.
-   */
-  const readback = async (options: ExactReadbackOptions): Promise<ReadPromoAfterClaimResult> => {
-    const first = await readCoordinate(options);
-    if (first.status !== "target_not_located" || first.reason !== "title_no_match") return first;
-
-    const refreshedSource = await db.novelSourceItem.findUnique({
-      where: { id: scope.source.id },
-      select: { title: true },
-    });
-    const refreshedTitle = refreshedSource?.title.trim() ?? "";
-    if (!refreshedTitle) {
-      return { status: "target_not_located", reason: "title_unavailable", totalCount: null };
-    }
-    request = { ...request, name: refreshedTitle };
-    const retried = await readCoordinate(options);
-    if (retried.status === "target_not_located" && retried.reason === "title_no_match") {
-      return { status: "target_not_located", reason: "locator_stale", totalCount: 0 };
-    }
-    return retried;
   };
 
   async function routeIntentToManualReview(
@@ -849,38 +826,12 @@ async function claimViaAdapter(
       }).then(() => undefined),
     };
   }
-  if (preRead.status === "target_not_located") {
-    return {
-      status: "failed",
-      error: {
-        code: preRead.reason === "title_unavailable"
-          ? "claim_readback_title_unavailable"
-          : preRead.reason === "locator_stale"
-            ? "claim_readback_locator_stale"
-            : "claim_readback_target_not_located",
-        message: preRead.reason === "locator_stale"
-          ? "The catalog title locator returned zero rows before and after its single refresh; manual review is required"
-          : "The exact-target title locator is unavailable",
-      },
-      protectedWrite: async () => undefined,
-    };
-  }
-  if (preRead.status === "target_missing") {
-    return {
-      status: "failed",
-      error: {
-        code: "claim_readback_target_missing",
-        message: `The complete candidate set contains no four-dimensional target match (totalCount=${preRead.totalCount})`,
-      },
-      protectedWrite: async () => undefined,
-    };
-  }
   if (preRead.status === "ambiguous") {
     return {
       status: "failed",
       error: {
         code: "claim_readback_ambiguous",
-        message: `Exact-target readback requires manual review (${preRead.reason}, totalCount=${preRead.totalCount}, returnedCount=${preRead.returnedCount ?? "not_array"})`,
+        message: `Exact-target readback requires manual review (${preRead.reason})`,
       },
       protectedWrite: async () => undefined,
     };

@@ -83,7 +83,7 @@ function clampedInteger(
 }
 
 /**
- * Runtime policy for read-only getlistpc recovery. Values are clamped in
+ * Runtime policy for read-only getvideoinfo recovery. Values are clamped in
  * both directions to the existing CPS-derived safety bounds. This policy
  * never controls task attempts or getcode dispatches.
  */
