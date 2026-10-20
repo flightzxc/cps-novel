@@ -1,0 +1,2 @@
+AUDIT=PASS mode=production critical=0 high=4 high_names=@prisma/config,deepmerge-ts,effect,prisma
+AUDIT=PASS mode=full critical=0 high=11 high_names=@next/eslint-plugin-next,@prisma/config,brace-expansion,braces,deepmerge-ts,effect,eslint-config-next,fast-glob,js-yaml,micromatch,prisma

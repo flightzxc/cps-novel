@@ -1,0 +1,49 @@
+import hashlib,json,pathlib,re,subprocess
+root=pathlib.Path.cwd();base=root/'.tmp/v065-release';dest=root/'docs/governance/releases/evidence/v065-release/phase1';dest.mkdir(parents=True,exist_ok=True)
+secrets=[]
+secret_dir=root/'.tmp/p1-12-runtime/secrets'
+if secret_dir.exists():
+ for p in secret_dir.iterdir():
+  if p.is_file() and p.suffix in ('.password','.key'):
+   v=p.read_text().strip()
+   if len(v)>=16:secrets.append(v)
+redactions=0
+def redact(s):
+ global redactions
+ for v in sorted(secrets,key=len,reverse=True):redactions+=s.count(v);s=s.replace(v,'[LOCAL_SECRET_REDACTED]')
+ for pattern,label in [(r'postgres(?:ql)?://[^\s"\x27<>]+','[DATABASE_URL_REDACTED]'),(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+','[JWT_REDACTED]'),(r'0x4[A-Za-z0-9_-]+','[TURNSTILE_SITE_KEY_REDACTED]'),(r'Bearer\s+[A-Za-z0-9._~-]+','Bearer [REDACTED]'),(r'\bG-[A-Z0-9]{6,}\b','[GA_ID_REDACTED]')]:
+  s,n=re.subn(pattern,label,s);redactions+=n
+ return s
+def walk(v):
+ if isinstance(v,str):return redact(v)
+ if isinstance(v,list):return [walk(x) for x in v]
+ if isinstance(v,dict):return {k:walk(x) for k,x in v.items()}
+ return v
+for p in sorted(base.iterdir()):
+ if not p.is_file() or p.name=='reference-before.json' or '.private.' in p.name or p.suffix not in ('.json','.log','.txt'):continue
+ if p.suffix=='.json':
+  data=walk(json.loads(p.read_text()));s=json.dumps(data,ensure_ascii=False,indent=2)+'\n';assert json.loads(s)==data
+ else:
+  s=redact(p.read_text());s=re.sub(r'[ \t]+(?=\r?$)','',s,flags=re.M).rstrip('\r\n')+'\n'
+ (dest/p.name).write_text(s)
+candidate=base/'nginx-public-86400.conf'
+assert hashlib.sha256(candidate.read_bytes()).hexdigest()=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+(dest/'nginx-public-86400.conf.txt').write_bytes(candidate.read_bytes())
+rows=[]
+for path,before in json.loads((base/'reference-before.json').read_text()).items():
+ head=subprocess.check_output(['git','-C',path,'rev-parse','HEAD'],text=True).strip();status=subprocess.check_output(['git','-C',path,'status','--porcelain=v1'],text=True)
+ assert head==before['head'] and status==before['status'],'reference drift'
+ rows.append({'path':path,'head':head,'statusSha256':hashlib.sha256(status.encode()).hexdigest(),'unchanged':True})
+(dest/'reference-isolation.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2)+'\n')
+for p in dest.iterdir():
+ if not p.is_file() or p.name=='SHA256SUMS':continue
+ s=p.read_text()
+ if p.suffix=='.json':json.loads(s)
+ assert not any(v in s for v in secrets),p.name
+ assert not re.search(r'0x4[A-Za-z0-9_-]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',s),p.name
+original=json.loads((base/'full-test.json').read_text());copied=json.loads((dest/'full-test.json').read_text())
+for k in ['numPassedTests','numFailedTests','numPendingTests','success']:assert original[k]==copied[k],k
+(dest/'evidence-scan.json').write_text(json.dumps({'knownLocalSecrets':len(secrets),'redactions':redactions,'leaks':0,'allJsonParse':True,'fullTestSummaryPreserved':True,'rawOriginalsPreservedIn':str(base)},indent=2)+'\n')
+checks=[hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name for p in sorted(dest.iterdir()) if p.is_file() and p.name!='SHA256SUMS']
+(dest/'SHA256SUMS').write_text('\n'.join(checks)+'\n')
+print('EVIDENCE_PACKAGE=PASS files='+str(len(checks))+' redactions='+str(redactions)+' leaks=0 json_parse=PASS')

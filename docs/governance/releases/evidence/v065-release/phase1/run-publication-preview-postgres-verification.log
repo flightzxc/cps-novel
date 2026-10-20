@@ -1,0 +1,41 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.5
+
+stdout | tests/integration/tasks/publication-preview-postgres.test.ts > publication preview real roles > single and batch materialization never enqueue previews
+[tagging-initialize] {
+  context: '34e45ce4-34db-4bc6-b553-62bb52bacd69',
+  status: 'skipped',
+  reason: 'tagging_gates_closed'
+}
+
+stderr | tests/integration/tasks/publication-preview-postgres.test.ts > publication preview real roles > an unexpected middle publish SQL failure still queues only the committed prefix
+[publish-gate] batch publish aborted {
+  batchRequestId: '39991584-5a0a-4087-9d69-5d47f86fff2f',
+  articleId: 'df21b9d1-371f-4d26-8c06-8e4a4a01ffda',
+  processedCount: 1,
+  remainingCount: 1,
+  errorKind: 'PrismaClientUnknownRequestError'
+}
+
+stdout | tests/integration/tasks/publication-preview-postgres.test.ts > publication preview real roles > mixed local adapter load N=50 through real worker and legal <=200 publish batches
+WO1_LOCAL_SIMULATION {"size":50,"adapterDelayPerCallMs":2,"baselineClaimsPerSecond":55.776725766755646,"publishMs":293.6373749999998,"previewWorkerMs":1007.2869169999999,"claimWaitingAfterEnqueueMs":1023.1363750000005,"publishToAllPreviewCompleteMs":1300.9242919999997,"claimThroughputDuringPreview":0,"claimThroughputDropPercent":100,"estimatedUpstream1500msTwoCallsSeconds":150}
+
+stdout | tests/integration/tasks/publication-preview-postgres.test.ts > publication preview real roles > mixed local adapter load N=500 through real worker and legal <=200 publish batches
+WO1_LOCAL_SIMULATION {"size":500,"adapterDelayPerCallMs":2,"baselineClaimsPerSecond":88.5610822079227,"publishMs":2587.967708,"previewWorkerMs":11939.408959,"claimWaitingAfterEnqueueMs":11957.421333999999,"publishToAllPreviewCompleteMs":14527.376667,"claimThroughputDuringPreview":0,"claimThroughputDropPercent":100,"estimatedUpstream1500msTwoCallsSeconds":1500}
+
+ ✓ |node| tests/integration/tasks/publication-preview-postgres.test.ts (20 tests) 19526ms
+     ✓ concurrent overlapping requests and different source/account aliases reserve each novel once  513ms
+     ✓ mixed local adapter load N=50 through real worker and legal <=200 publish batches  1619ms
+     ✓ mixed local adapter load N=500 through real worker and legal <=200 publish batches  15730ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  17:02:34
+   Duration  20.08s (transform 371ms, setup 0ms, import 461ms, tests 19.53s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-publication-preview-secrets.tIYYHi/integration-result.json
+PUBLICATION_PREVIEW_INTEGRATION=PASS passed=20 skipped=0 filtered=false
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+PUBLICATION_PREVIEW_DICTIONARY_DRIFT=0
+PUBLICATION_PREVIEW_POSTGRES_VERIFICATION=PASS
+PUBLICATION_PREVIEW_DISPOSABLE_DATABASE_CLEANED=yes

@@ -1,0 +1,31 @@
+# Closed-window verification only. Input: docker logs --timestamps bounded by
+# [startedAt, endedAt), plus the read-only intent snapshot for the same window.
+# Never output original log lines, response bodies, codes, URLs or credentials.
+import argparse,datetime,json,pathlib
+p=argparse.ArgumentParser();p.add_argument('--log',required=True);p.add_argument('--snapshot',required=True);a=p.parse_args()
+s=json.loads(pathlib.Path(a.snapshot).read_text())
+def time(x):
+ # Docker timestamps may have nanoseconds; Python accepts the extra precision.
+ return datetime.datetime.fromisoformat(x.replace('Z','+00:00'))
+start,end=time(s['startedAt']),time(s['endedAt']);assert start<end
+counts={'getcode':0,'getvideoinfo':0};http429=0
+for line in pathlib.Path(a.log).read_text().splitlines():
+ parts=line.split(' ',1)
+ if len(parts)!=2:continue
+ try:t=time(parts[0]);event=json.loads(parts[1])
+ except (ValueError,json.JSONDecodeError):continue
+ if not start<=t<end or event.get('event')!='upstream_call':continue
+ if event.get('endpoint') in counts:counts[event['endpoint']]+=1
+ if event.get('httpStatus')==429:http429+=1
+assert s['otherInflightStart']==0 and s['otherInflightEnd']==0,'other_claim_inflight'
+assert s['newIntentTotal']==s['newScopeIntentTotal'],'foreign_window_intent'
+assert all(r['intentCount']<=1 for r in s['books']),'intent_count_exceeds_one'
+assert all(r['intentCount']==0 for r in s['books'] if r['id'].startswith('c838c281')),'mine_intent_nonzero'
+assert counts['getcode']==s['newIntentTotal'],'getcode_intent_total_mismatch'
+assert s['unresolvedIntentTotal']==0 and s['manualReviewTotal']==0,'unresolved_intents'
+assert http429==0,'upstream_429'
+assert s['manual635DigestUnchanged'] is True,'plotnovel_manual_review_changed'
+print(json.dumps({'windowStart':s['startedAt'],'windowEnd':s['endedAt'],
+ 'countLabel':'窗口总调用数','getcode':counts['getcode'],'getvideoinfo':counts['getvideoinfo'],
+ 'newIntentTotal':s['newIntentTotal'],'perBookLabel':'按意图记录推定的每本 getcode 上限',
+ 'books':s['books'],'verification':'PASS'},ensure_ascii=False))

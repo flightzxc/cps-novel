@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "matchingTotalsAccepted": true,
+  "mismatchedTotalsRefused": true,
+  "mineNonzeroIntentRefused": true,
+  "upstreamRequests": 0
+}

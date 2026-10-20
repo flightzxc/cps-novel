@@ -1,0 +1,11 @@
+{
+  "ownerRuling": "删除web raw_payload读取，MINE剧场/精确标题/前缀三项定位；身份另行只读psql取证",
+  "priorStopPreserved": true,
+  "scriptBefore": "9c7f188b335817ca5a3abc1864029e245c347990b015b7f002de69ca206a9df9",
+  "scriptAfter": "3382cfea6f24fee507ab430f7f8a049b8b2b5abf239ce93bb9e77679c3e811b1",
+  "releaseCodeChanged": false,
+  "grantsChanged": false,
+  "executionRoleChanged": false,
+  "fixtureIteration": "首轮13/14通过；权限查询返回JSON数组被原测试输出解析器忽略，改为对象包装；新增所有CLI输出42501/permission_denied_stop禁止断言",
+  "replayWindowCheck": "显式包含parent_task_id为NULL的其它根领码任务；防止SQL NOT的NULL语义漏检，真实库重放/status加入外来根任务拒绝断言"
+}

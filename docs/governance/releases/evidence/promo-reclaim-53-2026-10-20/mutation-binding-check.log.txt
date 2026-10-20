@@ -1,0 +1,40 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (14 tests | 4 failed | 9 skipped) 8766ms
+     × uses the button error for theater_disabled without creating a batch 1841ms
+     × uses the button error for channel_disabled without creating a batch 1636ms
+     × uses the button error for account_unbound without creating a batch 1674ms
+     × uses the button error for account_disabled without creating a batch 1887ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > uses the button error for theater_disabled without creating a batch
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > uses the button error for channel_disabled without creating a batch
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > uses the button error for account_unbound without creating a batch
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > uses the button error for account_disabled without creating a batch
+AssertionError: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:148:49
+    146|     if (kind === "account_disabled") await owner.channelAccount.update…
+    147|     if (kind === "credential_never_validated") await owner.channelAcco…
+    148|     const x = cli(submitArgs()); expect(x.exit).toBe(64); expect(x.dat…
+       |                                                 ^
+    149|     expect(await owner.genericTask.count({ where: { params: { path: ["…
+    150|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed | 9 skipped (14)
+   Start at  17:59:10
+   Duration  8.89s (transform 23ms, setup 0ms, import 47ms, tests 8.77s, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

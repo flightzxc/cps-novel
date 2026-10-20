@@ -1,0 +1,13 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.5
+
+
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+   Start at  17:01:04
+   Duration  2.06s (transform 298ms, setup 0ms, import 389ms, tests 1.60s, environment 0ms)
+
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+PROMO_CLAIM_BATCH_CONTROL_DICTIONARY_DRIFT=0
+PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
+PROMO_CLAIM_BATCH_CONTROL_DISPOSABLE_DATABASE_CLEANED=yes

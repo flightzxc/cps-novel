@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "image": "cps-novel:0.6.5-b378910",
+  "platform": "linux/amd64",
+  "network": "none",
+  "cwd": "/app",
+  "moduleLoad": "passed",
+  "argumentValidationExit": 64,
+  "databaseAccess": false,
+  "upstreamRequests": 0
+}

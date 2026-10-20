@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "testedCodeHead": "9e8e2ee7586adec48436ca30596f62f1e245f57e",
+  "scriptSha256": "64bff7823aca3229421aa01e9b5dd89d7aa30faffc2e28e5a6b157f90bbdfd3e",
+  "typecheckErrors": 0,
+  "lintErrors": 0,
+  "lintWarnings": 16,
+  "testsPassed": 14,
+  "testsSkipped": 0,
+  "unhandled": 0,
+  "sqlstate42501": 0,
+  "payloadRows": 54,
+  "mutationsPassed": 2,
+  "mutationsRestoredDiffQuiet": true,
+  "accountValidatorVerbatimLines": 20,
+  "executionRole": "web_app",
+  "grantsChanged": false,
+  "releaseCodeChanged": false,
+  "productionConnected": false,
+  "mainReview": "pending"
+}

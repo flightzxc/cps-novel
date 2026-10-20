@@ -1,0 +1,24 @@
+// Only after Owner approves deployment, after v0.6.5 is healthy; read-only.
+// Copy reviewed ops TS to /tmp/promo-reclaim-53.ts, verify its pinned SHA256.
+// Run in the native web container, cwd=/app, with tsx --tsconfig /app/tsconfig.json.
+import { createRequire } from 'node:module';
+import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const load = createRequire('/app/package.json');
+const {PrismaClient} = load('@prisma/client');
+const ops = load('/tmp/promo-reclaim-53.ts');
+const db = new PrismaClient();
+(async () => {
+ try {
+  const snapshot = await ops.captureBaseline(db, '71f0e655-0640-4f07-bcbb-041f027fa7cb');
+  const bytes = JSON.stringify(snapshot, null, 2) + '\n';
+  writeFileSync('/tmp/promo-reclaim-53-phase-a.json', bytes, {flag:'wx',mode:0o600});
+  console.log(JSON.stringify({phase:'A',databaseRole:'web_app',transactionReadOnly:'on',count:snapshot.allIds.length,
+    actorId:snapshot.actorId,accountId:snapshot.accountId,canaryIds:snapshot.canaryIds,
+    mineId:snapshot.allIds.find((id:string)=>id.startsWith('c838c281')),
+    mineLocationVerified:true,seriesIdentityEvidence:'separate read-only psql',remainingIdsSha256:snapshot.remainingIdsSha256,baselineSha256:createHash('sha256').update(bytes).digest('hex')}));
+ } catch (e) {
+  console.error(JSON.stringify({stopped:true,code:e instanceof ops.OpsError ? e.code : 'phase_a_read_failed_stop'}));
+  process.exitCode=64;
+ } finally {await db.$disconnect();}
+})();

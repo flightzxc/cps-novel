@@ -1,0 +1,26 @@
+[
+  {
+    "name": "typecheck-governance",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "started_at": "2026-10-20T09:02:10.233750+00:00",
+    "exit": 0,
+    "seconds": 4.005,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/typecheck-governance.log"
+  },
+  {
+    "name": "lint-governance",
+    "command": [
+      "npm",
+      "run",
+      "lint"
+    ],
+    "started_at": "2026-10-20T09:02:14.239287+00:00",
+    "exit": 0,
+    "seconds": 14.028,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/lint-governance.log"
+  }
+]

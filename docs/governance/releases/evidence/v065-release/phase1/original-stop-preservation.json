@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "originalBytesUnchanged": true,
+  "files": {
+    "phase1-stop.txt": "0a22082fb7fd1be0f19fbf6a0ddd72f45410783aec4b466aa6367f6892a9949e",
+    "runners-result.json": "2e00f526582bd0859eebcbb9a2e0380dfc8f3e94fbeec74ebf456db2ca64df8e",
+    "wrapper-repair.json": "6cbd2c86ce1afca598b4a76f4ffdb540ce6aa0a7d73c208b6dbc32223aa7d8ef",
+    "remaining-result.json": "870f3feaad3b03b2efcf762414e9f4c74db7caf5cb124204a4e3741437917294",
+    "phase1-stop.json": "b392fee47fa7f484fb35b2055c8776681520336f7a8967f2a76d5f5d6f77911c",
+    "basic-result.json": "e5aad7ae119fdf834b9f42870444030f133a35cf4aae99d63262db5485e1d70d",
+    "ops-typecheck-stop.log.txt": "ddc045d357710df926f1900f00678d4820a950cad04fc111844e7e0af709792b",
+    "install-result.json": "56fb8bef4fbc8a2843a292272e75a700af52a2394982be8835b7bc5439c38db4"
+  },
+  "ownerRulings": "fixture self-repair; Web-readable MINE lookup; independent read-only psql evidence"
+}

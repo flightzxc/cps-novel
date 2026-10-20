@@ -1,0 +1,10 @@
+
+> cps-novel@0.6.5 typecheck
+> tsc --noEmit
+
+tests/integration/ops/promo-reclaim-53-postgres.test.ts(57,42): error TS2322: Type '{ id: string; channelAppId: string; externalBookId: string; sourceLanguageCode: string; sourceLocale: string; title: string; status: string; novelId: string; rawPayload: { agencyId: number; seriesId: string; language: number; }; }' is not assignable to type '(Without<NovelSourceItemCreateInput, NovelSourceItemUncheckedCreateInput> & NovelSourceItemUncheckedCreateInput) | (Without<...> & NovelSourceItemCreateInput)'.
+  Type '{ id: string; channelAppId: string; externalBookId: string; sourceLanguageCode: string; sourceLocale: string; title: string; status: string; novelId: string; rawPayload: { agencyId: number; seriesId: string; language: number; }; }' is not assignable to type 'Without<NovelSourceItemCreateInput, NovelSourceItemUncheckedCreateInput> & NovelSourceItemUncheckedCreateInput'.
+    Property 'description' is missing in type '{ id: string; channelAppId: string; externalBookId: string; sourceLanguageCode: string; sourceLocale: string; title: string; status: string; novelId: string; rawPayload: { agencyId: number; seriesId: string; language: number; }; }' but required in type 'NovelSourceItemUncheckedCreateInput'.
+tests/integration/ops/promo-reclaim-53-postgres.test.ts(60,56): error TS2322: Type '{ channelAppId: string; externalBookId: string; sourceLanguageCode: string; title: string; }' is not assignable to type '(Without<NovelSourceItemCreateInput, NovelSourceItemUncheckedCreateInput> & NovelSourceItemUncheckedCreateInput) | (Without<...> & NovelSourceItemCreateInput)'.
+  Type '{ channelAppId: string; externalBookId: string; sourceLanguageCode: string; title: string; }' is not assignable to type 'Without<NovelSourceItemCreateInput, NovelSourceItemUncheckedCreateInput> & NovelSourceItemUncheckedCreateInput'.
+    Type '{ channelAppId: string; externalBookId: string; sourceLanguageCode: string; title: string; }' is missing the following properties from type 'NovelSourceItemUncheckedCreateInput': description, rawPayload

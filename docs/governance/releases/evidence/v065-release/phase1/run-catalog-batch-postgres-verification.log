@@ -1,0 +1,110 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/release-v0.6.5
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > materializes 12,051 fixed members across channels without omissions at 50-row boundaries
+CATALOG_BATCH_SCALE_METRIC count=12051 materializeMs=1788 expectedHash=de230bec6460d7e3ade1addef265c9d210466c8c4a7fbe2344ea7f9dea0cf0e8
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=seedCatalogRows_claimed elapsedMs=323
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=seedCatalogRows_free_and_manual elapsedMs=3
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=bulkLinkAllUnderChannel elapsedMs=1087
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=bulkSeedFetchedPromoLinks elapsedMs=634
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=seedManualReviewIntent_loop elapsedMs=197
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=analyzePromoLink elapsedMs=78
+PROMO_LINK_STATUS_SCALE_METRIC phase=seed claimed=36000 notClaimed=130 manualReview=40 elapsedMs=2322
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=listing elapsedMs=79
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）
+PROMO_LINK_STATUS_SCALE_METRIC phase=enumerate elapsedMs=78
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=seed elapsedMs=972
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_all_default_order elapsedMs=22
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_all_sort_source_created_desc elapsedMs=18
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_30d elapsedMs=15
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_30d_sort_source_created_desc elapsedMs=15
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_90d elapsedMs=15
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_90d_sort_source_created_desc elapsedMs=13
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_365d elapsedMs=16
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_365d_sort_source_created_desc elapsedMs=17
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=list_within_365d_page_2 elapsedMs=16
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 30 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=seed elapsedMs=1087
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 30 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=enumerate_within_30d elapsedMs=113
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 90 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=seed elapsedMs=973
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 90 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=enumerate_within_90d elapsedMs=205
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 365 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=seed elapsedMs=942
+
+stdout | tests/integration/catalog-batch/postgres.test.ts > catalog batch on disposable PostgreSQL 16.14 > 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 365 天）实测耗时，selectedCount 与列表一致 (worker_app role)
+SOURCE_CREATED_FILTER_SCALE_METRIC rows=98239 step=enumerate_within_365d elapsedMs=882
+
+ ✓ |node| tests/integration/catalog-batch/postgres.test.ts (50 tests) 13245ms
+     ✓ materializes 12,051 fixed members across channels without omissions at 50-row boundaries  2152ms
+     ✓ quiesces runtime heartbeats before a slow fenced protected write  364ms
+     ✓ 规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）  2517ms
+     ✓ 上架时间筛选·场景 F：9.8 万本规模下带该筛选的列表查询（含 count、含新排序）实测耗时，计数与分布一致 (web_app role)  1142ms
+     ✓ 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 30 天）实测耗时，selectedCount 与列表一致 (worker_app role)  1251ms
+     ✓ 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 90 天）实测耗时，selectedCount 与列表一致 (worker_app role)  1226ms
+     ✓ 上架时间筛选·场景 F：9.8 万本规模下 worker 枚举（纳入书目·pending·近 365 天）实测耗时，selectedCount 与列表一致 (worker_app role)  1875ms
+stdout | tests/integration/catalog-batch/promo-claim-catalog-position-sort-postgres.test.ts > promo-claim lifecycle 5-A: 页位置登记后的枚举排序与载荷提示 (real Postgres) > sorts 5,000 books by trusted page position, groups untrusted/mismatched-signature rows to the tail, and stamps catalogPageHint/preReadMode consistently
+PROMO_CLAIM_CATALOG_POSITION_SORT_METRIC scaleCount=5000 enumerateMs=563
+
+ ✓ |node| tests/integration/catalog-batch/promo-claim-catalog-position-sort-postgres.test.ts (1 test) 880ms
+     ✓ sorts 5,000 books by trusted page position, groups untrusted/mismatched-signature rows to the tail, and stamps catalogPageHint/preReadMode consistently  869ms
+stdout | tests/integration/catalog-batch/promo-claim-lifecycle-shard-enumeration-postgres.test.ts > promo-claim lifecycle: 阶段2 第2步枚举切分片 (real Postgres) > enumerates 20,000 eligible books into disabled awaiting_release shards, and selectPending refuses every one of them until a shard is (simulated-)released
+PROMO_CLAIM_SHARD_ENUM_METRIC scaleCount=20000 enumerateMs=2376
+
+ ✓ |node| tests/integration/catalog-batch/promo-claim-lifecycle-shard-enumeration-postgres.test.ts (4 tests) 4167ms
+     ✓ enumerates 20,000 eligible books into disabled awaiting_release shards, and selectPending refuses every one of them until a shard is (simulated-)released  3577ms
+ ✓ |node| tests/integration/tasks/promo-claim-lifecycle-shard-deadline-postgres.test.ts (6 tests) 157ms
+
+ Test Files  4 passed (4)
+      Tests  61 passed (61)
+   Start at  16:47:53
+   Duration  19.53s (transform 492ms, setup 0ms, import 799ms, tests 18.45s, environment 0ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-catalog-batch-secrets.oqSHGg/integration-result.json
+CATALOG_BATCH_INTEGRATION=PASS files=4 passed=61 skipped=0
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+CATALOG_BATCH_DICTIONARY_DRIFT=0
+CATALOG_BATCH_POSTGRES_VERIFICATION=PASS
+CATALOG_BATCH_DISPOSABLE_DATABASE_CLEANED=yes

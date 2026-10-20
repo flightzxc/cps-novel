@@ -1,0 +1,9 @@
+COMPOSE_VARIABLES=PASS file=docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/production-like/docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/preproduction/docker-compose.yml added=0 removed=0
+COMPOSE_VARIABLES=PASS file=.env.example added=0 removed=0
+COMPOSE_VARIABLES=PASS file=infra/preproduction/preprod.env.example added=0 removed=0
+COMPOSE_RENDER=PASS mode=root services=5
+COMPOSE_RENDER=PASS mode=production-like services=7
+COMPOSE_RENDER=PASS mode=preproduction services=6
+COMPOSE_ALL=PASS

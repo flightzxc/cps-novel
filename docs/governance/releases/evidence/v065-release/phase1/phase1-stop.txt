@@ -1,0 +1,5 @@
+PHASE1=STOPPED reason=ops_typecheck_failed
+RELEASE_GATES=PASS full_tests=11639 real_db_full=11649 runners=37 nginx_mutations=27
+OPS_TYPECHECK=FAIL errors=2 fixture_missing=description,rawPayload
+OPS_SMOKE=NOT_RUN OPS_MUTATIONS=NOT_RUN OPS_MAIN_REVIEW=PENDING
+GITHUB_PUSH=NOT_RUN IMMUTABLE_ARCHIVE=NOT_BUILT PRODUCTION_CONNECTED=no

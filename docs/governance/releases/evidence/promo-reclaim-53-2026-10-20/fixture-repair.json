@@ -1,0 +1,38 @@
+{
+  "ownerRuling": "新ops夹具类型错误，自己修正后重跑；不重跑已通过产品门禁",
+  "initialTypecheckExit": 2,
+  "missingRequiredFields": [
+    "description",
+    "rawPayload"
+  ],
+  "fixtureSource": "tests/integration/tasks/promo-claim-batch-control-postgres.test.ts:158-184",
+  "helperCopiedVerbatim": true,
+  "originalFixtureSha256": "37ecc3afb56f49deeeae2858b505b835074e3befcc8be1cfc9a344d07f7707d5",
+  "fixedFixtureSha256": "beca999e82299ce67bb8a376b1b9a6b84f74ce30e7e166a9f1e5e27e84369a38",
+  "opsScriptSha256Unchanged": "9c7f188b335817ca5a3abc1864029e245c347990b015b7f002de69ca206a9df9",
+  "releaseFinalUnchanged": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "originalStopRecordPreserved": true,
+  "subsequentFixtureIterations": [
+    {
+      "run": "smoke-repaired",
+      "result": "管理员夹具占位哈希不符合admin_identity_password_hash_check",
+      "correction": "复用hashAdminPassword生成一次性有效哈希，不打印哈希/口令"
+    },
+    {
+      "run": "smoke-repaired2",
+      "result": "夹具子进程指向项目未安装的node_modules/tsx；业务命令尚未执行",
+      "correction": "与Docker一致固定tsx@4.21.0至npm缓存，夹具通过npm exec --offline启动；不改package/lockfile"
+    },
+    {
+      "run": "smoke-repaired3",
+      "result": "tsx -e配合分开的--tsconfig参数静默退出，子进程无JSON；夹具启动方式问题",
+      "correction": "eval启动器使用--tsconfig=<绝对路径>；文件入口保持原用法"
+    },
+    {
+      "run": "smoke-repaired4 plus debug-capture",
+      "result": "真实web_app P2010/42501，薄脚本captureBaseline读取Worker-only raw_payload列",
+      "correction": "停止，不改脚本/角色/grants；待Owner裁定权限安全的查询修正"
+    }
+  ],
+  "fixturePayloadShape": "54/54 pass: agencyId number, language number, seriesId nonempty string; description present"
+}

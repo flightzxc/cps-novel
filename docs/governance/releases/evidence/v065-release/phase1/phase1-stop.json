@@ -1,0 +1,46 @@
+{
+  "status": "STOPPED_ops_typecheck_failed",
+  "timestamp": "2026-10-20T08:14:05.535049+00:00",
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "tree": "0bb390152c2f4e87cb69338e96e4e4722f6f5f05",
+  "releaseGates": {
+    "typecheck": 0,
+    "lintErrors": 0,
+    "fullPassed": 11639,
+    "fullFailed": 0,
+    "realDbFullPassed": 11649,
+    "runnersPassed": 37,
+    "remainingGatesPassed": 9,
+    "routesDynamic": 100,
+    "routesStatic": 2,
+    "proxyProbes": 1750,
+    "migrationCount": 29,
+    "tableCount": 60,
+    "dictionaryTotal": 1401,
+    "dictionaryActive": 1331,
+    "nginxMutations": 27,
+    "nginxSha256": "7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9"
+  },
+  "ops": {
+    "npmCi": 0,
+    "prismaGenerate": 0,
+    "typecheckExit": 2,
+    "typeErrors": 2,
+    "fixtureMissingFields": [
+      "description",
+      "rawPayload"
+    ],
+    "lint": "not_run",
+    "smoke": "not_run",
+    "mutations": "not_run",
+    "scriptHead": "not_committed",
+    "mainReview": "pending"
+  },
+  "githubPushed": false,
+  "immutableArchiveBuilt": false,
+  "productionConnected": false,
+  "productionClaimsSubmitted": 0,
+  "stopRule": "交接材料：什么时候停：仓库门禁失败、线上状态与预期不符、提示词与脚本矛盾。",
+  "heavyLockReleased": true,
+  "referenceIsolation": "unchanged"
+}

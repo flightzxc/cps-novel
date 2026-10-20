@@ -1,0 +1,9 @@
+import json, pathlib, subprocess
+base=pathlib.Path('.tmp/v065-release')
+identity=json.loads((base/'identity.json').read_text())
+assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==identity['final']
+assert not subprocess.check_output(['git','status','--porcelain=v1'],text=True)
+subprocess.run(['git','push','--set-upstream','origin',identity['branch']],check=True)
+actual=subprocess.check_output(['git','ls-remote','origin','refs/heads/'+identity['branch']],text=True).split()[0]
+assert actual==identity['final']
+print('GITHUB_FINAL_PUSH=PASS commit='+actual)

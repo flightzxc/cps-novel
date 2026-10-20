@@ -1,0 +1,11 @@
+OPS_GATES=PASS
+OPS_CODE_HEAD=9e8e2ee7586adec48436ca30596f62f1e245f57e
+OPS_SCRIPT_SHA256=64bff7823aca3229421aa01e9b5dd89d7aa30faffc2e28e5a6b157f90bbdfd3e
+TYPECHECK=PASS errors=0
+LINT=PASS errors=0 warnings=16
+REAL_WEB_APP_SMOKE=PASS files=1 passed=14 skipped=0 unhandled=0 sqlstate_42501=0
+PAYLOAD_SHAPE=PASS rows=54 agencyId=number seriesId=string language=number
+OPS_MUTATIONS=PASS count=2 red=yes restored_diff_quiet=yes
+ACCOUNT_VALIDATOR_VERBATIM=PASS lines=20
+RESTORED_SMOKE=PASS passed=14
+MAIN_REVIEW=PENDING PRODUCTION_CONNECTED=no

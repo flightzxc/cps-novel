@@ -1,0 +1,44 @@
+SOURCE_COMMIT=58cdb94da40e3103ddc4ebba7c267ce0c23b905e
+SOURCE=src/app/(admin)/catalog-sync/_actions.ts:477-496
+COPY=scripts/ops/promo-reclaim-53.ts:49-68
+VERBATIM=PASS
+SOURCE 477 | async function validatePromoAccountConfiguration(
+COPY   49 | async function validatePromoAccountConfiguration(
+SOURCE 478 |   db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+COPY   50 |   db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+SOURCE 479 |   accounts: Readonly<Record<string, string>>,
+COPY   51 |   accounts: Readonly<Record<string, string>>,
+SOURCE 480 |   now: Date,
+COPY   52 |   now: Date,
+SOURCE 481 | ): Promise<PromoLinkClaimCredentialWarning[]> {
+COPY   53 | ): Promise<PromoLinkClaimCredentialWarning[]> {
+SOURCE 482 |   const warnings: PromoLinkClaimCredentialWarning[] = [];
+COPY   54 |   const warnings: PromoLinkClaimCredentialWarning[] = [];
+SOURCE 483 |   for (const [channelAppId, accountId] of Object.entries(accounts)) {
+COPY   55 |   for (const [channelAppId, accountId] of Object.entries(accounts)) {
+SOURCE 484 |     const binding = await db.channelApp.findFirst({ where: {
+COPY   56 |     const binding = await db.channelApp.findFirst({ where: {
+SOURCE 485 |       id: channelAppId, status: "active",
+COPY   57 |       id: channelAppId, status: "active",
+SOURCE 486 |       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+COPY   58 |       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+SOURCE 487 |     }, select: { id: true } });
+COPY   59 |     }, select: { id: true } });
+SOURCE 488 |     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+COPY   60 |     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+SOURCE 489 |     const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+COPY   61 |     const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+SOURCE 490 |     if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+COPY   62 |     if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+SOURCE 491 |     if (admission.expiringSoon && admission.expiresAt) {
+COPY   63 |     if (admission.expiringSoon && admission.expiresAt) {
+SOURCE 492 |       warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+COPY   64 |       warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+SOURCE 493 |     }
+COPY   65 |     }
+SOURCE 494 |   }
+COPY   66 |   }
+SOURCE 495 |   return warnings;
+COPY   67 |   return warnings;
+SOURCE 496 | }
+COPY   68 | }

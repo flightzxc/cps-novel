@@ -1,0 +1,29 @@
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (14 tests | 1 failed | 13 skipped) 2151ms
+     × existing code is excluded and causes the exact 48 plan to fail closed 2127ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > existing code is excluded and causes the exact 48 plan to fail closed
+AssertionError: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:139:20
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  17:59:04
+   Duration  2.31s (transform 25ms, setup 0ms, import 63ms, tests 2.15s, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes
