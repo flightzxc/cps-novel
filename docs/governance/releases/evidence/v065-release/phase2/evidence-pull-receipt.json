@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-20T10:28:58.149463+00:00",
+  "mode": "read existing artifact/log files only; no new database/upstream/service actions after phase-A STOP",
+  "files": [
+    "phase-a-capture.ts.txt",
+    "post-http-requests.jsonl",
+    "post-http-results.json",
+    "promo-reclaim-53.ts.txt",
+    "release-v0.6.5-b378910.exit.json",
+    "release-v0.6.5-b378910.log",
+    "release-v0.6.5-b378910.started",
+    "release-v0.6.5-b378910.timeline.json"
+  ]
+}

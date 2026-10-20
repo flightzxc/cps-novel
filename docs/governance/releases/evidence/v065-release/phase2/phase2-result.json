@@ -1,0 +1,185 @@
+{
+  "status": "deployed_technical_pass_phaseA_STOP",
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "tree": "0bb390152c2f4e87cb69338e96e4e4722f6f5f05",
+  "target": "haiyue-vps",
+  "releaseExit": 0,
+  "maintenanceSeconds": 48.476629,
+  "timeline": [
+    {
+      "event": "DEPLOY_STARTED",
+      "at": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "event": "MAINTENANCE=ON",
+      "at": "2026-10-20T10:25:45.035833+00:00"
+    },
+    {
+      "event": "DATABASE_MIGRATION=PASS",
+      "at": "2026-10-20T10:25:49.953480+00:00"
+    },
+    {
+      "event": "MAINTENANCE=OFF",
+      "at": "2026-10-20T10:26:33.512462+00:00"
+    },
+    {
+      "event": "RELEASE=PASS",
+      "at": "2026-10-20T10:26:34.687831+00:00"
+    },
+    {
+      "event": "DEPLOY_FINISHED",
+      "at": "2026-10-20T10:26:34.688309+00:00",
+      "exit": 0
+    }
+  ],
+  "backup": {
+    "path": "/var/lib/cps-novel/backups/logical/cps-novel-v065-20261020T102120Z.dump",
+    "sha256": "7645a906dd4f3886cb9da9d7a0f41798673197db2bfeb97b02d29f841065d530",
+    "bytes": 781611939,
+    "restoreList": "PASS"
+  },
+  "env": {
+    "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v065-20261020T102520Z",
+    "beforeSha256": "431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494",
+    "afterSha256": "c0a1eca45444ac9b50ae7e307b63f897d91133b278556b0c175f50ab3792bceb",
+    "otherBytesCmp": "PASS",
+    "allowlists": "UNCHANGED"
+  },
+  "health": {
+    "ok": true,
+    "status": "healthy",
+    "build": {
+      "version": "0.6.5",
+      "commit": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+      "builtAt": "2026-10-20T08:06:36Z"
+    },
+    "featureFlags": {},
+    "metadataConsistency": {
+      "status": "passed",
+      "runtimeClaims": {
+        "version": "0.6.5",
+        "commit": "b378910a8ec4b78029e71ad1bac92c742efb9f5b"
+      }
+    },
+    "database": {
+      "status": "passed",
+      "reason": null,
+      "durationMs": 1
+    },
+    "reasons": []
+  },
+  "services": [
+    {
+      "service": "web",
+      "id": "faa596266ca05f4186185cb10b6c79fe1caf32c806e8ab0cd23e138ea15df09d",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "service": "worker",
+      "id": "f5e1ab3d7795a321bbac6e730d7e6d71f2a057331a283a67cc1b46350eef6470",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "service": "worker-light",
+      "id": "3d86d6fd042180ab02c9395bf43d8d20f9799afa491f54fe001f0c0fdd042ec4",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "service": "scheduler",
+      "id": "4053c9a3d705d559234f240cb398a924593c99424cce1559a4a7798dff00698f",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "service": "backup-timer",
+      "id": "20c18a666a3ce68a3afc4ada934b6437071507b1e4d5433a0148cc388067dd0a",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "state": "running",
+      "health": "healthy",
+      "error_lines": 0,
+      "permission_denied": 0,
+      "expected_permission_probe_errors": 0,
+      "unexpected_error_lines": 0,
+      "unexpected_permission_denied": 0,
+      "since": "2026-10-20T10:25:36.737994+00:00"
+    }
+  ],
+  "migrations": 29,
+  "tables": 60,
+  "nginxUnchanged": true,
+  "effectiveTag": {
+    "missing": 0,
+    "extra": 0,
+    "changed": 0
+  },
+  "indexnow": {
+    "breakerOpen": false,
+    "rateLimitWaiting": false,
+    "dueUrls": 0,
+    "deadLetters": 0
+  },
+  "externalHttpRequests": 9,
+  "httpBudget": 10,
+  "phaseA": {
+    "at": "2026-10-20T10:28:52.457079+00:00",
+    "status": "STOP",
+    "code": "mine_identity_mismatch",
+    "strictLocation": [
+      "MoboReader channelApp 85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "title exact MINE",
+      "id prefix c838c281"
+    ],
+    "phaseABaselineCreated": false,
+    "remaining48ManifestCreated": false,
+    "claimBatchSubmitted": false,
+    "upstreamCallsInitiated": 0,
+    "matchConditionsRelaxed": false,
+    "requiredNextStep": "Owner/controller decision before more phase-A diagnosis or retries",
+    "databasePermissionErrorObserved": false
+  },
+  "claimBatchesSubmittedByThisRun": 0,
+  "upstreamCallsInitiatedByThisRun": 0,
+  "publicUrlsChanged": false,
+  "sudoUsed": false,
+  "moreProductionQueriesAfterStop": false,
+  "postStopActivity": "read existing evidence files, local evidence/governance only",
+  "governance": "local phase2 receipt now; annotated tag/generated changelog/unique release log/Notion sync-readback deferred until reclaim outcome per Owner plan"
+}

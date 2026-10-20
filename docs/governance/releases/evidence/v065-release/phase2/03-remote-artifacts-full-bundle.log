@@ -1,0 +1,46 @@
+b378910a8ec4b78029e71ad1bac92c742efb9f5b.json: OK
+cps-novel-0.6.5-b378910.tar.zst: OK
+cps-novel-code-b378910.bundle: OK
+identity.json: OK
+Initialized empty Git repository in /opt/cps-novel/releases/b378910a8ec4b78029e71ad1bac92c742efb9f5b/.git/
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+The bundle contains this ref:
+eade8f152d696b08360f253127a134c14db75853 refs/heads/release/v0.6.5-2026-10-20
+The bundle records a complete history.
+The bundle uses this hash algorithm: sha1
+/opt/cps-novel/shared/artifacts/staging/v065/cps-novel-code-b378910.bundle is okay
+From /opt/cps-novel/shared/artifacts/staging/v065/cps-novel-code-b378910.bundle
+ * [new branch]      release/v0.6.5-2026-10-20 -> release/v0.6.5-2026-10-20
+HEAD is now at b378910a 发布：准备海阅 v0.6.5 PATCH 六文件版本身份
+REMOTE_CHECKOUT=PASS Final=b378910a8ec4b78029e71ad1bac92c742efb9f5b tree=0bb390152c2f4e87cb69338e96e4e4722f6f5f05
+IDENTITY=PASS
+  target            sha256:3a3a276aefa10d4aa9339290d0eb1f5ded040be05abbdb80e3e06b31cfada87a (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:3a3a276aefa10d4aa9339290d0eb1f5ded040be05abbdb80e3e06b31cfada87a
+  config            sha256:4a56e99cae81d9f043c7bbc6339d185c5ab5a3e4c1a5b40044d070bc910c9843
+  platform          linux/amd64
+  revision          b378910a8ec4b78029e71ad1bac92c742efb9f5b
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=b378910a8ec4b78029e71ad1bac92c742efb9f5b
+  archive_sha256=187158e6a80b6ee02939e0e38154945993bd39aa50dd66b28e1eeb95cb43fb9b
+  image_tag=cps-novel:0.6.5-b378910
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.6.5-b378910
+  target             =sha256:3a3a276aefa10d4aa9339290d0eb1f5ded040be05abbdb80e3e06b31cfada87a
+  platform_manifest  =sha256:3a3a276aefa10d4aa9339290d0eb1f5ded040be05abbdb80e3e06b31cfada87a
+  config             =sha256:4a56e99cae81d9f043c7bbc6339d185c5ab5a3e4c1a5b40044d070bc910c9843
+  platform           =linux/amd64
+  revision           =b378910a8ec4b78029e71ad1bac92c742efb9f5b
+REMOTE_ARTIFACTS=PASS
+ARTIFACT_VERIFIED_DIR=/opt/cps-novel/shared/artifacts/verified/v065

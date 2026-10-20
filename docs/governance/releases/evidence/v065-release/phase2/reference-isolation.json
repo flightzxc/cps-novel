@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "rows": [
+    {
+      "path": "/Users/chenweifeng/Documents/\u4ea7\u54c1\u539f\u578b\u53ca\u6587\u6863/cps\u9879\u76ee/cps-admin-v811-search-ux",
+      "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+      "statusBytesUnchanged": true,
+      "statusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/chenweifeng/Documents/\u4ea7\u54c1\u539f\u578b\u53ca\u6587\u6863/cps\u9879\u76ee/cps-admin",
+      "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+      "statusBytesUnchanged": true,
+      "statusSha256": "ea53d26ea21ebd3dace6e7ec9a2cdd2ee4e2ffab4463d38af3392451c38cb5ea"
+    }
+  ]
+}

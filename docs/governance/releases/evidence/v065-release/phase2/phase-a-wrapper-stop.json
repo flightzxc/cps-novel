@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-20T10:28:09.241174+00:00",
+  "failure": "own docker cp wrapper preserved host root-owned mode 0600; native web user EACCES reading TS entry, before database access",
+  "repair": "copy nonsecret reviewed script and read-only wrapper with mode0644; native web runtime user and web_app connection unchanged; no database grants or role changes",
+  "originalLog": "14-phase-a.log",
+  "authorization": "Owner: own wrapper errors corrected and rerun"
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T10:16:51.078827+00:00",
+  "owner": "主控已经审核过了，批准部署",
+  "authorized": [
+    "phase2_deploy_haiyue-vps",
+    "phase3A_readonly"
+  ],
+  "notAuthorized": [
+    "claim_submit",
+    "canary_submit",
+    "rollback"
+  ]
+}

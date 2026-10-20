@@ -1,0 +1,11 @@
+{
+  "name": "14-phase-a",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client.py.txt",
+    ".tmp/v065-release/phase2/phase-a.py.txt"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792492051.29265,
+  "finishedAt": 1792492055.759669
+}

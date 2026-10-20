@@ -1,0 +1,6 @@
+import pathlib,subprocess
+folder=pathlib.Path('.tmp/v065-release/phase2/transport').resolve();files=sorted(str(p) for p in folder.iterdir());assert len(files)==5
+ssh=['ssh','-o','KexAlgorithms=curve25519-sha256','-o','ConnectTimeout=20','-o','BatchMode=yes']
+subprocess.run(ssh+['haiyue-vps','test','-d','/opt/cps-novel/shared/artifacts/staging/v065'],check=True)
+subprocess.run(['rsync','--archive','--partial','--stats','-e',"ssh -o KexAlgorithms=curve25519-sha256 -o ConnectTimeout=20 -o BatchMode=yes"]+files+['haiyue-vps:/opt/cps-novel/shared/artifacts/staging/v065/'],check=True)
+print('UPLOAD=PASS')

@@ -1,0 +1,11 @@
+{
+  "name": "03-remote-artifacts-full-bundle",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client.py.txt",
+    ".tmp/v065-release/phase2/remote-artifacts-full-bundle.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792491827.072583,
+  "finishedAt": 1792491869.256883
+}

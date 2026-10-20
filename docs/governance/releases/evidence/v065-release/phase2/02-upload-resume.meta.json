@@ -1,0 +1,10 @@
+{
+  "name": "02-upload-resume",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/upload-resume-direct.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792491665.751482,
+  "finishedAt": 1792491736.0838242
+}

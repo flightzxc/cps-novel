@@ -1,0 +1,19 @@
+b378910a8ec4b78029e71ad1bac92c742efb9f5b.json: OK
+cps-novel-0.6.5-b378910.tar.zst: OK
+cps-novel-code-b378910.bundle: OK
+identity.json: OK
+Cloning into '/opt/cps-novel/releases/b378910a8ec4b78029e71ad1bac92c742efb9f5b'...
+done.
+error: /opt/cps-novel/releases/db623505539c3ca55f55b1270aab829b8db102d7/.git/objects: ignoring alternate object stores, nesting too deep
+The bundle contains this ref:
+eade8f152d696b08360f253127a134c14db75853 refs/heads/release/v0.6.5-2026-10-20
+The bundle requires this ref:
+50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+The bundle uses this hash algorithm: sha1
+error: /opt/cps-novel/releases/db623505539c3ca55f55b1270aab829b8db102d7/.git/objects: ignoring alternate object stores, nesting too deep
+error: some prerequisite commits exist in the object store, but are not connected to the repository's history
+Traceback (most recent call last):
+  File "<stdin>", line 7, in <module>
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['git', '-C', '/opt/cps-novel/releases/b378910a8ec4b78029e71ad1bac92c742efb9f5b', 'bundle', 'verify', '/opt/cps-novel/shared/artifacts/staging/v065/cps-novel-code-b378910.bundle']' returned non-zero exit status 1.

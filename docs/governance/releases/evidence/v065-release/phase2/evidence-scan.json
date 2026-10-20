@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-20T10:31:15.565597+00:00",
+  "status": "PASS",
+  "redactions": 0,
+  "leaks": 0,
+  "scriptsUseTxtSuffix": true,
+  "privateAndBinaryExcluded": true,
+  "phaseA": "STOP mine_identity_mismatch",
+  "externalHttpRequests": 9
+}

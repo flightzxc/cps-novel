@@ -1,0 +1,8 @@
+from pathlib import Path
+import subprocess,sys,json,time,os
+out=Path.cwd()/'.tmp/v065-release/phase2';name=sys.argv[1];cmd=sys.argv[2:];log=out/(name+'.log');assert not log.exists(),log
+start=time.time();print('START='+name,flush=True)
+with log.open('xb') as f:os.chmod(log,0o600);rc=subprocess.run(cmd,stdout=f,stderr=subprocess.STDOUT).returncode
+(out/(name+'.meta.json')).write_text(json.dumps({'name':name,'command':cmd,'exitCode':rc,'startedAt':start,'finishedAt':time.time()},indent=2)+'\n')
+print('END='+name+' EXIT='+str(rc)+' LOG='+str(log),flush=True)
+if rc:raise SystemExit(rc)

@@ -1,0 +1,170 @@
+{
+  "status": "PASS",
+  "requests": 9,
+  "budget": 10,
+  "redirectsFollowed": false,
+  "results": [
+    {
+      "sequence": 1,
+      "name": "drama_public_301",
+      "host": "pulsenovels.com",
+      "path": "/drama/the-housewifes-comeback-drama-p8mkirtiv?utm_source=chatgpt.com",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:27.542521+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 301,
+      "bodySha256": "7c89e5fb8bd1d46fd596178fd633089af34e75c879dab7c829716e2fc627809d",
+      "headers": {
+        "location": "https://enpulsedrama.com/drama/the-housewifes-comeback-drama-p8mkirtiv?utm_source=chatgpt.com",
+        "strict-transport-security": "max-age=86400"
+      }
+    },
+    {
+      "sequence": 2,
+      "name": "drama_admin_404",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/drama/x",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:29.202853+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 404,
+      "bodySha256": "766c1d6bcb81d3e983fb7adbc19c616d7fc01dafb7893738edc242e2adc59c07",
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      }
+    },
+    {
+      "sequence": 3,
+      "name": "dramas_public_404",
+      "host": "pulsenovels.com",
+      "path": "/dramas",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:31.610773+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 404,
+      "bodySha256": "0fea97480efdb20e0081951c20d9062dcf9574284899bd3c4869617080e86f95",
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "sequence": 4,
+      "name": "published_novel",
+      "host": "pulsenovels.com",
+      "path": "/novel/contract-baby-and-billionaire-pg15q11wz",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:33.336208+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 200,
+      "bodySha256": "2de2394e19a443d7702dfff5325e2b4ba834a980875334f27da6ebc37794cc95",
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "sequence": 5,
+      "name": "public_ga_present",
+      "host": "pulsenovels.com",
+      "path": "/",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:35.879175+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 200,
+      "bodySha256": "7fdec32912a7cda8d45cb523505806f92a9e01fc06c7e3a810e17654eb87f706",
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "ga": "present"
+    },
+    {
+      "sequence": 6,
+      "name": "admin_login_ga_absent",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/login",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:38.944319+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 200,
+      "bodySha256": "847e210cdd7edbdc418490a823efefb3365733d5e8c9c6bbf0536d7fef8d48b0",
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "ga": "absent",
+      "publicGaIdentifierAbsent": true
+    },
+    {
+      "sequence": 7,
+      "name": "health_anonymous_health",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:40.655705+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 401,
+      "bodySha256": "b040e5d5bbdb37957e773627aa09416c9326eea6d0a0f3b5c504b629b1f22a7a",
+      "headers": {
+        "www-authenticate": "Basic realm=\"CPS Novel Administration\"",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "text/html"
+      }
+    },
+    {
+      "sequence": 8,
+      "name": "health_authenticated_health",
+      "host": "zbcwf.pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": true,
+      "at": "2026-10-20T10:27:42.849193+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 200,
+      "bodySha256": "987b572eee5a589e5ff0cfe78a068432804c05b1981b0dfe1cc2dd4781e33989",
+      "headers": {
+        "x-robots-tag": "noindex, nofollow, noarchive",
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "build": {
+        "version": "0.6.5",
+        "commit": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+        "builtAt": "2026-10-20T08:06:36Z"
+      }
+    },
+    {
+      "sequence": 9,
+      "name": "public_health",
+      "host": "pulsenovels.com",
+      "path": "/api/health",
+      "authenticated": false,
+      "at": "2026-10-20T10:27:44.589746+00:00",
+      "source": "client_proxy_via_temporary_ssh_forward",
+      "followRedirects": false,
+      "status": 200,
+      "bodySha256": "987b572eee5a589e5ff0cfe78a068432804c05b1981b0dfe1cc2dd4781e33989",
+      "headers": {
+        "strict-transport-security": "max-age=86400",
+        "content-type": "application/json"
+      },
+      "build": {
+        "version": "0.6.5",
+        "commit": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+        "builtAt": "2026-10-20T08:06:36Z"
+      }
+    }
+  ]
+}

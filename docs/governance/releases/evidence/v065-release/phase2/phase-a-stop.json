@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-20T10:28:52.457079+00:00",
+  "status": "STOP",
+  "code": "mine_identity_mismatch",
+  "strictLocation": [
+    "MoboReader channelApp 85c2fb3e-28f8-476a-83f2-9647e2206192",
+    "title exact MINE",
+    "id prefix c838c281"
+  ],
+  "phaseABaselineCreated": false,
+  "remaining48ManifestCreated": false,
+  "claimBatchSubmitted": false,
+  "upstreamCallsInitiated": 0,
+  "matchConditionsRelaxed": false,
+  "requiredNextStep": "Owner/controller decision before more phase-A diagnosis or retries",
+  "databasePermissionErrorObserved": false
+}

@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前仅本地准备，未连接生产，未提交生产批次。部署需 Owner“批准部署”；金丝雀只能运营提交；余48本另需 Owner“批准重领”与主控复核本脚本。失败书不重试。
+当前：Owner确认主控审核并批准部署，v0.6.5技术验收通过；甲阶段只读检查返回mine_identity_mismatch，按严格定位停手。未生成基线/清单、未提交批次，金丝雀暂不开始，余48本仍待另行批准。失败书不重试。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -44,6 +44,10 @@
 
 代码提交 `9e8e2ee7586adec48436ca30596f62f1e245f57e`，脚本SHA256 `64bff7823aca3229421aa01e9b5dd89d7aa30faffc2e28e5a6b157f90bbdfd3e`。原校验函数20行逐字一致；[逐行对照](evidence/promo-reclaim-53-2026-10-20/account-validation-lines.txt)。真实web_app冒烟14/14、无跳过/Unhandled/42501，54行payload形态断言通过。两组变异均行为变红后还原、git diff --quiet，最终完整冒烟再14/14通过。tsc0、lint0error/16既有warning；治理提交后再做提交后检查与GitHub回读。
 
-[原始结论](evidence/promo-reclaim-53-2026-10-20/summary.txt)、[门禁收据](evidence/promo-reclaim-53-2026-10-20/gates.json)、[变异](evidence/promo-reclaim-53-2026-10-20/mutations.json)、[夹具修正](evidence/promo-reclaim-53-2026-10-20/fixture-repair.json)、[权限修正](evidence/promo-reclaim-53-2026-10-20/permission-repair.json)。历史权限停点原样保留；原始失败日志保存在本地.tmp/promo-reclaim-53，不混作当前结果。未连接生产，仍须主控复核。
+[原始结论](evidence/promo-reclaim-53-2026-10-20/summary.txt)、[门禁收据](evidence/promo-reclaim-53-2026-10-20/gates.json)、[变异](evidence/promo-reclaim-53-2026-10-20/mutations.json)、[夹具修正](evidence/promo-reclaim-53-2026-10-20/fixture-repair.json)、[权限修正](evidence/promo-reclaim-53-2026-10-20/permission-repair.json)。历史权限停点原样保留；原始失败日志保存在本地.tmp/promo-reclaim-53，不混作当前结果。这是第一阶段交付时的历史状态；Owner随后确认主控已审核，生产甲阶段实际停点见下文。
 
 最终ops分支HEAD `786ec4ae270c4a5e3585ebe2f376116e6f2d3981` 已推送GitHub并回读一致；提交后tsc/lint通过，脚本SHA仍 `64bff7823aca3229421aa01e9b5dd89d7aa30faffc2e28e5a6b157f90bbdfd3e`。最终归档镜像内原生tsx/模块加载验证通过（network=none、无数据库访问）；收据见本目录证据中的github-push.json、post-governance.json及image-entry.json。主控复核仍待完成。
+
+## 甲阶段实际停点
+
+2026-10-20 JST：审核过的脚本SHA256不变，以容器原生用户和web_app执行。复制包装器的0600文件权限错误自修为0644后，函数返回`mine_identity_mismatch`并退出64；原始记录保留。没有数据库42501，没有换角色/改grants，没有调用任何提交函数或上游。严格条件未放宽。生产53本/5本/48本、账户和635条摘要均未冻结，不可进行运营金丝雀；须Owner/主控裁定后继续只读诊断。详见[发布及停点证据](evidence/v065-release/phase2/phase2-result.json)。

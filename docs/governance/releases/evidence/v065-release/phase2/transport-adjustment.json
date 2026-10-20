@@ -1,0 +1,4 @@
+{
+  "at": "2026-10-20T10:21:05.722560+00:00",
+  "reason": "SSH proxy transport slow; interrupted transport only; preserve partial files and resume original rsync over direct SSH. External HTTP still uses required proxy. No product gate failure or production service mutation."
+}

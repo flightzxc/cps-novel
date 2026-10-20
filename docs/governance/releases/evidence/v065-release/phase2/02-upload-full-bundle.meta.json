@@ -1,0 +1,10 @@
+{
+  "name": "02-upload-full-bundle",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/upload-full-bundle.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792491794.9043672,
+  "finishedAt": 1792491816.060956
+}

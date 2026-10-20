@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-20T10:23:14.864062+00:00",
+  "failure": "new shared clone hit historical Git alternate store nesting limit at bundle verification",
+  "scope": "own transport wrapper, production current/env/services unchanged",
+  "repair": "retain failed checkout, use full original Git bundle transport with independent git init/fetch object store; archive unchanged",
+  "fullBundleBytes": 26174082
+}

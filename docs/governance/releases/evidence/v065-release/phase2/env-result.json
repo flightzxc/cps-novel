@@ -1,0 +1,7 @@
+{
+  "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v065-20261020T102520Z",
+  "beforeSha256": "431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494",
+  "afterSha256": "c0a1eca45444ac9b50ae7e307b63f897d91133b278556b0c175f50ab3792bceb",
+  "otherBytesCmp": "PASS",
+  "allowlists": "UNCHANGED"
+}

@@ -1,0 +1,10 @@
+POST_HTTP=PASS sequence=1 name=drama_public_301 status=301
+POST_HTTP=PASS sequence=2 name=drama_admin_404 status=404
+POST_HTTP=PASS sequence=3 name=dramas_public_404 status=404
+POST_HTTP=PASS sequence=4 name=published_novel status=200
+POST_HTTP=PASS sequence=5 name=public_ga_present status=200 ga=present
+POST_HTTP=PASS sequence=6 name=admin_login_ga_absent status=200 ga=absent
+POST_HTTP=PASS sequence=7 name=health_anonymous_health status=401
+POST_HTTP=PASS sequence=8 name=health_authenticated_health status=200
+POST_HTTP=PASS sequence=9 name=public_health status=200
+POST_HTTP_ALL=PASS external_requests=9 budget=10 B50=PASS B51=PASS

@@ -1,0 +1,14 @@
+RELEASE=PASS EXIT=0 Final=b378910a8ec4b78029e71ad1bac92c742efb9f5b
+MAINTENANCE_SECONDS=48.476629
+BACKUP_LIST_VERIFY=PASS
+ENV_TWO_LINES_ONLY=PASS other_bytes_cmp=PASS
+POST_CHECK=PASS health=0.6.5 metadata=passed services=6_healthy postgres_unchanged=yes
+POST_DATABASE=PASS migrations=29 finished=29 tables=60 checksums=unchanged
+EFFECTIVE_TAG=PASS missing=0 extra=0 changed=0
+INDEXNOW_POST_STATUS=PASS breaker=closed rate_limit_waiting=0 due_urls=0 dead_letters=0
+NGINX_UNCHANGED=PASS
+BACKUP_TIMER=RUNNING
+POST_HTTP_ALL=PASS external_requests=9 budget=10 proxy=yes
+PHASE_A=STOP code=mine_identity_mismatch baseline_created=no manifest_48_created=no
+CLAIM_BATCHES_SUBMITTED_BY_THIS_RUN=0 UPSTREAM_CALLS_INITIATED_BY_THIS_RUN=0
+AFTER_STOP=existing_evidence_collection_and_local_governance_only

@@ -1,0 +1,11 @@
+{
+  "name": "03-remote-artifacts",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client.py.txt",
+    ".tmp/v065-release/phase2/remote-artifacts.py.txt"
+  ],
+  "exitCode": 1,
+  "startedAt": 1792491753.5747242,
+  "finishedAt": 1792491758.894997
+}

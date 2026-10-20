@@ -1,0 +1,11 @@
+{
+  "name": "08-launch-deploy",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client.py.txt",
+    ".tmp/v065-release/phase2/launch-deploy.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792491932.6219141,
+  "finishedAt": 1792491936.65721
+}

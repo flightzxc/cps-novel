@@ -1,0 +1,16 @@
+-- NOT EXECUTED. After mine_identity_mismatch STOP, requires Owner/controller decision.
+-- Read-only evidence only; never feeds submit or changes the approved matching rule.
+-- Existing read-only psql method, PGOPTIONS=-c default_transaction_read_only=on.
+BEGIN READ ONLY;
+SELECT current_user, current_setting('transaction_read_only') AS read_only;
+SELECT id, title, channel_app_id, status,
+       char_length(title) AS title_characters,
+       octet_length(title) AS title_bytes,
+       encode(convert_to(title, 'UTF8'), 'hex') AS title_utf8_hex,
+       title = 'MINE' AS title_exact_mine,
+       id::text LIKE 'c838c281-%' AS appendix_b_prefix_matches
+FROM novel_source_item
+WHERE channel_app_id = '85c2fb3e-28f8-476a-83f2-9647e2206192'::uuid
+  AND (id::text LIKE 'c838c281-%' OR title = 'MINE')
+ORDER BY id;
+COMMIT;

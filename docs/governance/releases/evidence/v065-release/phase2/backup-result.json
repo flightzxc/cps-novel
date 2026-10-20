@@ -1,0 +1,6 @@
+{
+  "path": "/var/lib/cps-novel/backups/logical/cps-novel-v065-20261020T102120Z.dump",
+  "sha256": "7645a906dd4f3886cb9da9d7a0f41798673197db2bfeb97b02d29f841065d530",
+  "bytes": 781611939,
+  "restoreList": "PASS"
+}

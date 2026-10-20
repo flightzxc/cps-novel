@@ -1,0 +1,93 @@
+import datetime, hashlib, json, os, pathlib, re, subprocess
+
+assert subprocess.check_output(['hostname'], text=True).strip() == 'haiyue-vps'
+os.umask(0o077)
+final = 'b378910a8ec4b78029e71ad1bac92c742efb9f5b'
+out = pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/evidence')
+out.mkdir(mode=0o700, exist_ok=True)
+ledger = out / 'post-http-requests.jsonl'
+assert not ledger.exists()
+config = '/opt/cps-novel/shared/secrets/preprod-curl.conf'
+book = '/novel/contract-baby-and-billionaire-pg15q11wz'
+assert book.startswith('/novel/')
+rows = []
+ga_ids = set()
+ga_pattern = rb'(?<![A-Za-z0-9_-])G-[A-Z0-9]{6,15}(?![A-Za-z0-9_-])'
+
+def probe(name, host, path, expected, kind='', auth=False, location=None):
+    row = {'sequence': len(rows) + 1, 'name': name, 'host': host, 'path': path,
+           'authenticated': auth, 'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           'source': 'client_proxy_via_temporary_ssh_forward', 'followRedirects': False}
+    assert row['sequence'] <= 10
+    with ledger.open('a') as f:
+        f.write(json.dumps(row) + '\n')
+    headers = out / 'post-http-headers.private.txt'
+    args = ['curl', '-q'] + (['--config', config] if auth else []) + [
+        '--silent', '--show-error', '--compressed', '--proxy', 'http://127.0.0.1:7899',
+        '--noproxy', '', '--no-location', '--retry', '0', '--connect-timeout', '15', '--max-time', '45',
+        '--dump-header', str(headers), '--write-out', '\n%{http_code}', 'https://' + host + path]
+    response = subprocess.run(args, capture_output=True)
+    assert response.returncode == 0, ('curl_failed', name, response.returncode)
+    body, code = response.stdout.rsplit(b'\n', 1)
+    code = int(code)
+    h = {}
+    for line in headers.read_text().splitlines():
+        if line.startswith('HTTP/'):
+            h = {}
+        elif ':' in line:
+            k, v = line.split(':', 1)
+            h[k.lower()] = v.strip()
+    row.update({'status': code, 'bodySha256': hashlib.sha256(body).hexdigest(),
+                'headers': {k: h[k] for k in ['location', 'www-authenticate', 'x-robots-tag',
+                                             'strict-transport-security', 'content-type'] if k in h}})
+    rows.append(row)
+    (out / 'post-http-results.json').write_text(json.dumps({'status': 'RUNNING', 'results': rows}, indent=2))
+    assert code == expected, (name, code, expected)
+    if location is not None:
+        assert h.get('location') == location, ('location_mismatch', name)
+    if kind in ['book', 'public_ga']:
+        assert 'x-robots-tag' not in h and h.get('strict-transport-security') == 'max-age=86400'
+    if kind == 'public_ga':
+        ga_ids.update(re.findall(ga_pattern, body))
+        assert ga_ids and (b'googletagmanager' in body.lower() or b'GoogleAnalytics' in body)
+        row['ga'] = 'present'
+    if kind == 'admin_ga':
+        assert 'www-authenticate' not in h
+        assert b'googletagmanager' not in body.lower()
+        assert not re.findall(ga_pattern, body)
+        assert not any(value in body for value in ga_ids)
+        row['ga'] = 'absent'
+        row['publicGaIdentifierAbsent'] = True
+    if kind == 'health_anonymous':
+        assert h.get('www-authenticate') == 'Basic realm="CPS Novel Administration"'
+    if kind == 'health_authenticated' or kind == 'public_health':
+        data = json.loads(body)
+        if path == '/api/health':
+            assert data['ok'] and data['build']['version'] == '0.6.5' and data['build']['commit'] == final
+            assert data['metadataConsistency']['status'] == 'passed'
+            row['build'] = data['build']
+        elif path == '/api/health/worker':
+            assert data['workerStatus'] == 'ok'
+        elif path == '/api/health/backup':
+            assert data['backupStatus'] == 'ok'
+    print('POST_HTTP=PASS sequence=%d name=%s status=%d%s' %
+          (row['sequence'], name, code, ' ga=' + row['ga'] if 'ga' in row else ''), flush=True)
+
+drama = '/drama/the-housewifes-comeback-drama-p8mkirtiv?utm_source=chatgpt.com'
+probe('drama_public_301', 'pulsenovels.com', drama, 301, location='https://enpulsedrama.com' + drama)
+probe('drama_admin_404', 'zbcwf.pulsenovels.com', '/drama/x', 404)
+probe('dramas_public_404', 'pulsenovels.com', '/dramas', 404)
+probe('published_novel', 'pulsenovels.com', book, 200, kind='book')
+probe('public_ga_present', 'pulsenovels.com', '/', 200, kind='public_ga')
+probe('admin_login_ga_absent', 'zbcwf.pulsenovels.com', '/login', 200, kind='admin_ga')
+for path in ['/api/health']:
+    probe('health_anonymous_' + path.rsplit('/', 1)[-1], 'zbcwf.pulsenovels.com', path, 401, kind='health_anonymous')
+for path in ['/api/health']:
+    probe('health_authenticated_' + path.rsplit('/', 1)[-1], 'zbcwf.pulsenovels.com', path, 200,
+          auth=True, kind='health_authenticated')
+probe('public_health', 'pulsenovels.com', '/api/health', 200, kind='public_health')
+assert len(rows) == 9
+(out / 'post-http-results.json').write_text(json.dumps({'status': 'PASS', 'requests': 9, 'budget': 10,
+                                                     'redirectsFollowed': False, 'results': rows}, indent=2) + '\n')
+(out / 'post-http-headers.private.txt').unlink(missing_ok=True)
+print('POST_HTTP_ALL=PASS external_requests=9 budget=10 B50=PASS B51=PASS')

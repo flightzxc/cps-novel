@@ -1,0 +1,6 @@
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT jsonb_build_object('role',current_user,'defaultReadOnly',current_setting('default_transaction_read_only'),'transactionReadOnly',current_setting('transaction_read_only'),'observedAt',clock_timestamp(),
+'mine',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'title',title,'app',channel_app_id,'status',status,'agencyId',raw_payload->>'agencyId','seriesId',raw_payload->>'seriesId','language',raw_payload->>'language')),'[]'::jsonb) FROM novel_source_item WHERE channel_app_id='85c2fb3e-28f8-476a-83f2-9647e2206192' AND title='MINE' AND id::text LIKE 'c838c281-%'),
+'contract',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'title',title,'app',channel_app_id)),'[]'::jsonb) FROM novel_source_item WHERE id::text LIKE '43c2b295-%'),
+'books',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'title',title,'app',channel_app_id,'status',status,'language',source_language_code) ORDER BY id),'[]'::jsonb) FROM novel_source_item WHERE id=ANY(ARRAY_IDS::uuid[])));
+COMMIT;

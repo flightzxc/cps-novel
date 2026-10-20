@@ -1,0 +1,11 @@
+{
+  "name": "12-post-http",
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client-proxy.py.txt",
+    ".tmp/v065-release/phase2/post-http.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792492043.683297,
+  "finishedAt": 1792492067.4403589
+}

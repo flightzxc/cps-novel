@@ -1,0 +1,23 @@
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error: EACCES: permission denied, open '/tmp/phase-a-capture.ts'
+    at async open (node:internal/fs/promises:637:25)
+    at async readFile (node:internal/fs/promises:1249:14)
+    at async load (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1792492055628:2:1958)
+    at async nextLoad (node:internal/modules/esm/hooks:864:22)
+    at async Hooks.load (node:internal/modules/esm/hooks:451:20)
+    at async handleMessage (node:internal/modules/esm/worker:196:18) {
+  errno: -13,
+  code: 'EACCES',
+  syscall: 'open',
+  path: '/tmp/phase-a-capture.ts'
+}
+
+Node.js v20.20.2
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['docker', 'exec', '-w', '/app', 'cps-novel-web-1', 'tsx', '--tsconfig=/app/tsconfig.json', '/tmp/phase-a-capture.ts']' returned non-zero exit status 1.
