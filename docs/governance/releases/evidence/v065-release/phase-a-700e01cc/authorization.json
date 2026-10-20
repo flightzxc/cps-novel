@@ -1,0 +1,5 @@
+{
+  "OwnerMessage": "主控复核通过ops@700e01cc；请从甲阶段captureBaseline重新开始；名单核对通过后停下，把金丝雀说明交给运营",
+  "scope": "phase A read-only; no claim submission",
+  "reviewedOpsHead": "700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d"
+}

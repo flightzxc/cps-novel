@@ -1,0 +1,87 @@
+from pathlib import Path
+import json,hashlib,base64,re,subprocess,os
+root=Path('/Users/chenweifeng/Documents/cps海阅/release-v0.6.5');ops=Path('/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops');out=root/'.tmp/v065-release/phase-a-700e01cc';out.mkdir(parents=True)
+env=dict(os.environ,DEVELOPER_DIR='/Library/Developer/CommandLineTools');assert subprocess.check_output(['git','-C',str(ops),'rev-parse','HEAD'],text=True,env=env).strip()=='700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d'
+src=(ops/'scripts/ops/promo-reclaim-53.ts').read_bytes();assert hashlib.sha256(src).hexdigest()=='08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15'
+proposal=Path('/Users/chenweifeng/Documents/产品原型及文档/cps海阅/方案_领码回读短书名候选集翻页_2026-10-20.md').read_text();appendix=proposal.split('## 附录 B：',1)[1].split('## 附录 C：',1)[0];expected=[]
+for line in appendix.splitlines():
+ for match in re.finditer(r'([0-9a-f]{8})\s+(\d+)\s+(.*?)\s+(\d+)(?=\s+[0-9a-f]{8}|\s*$)',line):
+  prefix,code,title,total=match.groups();expected.append({'prefix':prefix,'code':code,'title':title.strip()})
+assert len(expected)==53
+(out/'appendix-b-expected.json').write_text(json.dumps(expected,ensure_ascii=False,indent=2)+'\n')
+wrapper=r'''// Read-only evidence wrapper. Reviewed ops@700e01cc is loaded unchanged.
+import {createRequire} from 'node:module';
+import {writeFileSync,readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const load=createRequire('/app/package.json');
+const {PrismaClient}=load('@prisma/client');
+const ops=load('/tmp/promo-reclaim-53-reviewed-700e01cc.ts');
+const {MOBOREADER_LANGUAGE_CODE_TO_LOCALE:locales}=load('/app/src/lib/locale/channel-language');
+const expected=EXPECTED;
+const db=new PrismaClient();
+const sha=(x:string)=>createHash('sha256').update(x).digest('hex');
+const refuse=(ok:unknown,code:string)=>{if(!ok)throw new ops.OpsError(code);};
+(async()=>{try {
+ const startedAt=new Date().toISOString();
+ const b=await ops.captureBaseline(db,'71f0e655-0640-4f07-bcbb-041f027fa7cb');
+ const detail=await ops.readOnly(db,async(tx:any)=>{
+  const [connection]=await tx.$queryRawUnsafe("SELECT current_user::text role,current_setting('transaction_read_only') read_only,clock_timestamp()::text observed_at");
+  refuse(connection.role==='web_app' && connection.read_only==='on','phase_a_connection_mismatch');
+  const rows=await tx.novelSourceItem.findMany({where:{id:{in:b.allIds}},orderBy:{id:'asc'},select:{id:true,title:true,sourceLocale:true,channelAppId:true,status:true}});
+  refuse(rows.length===53,'phase_a_detail_count_mismatch');
+  const books=[];
+  for (const row of rows){
+   const e=expected.find((x:any)=>row.id.startsWith(x.prefix+'-'));
+   refuse(e && row.title.trim()===e.title && row.sourceLocale===locales[e.code] && row.channelAppId===ops.APP && row.status==='linked','appendix_b_detail_mismatch');
+   const codeLinks=await tx.promoLink.count({where:{novelSourceItemId:row.id,upstreamCodePresent:true}});
+   const intents=await tx.sideEffectIntent.count({where:{requestSummary:{path:['novelSourceItemId'],equals:row.id}}});
+   const inflight=await tx.genericTaskItem.count({where:{status:{in:['pending','processing']},task:{taskType:{startsWith:'promo_link.claim.'}},OR:[{targetId:row.id},{payload:{path:['novelSourceItemId'],equals:row.id}}]}});
+   refuse(codeLinks===0 && intents===0 && inflight===0,'phase_a_detail_preconditions_failed');
+   books.push({...row,hasCodeLink:false,getcodeUpperBoundByIntent:intents,inflightClaimItems:inflight});
+  }
+  const account=await tx.channelAccount.findUnique({where:{id:b.accountId},select:{id:true,accountName:true,status:true,channelId:true,deletedAt:true}});
+  const actor=await tx.adminIdentity.findUnique({where:{id:b.actorId},select:{id:true,username:true,role:true,status:true}});
+  refuse(account && account.status==='active' && account.deletedAt===null,'phase_a_account_metadata_mismatch');
+  const tasks=await tx.genericTask.findMany({where:{OR:[{taskType:{startsWith:'promo_link.claim.'}},{taskType:'batch.materialize.v1',params:{path:['operation'],equals:'promo_claim'}}]},select:{id:true,status:true,items:{where:{status:{in:['pending','processing']}},select:{id:true},take:1}}});
+  const active=tasks.filter((x:any)=>['pending','processing'].includes(x.status)||x.items.length>0);
+  refuse(active.length===0,'other_claim_inflight');
+  return {connection,actor,account,books,otherInflightClaims:active.length};
+ });
+ const baselineBytes=JSON.stringify(b,null,2)+'\n';
+ const remaining=b.allIds.filter((id:string)=>!b.canaryIds.includes(id));
+ refuse(remaining.length===48 && ops.idsSha(remaining)===b.remainingIdsSha256,'remaining_48_ids_mismatch');
+ const canaries=detail.books.filter((x:any)=>b.canaryIds.includes(x.id));
+ refuse(canaries.length===5 && b.allIds.every((id:string)=>!id.startsWith('43c2b295-')),'canary_or_contract_scope_mismatch');
+ const report={status:'PASS',startedAt,finishedAt:new Date().toISOString(),reviewedOpsHead:'700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d',scriptSha256:'08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15',baselineSha256:sha(baselineBytes),remainingIdsSha256:b.remainingIdsSha256,all53IdsSha256:ops.idsSha(b.allIds),manualReviewCount:b.manualReviewCount,manualReviewSha256:b.manualReviewSha256,contractExcluded:true,canaries,...detail,seriesIdEvidence:'Owner/controller already verified c838c281 -> 131539322 using postgres read-only transaction; not queried here',perBookCountLabel:'按意图记录推定的每本 getcode 上限',upstreamCallsInitiatedByThisRun:0,claimBatchesSubmittedByThisRun:0};
+ const path='/tmp/promo-reclaim-53-phase-a-700e01cc.json';
+ writeFileSync(path,baselineBytes,{flag:'wx',mode:0o600});
+ writeFileSync('/tmp/promo-reclaim-53-phase-a-700e01cc-report.json',JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});
+ writeFileSync('/tmp/promo-reclaim-53-remaining-48-700e01cc.txt',remaining.sort().join('\n')+'\n',{flag:'wx',mode:0o600});
+ console.log(JSON.stringify({status:'PASS',count:b.allIds.length,canaryCount:canaries.length,remainingCount:remaining.length,mineId:b.allIds.find((id:string)=>id.startsWith('c838c281-')),actorId:b.actorId,accountId:b.accountId,baselineSha256:report.baselineSha256,remainingIdsSha256:b.remainingIdsSha256,manualReviewCount:b.manualReviewCount,manualReviewSha256:b.manualReviewSha256,startedAt,finishedAt:report.finishedAt,role:detail.connection.role,readOnly:detail.connection.read_only,otherInflightClaims:detail.otherInflightClaims}));
+} catch(e) {console.error(JSON.stringify({stopped:true,code:e instanceof ops.OpsError?e.code:'phase_a_read_failed_stop'}));process.exitCode=64;} finally{await db.$disconnect();}})();
+'''.replace('EXPECTED',json.dumps(expected,ensure_ascii=False))
+(out/'capture-wrapper.ts.txt').write_text(wrapper)
+remote="""import pathlib,subprocess,hashlib,json,base64,datetime
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+assert pathlib.Path('/opt/cps-novel/current').resolve().name=='b378910a8ec4b78029e71ad1bac92c742efb9f5b'
+health=json.loads(subprocess.check_output(['docker','exec','cps-novel-web-1','wget','-qO-','http://127.0.0.1:3000/api/health'],text=True));assert health['ok'] and health['build']['version']=='0.6.5' and health['build']['commit']=='b378910a8ec4b78029e71ad1bac92c742efb9f5b' and health['metadataConsistency']['status']=='passed'
+assert not pathlib.Path('/opt/cps-novel/shared/maintenance/enabled').exists()
+assert hashlib.sha256(pathlib.Path('/etc/nginx/conf.d/cps-novel-preprod.conf').read_bytes()).hexdigest()=='7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9'
+info=json.loads(subprocess.check_output(['docker','inspect','cps-novel-web-1'],text=True))[0];assert info['State']['Health']['Status']=='healthy'
+uid=subprocess.check_output(['docker','exec','cps-novel-web-1','id','-u'],text=True).strip()
+print('PRE_CAPTURE='+json.dumps({'health':health['build'],'uid':uid,'maintenance':False,'nginxUnchanged':True}),flush=True)
+folder=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/phase-a-700e01cc');folder.mkdir(mode=0o700)
+"""
+for name,data,target in [('reviewed-ops.ts.txt',src,'/tmp/promo-reclaim-53-reviewed-700e01cc.ts'),('capture-wrapper.ts.txt',wrapper.encode(),'/tmp/promo-reclaim-capture-700e01cc.ts')]:
+ remote+=f"p=folder/{name!r};p.write_bytes(base64.b64decode({base64.b64encode(data).decode()!r}));p.chmod(0o644)\n"
+ remote+=f"subprocess.run(['docker','cp',str(p),'cps-novel-web-1:{target}'],check=True)\n"
+ remote+=f"assert hashlib.sha256(subprocess.check_output(['docker','exec','cps-novel-web-1','cat',{target!r}])).hexdigest()=={hashlib.sha256(data).hexdigest()!r}\n"
+remote+="""subprocess.run(['docker','exec','-w','/app','cps-novel-web-1','tsx','--tsconfig=/app/tsconfig.json','/tmp/promo-reclaim-capture-700e01cc.ts'],check=True)
+for name,target in [('baseline.json','/tmp/promo-reclaim-53-phase-a-700e01cc.json'),('report.json','/tmp/promo-reclaim-53-phase-a-700e01cc-report.json'),('remaining-48-ids.txt','/tmp/promo-reclaim-53-remaining-48-700e01cc.txt')]:
+ data=subprocess.check_output(['docker','exec','cps-novel-web-1','cat',target]);p=folder/name;p.write_bytes(data);p.chmod(0o600)
+b=json.loads((folder/'baseline.json').read_text());r=json.loads((folder/'report.json').read_text());assert hashlib.sha256((folder/'baseline.json').read_bytes()).hexdigest()==r['baselineSha256']
+print('PHASE_A_CAPTURE=PASS count=53 canaries=5 remaining=48 readonly=yes upstream_calls=0 claim_submissions=0',flush=True)
+"""
+(out/'remote-capture.py.txt').write_text(remote)
+(out/'authorization.json').write_text(json.dumps({'OwnerMessage':'主控复核通过ops@700e01cc；请从甲阶段captureBaseline重新开始；名单核对通过后停下，把金丝雀说明交给运营','scope':'phase A read-only; no claim submission','reviewedOpsHead':'700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d'},ensure_ascii=False,indent=2)+'\n')
+print('CAPTURE_PREPARED=PASS appendix=53 pinned_script=yes')

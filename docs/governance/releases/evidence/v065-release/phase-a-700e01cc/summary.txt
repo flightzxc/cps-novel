@@ -1,0 +1,14 @@
+PHASE_A_CAPTURE=PASS scope=53 canaries=5 remaining=48
+APPENDIX_B=PASS ids_titles_locales=53_OF_53 contract_excluded=yes
+PRECONDITIONS=PASS linked=53 no_code_link=53 no_inflight_claim_item=53 no_intent=53
+MINE=PASS id=c838c281-c9ba-482a-aa80-05792e8fdc4a trimmed_title=MINE locale=en exactly_one=yes
+NATIVE_WEB_APP=PASS uid=1001 transaction_read_only=on sql42501=0
+ACTOR=PASS admin active super_admin id=71f0e655-0640-4f07-bcbb-041f027fa7cb
+ACCOUNT=PASS recent_operator_batch active id=53f03fd8-951d-433e-ac66-784e82496a84
+BASELINE_SHA256=244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d
+REMAINING_48_IDS_SHA256=19231defb2d3488135d80e3ff6a61baf02e6438e72f916ac9b1c464605e917d6
+PLOTNOVEL_MANUAL_REVIEW_COUNT=635 SHA256=f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454
+PHASE_A_WINDOW_UTC=2026-10-20T14:38:58.581Z..2026-10-20T14:39:03.260Z
+PER_BOOK_GETCODE_LABEL=按意图记录推定的每本 getcode 上限 ALL_53=0 MINE=0
+UPSTREAM_CALLS_INITIATED_BY_THIS_RUN=0 CLAIM_BATCHES_SUBMITTED_BY_THIS_RUN=0
+STOP=phase_A_complete_wait_operator_canary no_48_authorization

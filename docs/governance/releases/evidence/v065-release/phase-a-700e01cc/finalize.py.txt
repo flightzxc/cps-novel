@@ -1,0 +1,82 @@
+from pathlib import Path
+import json,hashlib,subprocess,os,datetime,re
+out=Path('.tmp/v065-release/phase-a-700e01cc');remote=out/'remote-evidence';b=json.loads((remote/'baseline.json').read_text());r=json.loads((remote/'report.json').read_text());sha=lambda x:hashlib.sha256(x).hexdigest()
+assert r['status']=='PASS' and len(b['allIds'])==53 and len(b['canaryIds'])==5 and b['manualReviewCount']==635
+assert sha((remote/'baseline.json').read_bytes())==r['baselineSha256']
+assert sha((remote/'remaining-48-ids.txt').read_bytes())==b['remainingIdsSha256']
+assert len((remote/'remaining-48-ids.txt').read_text().splitlines())==48
+assert sha((remote/'reviewed-ops.ts.txt').read_bytes())==r['scriptSha256']
+assert all(x['status']=='linked' and not x['hasCodeLink'] and x['getcodeUpperBoundByIntent']==0 and x['inflightClaimItems']==0 for x in r['books'])
+assert r['connection']['role']=='web_app' and r['connection']['read_only']=='on' and r['otherInflightClaims']==0
+env=dict(os.environ,DEVELOPER_DIR='/Library/Developer/CommandLineTools');ops=Path('../promo-reclaim-ops').resolve();assert subprocess.check_output(['git','-C',str(ops),'rev-parse','HEAD'],env=env,text=True).strip()==r['reviewedOpsHead'];assert not subprocess.check_output(['git','-C',str(ops),'status','--porcelain=v1'],env=env,text=True)
+order=['c838c281','17f20eb7','49e254d4','4265a05f','191da4c8'];canaries=sorted(r['canaries'],key=lambda x:order.index(x['id'][:8]));table='| 书名 | 剧场 | 语种筛选 | 完整书目行ID |\n| --- | --- | --- | --- |\n'+''.join(f"| {x['title'].strip()} | MoboReader | {'英语（en）' if x['sourceLocale']=='en' else '法语（fr）'} | `{x['id']}` |\n" for x in canaries)
+summary=f'''PHASE_A_CAPTURE=PASS scope=53 canaries=5 remaining=48
+APPENDIX_B=PASS ids_titles_locales=53_OF_53 contract_excluded=yes
+PRECONDITIONS=PASS linked=53 no_code_link=53 no_inflight_claim_item=53 no_intent=53
+MINE=PASS id=c838c281-c9ba-482a-aa80-05792e8fdc4a trimmed_title=MINE locale=en exactly_one=yes
+NATIVE_WEB_APP=PASS uid=1001 transaction_read_only=on sql42501=0
+ACTOR=PASS admin active super_admin id={b['actorId']}
+ACCOUNT=PASS recent_operator_batch active id={b['accountId']}
+BASELINE_SHA256={r['baselineSha256']}
+REMAINING_48_IDS_SHA256={b['remainingIdsSha256']}
+PLOTNOVEL_MANUAL_REVIEW_COUNT=635 SHA256={b['manualReviewSha256']}
+PHASE_A_WINDOW_UTC={r['startedAt']}..{r['finishedAt']}
+PER_BOOK_GETCODE_LABEL=按意图记录推定的每本 getcode 上限 ALL_53=0 MINE=0
+UPSTREAM_CALLS_INITIATED_BY_THIS_RUN=0 CLAIM_BATCHES_SUBMITTED_BY_THIS_RUN=0
+STOP=phase_A_complete_wait_operator_canary no_48_authorization
+'''
+(out/'summary.txt').write_text(summary)
+operator=f'''# 运营金丝雀交接（仅以下5本）
+
+甲阶段只读核对通过：53本与附录B一致，四项前置条件全满足，MINE原始书名为`"MINE "`（末尾一个空格），正确目标为下表英语行。按主控复核与当前只读核对，以下每本在MoboReader内按对应语种加书名恰好定位到一行。seriesId=131539322的对应关系引用主控已完成的只读SQL，不重复查询。
+
+{table}
+
+1. 后台“目录同步”：剧场选MoboReader，语种选表中英语或法语，再按书名搜索并核对ID后勾选。MINE必须选英语；不要选印尼语MINE（63172440…），Obsession必须选法语4265a05f…，不要选英语OBSESSION（50cdc502…）。
+2. 账户使用运营近期领码批次同一账户：`{b['accountId']}`（active）。不要更换账户，不要选择PlotNovel。
+3. 搜索、语种等筛选、排序、翻页都会清空勾选，不能跨筛选累计假定已勾选。每次只按当前页实际勾选提交，累计严格限表中五本；已提交的不要再选，不使用“符合筛选的全部”扩大范围。如分批，保留全部批次ID。
+4. 金丝雀开始前请先告知“准备提交金丝雀”；由Codex只读记录窗口起点并确认没有其它在途领码批次。Owner和运营在该窗口内不要提交其它领码批次，直至结束核对。当前甲阶段观测无其它在途，金丝雀窗口尚未开始。
+5. 在后台提交“领取推广链接”由运营执行。完成后告知“已提交”，附批次ID（如分批则全部ID）和提交时间。Codex只读核对结果：MINE应为already_available且按意图记录推定的getcode上限=0；其余成功书有码有网址、每本意图≤1、无未决/转人工，并核对窗口getcode日志总数=新增意图总数；getvideoinfo仅报窗口总数。
+6. 遇失败不重复提交、不点重试。金丝雀结果交Owner查看后，余48本只有Owner另说“批准重领”才执行。
+
+本交接没有替运营提交任何批次，也没有发起任何上游调用。完整53本和其余48本ID已冻结，余48不是可自行执行的提交授权。
+'''
+(out/'operator-canary-handoff.md').write_text(operator)
+# Freeze exact JSON baseline bytes unchanged; redact only nonessential account label in the report mirror.
+safe=json.loads(json.dumps(r));safe['account']['accountName']='[REDACTED account label; ID verified]';safe['account']['accountNameRedacted']=True
+(out/'report-redacted.json').write_text(json.dumps(safe,ensure_ascii=False,indent=2)+'\n')
+receipt={'status':'PASS','opsHead':r['reviewedOpsHead'],'scriptSha256':r['scriptSha256'],'final':b['final'],'baselineSha256':r['baselineSha256'],'remaining48IdsSha256':b['remainingIdsSha256'],'actorId':b['actorId'],'accountId':b['accountId'],'canaries':canaries,'manualReviewCount':635,'manualReviewSha256':b['manualReviewSha256'],'captureWindowUtc':{'start':r['startedAt'],'end':r['finishedAt']},'phaseAComplete':True,'canaryWindowStarted':False,'submissionManifestCreated':False,'productionClaimSubmitted':False,'productionUpstreamCalled':False,'followup':'operator prepare notice -> pre-window readonly check -> operator submits -> readonly results -> separate Owner approval for48'}
+(out/'phase-a-result.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+release=Path('docs/governance/releases/v0.6.5-preproduction.md');s=release.read_text();first=s.splitlines()[2];s=s.replace(first,'当前状态：v0.6.5已部署、技术验收PASS；主控复核ops@700e01cc后重新执行第三阶段甲，53本核对PASS。旧MINE定位停点已由主控裁定并修正，原始证据保留。五本金丝雀交运营；本轮没有提交领码，余48本仍需Owner另说“批准重领”。',1);s=s.replace('| ops HEAD | `786ec4ae270c4a5e3585ebe2f376116e6f2d3981`，独立留档，不合入发布 |','| ops HEAD | `700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d`，主控复核通过；独立留档，不合入发布 |')
+s+=f'''\n## 第三阶段甲重启通过（2026-10-20 JST）
+
+Owner确认主控复核ops@700e01cc通过，并亲跑tsc0、真实库18/18、无42501；已只读查实五本金丝雀的语种与唯一性。本轮将审核脚本原字节复制到原生web容器，复制前后SHA256一致，uid1001、web_app、事务READ ONLY。线上健康仍0.6.5/Final、维护关闭、nginx原摘要。脚本与镜像均未改动，无sudo或grants变更。
+
+甲阶段观测窗口：{r['startedAt']}–{r['finishedAt']} UTC，即JST23:38:58.581–23:39:03.260。原captureBaseline及附录B书名/语种逐项核对53/53通过，Contract排除；逐本linked、无带码链接、无在途领码条目、无任何意图，均53/53。MINE为c838c281-c9ba-482a-aa80-05792e8fdc4a、原始标题末尾一空格、source_locale=en。seriesId131539322只引用主控postgres只读查实，不重新查询。其它在途领码批次/条目0。
+
+- actor：`{b['actorId']}`，active admin/super_admin，10-15同一身份。
+- 账户：`{b['accountId']}`，取近期同actor的MoboReader运营批次，active，冻结入基线；标签在提交证据中脱敏。
+- 基线文件SHA256：`{r['baselineSha256']}`。
+- 余48本排序ID文本SHA256：`{b['remainingIdsSha256']}`；只冻结ID，未创建submit清单、未运行plan/submit/status。
+- PlotNovel人工复核基准：635条，摘要`{b['manualReviewSha256']}`，供后续窗口检查不变。
+- 逐本计数名称为“按意图记录推定的每本getcode上限”，当前53本均0，MINE=0；不宣称实际逐本HTTP次数。本轮主动上游调用0、领码提交0。
+
+{table}
+
+金丝雀交运营说明：[operator-canary-handoff.md](evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)。先按剧场+语种+书名定位；筛选/搜索变化会清空勾选，按当前页实际勾选提交并保留所有批次ID。提交前先通知准备，以记录独占领码窗口；窗口内不得提交其它领码批次。当前甲阶段已结束，金丝雀窗口尚未开始。运营提交后告知“已提交”与批次ID，再做只读核对；不重试失败书。余48仍待Owner看过结果后另行批准。
+
+[原始结论](evidence/v065-release/phase-a-700e01cc/summary.txt)、[基线](evidence/v065-release/phase-a-700e01cc/baseline.json)、[53本核对明细](evidence/v065-release/phase-a-700e01cc/report-redacted.json)、[机器结果](evidence/v065-release/phase-a-700e01cc/phase-a-result.json)。旧定位STOP与权限包装器停点保留作历史。此处停止，未进入运营金丝雀或48本执行。tag/生成CHANGELOG/唯一发版日志/Notion依计划待重领结果明确后补齐。\n'''
+release.write_text(s)
+opsdoc=Path('docs/governance/releases/promo-reclaim-53-2026-10-20.md');s=opsdoc.read_text();s=s.replace(s.splitlines()[2],'当前：v0.6.5部署技术PASS；主控复核ops@700e01cc通过后重新执行甲阶段，53本、五本金丝雀完整ID及余48本ID摘要已核对冻结。原MINE定位STOP已由主控裁定并修正，原证据保留。金丝雀交运营，余48本仍待Owner另行“批准重领”；Codex本轮未提交批次。',1);s+='\n## 甲阶段重新核对通过\n\n主控复核通过ops@700e01cc，脚本SHA256 `'+r['scriptSha256']+'`；原生web_app只读captureBaseline通过53/53，附录B书名/语种一致，四项前提全部满足，Contract排除，MINE英语尾空格目标唯一。基线/48ID摘要、actor/运营账户及635条PlotNovel摘要均已冻结。详见[甲阶段交接](evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)及[结果](evidence/v065-release/phase-a-700e01cc/phase-a-result.json)。当前停下交运营；不提交领码、不创建48本submit清单。原STOP段为历史，seriesId引用主控查实，不重查raw_payload。\n';opsdoc.write_text(s)
+reg=Path('docs/governance/version-registry.md');s=reg.read_text();a=s.index('### v0.6.5');end=s.index('### v0.6.4',a);chunk=s[a:end];chunk=chunk.replace('PATCH 已部署，甲阶段MINE定位停手','PATCH 已部署，甲阶段核对通过，等待运营金丝雀');chunk+='- 后续主控裁定原MINE STOP为定位规则问题；ops@700e01cc已复核通过。以审核脚本重启captureBaseline后53/53和四项前提通过，五本完整ID与余48ID摘要冻结，635条摘要冻结；没有领码提交。历史STOP记录保留，当前等待运营金丝雀，余48仍需另行批准。[甲交接](releases/evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)。\n\n';s=s[:a]+chunk+s[end:];old=next(x for x in s.splitlines() if x.startswith('| `v0.6.5` |'));s=s.replace(old,'| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，技术及甲阶段53本核对PASS；等待运营金丝雀，余48待另批 |');reg.write_text(s)
+# Publish only authorized, redacted evidence; exact baseline remains byte-identical.
+dest=Path('docs/governance/releases/evidence/v065-release/phase-a-700e01cc');dest.mkdir(parents=True)
+selected=[p for p in out.iterdir() if p.is_file() and p.suffix in ['.txt','.json','.log','.md']]+[remote/'baseline.json',remote/'remaining-48-ids.txt']
+for p in selected:
+ s=p.read_text();assert not re.search(r'postgres(?:ql)?://[^\s"\x27<>]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.|0x4[A-Za-z0-9_-]+|\bG-[A-Z0-9]{6,}\b',s),p.name
+ if p.suffix=='.json':json.loads(s)
+ s=s.rstrip('\r\n')+'\n';(dest/(p.name+'.txt' if p.suffix=='.log' else p.name)).write_text(s)
+assert sha((dest/'baseline.json').read_bytes())==r['baselineSha256'] and sha((dest/'remaining-48-ids.txt').read_bytes())==b['remainingIdsSha256']
+(dest/'evidence-scan.json').write_text(json.dumps({'status':'PASS','secretsOrCodesSelected':False,'accountLabelRedacted':True,'scriptsUseTxtSuffix':True,'baselineBytesUnchanged':True},indent=2)+'\n')
+files=[p for p in sorted(dest.iterdir()) if p.is_file() and p.name!='SHA256SUMS'];(dest/'SHA256SUMS').write_text(''.join(sha(p.read_bytes())+'  '+p.name+'\n' for p in files))
+print(summary)

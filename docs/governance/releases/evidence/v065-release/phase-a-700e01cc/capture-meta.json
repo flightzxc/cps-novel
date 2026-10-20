@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    ".tmp/v065-release/phase2/remote-client.py.txt",
+    ".tmp/v065-release/phase-a-700e01cc/remote-capture.py.txt"
+  ],
+  "exit": 0,
+  "startedAt": 1792507129.441536,
+  "finishedAt": 1792507144.109895
+}

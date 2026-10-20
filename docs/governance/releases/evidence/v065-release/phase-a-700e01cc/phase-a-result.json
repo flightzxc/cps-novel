@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "opsHead": "700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d",
+  "scriptSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15",
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "remaining48IdsSha256": "19231defb2d3488135d80e3ff6a61baf02e6438e72f916ac9b1c464605e917d6",
+  "actorId": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+  "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+  "canaries": [
+    {
+      "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+      "title": "MINE ",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked",
+      "hasCodeLink": false,
+      "getcodeUpperBoundByIntent": 0,
+      "inflightClaimItems": 0
+    },
+    {
+      "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+      "title": "Fran",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked",
+      "hasCodeLink": false,
+      "getcodeUpperBoundByIntent": 0,
+      "inflightClaimItems": 0
+    },
+    {
+      "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+      "title": "SOLD",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked",
+      "hasCodeLink": false,
+      "getcodeUpperBoundByIntent": 0,
+      "inflightClaimItems": 0
+    },
+    {
+      "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+      "title": "Obsession",
+      "sourceLocale": "fr",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked",
+      "hasCodeLink": false,
+      "getcodeUpperBoundByIntent": 0,
+      "inflightClaimItems": 0
+    },
+    {
+      "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+      "title": "Heart",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked",
+      "hasCodeLink": false,
+      "getcodeUpperBoundByIntent": 0,
+      "inflightClaimItems": 0
+    }
+  ],
+  "manualReviewCount": 635,
+  "manualReviewSha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "captureWindowUtc": {
+    "start": "2026-10-20T14:38:58.581Z",
+    "end": "2026-10-20T14:39:03.260Z"
+  },
+  "phaseAComplete": true,
+  "canaryWindowStarted": false,
+  "submissionManifestCreated": false,
+  "productionClaimSubmitted": false,
+  "productionUpstreamCalled": false,
+  "followup": "operator prepare notice -> pre-window readonly check -> operator submits -> readonly results -> separate Owner approval for48"
+}

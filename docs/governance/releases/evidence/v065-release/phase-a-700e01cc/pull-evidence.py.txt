@@ -1,0 +1,6 @@
+import pathlib,base64,json
+folder=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/phase-a-700e01cc')
+rows={}
+for p in folder.iterdir():
+ if p.is_file():rows[p.name]=base64.b64encode(p.read_bytes()).decode()
+print(json.dumps(rows))

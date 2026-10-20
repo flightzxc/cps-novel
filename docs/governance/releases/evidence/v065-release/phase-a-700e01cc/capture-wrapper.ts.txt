@@ -1,0 +1,50 @@
+// Read-only evidence wrapper. Reviewed ops@700e01cc is loaded unchanged.
+import {createRequire} from 'node:module';
+import {writeFileSync,readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const load=createRequire('/app/package.json');
+const {PrismaClient}=load('@prisma/client');
+const ops=load('/tmp/promo-reclaim-53-reviewed-700e01cc.ts');
+const {MOBOREADER_LANGUAGE_CODE_TO_LOCALE:locales}=load('/app/src/lib/locale/channel-language');
+const expected=[{"prefix": "419b62f9", "code": "3", "title": "Love"}, {"prefix": "3e82bd35", "code": "11", "title": "LOVE"}, {"prefix": "244d728f", "code": "4", "title": "Alpha"}, {"prefix": "1de3cb8d", "code": "3", "title": "KING"}, {"prefix": "14ceb128", "code": "4", "title": "Luna"}, {"prefix": "4456a587", "code": "3", "title": "Husband"}, {"prefix": "191da4c8", "code": "3", "title": "Heart"}, {"prefix": "2bd7bbd6", "code": "3", "title": "Other"}, {"prefix": "29e12e67", "code": "4", "title": "Ira"}, {"prefix": "004e61b4", "code": "5", "title": "ELE"}, {"prefix": "514635fd", "code": "5", "title": "ANA"}, {"prefix": "4ebd962b", "code": "3", "title": "Heiress"}, {"prefix": "3cb68965", "code": "11", "title": "The Mafia"}, {"prefix": "0eb75634", "code": "5", "title": "The Mafia"}, {"prefix": "1428d0e8", "code": "3", "title": "Ruth"}, {"prefix": "34a53d25", "code": "3", "title": "THE ALPHA'S"}, {"prefix": "2ede37d3", "code": "3", "title": "IMP"}, {"prefix": "4265a05f", "code": "6", "title": "Obsession"}, {"prefix": "50cdc502", "code": "3", "title": "OBSESSION"}, {"prefix": "14fb4ba6", "code": "3", "title": "Fate"}, {"prefix": "51f07fe6", "code": "3", "title": "Bound"}, {"prefix": "06385053", "code": "3", "title": "Pan"}, {"prefix": "544ac759", "code": "3", "title": "OMEGA"}, {"prefix": "19aac9d5", "code": "3", "title": "Lost"}, {"prefix": "472acb5b", "code": "4", "title": "LOST"}, {"prefix": "290c0772", "code": "3", "title": "Second Chance"}, {"prefix": "2a116408", "code": "3", "title": "Fan"}, {"prefix": "5305ceef", "code": "3", "title": "Eva"}, {"prefix": "c838c281", "code": "3", "title": "MINE"}, {"prefix": "014e3a56", "code": "6", "title": "Ella"}, {"prefix": "49e254d4", "code": "3", "title": "SOLD"}, {"prefix": "053c5b33", "code": "3", "title": "THE HEIR"}, {"prefix": "1252d311", "code": "4", "title": "SECRETO"}, {"prefix": "182dc738", "code": "4", "title": "Fire"}, {"prefix": "29eb1a73", "code": "3", "title": "Stolen"}, {"prefix": "374e5d3c", "code": "3", "title": "The Unwanted"}, {"prefix": "081bfcd3", "code": "6", "title": "TRAHISON"}, {"prefix": "022b9efe", "code": "3", "title": "The Heiress"}, {"prefix": "33b86265", "code": "5", "title": "ANGEL"}, {"prefix": "2439f2b1", "code": "11", "title": "Fatal"}, {"prefix": "2975ad34", "code": "3", "title": "The Bet"}, {"prefix": "35e28f43", "code": "11", "title": "Alia"}, {"prefix": "38ff68bb", "code": "11", "title": "DESTINY"}, {"prefix": "40c1c63c", "code": "5", "title": "Destiny"}, {"prefix": "3b727395", "code": "3", "title": "My Wife"}, {"prefix": "2bedc1f0", "code": "5", "title": "A MÁFIA"}, {"prefix": "410119f1", "code": "3", "title": "Unexpected"}, {"prefix": "44311f5e", "code": "3", "title": "ONCE"}, {"prefix": "33029497", "code": "11", "title": "VIRGIN"}, {"prefix": "3ff5573b", "code": "3", "title": "Found"}, {"prefix": "005dfe6a", "code": "11", "title": "Promise"}, {"prefix": "1e47a937", "code": "3", "title": "Yours"}, {"prefix": "17f20eb7", "code": "3", "title": "Fran"}];
+const db=new PrismaClient();
+const sha=(x:string)=>createHash('sha256').update(x).digest('hex');
+const refuse=(ok:unknown,code:string)=>{if(!ok)throw new ops.OpsError(code);};
+(async()=>{try {
+ const startedAt=new Date().toISOString();
+ const b=await ops.captureBaseline(db,'71f0e655-0640-4f07-bcbb-041f027fa7cb');
+ const detail=await ops.readOnly(db,async(tx:any)=>{
+  const [connection]=await tx.$queryRawUnsafe("SELECT current_user::text role,current_setting('transaction_read_only') read_only,clock_timestamp()::text observed_at");
+  refuse(connection.role==='web_app' && connection.read_only==='on','phase_a_connection_mismatch');
+  const rows=await tx.novelSourceItem.findMany({where:{id:{in:b.allIds}},orderBy:{id:'asc'},select:{id:true,title:true,sourceLocale:true,channelAppId:true,status:true}});
+  refuse(rows.length===53,'phase_a_detail_count_mismatch');
+  const books=[];
+  for (const row of rows){
+   const e=expected.find((x:any)=>row.id.startsWith(x.prefix+'-'));
+   refuse(e && row.title.trim()===e.title && row.sourceLocale===locales[e.code] && row.channelAppId===ops.APP && row.status==='linked','appendix_b_detail_mismatch');
+   const codeLinks=await tx.promoLink.count({where:{novelSourceItemId:row.id,upstreamCodePresent:true}});
+   const intents=await tx.sideEffectIntent.count({where:{requestSummary:{path:['novelSourceItemId'],equals:row.id}}});
+   const inflight=await tx.genericTaskItem.count({where:{status:{in:['pending','processing']},task:{taskType:{startsWith:'promo_link.claim.'}},OR:[{targetId:row.id},{payload:{path:['novelSourceItemId'],equals:row.id}}]}});
+   refuse(codeLinks===0 && intents===0 && inflight===0,'phase_a_detail_preconditions_failed');
+   books.push({...row,hasCodeLink:false,getcodeUpperBoundByIntent:intents,inflightClaimItems:inflight});
+  }
+  const account=await tx.channelAccount.findUnique({where:{id:b.accountId},select:{id:true,accountName:true,status:true,channelId:true,deletedAt:true}});
+  const actor=await tx.adminIdentity.findUnique({where:{id:b.actorId},select:{id:true,username:true,role:true,status:true}});
+  refuse(account && account.status==='active' && account.deletedAt===null,'phase_a_account_metadata_mismatch');
+  const tasks=await tx.genericTask.findMany({where:{OR:[{taskType:{startsWith:'promo_link.claim.'}},{taskType:'batch.materialize.v1',params:{path:['operation'],equals:'promo_claim'}}]},select:{id:true,status:true,items:{where:{status:{in:['pending','processing']}},select:{id:true},take:1}}});
+  const active=tasks.filter((x:any)=>['pending','processing'].includes(x.status)||x.items.length>0);
+  refuse(active.length===0,'other_claim_inflight');
+  return {connection,actor,account,books,otherInflightClaims:active.length};
+ });
+ const baselineBytes=JSON.stringify(b,null,2)+'\n';
+ const remaining=b.allIds.filter((id:string)=>!b.canaryIds.includes(id));
+ refuse(remaining.length===48 && ops.idsSha(remaining)===b.remainingIdsSha256,'remaining_48_ids_mismatch');
+ const canaries=detail.books.filter((x:any)=>b.canaryIds.includes(x.id));
+ refuse(canaries.length===5 && b.allIds.every((id:string)=>!id.startsWith('43c2b295-')),'canary_or_contract_scope_mismatch');
+ const report={status:'PASS',startedAt,finishedAt:new Date().toISOString(),reviewedOpsHead:'700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d',scriptSha256:'08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15',baselineSha256:sha(baselineBytes),remainingIdsSha256:b.remainingIdsSha256,all53IdsSha256:ops.idsSha(b.allIds),manualReviewCount:b.manualReviewCount,manualReviewSha256:b.manualReviewSha256,contractExcluded:true,canaries,...detail,seriesIdEvidence:'Owner/controller already verified c838c281 -> 131539322 using postgres read-only transaction; not queried here',perBookCountLabel:'按意图记录推定的每本 getcode 上限',upstreamCallsInitiatedByThisRun:0,claimBatchesSubmittedByThisRun:0};
+ const path='/tmp/promo-reclaim-53-phase-a-700e01cc.json';
+ writeFileSync(path,baselineBytes,{flag:'wx',mode:0o600});
+ writeFileSync('/tmp/promo-reclaim-53-phase-a-700e01cc-report.json',JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});
+ writeFileSync('/tmp/promo-reclaim-53-remaining-48-700e01cc.txt',remaining.sort().join('\n')+'\n',{flag:'wx',mode:0o600});
+ console.log(JSON.stringify({status:'PASS',count:b.allIds.length,canaryCount:canaries.length,remainingCount:remaining.length,mineId:b.allIds.find((id:string)=>id.startsWith('c838c281-')),actorId:b.actorId,accountId:b.accountId,baselineSha256:report.baselineSha256,remainingIdsSha256:b.remainingIdsSha256,manualReviewCount:b.manualReviewCount,manualReviewSha256:b.manualReviewSha256,startedAt,finishedAt:report.finishedAt,role:detail.connection.role,readOnly:detail.connection.read_only,otherInflightClaims:detail.otherInflightClaims}));
+} catch(e) {console.error(JSON.stringify({stopped:true,code:e instanceof ops.OpsError?e.code:'phase_a_read_failed_stop'}));process.exitCode=64;} finally{await db.$disconnect();}})();

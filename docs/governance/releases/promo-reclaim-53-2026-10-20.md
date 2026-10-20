@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：Owner确认主控审核并批准部署，v0.6.5技术验收通过；甲阶段只读检查返回mine_identity_mismatch，按严格定位停手。未生成基线/清单、未提交批次，金丝雀暂不开始，余48本仍待另行批准。失败书不重试。
+当前：v0.6.5部署技术PASS；主控复核ops@700e01cc通过后重新执行甲阶段，53本、五本金丝雀完整ID及余48本ID摘要已核对冻结。原MINE定位STOP已由主控裁定并修正，原证据保留。金丝雀交运营，余48本仍待Owner另行“批准重领”；Codex本轮未提交批次。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -51,3 +51,7 @@
 ## 甲阶段实际停点
 
 2026-10-20 JST：审核过的脚本SHA256不变，以容器原生用户和web_app执行。复制包装器的0600文件权限错误自修为0644后，函数返回`mine_identity_mismatch`并退出64；原始记录保留。没有数据库42501，没有换角色/改grants，没有调用任何提交函数或上游。严格条件未放宽。生产53本/5本/48本、账户和635条摘要均未冻结，不可进行运营金丝雀；须Owner/主控裁定后继续只读诊断。详见[发布及停点证据](evidence/v065-release/phase2/phase2-result.json)。
+
+## 甲阶段重新核对通过
+
+主控复核通过ops@700e01cc，脚本SHA256 `08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15`；原生web_app只读captureBaseline通过53/53，附录B书名/语种一致，四项前提全部满足，Contract排除，MINE英语尾空格目标唯一。基线/48ID摘要、actor/运营账户及635条PlotNovel摘要均已冻结。详见[甲阶段交接](evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)及[结果](evidence/v065-release/phase-a-700e01cc/phase-a-result.json)。当前停下交运营；不提交领码、不创建48本submit清单。原STOP段为历史，seriesId引用主控查实，不重查raw_payload。
