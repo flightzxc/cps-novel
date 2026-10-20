@@ -1,0 +1,74 @@
+diff --git a/scripts/ops/promo-reclaim-53.ts b/scripts/ops/promo-reclaim-53.ts
+index 4d736418..660c7f56 100644
+--- a/scripts/ops/promo-reclaim-53.ts
++++ b/scripts/ops/promo-reclaim-53.ts
+@@ -3 +3 @@
+- * /tmp/promo-reclaim-53.ts plan|submit|status ...
++ * /tmp/promo-reclaim-53.ts plan|submit|submit-canary|status ...
+@@ -17,0 +18 @@ export const REQUEST_ID = "promo-reclaim-53-2026-10-20";
++export const CANARY_REQUEST_ID = "promo-reclaim-53-2026-10-20-canary";
+@@ -193,4 +194,11 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-  const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids: m.ids });
+-  const channelAccounts = { [APP]: m.accountId };
+-  const requestId = REQUEST_ID;
+-  // Replay must retain the original 48 inputs even after some books have codes.
++  return submitSelection(db, m, m.ids, actorId, REQUEST_ID, now);
++}
++export async function submitCanary(db: PrismaClient, b: Baseline, ids: readonly string[], actorId: string, confirm: string, now = new Date()) {
++  check(confirm === "PROMO_RECLAIM_CANARY_5", "confirmation_refused"); validateBaseline(b);
++  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");
++  return submitSelection(db, b, [...ids], actorId, CANARY_REQUEST_ID, now);
++}
++async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], actorId: string, requestId: typeof REQUEST_ID | typeof CANARY_REQUEST_ID, now: Date) {
++  const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids });
++  const channelAccounts = { [APP]: b.accountId };
++  // Replay retains the original fixed scope even after some books have codes.
+@@ -198 +206 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-    await context(tx, actorId); await checkManual(tx, m);
++    await context(tx, actorId); await checkManual(tx, b);
+@@ -202,3 +210,3 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-    const rows = await tx.novelSourceItem.findMany({ where: { id: { in: m.ids }, channelAppId: APP }, select: { id: true } });
+-    check(same(rows.map(r => r.id), m.ids), "manifest_theater_mismatch");
+-    if (!existing) check(same(await eligibleIds(tx, m.ids), m.ids), "submit_preconditions_failed");
++    const rows = await tx.novelSourceItem.findMany({ where: { id: { in: ids }, channelAppId: APP }, select: { id: true } });
++    check(same(rows.map(r => r.id), ids), "manifest_theater_mismatch");
++    if (!existing) check(same(await eligibleIds(tx, ids), ids), "submit_preconditions_failed");
+@@ -224 +232 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-  return { ...result, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
++  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
+@@ -226,2 +234,4 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-  validateManifest(m);
++export async function status(db: PrismaClient, m: Baseline | Manifest, actorId: string, requestId: string = REQUEST_ID) {
++  check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
++  if ("ids" in m) validateManifest(m); else validateBaseline(m);
++  const ids = requestId === CANARY_REQUEST_ID ? m.canaryIds : m.allIds.filter(id => !m.canaryIds.includes(id));
+@@ -230 +240 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${REQUEST_ID}`)}`;
++    const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${requestId}`)}`;
+@@ -233 +243 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    for (const id of m.ids) {
++    for (const id of ids) {
+@@ -254 +264 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    return { ...ctx, accountId: m.accountId, task, counts, rows, otherInflight: other,
++    return { ...ctx, requestId, accountId: m.accountId, task, counts, rows, otherInflight: other,
+@@ -264 +274 @@ export async function main(argv: string[]) {
+-  check(["plan", "submit", "status"].includes(command), "command_invalid");
++  check(["plan", "submit", "submit-canary", "status"].includes(command), "command_invalid");
+@@ -268 +278 @@ export async function main(argv: string[]) {
+-    check(["--actor-id", "--baseline", "--baseline-sha256", "--output", "--manifest", "--manifest-sha256", "--confirm"].includes(k) && !(k in values) && v && !v.startsWith("--"), "arguments_invalid");
++    check(["--actor-id", "--baseline", "--baseline-sha256", "--output", "--manifest", "--manifest-sha256", "--confirm", "--request-id"].includes(k) && !(k in values) && v && !v.startsWith("--"), "arguments_invalid");
+@@ -271 +281,2 @@ export async function main(argv: string[]) {
+-  const allowed = command === "plan" ? ["--actor-id", "--baseline", "--baseline-sha256", "--output"] : command === "submit" ? ["--actor-id", "--manifest", "--manifest-sha256", "--confirm"] : ["--actor-id", "--manifest"];
++  const baselineInput = command === "plan" || command === "submit-canary" || (command === "status" && "--baseline" in values);
++  const allowed = command === "plan" ? ["--actor-id", "--baseline", "--baseline-sha256", "--output"] : command === "submit" ? ["--actor-id", "--manifest", "--manifest-sha256", "--confirm"] : command === "submit-canary" ? ["--actor-id", "--baseline", "--baseline-sha256", "--confirm"] : ["--actor-id", ...(baselineInput ? ["--baseline", "--baseline-sha256"] : ["--manifest"]), ...("--request-id" in values ? ["--request-id"] : [])];
+@@ -275 +286,4 @@ export async function main(argv: string[]) {
+-  const input = command === "plan" ? loadPinned<Baseline>(values["--baseline"], values["--baseline-sha256"]) : command === "submit" ? loadPinned<Manifest>(values["--manifest"], values["--manifest-sha256"]) : JSON.parse(readFileSync(values["--manifest"], "utf8")) as Manifest;
++  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_5", "confirmation_refused");
++  const requestId = values["--request-id"] ?? REQUEST_ID;
++  if (command === "status") check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
++  const input = baselineInput ? loadPinned<Baseline>(values["--baseline"], values["--baseline-sha256"]) : command === "submit" ? loadPinned<Manifest>(values["--manifest"], values["--manifest-sha256"]) : JSON.parse(readFileSync(values["--manifest"], "utf8")) as Manifest;
+@@ -284 +298,2 @@ export async function main(argv: string[]) {
+-    else console.log(JSON.stringify(await status(prisma, input as Manifest, values["--actor-id"])));
++    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, input.canaryIds, values["--actor-id"], values["--confirm"])));
++    else console.log(JSON.stringify(await status(prisma, input, values["--actor-id"], requestId)));

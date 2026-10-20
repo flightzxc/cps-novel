@@ -1,0 +1,182 @@
+diff --git a/docs/governance/releases/promo-reclaim-53-2026-10-20.md b/docs/governance/releases/promo-reclaim-53-2026-10-20.md
+index 12fb311d..6fbfcfaa 100644
+--- a/docs/governance/releases/promo-reclaim-53-2026-10-20.md
++++ b/docs/governance/releases/promo-reclaim-53-2026-10-20.md
+@@ -3 +3 @@
+-当前：v0.6.5部署技术验收已通过；甲阶段原mine_identity_mismatch经主控查实为定位规则问题。仅在ops分支修正，待本次主控复核通过后从captureBaseline重启甲阶段。金丝雀继续暂停，余48本仍须Owner“批准重领”。本轮不连接生产、不提交领码；失败书不重试。
++当前Owner 2026-10-21裁定：金丝雀5本改由Codex薄脚本提交，转交即授权这5本；但新增submit-canary须本次主控复核通过后才能用于生产。其余48本仍须Owner另说“批准重领”。甲阶段已通过，冻结基线不变；本轮仅本地实现、冒烟、推送复核，不连接生产或提交领码。
+@@ -13 +13 @@
+-## 甲阶段与命令
++## 甲阶段与原命令（10-20历史；当前金丝雀执行者及命令见10-21小节）
+@@ -69,0 +70,18 @@
++
++## Owner 10-21：Codex金丝雀提交扩展（当前）
++
++Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结的五本；不再要求运营后台提交。该授权在本次主控复核通过后即可执行，无须再向Owner重复申请这五本；复核前不得提交。旧文的“运营提交”交接说明作为历史保留，由本节替代。已部署Final/发布分支、grants、运行角色、公开网址均不变。
++
++`submit-canary --baseline <甲阶段JSON> --baseline-sha256 <原始文件摘要> --actor-id <固定admin ID> --confirm PROMO_RECLAIM_CANARY_5`：CLI不接受可覆盖的ID列表，只用原文件canaryIds；调用层还须数组恰好5个、不重复、与baseline的canaryIds完全一致、逐一匹配CANARY_PREFIXES。requestId固定`promo-reclaim-53-2026-10-20-canary`，独立于48本的`promo-reclaim-53-2026-10-20`；baseline自身原requestId不修改。通过同一个submitSelection调用原enqueueCatalogBatch，照抄的账户校验20行、enabled双闸、临期审计完全复用；提交前以web_app只读事务检查无其它领码在途、五本四项条件与635摘要。已有同requestId时保留原五本输入，返回原批次，不重复创建或补领失败书。
++
++`status --baseline <甲JSON> --baseline-sha256 <摘要> --actor-id <ID> --request-id <固定requestId>`：按requestId查询金丝雀5本或剩余48本，输出requestId、task和对应行；只允许上述两个固定requestId。原`status --manifest <48清单> --actor-id <ID>`兼容保留（默认48的requestId），也可显式传同一requestId。只读status不授予48本提交权限；一个请求的在途任务仍会阻止另一个请求的plan/submit/status，保持独占窗口。金丝雀终态后，48的plan仍排除固定五本，即使五本已经有码/有意图，也不得把它们回加。
++
++本次真实库新增冒烟覆盖：精确五本与独立requestId、重放幂等/临期审计一次；短缺/重复/外来ID及错误确认/摘要拒绝；前置条件及其它在途拒绝；金丝雀与48均与按钮绑定/凭据拒绝码相同；模拟金丝雀已结束后可同时按各自requestId读进度，48的plan仍为原48。模拟终态只由一次性夹具写入，不调上游。双向变异去掉“必须等于冻结五本”校验，必须行为变红、还原并git diff --quiet。
++
++### 复核通过后的执行约定（尚未执行）
++
++- 先核对新版ops HEAD/脚本SHA、线上0.6.5/Final、原生web容器web_app，以及原冻结baseline SHA256 `244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d`。固定actor `71f0e655-0640-4f07-bcbb-041f027fa7cb`、账户 `53f03fd8-951d-433e-ac66-784e82496a84`，不换角色、不改grants、不读raw_payload；原635摘要 `f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454`。
++- 在提交前只读确认无其它领码任务/条目，记录UTC窗口起点及意图基线；请Owner/运营在整个窗口不提交其它领码批次。只执行一次submit-canary，保留实际requestId/taskId；不自动重放、不新建失败重试批次。
++- 用status指定canary requestId等待五本全部终态，期间若429/熔断/permission denied、意图>1、未决/转人工或名单变化立即停。结束前再查无其它在途，记录窗口终点（同一半开区间）。
++- MINE必须already_available、意图0；其余成功书有码有网址，失败安全列原因；逐本标为“按意图记录推定的每本getcode上限”。宿主机只读采集窗口upstream_call，getcode总事件数必须等于新增意图总数，getvideoinfo仅报窗口总数。确认635摘要不变及六服务error/permission denied均0。
++- 回报即停，余48本绝不自动提交，仍等Owner明确“批准重领”。本次复核材料中的未来生产步骤不表示已经执行。
+diff --git a/scripts/ops/promo-reclaim-53.ts b/scripts/ops/promo-reclaim-53.ts
+index 4d736418..660c7f56 100644
+--- a/scripts/ops/promo-reclaim-53.ts
++++ b/scripts/ops/promo-reclaim-53.ts
+@@ -3 +3 @@
+- * /tmp/promo-reclaim-53.ts plan|submit|status ...
++ * /tmp/promo-reclaim-53.ts plan|submit|submit-canary|status ...
+@@ -17,0 +18 @@ export const REQUEST_ID = "promo-reclaim-53-2026-10-20";
++export const CANARY_REQUEST_ID = "promo-reclaim-53-2026-10-20-canary";
+@@ -193,4 +194,11 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-  const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids: m.ids });
+-  const channelAccounts = { [APP]: m.accountId };
+-  const requestId = REQUEST_ID;
+-  // Replay must retain the original 48 inputs even after some books have codes.
++  return submitSelection(db, m, m.ids, actorId, REQUEST_ID, now);
++}
++export async function submitCanary(db: PrismaClient, b: Baseline, ids: readonly string[], actorId: string, confirm: string, now = new Date()) {
++  check(confirm === "PROMO_RECLAIM_CANARY_5", "confirmation_refused"); validateBaseline(b);
++  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");
++  return submitSelection(db, b, [...ids], actorId, CANARY_REQUEST_ID, now);
++}
++async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], actorId: string, requestId: typeof REQUEST_ID | typeof CANARY_REQUEST_ID, now: Date) {
++  const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids });
++  const channelAccounts = { [APP]: b.accountId };
++  // Replay retains the original fixed scope even after some books have codes.
+@@ -198 +206 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-    await context(tx, actorId); await checkManual(tx, m);
++    await context(tx, actorId); await checkManual(tx, b);
+@@ -202,3 +210,3 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-    const rows = await tx.novelSourceItem.findMany({ where: { id: { in: m.ids }, channelAppId: APP }, select: { id: true } });
+-    check(same(rows.map(r => r.id), m.ids), "manifest_theater_mismatch");
+-    if (!existing) check(same(await eligibleIds(tx, m.ids), m.ids), "submit_preconditions_failed");
++    const rows = await tx.novelSourceItem.findMany({ where: { id: { in: ids }, channelAppId: APP }, select: { id: true } });
++    check(same(rows.map(r => r.id), ids), "manifest_theater_mismatch");
++    if (!existing) check(same(await eligibleIds(tx, ids), ids), "submit_preconditions_failed");
+@@ -224 +232 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-  return { ...result, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
++  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
+@@ -226,2 +234,4 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
+-export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-  validateManifest(m);
++export async function status(db: PrismaClient, m: Baseline | Manifest, actorId: string, requestId: string = REQUEST_ID) {
++  check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
++  if ("ids" in m) validateManifest(m); else validateBaseline(m);
++  const ids = requestId === CANARY_REQUEST_ID ? m.canaryIds : m.allIds.filter(id => !m.canaryIds.includes(id));
+@@ -230 +240 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${REQUEST_ID}`)}`;
++    const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${requestId}`)}`;
+@@ -233 +243 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    for (const id of m.ids) {
++    for (const id of ids) {
+@@ -254 +264 @@ export async function status(db: PrismaClient, m: Manifest, actorId: string) {
+-    return { ...ctx, accountId: m.accountId, task, counts, rows, otherInflight: other,
++    return { ...ctx, requestId, accountId: m.accountId, task, counts, rows, otherInflight: other,
+@@ -264 +274 @@ export async function main(argv: string[]) {
+-  check(["plan", "submit", "status"].includes(command), "command_invalid");
++  check(["plan", "submit", "submit-canary", "status"].includes(command), "command_invalid");
+@@ -268 +278 @@ export async function main(argv: string[]) {
+-    check(["--actor-id", "--baseline", "--baseline-sha256", "--output", "--manifest", "--manifest-sha256", "--confirm"].includes(k) && !(k in values) && v && !v.startsWith("--"), "arguments_invalid");
++    check(["--actor-id", "--baseline", "--baseline-sha256", "--output", "--manifest", "--manifest-sha256", "--confirm", "--request-id"].includes(k) && !(k in values) && v && !v.startsWith("--"), "arguments_invalid");
+@@ -271 +281,2 @@ export async function main(argv: string[]) {
+-  const allowed = command === "plan" ? ["--actor-id", "--baseline", "--baseline-sha256", "--output"] : command === "submit" ? ["--actor-id", "--manifest", "--manifest-sha256", "--confirm"] : ["--actor-id", "--manifest"];
++  const baselineInput = command === "plan" || command === "submit-canary" || (command === "status" && "--baseline" in values);
++  const allowed = command === "plan" ? ["--actor-id", "--baseline", "--baseline-sha256", "--output"] : command === "submit" ? ["--actor-id", "--manifest", "--manifest-sha256", "--confirm"] : command === "submit-canary" ? ["--actor-id", "--baseline", "--baseline-sha256", "--confirm"] : ["--actor-id", ...(baselineInput ? ["--baseline", "--baseline-sha256"] : ["--manifest"]), ...("--request-id" in values ? ["--request-id"] : [])];
+@@ -275 +286,4 @@ export async function main(argv: string[]) {
+-  const input = command === "plan" ? loadPinned<Baseline>(values["--baseline"], values["--baseline-sha256"]) : command === "submit" ? loadPinned<Manifest>(values["--manifest"], values["--manifest-sha256"]) : JSON.parse(readFileSync(values["--manifest"], "utf8")) as Manifest;
++  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_5", "confirmation_refused");
++  const requestId = values["--request-id"] ?? REQUEST_ID;
++  if (command === "status") check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
++  const input = baselineInput ? loadPinned<Baseline>(values["--baseline"], values["--baseline-sha256"]) : command === "submit" ? loadPinned<Manifest>(values["--manifest"], values["--manifest-sha256"]) : JSON.parse(readFileSync(values["--manifest"], "utf8")) as Manifest;
+@@ -284 +298,2 @@ export async function main(argv: string[]) {
+-    else console.log(JSON.stringify(await status(prisma, input as Manifest, values["--actor-id"])));
++    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, input.canaryIds, values["--actor-id"], values["--confirm"])));
++    else console.log(JSON.stringify(await status(prisma, input, values["--actor-id"], requestId)));
+diff --git a/tests/integration/ops/promo-reclaim-53-postgres.test.ts b/tests/integration/ops/promo-reclaim-53-postgres.test.ts
+index 7e6cd2cc..75115f14 100644
+--- a/tests/integration/ops/promo-reclaim-53-postgres.test.ts
++++ b/tests/integration/ops/promo-reclaim-53-postgres.test.ts
+@@ -26,0 +27,2 @@ const mineIndonesian = "63172440-a1bb-4df2-a920-75f1a7b40a44";
++const canaryRequest = "promo-reclaim-53-2026-10-20-canary";
++const remainingRequest = "promo-reclaim-53-2026-10-20";
+@@ -45,0 +48,3 @@ function submitArgs() { const x = manifest(); return ["submit", "--actor-id", ac
++function baseline() { const file = path.join(dir, "baseline.json"), bytes = readFileSync(file, "utf8"); return { file, digest: hash(bytes), data: JSON.parse(bytes) as { canaryIds: string[] } }; }
++function canaryArgs() { const x = baseline(); return ["submit-canary", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--confirm", "PROMO_RECLAIM_CANARY_5"]; }
++function baselineStatus(requestId: string) { const x = baseline(); return cli(["status", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--request-id", requestId]); }
+@@ -120,0 +126,63 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++  it("submit-canary fixes five IDs, replays once, isolates request IDs and preserves the remaining plan after completion", async () => {
++    const five = baseline().data.canaryIds;
++    expect(five).toHaveLength(5); expect(five.map(id => id.slice(0, 8)).sort()).toEqual(["17f20eb7", "191da4c8", "4265a05f", "49e254d4", "c838c281"]);
++    const first = cli(canaryArgs()); expect(first.exit, JSON.stringify(first.data)).toBe(0);
++    expect(first.data.requestId).toBe(canaryRequest); expect(first.data.duplicate).toBe(false); expect(first.data.enabled).toBe(true);
++    expect(first.data.channelAccounts).toEqual({ [app]: account });
++    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: first.data.taskId }, select: { params: true } });
++    const params = task.params as { selection: { scope: string; ids: string[] }; requestId: string };
++    expect(params.requestId).toBe(canaryRequest); expect(params.selection.scope).toBe("explicit_ids"); expect([...params.selection.ids].sort()).toEqual([...five].sort());
++    const again = cli(canaryArgs()); expect(again.exit).toBe(0); expect(again.data.duplicate).toBe(true); expect(again.data.taskId).toBe(first.data.taskId);
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(1);
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: remainingRequest } } })).toBe(0);
++    expect(await owner.operationAudit.count({ where: { action: "promo_link_claim.credential_expiring_soon", requestId: canaryRequest } })).toBe(1);
++    const pending = baselineStatus(canaryRequest); expect(pending.exit).toBe(0); expect(pending.data.requestId).toBe(canaryRequest); expect(pending.data.rows).toHaveLength(5);
++    // Existing quiet-window rule still blocks the 48 plan while canaries run.
++    const blocked = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
++    expect(blocked.data.code).toBe("other_claim_inflight");
++    // Simulated terminal worker results only: no upstream/adapter is invoked.
++    await owner.genericTask.update({ where: { id: first.data.taskId }, data: { status: "completed" } });
++    await owner.genericTaskItem.updateMany({ where: { taskId: first.data.taskId }, data: { status: "success" } });
++    await owner.genericTask.create({ data: { parentTaskId: first.data.taskId, taskType: "promo_link.claim.v1", operationScopeHash: hash("canary-terminal"), requestToken: "canary-terminal", status: "completed", items: { create: five.map(id => ({ targetType: "novel_source_item", targetId: id, payload: { novelSourceItemId: id }, status: "success", result: { decision: id === mineTarget ? "already_available" : "claimed" } })) } } });
++    for (const id of five) {
++      await addCode(id);
++      if (id !== mineTarget) await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-" + id), idempotencyKey: hash("canary-idem-" + id), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: id, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: id } } });
++    }
++    const beforeAudit = await owner.operationAudit.count();
++    const done = baselineStatus(canaryRequest); expect(done.exit).toBe(0); expect(done.data.counts).toEqual({ success: 4, already_available: 1, failed: 0 });
++    expect(done.data.databaseRole).toBe("web_app"); expect(done.data.transactionReadOnly).toBe("on");
++    expect(done.data.rows.every((x: { promoCodePresent: boolean; promoUrlPresent: boolean }) => x.promoCodePresent && x.promoUrlPresent)).toBe(true);
++    expect(done.data.rows.find((x: { id: string }) => x.id === mineTarget).getcodeUpperBoundByIntent).toBe(0);
++    const notSubmitted = baselineStatus(remainingRequest); expect(notSubmitted.exit).toBe(0); expect(notSubmitted.data.requestId).toBe(remainingRequest); expect(notSubmitted.data.rows).toHaveLength(48); expect(notSubmitted.data.task).toBeNull();
++    expect(await owner.operationAudit.count()).toBe(beforeAudit);
++    const planned = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
++    expect(planned.exit, JSON.stringify(planned.data)).toBe(0); expect(planned.data.ids).toEqual(m.ids); expect(planned.data.ids.some((id: string) => five.includes(id))).toBe(false);
++    const replay = cli(canaryArgs()); expect(replay.exit).toBe(0); expect(replay.data.duplicate).toBe(true);
++    const remaining = cli(submitArgs()); expect(remaining.exit).toBe(0); expect(remaining.data.requestId).toBe(remainingRequest); expect(remaining.data.taskId).not.toBe(first.data.taskId);
++  });
++  it("rejects canary phrase, hash and request ID errors before submission", async () => {
++    for (const phrase of ["wrong", "PROMO_RECLAIM_48"]) { const args = canaryArgs(); args[args.indexOf("--confirm") + 1] = phrase; expect(cli(args).data.code).toBe("confirmation_refused"); }
++    const args = canaryArgs(); args[args.indexOf("--baseline-sha256") + 1] = "0".repeat(64); expect(cli(args).data.code).toBe("manifest_sha256_mismatch");
++    expect(baselineStatus("unknown-request").data.code).toBe("request_id_refused");
++    const tampered = JSON.parse(readFileSync(baseline().file, "utf8")); tampered.canaryIds[0] = m.ids[0];
++    const bytes = JSON.stringify(tampered); const file = path.join(dir, "tampered-baseline.json"); writeFileSync(file, bytes);
++    expect(cli(["submit-canary", "--actor-id", actor, "--baseline", file, "--baseline-sha256", hash(bytes), "--confirm", "PROMO_RECLAIM_CANARY_5"]).data.code).toBe("canary_scope_invalid");
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
++  });
++  it.each(["short", "duplicate", "outsider"])("rejects canary ID selections outside the frozen five: %s", async kind => {
++    const selected = [...baseline().data.canaryIds];
++    if (kind === "short") selected.pop();
++    if (kind === "duplicate") selected[0] = selected[1];
++    if (kind === "outsider") selected[0] = m.ids[0];
++    const result = inline(`return ops.submitCanary(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(selected)},${JSON.stringify(actor)},'PROMO_RECLAIM_CANARY_5');`);
++    expect(result.exit, JSON.stringify(result.data)).toBe(64); expect(result.data.code).toBe("canary_ids_invalid");
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
++  });
++  it.each(["existing_code", "historical_intent", "not_linked", "inflight_item", "other_inflight"])("rechecks canary prerequisites before enqueue: %s", async kind => {
++    if (kind === "existing_code") await addCode(mineTarget);
++    if (kind === "historical_intent") await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-existing"), idempotencyKey: hash("canary-existing-idem"), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: mineTarget, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: mineTarget } } });
++    if (kind === "not_linked") await owner.novelSourceItem.update({ where: { id: mineTarget }, data: { status: "pending" } });
++    if (kind === "inflight_item" || kind === "other_inflight") await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", operationScopeHash: hash(kind), requestToken: kind, status: kind === "inflight_item" ? "completed" : "pending", ...(kind === "inflight_item" ? { items: { create: { targetType: "novel_source_item", targetId: mineTarget, payload: { novelSourceItemId: mineTarget } } } } : {}) } });
++    const result = cli(canaryArgs()); expect(result.exit).toBe(64); expect(result.data.code).toBe(["inflight_item", "other_inflight"].includes(kind) ? "other_claim_inflight" : "submit_preconditions_failed");
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
++  });
+@@ -171,0 +240 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    const canary = cli(canaryArgs()); expect(canary.exit).toBe(64); expect(canary.data.code).toBe(x.data.code);
+@@ -172,0 +242 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);

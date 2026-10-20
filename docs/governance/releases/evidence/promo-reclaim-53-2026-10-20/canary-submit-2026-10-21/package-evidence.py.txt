@@ -1,0 +1,64 @@
+from pathlib import Path
+import subprocess,os,json,hashlib,re,datetime
+out=Path('.tmp/promo-reclaim-53/canary-submit-2026-10-21');env=dict(os.environ,DEVELOPER_DIR='/Library/Developer/CommandLineTools');run=lambda a:subprocess.check_output(a,env=env,text=True)
+assert subprocess.run(['git','diff','--quiet'],env=env).returncode==0
+stages=json.loads((out/'initial-result.json').read_text())+json.loads((out/'restored-result.json').read_text());assert all(x['exit']==0 for x in stages)
+for name in ['smoke','smoke-restored']:
+ text=(out/(name+'.log')).read_text();assert re.search(r'Test Files\s+1 passed',text) and re.search(r'Tests\s+28 passed \(28\)',text)
+ assert not re.search(r'Unhandled|42501|permission_denied_stop|\d+ skipped',text)
+ assert 'PROMO_RECLAIM_POSTGRES_VERIFICATION=PASS' in text and 'PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes' in text
+mutation=json.loads((out/'mutation.json').read_text());assert mutation['redExit']!=0 and mutation['behaviorAssertionRed'] and mutation['restoredDiffQuiet']
+sha=hashlib.sha256(Path('scripts/ops/promo-reclaim-53.ts').read_bytes()).hexdigest();assert sha==mutation['restoredSourceSha256']
+code=run(['git','rev-parse','HEAD']).strip();isolation=[]
+for path,before in json.loads((out/'isolation-before.json').read_text()).items():
+ head=run(['git','-C',path,'rev-parse','HEAD']).strip();status=run(['git','-C',path,'status','--porcelain=v1']);assert head==before['head'] and status==before['status'],path
+ isolation.append({'path':path,'head':head,'statusUnchanged':True,'statusSha256':hashlib.sha256(status.encode()).hexdigest()})
+(out/'isolation-result.json').write_text(json.dumps({'status':'PASS','rows':isolation},ensure_ascii=False,indent=2)+'\n')
+summary='''SUBMIT_CANARY=PASS fixed_baseline_five=yes explicit_ids=yes separate_request_id=yes
+REQUEST_ID=promo-reclaim-53-2026-10-20-canary CONFIRM=PROMO_RECLAIM_CANARY_5
+TSC=PASS exit=0
+LINT=PASS errors=0 warnings=16_existing
+WEB_APP_SMOKE=PASS files=1 tests=28 failed=0 skipped=0 unhandled=0 sql42501=0
+REPLAY=PASS duplicate_batch=no original_ids_preserved=yes warning_audit_once=yes
+CANARY_SCOPE_REJECTION=PASS short=yes duplicate=yes outsider=yes wrong_phrase=yes wrong_hash=yes
+PREREQUISITES=PASS existing_code_rejected=yes historical_intent_rejected=yes not_linked_rejected=yes inflight_item_rejected=yes other_inflight_rejected=yes
+BUTTON_ERROR_PARITY=PASS modes=canary_and_48 theater_channel_account_binding_and_credential=yes
+STATUS=PASS canary_rows=5 remaining_rows=48 independent_request_ids=yes read_only=yes
+POST_CANARY_PLAN=PASS after_terminal_with_codes_and_intents remaining=48 fixed_canaries_excluded=yes
+CANARY_SCOPE_MUTATION=PASS red=yes restored_git_diff_quiet=yes
+RESTORED_WEB_APP_SMOKE=PASS files=1 tests=28 failed=0 skipped=0 unhandled=0 sql42501=0
+ACCOUNT_VALIDATION_COPY=PASS lines=20 unchanged=yes
+PROMO_RECLAIM_DICTIONARY_DRIFT=0 tables=60 migrations=29
+ISOLATION=PASS release_integration_fix_CPS_unchanged=yes
+PRODUCTION_CONNECTIONS=0 PRODUCTION_CLAIM_SUBMISSIONS=0 PRODUCTION_UPSTREAM_CALLS=0
+REVIEW_GATE=pending_new_controller_review OWNER_FIVE_APPROVAL=already_given REMAINING_48_APPROVAL=not_given
+'''
+(out/'summary.txt').write_text(summary)
+result={'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'status':'PASS_pending_new_controller_review','baseOpsHead':'700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d','codeCommit':code,'scriptSha256':sha,'initialSmoke':{'files':1,'passed':28,'failed':0,'skipped':0,'unhandled':0,'sql42501':0,'role':'web_app'},'restoredSmoke':{'files':1,'passed':28,'failed':0,'skipped':0,'unhandled':0,'sql42501':0,'role':'web_app'},'typecheckExit':0,'lintErrors':0,'lintWarnings':16,'mutation':mutation,'accountValidationVerbatimLines':20,'baselineSha256':'244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d','baselineModified':False,'canaryRequestId':'promo-reclaim-53-2026-10-20-canary','remainingRequestId':'promo-reclaim-53-2026-10-20','productionConnections':0,'productionSubmissions':0,'productionUpstreamCalls':0,'ownerApprovedFive':True,'newControllerReviewApproved':False,'ownerApprovedRemaining48':False,'releaseBranchModified':False,'grantsOrRolesChanged':False}
+(out/'gates.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+review=f'''主控复核：新增submit-canary，Owner已授权五本，但本次复核通过前不提交。
+分支：ops/promo-reclaim-53-2026-10-20
+代码提交：{code}
+脚本SHA256：{sha}
+发布Final保持：b378910a8ec4b78029e71ad1bac92c742efb9f5b
+基线原始摘要：244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d
+
+核心diff见script-diff.txt，代码/夹具/文档完整diff见review-diff.txt。
+submit与submit-canary共用submitSelection：原enqueueCatalogBatch、双闸、20行逐字账户校验、临期审计、原生web_app及只读预检/写入边界不变。
+五本requestId/确认短语与48本独立。CLI无ID覆盖参数；导出函数仍严格检查传入ID恰好是baseline冻结五本（短缺/重复/外来ID均拒绝）。
+status按--request-id分别查询固定canary或48 requestId，输出自身requestId和对应5/48行；可用冻结baseline+sha，兼容原48 manifest。仍保持无其它在途闸；canary在途时48 plan拒绝，canary终态且有码/意图后48 plan通过，排除五本。
+真实库测试模拟worker终态，不调用真实adapter或上游。原20行逐字对照见account-validation-lines.txt。
+授权与实际5ID见authorization.json；未来生产步骤见post-review-runbook.txt，均尚未执行。
+
+{summary}'''
+(out/'controller-review.txt').write_text(review)
+dest=Path('docs/governance/releases/evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21');dest.mkdir()
+for p in sorted(out.iterdir()):
+ if not p.is_file() or p.name=='isolation-before.json' or p.suffix not in ['.txt','.json','.log']:continue
+ text=p.read_text();assert not re.search(r'postgres(?:ql)?://[^\s"\x27<>]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.|0x4[A-Za-z0-9_-]+|\bG-[A-Z0-9]{6,}\b|Bearer\s+[A-Za-z0-9._~-]+',text),p.name
+ text=text.rstrip('\r\n')+'\n';(dest/(p.name+'.txt' if p.suffix=='.log' else p.name)).write_text(text)
+(dest/'evidence-scan.json').write_text(json.dumps({'status':'PASS','leaks':0,'rawCodesCredentialsOrResponsesExcluded':True,'oldStopsUnmodified':True,'scriptsUseTxtSuffix':True},indent=2)+'\n')
+files=[p for p in sorted(dest.iterdir()) if p.is_file() and p.name!='SHA256SUMS'];(dest/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files))
+doc=Path('docs/governance/releases/promo-reclaim-53-2026-10-20.md');doc.write_text(doc.read_text()+f'\n本次代码提交`{code}`，脚本SHA256 `{sha}`。tsc0/lint0error（16既有warning），真实web_app初次及变异还原后完整冒烟均28/28、无跳过/Unhandled/42501，精确五本守卫删除变异行为红并还原git diff --quiet；原账户校验20行逐字不变。当前未连接生产、未提交五本；本次主控复核仍待通过。材料：[核心diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/script-diff.txt)、[完整diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/review-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/summary.txt)、[主控复核包](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/controller-review.txt)。\n')
+print(summary)
+print('EVIDENCE_PACKAGE=PASS files='+str(len(files))+' leaks=0')

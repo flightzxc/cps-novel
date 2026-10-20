@@ -1,0 +1,16 @@
+from pathlib import Path
+import json,subprocess,os,time,hashlib
+out=Path('.tmp/promo-reclaim-53/canary-submit-2026-10-21');p=Path('scripts/ops/promo-reclaim-53.ts');original=p.read_bytes();s=original.decode()
+needle='  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");\n'
+assert s.count(needle)==1 and subprocess.run(['git','diff','--quiet']).returncode==0
+try:
+ while os.getloadavg()[0]>18:time.sleep(15)
+ p.write_text(s.replace(needle,'',1))
+ with (out/'mutation-exact-five.log').open('x') as log:r=subprocess.run(['/bin/bash','scripts/run-promo-reclaim-postgres-verification.sh'],env=dict(os.environ,PROMO_RECLAIM_TEST_FILTER='rejects canary ID selections outside the frozen five'),stdout=log,stderr=subprocess.STDOUT)
+ text=(out/'mutation-exact-five.log').read_text();assert r.returncode!=0 and 'AssertionError' in text and 'failed' in text,'mutation did not fail behavior assertions'
+ assert '42501' not in text and 'Unhandled' not in text and 'PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes' in text
+finally:p.write_bytes(original)
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+result={'mutation':'remove_exact_frozen_five_check','redExit':r.returncode,'behaviorAssertionRed':True,'restoredDiffQuiet':True,'restoredSourceSha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+(out/'mutation.json').write_text(json.dumps(result,indent=2)+'\n')
+print('CANARY_SCOPE_MUTATION=PASS red=yes restored_git_diff_quiet=yes',flush=True)

@@ -1,0 +1,57 @@
+OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (28 tests | 3 failed | 25 skipped) 4909ms
+     × rejects canary ID selections outside the frozen five: short 1761ms
+     × rejects canary ID selections outside the frozen five: duplicate 1559ms
+     × rejects canary ID selections outside the frozen five: outsider 1568ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects canary ID selections outside the frozen five: short
+AssertionError: {"taskId":"e78f4994-dc85-4ef7-b5fe-b4d9192e90da","duplicate":false,"taskStatus":"pending","requestId":"promo-reclaim-53-2026-10-20-canary","actorId":"71f0e655-0640-4f07-bcbb-041f027fa7cb","channelAccounts":{"85c2fb3e-28f8-476a-83f2-9647e2206192":"eff7af92-ec7e-45dd-8df3-7a6c74c62860"},"enabled":true,"credentialWarningCount":1}: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:178:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects canary ID selections outside the frozen five: duplicate
+AssertionError: expected 'manifest_theater_mismatch' to be 'canary_ids_invalid' // Object.is equality
+
+Expected: "canary_ids_invalid"
+Received: "manifest_theater_mismatch"
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:178:89
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects canary ID selections outside the frozen five: outsider
+AssertionError: {"taskId":"1d13d7eb-37ce-493b-8696-36b347aaa06b","duplicate":false,"taskStatus":"pending","requestId":"promo-reclaim-53-2026-10-20-canary","actorId":"71f0e655-0640-4f07-bcbb-041f027fa7cb","channelAccounts":{"85c2fb3e-28f8-476a-83f2-9647e2206192":"7f6fdffa-ff9d-48c9-bf2a-de7d38da92d9"},"enabled":true,"credentialWarningCount":1}: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:178:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 25 skipped (28)
+   Start at  01:07:02
+   Duration  5.05s (transform 24ms, setup 0ms, import 57ms, tests 4.91s, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

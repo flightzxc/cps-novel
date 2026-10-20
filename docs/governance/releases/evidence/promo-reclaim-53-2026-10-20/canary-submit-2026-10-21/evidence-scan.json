@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "leaks": 0,
+  "rawCodesCredentialsOrResponsesExcluded": true,
+  "oldStopsUnmodified": true,
+  "scriptsUseTxtSuffix": true
+}

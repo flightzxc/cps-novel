@@ -1,0 +1,42 @@
+Verbatim baseline58cdb94d _actions.ts:477-496, unchanged.
+477: async function validatePromoAccountConfiguration(
+ops: async function validatePromoAccountConfiguration(
+478:   db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+ops:   db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+479:   accounts: Readonly<Record<string, string>>,
+ops:   accounts: Readonly<Record<string, string>>,
+480:   now: Date,
+ops:   now: Date,
+481: ): Promise<PromoLinkClaimCredentialWarning[]> {
+ops: ): Promise<PromoLinkClaimCredentialWarning[]> {
+482:   const warnings: PromoLinkClaimCredentialWarning[] = [];
+ops:   const warnings: PromoLinkClaimCredentialWarning[] = [];
+483:   for (const [channelAppId, accountId] of Object.entries(accounts)) {
+ops:   for (const [channelAppId, accountId] of Object.entries(accounts)) {
+484:     const binding = await db.channelApp.findFirst({ where: {
+ops:     const binding = await db.channelApp.findFirst({ where: {
+485:       id: channelAppId, status: "active",
+ops:       id: channelAppId, status: "active",
+486:       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+ops:       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+487:     }, select: { id: true } });
+ops:     }, select: { id: true } });
+488:     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+ops:     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+489:     const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+ops:     const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+490:     if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+ops:     if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+491:     if (admission.expiringSoon && admission.expiresAt) {
+ops:     if (admission.expiringSoon && admission.expiresAt) {
+492:       warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+ops:       warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+493:     }
+ops:     }
+494:   }
+ops:   }
+495:   return warnings;
+ops:   return warnings;
+496: }
+ops: }
+ACCOUNT_VALIDATION_COPY=PASS lines=20

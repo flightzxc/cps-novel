@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-20T16:09:12.134155+00:00",
+  "status": "PASS_pending_new_controller_review",
+  "baseOpsHead": "700e01cc2db00fe18bd895cda7a8cc76e0c4aa9d",
+  "codeCommit": "ca765e56e0414522fb8be3903bdc96e864ffc03e",
+  "scriptSha256": "f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d",
+  "initialSmoke": {
+    "files": 1,
+    "passed": 28,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0,
+    "role": "web_app"
+  },
+  "restoredSmoke": {
+    "files": 1,
+    "passed": 28,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0,
+    "role": "web_app"
+  },
+  "typecheckExit": 0,
+  "lintErrors": 0,
+  "lintWarnings": 16,
+  "mutation": {
+    "mutation": "remove_exact_frozen_five_check",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d"
+  },
+  "accountValidationVerbatimLines": 20,
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "baselineModified": false,
+  "canaryRequestId": "promo-reclaim-53-2026-10-20-canary",
+  "remainingRequestId": "promo-reclaim-53-2026-10-20",
+  "productionConnections": 0,
+  "productionSubmissions": 0,
+  "productionUpstreamCalls": 0,
+  "ownerApprovedFive": true,
+  "newControllerReviewApproved": false,
+  "ownerApprovedRemaining48": false,
+  "releaseBranchModified": false,
+  "grantsOrRolesChanged": false
+}

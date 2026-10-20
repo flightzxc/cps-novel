@@ -1,0 +1,9 @@
+[
+  [
+    "smoke-restored",
+    [
+      "/bin/bash",
+      "scripts/run-promo-reclaim-postgres-verification.sh"
+    ]
+  ]
+]

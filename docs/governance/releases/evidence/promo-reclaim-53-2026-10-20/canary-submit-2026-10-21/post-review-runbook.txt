@@ -1,0 +1,21 @@
+NOT EXECUTED. Owner has approved the five; execute only after controller approves this new ops revision.
+Code commit: ca765e56e0414522fb8be3903bdc96e864ffc03e
+Script SHA256: f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d
+Native web uid and web_app connection only, cwd=/app; no grants/role/env changes.
+Pin the original phase-A baseline bytes, SHA256 244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d.
+Do not modify baseline.requestId, canaryIds, actor or account.
+
+Before the window: confirm Owner/operators submit no other claim batches until verification closes. Check health0.6.5/Final b378910a8ec4b78029e71ad1bac92c742efb9f5b, no other claim tasks/items, 635 manual rows/digest, and original scope. Record UTC window start and global/scope intent snapshot. Copy and re-hash the reviewed source; the baseline must be readable by the native container user (avoid root:0600 docker-cp trap).
+
+Exact future submit command (reviewed-script.ts is the just-verified source; path may be named by reviewed SHA):
+docker exec -w /app cps-novel-web-1 tsx --tsconfig=/app/tsconfig.json /tmp/reviewed-script.ts submit-canary --baseline /tmp/promo-reclaim-53-phase-a-700e01cc.json --baseline-sha256 244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d --actor-id 71f0e655-0640-4f07-bcbb-041f027fa7cb --confirm PROMO_RECLAIM_CANARY_5
+
+Record requestId=promo-reclaim-53-2026-10-20-canary and returned taskId. No automatic submit replay, no failed-book retry.
+Read-only polling command, bounded with progress updates until all five terminal:
+docker exec -w /app cps-novel-web-1 tsx --tsconfig=/app/tsconfig.json /tmp/reviewed-script.ts status --baseline /tmp/promo-reclaim-53-phase-a-700e01cc.json --baseline-sha256 244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d --actor-id 71f0e655-0640-4f07-bcbb-041f027fa7cb --request-id promo-reclaim-53-2026-10-20-canary
+
+The corresponding 48-row read-only command uses --request-id promo-reclaim-53-2026-10-20; it grants no 48-row submission authorization. Query after canary completion, retaining the existing no-other-inflight guard.
+
+Once all five terminal, check no other inflight claims, no unresolved/manual review, then record UTC window end. Use the same half-open interval for read-only intent evidence and bounded host docker logs. Existing window-counts.py.txt must show getcode events == new global intents == new canary-scope intents; each book <=1, MINE exactly0; report getvideoinfo only as window total. MINE decision must be already_available and links ready; other successes code+URL, failures safe reason only. Recheck original635 digest f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454, six-service error and permission denied0, no429/breaker. No raw payloads, code values, URLs or credential fields in outputs.
+
+Any stop condition ends submission work; uncertain submit outcome is resolved with read-only status, never a new batch. Report results and stop. Remaining48 still requires Owner's separate explicit approval.

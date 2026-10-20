@@ -1,0 +1,25 @@
+[
+  [
+    "typecheck",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "lint",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ],
+  [
+    "smoke",
+    [
+      "/bin/bash",
+      "scripts/run-promo-reclaim-postgres-verification.sh"
+    ]
+  ]
+]

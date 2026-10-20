@@ -85,3 +85,5 @@ Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结�
 - 用status指定canary requestId等待五本全部终态，期间若429/熔断/permission denied、意图>1、未决/转人工或名单变化立即停。结束前再查无其它在途，记录窗口终点（同一半开区间）。
 - MINE必须already_available、意图0；其余成功书有码有网址，失败安全列原因；逐本标为“按意图记录推定的每本getcode上限”。宿主机只读采集窗口upstream_call，getcode总事件数必须等于新增意图总数，getvideoinfo仅报窗口总数。确认635摘要不变及六服务error/permission denied均0。
 - 回报即停，余48本绝不自动提交，仍等Owner明确“批准重领”。本次复核材料中的未来生产步骤不表示已经执行。
+
+本次代码提交`ca765e56e0414522fb8be3903bdc96e864ffc03e`，脚本SHA256 `f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d`。tsc0/lint0error（16既有warning），真实web_app初次及变异还原后完整冒烟均28/28、无跳过/Unhandled/42501，精确五本守卫删除变异行为红并还原git diff --quiet；原账户校验20行逐字不变。当前未连接生产、未提交五本；本次主控复核仍待通过。材料：[核心diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/script-diff.txt)、[完整diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/review-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/summary.txt)、[主控复核包](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/controller-review.txt)。

@@ -1,0 +1,17 @@
+{
+  "ownerDate": "2026-10-21 Asia/Tokyo",
+  "authorized": "five canaries via thin script, after new controller review; no repeated Owner approval required",
+  "reviewRequiredBeforeSubmission": true,
+  "remaining48RequireSeparateApproval": true,
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "canaryIds": [
+    "17f20eb7-f286-4f36-9078-3237c84742ac",
+    "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+    "4265a05f-1bf4-46df-84ee-76d65aa64453",
+    "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+    "c838c281-c9ba-482a-aa80-05792e8fdc4a"
+  ],
+  "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+  "actorId": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+  "source": "Owner current message; no production connection in this implementation turn"
+}

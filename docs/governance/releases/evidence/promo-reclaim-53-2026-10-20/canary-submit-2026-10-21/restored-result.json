@@ -1,0 +1,13 @@
+[
+  {
+    "name": "smoke-restored",
+    "command": [
+      "/bin/bash",
+      "scripts/run-promo-reclaim-postgres-verification.sh"
+    ],
+    "started_at": "2026-10-20T16:07:08.199438+00:00",
+    "exit": 0,
+    "seconds": 64.185,
+    "log": "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops/.tmp/promo-reclaim-53/canary-submit-2026-10-21/smoke-restored.log"
+  }
+]

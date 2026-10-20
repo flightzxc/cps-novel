@@ -1,0 +1,7 @@
+{
+  "mutation": "remove_exact_frozen_five_check",
+  "redExit": 1,
+  "behaviorAssertionRed": true,
+  "restoredDiffQuiet": true,
+  "restoredSourceSha256": "f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d"
+}
