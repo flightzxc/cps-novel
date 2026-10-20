@@ -1,0 +1,31 @@
+OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (18 tests | 1 failed | 17 skipped) 648ms
+     × locates trimmed English MINE among two theater namesakes; raw payload is Web-inaccessible 635ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > locates trimmed English MINE among two theater namesakes; raw payload is Web-inaccessible
+AssertionError: {"code":"mine_identity_mismatch"}: expected 64 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 64
+
+ ❯ seed tests/integration/ops/promo-reclaim-53-postgres.test.ts:83:56
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:102:151
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  21:38:49
+   Duration  764ms (transform 22ms, setup 0ms, import 45ms, tests 648ms, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

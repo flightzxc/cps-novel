@@ -1,0 +1,24 @@
+from pathlib import Path
+import subprocess,os,json,time,hashlib
+root=Path.cwd();out=root/'.tmp/promo-reclaim-53/mine-location-fix';p=root/'scripts/ops/promo-reclaim-53.ts';original=p.read_bytes();s=original.decode();rows=[]
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+mutations=[('trim-title','row.title.trim() === "MINE"','row.title === "MINE"','locates trimmed English MINE'),
+ ('locale',' && row.sourceLocale === "en"','','keeps MINE unique with cross-locale and cross-prefix lookalikes'),
+ ('prefix',' && row.id.startsWith("c838c281-")','','keeps MINE unique with cross-locale and cross-prefix lookalikes')]
+try:
+ for name,needle,replacement,test in mutations:
+  assert s.count(needle)==1
+  while os.getloadavg()[0]>18:time.sleep(15)
+  p.write_text(s.replace(needle,replacement,1));env=dict(os.environ,PROMO_RECLAIM_TEST_FILTER=test)
+  with (out/('mutation-'+name+'.log')).open('x') as log:
+   result=subprocess.run(['/bin/bash','scripts/run-promo-reclaim-postgres-verification.sh'],env=env,stdout=log,stderr=subprocess.STDOUT)
+  log=(out/('mutation-'+name+'.log')).read_text()
+  assert result.returncode!=0 and 'AssertionError' in log and 'mine_identity_mismatch' in log,(name,'not a behavior rejection')
+  assert '42501' not in log and 'Unhandled' not in log and 'PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes' in log
+  p.write_bytes(original);assert subprocess.run(['git','diff','--quiet']).returncode==0
+  rows.append({'mutation':name,'exit':result.returncode,'redBehaviorAssertion':True,'rejectionCode':'mine_identity_mismatch','restoredDiffQuiet':True,'restoredSourceSha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+  (out/'mutations.json').write_text(json.dumps(rows,indent=2)+'\n')
+  print('MINE_MUTATION=PASS name='+name+' red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes',flush=True)
+finally:p.write_bytes(original)
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+print('MINE_MUTATIONS=PASS count=3 restored_git_diff_quiet=yes',flush=True)

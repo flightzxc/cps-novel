@@ -1,0 +1,14 @@
+OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  21:39:05
+   Duration  35.19s (transform 21ms, setup 0ms, import 44ms, tests 35.08s, environment 0ms)
+
+{"status":"ok","models":60,"recordCount":1401,"activeCount":1331,"tableCount":60,"constraintCount":290,"indexCount":248,"triggerCount":4}
+PROMO_RECLAIM_DICTIONARY_DRIFT=0
+PROMO_RECLAIM_POSTGRES_VERIFICATION=PASS
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

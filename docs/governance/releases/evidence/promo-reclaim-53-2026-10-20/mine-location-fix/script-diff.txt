@@ -1,0 +1,13 @@
+diff --git a/scripts/ops/promo-reclaim-53.ts b/scripts/ops/promo-reclaim-53.ts
+index a7ba89f5..4d736418 100644
+--- a/scripts/ops/promo-reclaim-53.ts
++++ b/scripts/ops/promo-reclaim-53.ts
+@@ -163 +163,2 @@ export async function captureBaseline(db: PrismaClient, actorId: string, now = n
+-    // Owner 2026-10-20: locate by three Web-readable fields only. The worker
++    // Owner 2026-10-20 correction: trim title + English locale + appendix prefix,
++    // within MoboReader, using only Web-readable columns. The worker
+@@ -165,2 +166,2 @@ export async function captureBaseline(db: PrismaClient, actorId: string, now = n
+-    const mine = await tx.novelSourceItem.findMany({ where: { channelAppId: APP, title: "MINE" }, select: { id: true } });
+-    const matchedMine = mine.filter(row => row.id.startsWith("c838c281-"));
++    const mine = await tx.novelSourceItem.findMany({ where: { channelAppId: APP, title: { contains: "MINE" } }, select: { id: true, title: true, sourceLocale: true } });
++    const matchedMine = mine.filter(row => row.title.trim() === "MINE" && row.sourceLocale === "en" && row.id.startsWith("c838c281-"));

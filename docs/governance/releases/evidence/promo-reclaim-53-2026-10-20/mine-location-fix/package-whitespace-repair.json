@@ -1,0 +1,7 @@
+{
+  "scope": "new evidence formatting only",
+  "reason": "git diff --check rejects trailing context-space lines in archived unified diffs and terminal blank lines in npm logs",
+  "repair": "git diff --unified=0 for review; single final newline for archived evidence; raw .tmp logs unchanged",
+  "codeTestsGrantsChanged": false,
+  "productGateFailure": false
+}

@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "rows": [
+    {
+      "path": "/Users/chenweifeng/Documents/cps海阅/release-v0.6.5",
+      "head": "9688e56e9d586de143d3dd4762c6e1b6941a4f7d",
+      "statusUnchanged": true,
+      "statusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/chenweifeng/Documents/cps海阅/integration-v0.6.5",
+      "head": "58cdb94da40e3103ddc4ebba7c267ce0c23b905e",
+      "statusUnchanged": true,
+      "statusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/chenweifeng/Documents/cps海阅/promo-readback-getvideoinfo",
+      "head": "f5319950da997eecb040023a7ea8fce0a1044448",
+      "statusUnchanged": true,
+      "statusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux",
+      "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+      "statusUnchanged": true,
+      "statusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin",
+      "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+      "statusUnchanged": true,
+      "statusSha256": "ea53d26ea21ebd3dace6e7ec9a2cdd2ee4e2ffab4463d38af3392451c38cb5ea"
+    }
+  ]
+}

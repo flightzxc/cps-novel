@@ -1,0 +1,12 @@
+MINE_LOCATION=PASS theater=MoboReader title_trim=MINE source_locale=en id_prefix=c838c281 exactly_one=yes
+TSC=PASS exit=0
+LINT=PASS errors=0 warnings=16_existing
+WEB_APP_SMOKE=PASS files=1 tests=18 failed=0 skipped=0 unhandled=0 sql42501=0
+MINE_MUTATION=PASS name=trim-title red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+MINE_MUTATION=PASS name=locale red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+MINE_MUTATION=PASS name=prefix red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+RESTORED_WEB_APP_SMOKE=PASS files=1 tests=18 failed=0 skipped=0 unhandled=0 sql42501=0
+ACCOUNT_VALIDATION_COPY=PASS lines=20 unchanged=yes
+PROMO_RECLAIM_DICTIONARY_DRIFT=0
+ISOLATION=PASS release_integration_fix_and_CPS_heads_status_unchanged=yes
+PRODUCTION_CONNECTIONS=0 CAPTURE_BASELINE_RESTARTED=no CANARY=PAUSED_PENDING_REVIEW

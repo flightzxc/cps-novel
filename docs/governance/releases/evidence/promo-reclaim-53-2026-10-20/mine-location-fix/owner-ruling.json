@@ -1,0 +1,22 @@
+{
+  "source": "Owner转述主控2026-10-20已用postgres只读事务查实；本轮引用，未重查生产",
+  "target": {
+    "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+    "title": "MINE ",
+    "sourceLocale": "en",
+    "externalBookId": "1274862844",
+    "seriesId": "131539322",
+    "in53": true
+  },
+  "other": {
+    "id": "63172440-a1bb-4df2-a920-75f1a7b40a44",
+    "title": "MINE",
+    "sourceLocale": "id",
+    "externalBookId": "5531080",
+    "seriesId": "2946414",
+    "in53": false
+  },
+  "productionRequeried": false,
+  "captureBaselineRestarted": false,
+  "canary": "paused_pending_controller_review"
+}

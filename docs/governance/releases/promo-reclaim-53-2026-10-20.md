@@ -65,3 +65,5 @@
 脚本仅调整MINE定位：SQL仅预选MoboReader内含MINE的标题（不分页、不截断），再同时严格检查trim后的标题、英语locale与附录B前缀，恰好一行并且属于53本范围才通过。无raw_payload读取；账户校验逐字复制部分、提交函数、状态机、grants和运行角色不变。发布分支与已部署Final不动。
 
 真实库夹具复用原辅助函数，并按主控提供的两本MINE完整身份构造同剧场重名；另以同前缀跨语种、同语种跨前缀干扰行验证两个约束独立必要，四条件多行也拒绝。要求trim退回精确比较的变异必须红，恢复后git diff --quiet；locale与prefix删除也以真实数据行为验证歧义停手。门禁及diff见本次mine-location-fix证据。本次推送供主控复核，未获复核通过前不重启生产captureBaseline，不执行金丝雀。
+
+本次代码提交`c1ca68182ff598d38bf285a52a6996e04ce6d7c7`，脚本SHA256 `08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15`。tsc0、lint0error/16既有warning；真实web_app冒烟及还原后完整冒烟均18/18，skipped0/无Unhandled/42501；trim、locale、prefix三种变异均红后还原并git diff --quiet。现有拒绝码、临期审计、plan→submit→status和635条基线守卫均通过，字典drift0。主控复核材料：[核心diff](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/script-diff.txt)、[完整diff](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/review-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/summary.txt)、[复核包](evidence/promo-reclaim-53-2026-10-20/mine-location-fix/controller-review.txt)。本轮未连接生产，待主控复核通过后才从captureBaseline重启甲阶段。

@@ -1,0 +1,12 @@
+from pathlib import Path
+import subprocess,os,json,hashlib
+folder=Path('docs/governance/releases/evidence/promo-reclaim-53-2026-10-20/mine-location-fix');out=Path('.tmp/promo-reclaim-53/mine-location-fix');env=dict(os.environ,DEVELOPER_DIR='/Library/Developer/CommandLineTools')
+for name,paths in [('script-diff.txt',['scripts/ops/promo-reclaim-53.ts']),('review-diff.txt',['scripts/ops/promo-reclaim-53.ts','tests/integration/ops/promo-reclaim-53-postgres.test.ts','docs/governance/releases/promo-reclaim-53-2026-10-20.md'])]:
+ text=subprocess.check_output(['git','diff','--unified=0','786ec4ae270c4a5e3585ebe2f376116e6f2d3981','HEAD','--',*paths],env=env,text=True)
+ (folder/name).write_text(text)
+for p in folder.iterdir():
+ if p.is_file() and p.name!='SHA256SUMS':p.write_text(p.read_text().rstrip('\r\n')+'\n')
+(folder/'package-whitespace-repair.json').write_text(json.dumps({'scope':'new evidence formatting only','reason':'git diff --check rejects trailing context-space lines in archived unified diffs and terminal blank lines in npm logs','repair':'git diff --unified=0 for review; single final newline for archived evidence; raw .tmp logs unchanged','codeTestsGrantsChanged':False,'productGateFailure':False},indent=2)+'\n')
+(folder/'package-whitespace-repair.py.txt').write_text((out/'package-whitespace-repair.py.txt').read_text())
+files=[p for p in sorted(folder.iterdir()) if p.is_file() and p.name!='SHA256SUMS'];(folder/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files))
+print('EVIDENCE_FORMAT_REPAIR=PASS code_unchanged=yes')

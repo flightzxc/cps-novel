@@ -1,0 +1,28 @@
+主控复核包：仅ops分支MINE定位修正
+分支：ops/promo-reclaim-53-2026-10-20
+代码提交：c1ca68182ff598d38bf285a52a6996e04ce6d7c7
+脚本SHA256：08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15
+发布Final保持：b378910a8ec4b78029e71ad1bac92c742efb9f5b
+生产captureBaseline：未重启；金丝雀继续暂停，待主控本次复核通过。
+
+核心diff见script-diff.txt；完整改动（脚本/夹具/运营说明）见review-diff.txt。
+无raw_payload读取。SQL contains仅作不截断的候选预选，最终trim标题+英语locale+前缀且恰好一行。
+两本真实形态MINE、缺失locale/prefix、多行、交叉干扰的行为均由web_app真实库测试验证。
+原账户校验20行逐字未改，逐行对照见account-validation-lines.txt。
+seriesId对应关系仅引用Owner转述主控postgres只读SQL查实，见owner-ruling.json；本轮未重查生产。
+去掉locale或prefix的变异使用交叉干扰行使结果歧义，明确返回mine_identity_mismatch；未宣称仅原两行就能检出每个缺失约束。
+
+MINE_LOCATION=PASS theater=MoboReader title_trim=MINE source_locale=en id_prefix=c838c281 exactly_one=yes
+TSC=PASS exit=0
+LINT=PASS errors=0 warnings=16_existing
+WEB_APP_SMOKE=PASS files=1 tests=18 failed=0 skipped=0 unhandled=0 sql42501=0
+MINE_MUTATION=PASS name=trim-title red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+MINE_MUTATION=PASS name=locale red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+MINE_MUTATION=PASS name=prefix red=yes code=mine_identity_mismatch restored_git_diff_quiet=yes
+RESTORED_WEB_APP_SMOKE=PASS files=1 tests=18 failed=0 skipped=0 unhandled=0 sql42501=0
+ACCOUNT_VALIDATION_COPY=PASS lines=20 unchanged=yes
+PROMO_RECLAIM_DICTIONARY_DRIFT=0
+ISOLATION=PASS release_integration_fix_and_CPS_heads_status_unchanged=yes
+PRODUCTION_CONNECTIONS=0 CAPTURE_BASELINE_RESTARTED=no CANARY=PAUSED_PENDING_REVIEW
+
+金丝雀定位（恢复前不可提交）：剧场MoboReader；MINE/Fran/SOLD/Heart英语en；Obsession法语fr（4265a05f，不能选英语OBSESSION）。切换筛选会清空勾选，按实际勾选核对。

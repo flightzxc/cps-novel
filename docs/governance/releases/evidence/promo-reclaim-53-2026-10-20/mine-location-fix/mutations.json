@@ -1,0 +1,26 @@
+[
+  {
+    "mutation": "trim-title",
+    "exit": 1,
+    "redBehaviorAssertion": true,
+    "rejectionCode": "mine_identity_mismatch",
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+  },
+  {
+    "mutation": "locale",
+    "exit": 1,
+    "redBehaviorAssertion": true,
+    "rejectionCode": "mine_identity_mismatch",
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+  },
+  {
+    "mutation": "prefix",
+    "exit": 1,
+    "redBehaviorAssertion": true,
+    "rejectionCode": "mine_identity_mismatch",
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+  }
+]

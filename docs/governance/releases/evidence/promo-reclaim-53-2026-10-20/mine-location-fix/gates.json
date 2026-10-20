@@ -1,0 +1,70 @@
+{
+  "at": "2026-10-20T12:41:14.191793+00:00",
+  "status": "PASS_pending_controller_review",
+  "baseOpsHead": "786ec4ae270c4a5e3585ebe2f376116e6f2d3981",
+  "codeCommit": "c1ca68182ff598d38bf285a52a6996e04ce6d7c7",
+  "scriptSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15",
+  "typecheckExit": 0,
+  "lintErrors": 0,
+  "lintWarnings": 16,
+  "initialSmoke": {
+    "files": 1,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0,
+    "role": "web_app"
+  },
+  "restoredSmoke": {
+    "files": 1,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0,
+    "role": "web_app"
+  },
+  "mutations": [
+    {
+      "mutation": "trim-title",
+      "exit": 1,
+      "redBehaviorAssertion": true,
+      "rejectionCode": "mine_identity_mismatch",
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+    },
+    {
+      "mutation": "locale",
+      "exit": 1,
+      "redBehaviorAssertion": true,
+      "rejectionCode": "mine_identity_mismatch",
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+    },
+    {
+      "mutation": "prefix",
+      "exit": 1,
+      "redBehaviorAssertion": true,
+      "rejectionCode": "mine_identity_mismatch",
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15"
+    }
+  ],
+  "accountValidationVerbatimLines": 20,
+  "database": {
+    "version": "16.14",
+    "migrations": 29,
+    "tables": 60,
+    "dictionaryRecords": 1401,
+    "activeDictionaryRecords": 1331,
+    "drift": 0
+  },
+  "releaseBranchUnchanged": true,
+  "grantsAndRolesUnchanged": true,
+  "productionConnections": 0,
+  "productionCaptureBaselineRestarted": false,
+  "claimBatchesSubmittedToProduction": 0,
+  "canary": "paused_pending_controller_review",
+  "seriesIdSource": "Owner/controller read-only SQL ruling; not requeried"
+}
