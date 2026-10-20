@@ -1,0 +1,100 @@
+{
+  "status": "deployed_technical_pass_owner_operator_acceptance_pending",
+  "final": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45",
+  "tree": "b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae",
+  "branch": "release/v0.6.4-2026-10-20",
+  "target": "haiyue-vps",
+  "image": "cps-novel:0.6.4-50e3e06",
+  "releaseExit": 0,
+  "maintenanceOn": "2026-10-20T01:40:20.270148+00:00",
+  "maintenanceOff": "2026-10-20T01:41:08.318174+00:00",
+  "maintenanceSeconds": 48.048026,
+  "finishedAt": "2026-10-20T01:41:09.520856+00:00",
+  "backup": {
+    "path": "/var/lib/cps-novel/backups/logical/cps-novel-v064-20261020T013646Z.dump",
+    "sha256": "1a742a5fd0c5df8b742cbf469badfac10d9fa3cc31ed6634320704dbc953680f",
+    "bytes": 777201984,
+    "restoreList": "PASS"
+  },
+  "env": {
+    "envBackup": "/opt/cps-novel/shared/env/preprod.env.bak-v064-20261020T014005Z",
+    "beforeSha256": "2da417dbc7ec25e5e0fc4d62885c3fd4b66a8530a877917198bcccb74b3e66f1",
+    "afterSha256": "431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494",
+    "otherBytesCmp": "PASS",
+    "allowlists": "UNCHANGED"
+  },
+  "services": [
+    {
+      "service": "web",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker-light",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "scheduler",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "backup-timer",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "postgres",
+      "healthy": true,
+      "error": 0,
+      "permissionDenied": 0
+    }
+  ],
+  "runtimeCheckedUntil": "2026-10-20T01:47:11.177632+00:00",
+  "postgresIdUnchanged": true,
+  "migrationCount": 29,
+  "tableCount": 60,
+  "migrationChecksumsUnchanged": true,
+  "nginxSha256": "7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9",
+  "externalHttpRequests": 13,
+  "httpBudget": 15,
+  "B50": "PASS",
+  "B51": "PASS",
+  "effectiveTag": {
+    "missing": 0,
+    "extra": 0,
+    "changed": 0
+  },
+  "indexnow": {
+    "breakerOpen": false,
+    "rateLimitWaiting": false,
+    "dueUrls": 0,
+    "deadLetters": 0
+  },
+  "sudoUsed": false,
+  "nginxInstalled": false,
+  "manualProductionWriteSql": false,
+  "businessAcceptance": {
+    "catalogSyncOperator": "pending",
+    "ownerGaRealtime": "pending",
+    "operatorDramaTriggerRetirement": "pending"
+  },
+  "governance": {
+    "annotatedTag": "local_then_push_after_checks",
+    "changelog": "generated",
+    "versionRegistry": "updated",
+    "developmentLog": "one_release_entry",
+    "notion": "pending_sync"
+  }
+}

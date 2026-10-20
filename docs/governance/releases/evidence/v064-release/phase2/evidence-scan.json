@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "files": 66,
+  "redactions": 0,
+  "leaks": 0,
+  "allJsonParse": true,
+  "privateFilesExcluded": true,
+  "scriptsUseTxtSuffix": true,
+  "httpRequests": 13,
+  "rawOriginals": "/Users/chenweifeng/Documents/cps\u6d77\u9605/release-v0.6.4/.tmp/v064-release/phase2"
+}

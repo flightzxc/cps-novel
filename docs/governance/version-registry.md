@@ -19,15 +19,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.4 —— 第一阶段完成，尚未部署（2026-10-20 JST）
+### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）
 
-- 版本类型 **PATCH**。基线 `0f5fe7e06297211972aabcb43c5b8502349afe73`（tree `e574127f442c7cacafecee8770d5d3dda9bec428`），集成线 `integration/v0.6.4-2026-10-19`，发布分支 `release/v0.6.4-2026-10-20`；来源 `feat/v064-drama-ga-theater`，经 `7cc19ece` no-ff 合并，`0f5fe7e0` 登记 B-50 冻结例外。
-- B-50：仅公开站 SITE_URL 主机的 `/drama` 与 `/drama/*` 301 到 `https://enpulsedrama.com` 同路径并保留查询串，后台不跳；Owner 2026-10-19 单独批准，已登记 AI_WORKFLOW.md。B-51：后台子域名不加载 Google Analytics。B-44：领取推广链接页按剧场筛选；排序与翻页清空勾选；领取时自动跳过已暂停剧场并提示，运营确认后才提交。
-- 零新增迁移：迁移 **29 条**、表 **60 张**、字典 **1401 条 / active 1331 条**；grants、环境变量集合、compose、nginx、后台路由及任务白名单不变。除 B-50 已批准例外，公开网址、canonical、hreflang、站点地图、robots 冻结保持。
-- 第一阶段只在本地升版、运行完整门禁、推送 GitHub、构建及核验 linux/amd64 不可变归档，不连接远程主机。第二阶段须 Owner 明确“批准部署”，仅限 haiyue-vps 低流量窗口；不安装 nginx、不使用 sudo，目标机只改两个版本变量。
-- annotated tag、生成 CHANGELOG、唯一发版级开发日志与 Notion 同步回读留待部署验收后完成；第一阶段结果由后续发布记录补充。
-
-- 第一阶段实测：Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` / tree `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae`；全量 11616 通过、0失败、无Unhandled，真实库全量 11626 通过；37运行器、严格1750探针、nginx三模式/27变异、最终归档端到端全部PASS。归档SHA256 `a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77`；GitHub Final已推送回读，未连接远程主机。等待Owner“批准部署”；[发布记录](releases/v0.6.4-preproduction.md)。
+- **PATCH**，Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` / tree `b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae`，annotated `v0.6.4`固定Final；发布分支`release/v0.6.4-2026-10-20`，治理提交不改变工件身份。镜像`cps-novel:0.6.4-50e3e06`，linux/amd64；归档253595910字节/SHA256 `a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77`。
+- B-50公开站/drama及/drama/*301到短剧站同路径并保留查询串，属于Owner10-19单独批准、已登记的网址冻结例外；B-51后台不加载GA；B-44剧场筛选、排序/翻页清空勾选、领取自动跳过暂停剧场并提示，三项代码已部署。公开网址其余冻结，nginx/compose/后台路由/任务白名单不变，不装nginx、不用sudo。
+- Owner本会话“批准部署”，仅haiyue-vps；原RELEASE=PASS/EXIT=0，维护10:40:20–10:41:08 JST、48.048026秒。env仅改两版本行、cmp PASS，备份及restore-list/checksum PASS；零新增迁移，29finished/0rolled_back、60表、字典1401/active1331/drift0，名称checksum一致，原流程单事务grants。
+- health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变；六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压、四应用Next16.3.8及无测试依赖、写闸白名单和备份定时器PASS。nginx SHA256 `7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9`保持。
+- B-50指定URL301及两个负向404、已发布小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康接口匿名401/认证200，公开health正确。外部13/15次，全走指定代理且不跟随跳转，密钥和编号不输出。
+- 第一阶段全量11616通过、真实库全量11626通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异及最终镜像端到端PASS。tag/生成CHANGELOG/唯一日志及本地证据已补齐；Notion待本地治理门禁与推送后同步回读。**运营/catalog-sync与Owner GA实时报告待回执，不能登记为业务全部验收或正式收官。** [发布记录](releases/v0.6.4-preproduction.md)。
 
 ### v0.6.3 —— 已正式收官，技术及Owner/运营验收PASS（2026-10-19）
 
@@ -548,7 +547,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.4` | 2026-10-20 | PATCH | B-50 公开站短剧误入 301、B-51 后台不加载 GA、B-44 剧场筛选及暂停剧场自动跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45` / [发布记录](releases/v0.6.4-preproduction.md) | 第一阶段完成，尚未部署 |
+| `v0.6.4` | 2026-10-20 09:41:09 | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |
 | `v0.6.1` | 2026-10-16 | PATCH | B-47 正文封面编码、B-42 空正文跳过、B-46 试读后站点地图刷新；迁移27、表58、grants不变 | Final `cb255e0f1c93041eda6aefeefbb541d7eddfc15f`；`release/v0.6.1-2026-10-16` | 已部署；58补发/34试读/公网/B-46全PASS，Owner关闭误报停点 |

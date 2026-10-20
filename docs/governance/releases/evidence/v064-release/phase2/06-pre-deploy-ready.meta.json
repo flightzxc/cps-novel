@@ -1,0 +1,11 @@
+{
+  "name": "06-pre-deploy-ready",
+  "command": [
+    "python3",
+    ".tmp/v064-release/phase2/remote-client.py.txt",
+    ".tmp/v064-release/phase2/pre-deploy-ready.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792460358.336718,
+  "finishedAt": 1792460390.9449139
+}

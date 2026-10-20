@@ -1,0 +1,39 @@
+50e3e06a413fe2b8ead4ad05ce8fc75733321e45.json: OK
+cps-novel-0.6.4-50e3e06.tar.zst: OK
+cps-novel-0.6.4-50e3e06.tar.zst.sha256: OK
+cps-novel-code-50e3e06.bundle: OK
+Cloning into '/opt/cps-novel/releases/50e3e06a413fe2b8ead4ad05ce8fc75733321e45'...
+done.
+The bundle contains this ref:
+9c8577181ede363e87080e3a06d0f087dd019526 refs/heads/release/v0.6.4-2026-10-20
+The bundle requires this ref:
+6543af6876b1dda857ec6b28ae13df1e2c1a49c6
+The bundle uses this hash algorithm: sha1
+/opt/cps-novel/shared/artifacts/staging/v064/cps-novel-code-50e3e06.bundle is okay
+From /opt/cps-novel/shared/artifacts/staging/v064/cps-novel-code-50e3e06.bundle
+ * branch                release/v0.6.4-2026-10-20 -> FETCH_HEAD
+Previous HEAD position was 6543af687 发布：准备海阅 v0.6.3 PATCH 六文件版本身份
+HEAD is now at 50e3e06a4 发布：准备海阅 v0.6.4 PATCH 六文件版本身份
+REMOTE_CHECKOUT=PASS Final=50e3e06a413fe2b8ead4ad05ce8fc75733321e45 tree=b8b77edfd7c36ca9c7d49f6aa4bd7ded47828bae
+IDENTITY=PASS
+  target            sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004 (application/vnd.oci.image.manifest.v1+json)
+  platform_manifest sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004
+  config            sha256:406196968055798bfea6e5804459f242e959cab06c461d900b694cbb97b68f4c
+  platform          linux/amd64
+  revision          50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+  layers            20
+VERIFY_OFFLINE=PASS
+  approved_git_commit=50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+  archive_sha256=a0c115e6c8c3cca74972887569143011bae84491b70a4d46a34a79d6e98fea77
+  image_tag=cps-novel:0.6.4-50e3e06
+  approval_record_checked=yes
+IMAGE=PASS anchor=descriptor
+VERIFY=PASS
+  image_tag          =cps-novel:0.6.4-50e3e06
+  target             =sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004
+  platform_manifest  =sha256:a6912eee999580cae6c0461f3cf417a001075f36fcfa72dfccd96fb5c17f8004
+  config             =sha256:406196968055798bfea6e5804459f242e959cab06c461d900b694cbb97b68f4c
+  platform           =linux/amd64
+  revision           =50e3e06a413fe2b8ead4ad05ce8fc75733321e45
+REMOTE_ARTIFACTS=PASS
+ARTIFACT_VERIFIED_DIR=/opt/cps-novel/shared/artifacts/verified/v064

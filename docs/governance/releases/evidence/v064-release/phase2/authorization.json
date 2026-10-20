@@ -1,0 +1,9 @@
+{
+  "ownerMessage": "批准部署",
+  "receivedAtRecorded": "2026-10-20T01:32:26.606444+00:00",
+  "target": "haiyue-vps",
+  "final": "50e3e06a413fe2b8ead4ad05ce8fc75733321e45",
+  "nginxInstallation": false,
+  "sudo": false,
+  "rollbackCompatibilityNotApproved": true
+}

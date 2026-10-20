@@ -1,0 +1,82 @@
+import subprocess, json, pathlib, re, hashlib, time
+
+final = '50e3e06a413fe2b8ead4ad05ce8fc75733321e45'
+root = pathlib.Path('/opt/cps-novel/releases') / final
+timeline = json.loads(pathlib.Path('/opt/cps-novel/logs/release-v0.6.4-50e3e06.timeline.json').read_text())
+since = timeline[0]['at']
+run = lambda args: subprocess.check_output(args, text=True)
+deadline=time.monotonic()+60
+while True:
+    pending=[n for n in ['web','worker','worker-light','scheduler','backup-timer'] if json.loads(run(['docker','inspect','cps-novel-'+n+'-1']))[0]['State'].get('Health',{}).get('Status')!='healthy']
+    if not pending:break
+    assert time.monotonic()<deadline, ('health timeout',pending)
+    time.sleep(2)
+services = ['web','worker','worker-light','scheduler','backup-timer','postgres']
+for service in services:
+    name = 'cps-novel-' + service + '-1'
+    info = json.loads(run(['docker','inspect',name]))[0]
+    logs = subprocess.run(['docker','logs','--since',since,name], capture_output=True, text=True, check=True)
+    lines = (logs.stdout + logs.stderr).splitlines()
+    errors = []
+    allowlists = []
+    for line in lines:
+        try:
+            event = json.loads(line)
+            if isinstance(event,dict):
+                if event.get('level') in ('error','fatal') or event.get('severity') in ('ERROR','FATAL','PANIC'):
+                    errors.append(line)
+                if event.get('event') == 'worker_task_allowlist': allowlists.append(event)
+        except ValueError:
+            if re.search(r'(^|\s)(?:ERROR|FATAL|PANIC|Error:|Unhandled)',line): errors.append(line)
+    denied = sum('permission denied' in line.lower() for line in lines)
+    unexpected_errors=len(errors);unexpected_denied=denied
+    expected_lines=[]
+    row = {'service':service,'id':info['Id'],'state':info['State']['Status'],'health':info['State'].get('Health',{}).get('Status'),'error_lines':len(errors),'permission_denied':denied,'expected_permission_probe_errors':len(expected_lines),'unexpected_error_lines':unexpected_errors,'unexpected_permission_denied':unexpected_denied,'since':since}
+    print(json.dumps(row),flush=True)
+    assert row['state']=='running' and row['health']=='healthy' and row['unexpected_error_lines']==row['unexpected_permission_denied']==0, row
+    if service=='postgres': assert info['Id']=='691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e'
+    if service in ('worker','worker-light'):
+        assert len(allowlists)==1 and not allowlists[0]['invalid']
+        print('STARTUP_ALLOWLIST='+json.dumps(dict(service=service,**allowlists[0])))
+    if service in ('web','worker','worker-light','scheduler'):
+        next_version=run(['docker','exec',name,'node','-e',"console.log(require('next/package.json').version)"]).strip();assert next_version=='16.3.8';print('NEXT_VERSION=16.3.8 service='+service)
+        env=dict(x.split('=',1) for x in info['Config']['Env'])
+        if service in ('web','worker','worker-light'):
+            assert env.get('FEATURE_INDEXNOW_OUTBOX')=='true' and env.get('INDEXNOW_OUTBOX_ALLOW_WRITE')=='true'
+            print('INDEXNOW_OUTBOX_UNCHANGED=PASS service='+service)
+        assert info['Config']['Image']=='cps-novel:0.6.4-50e3e06'
+        result=subprocess.run(['docker','exec','-i',name,'node','--input-type=module','-'], input=(root/'scripts/preproduction/verify-runtime-image-deps.mjs').read_text(), text=True,capture_output=True,check=True)
+        print('service='+service+' '+result.stdout.strip())
+health=json.loads(run(['docker','exec','cps-novel-web-1','wget','-qO-','http://127.0.0.1:3000/api/health']))
+print('HEALTH='+json.dumps(health))
+assert health['build']['version']=='0.6.4' and health['build']['commit']==final
+assert health['ok'] and health['metadataConsistency']['status']=='passed' and health['database']['status']=='passed'
+version=run(['docker','exec','cps-novel-web-1','node','-e',"console.log(JSON.stringify({next:require('next/package.json').version,nanoid:require('nanoid/package.json').version}))"])
+print('WEB_VERSIONS='+version.strip());assert json.loads(version)=={'next':'16.3.8','nanoid':'3.3.18'}
+expected={'/etc/nginx/conf.d/cps-novel-preprod.conf': '7199de10c02c9484fb5c8d571351f45fb7c3c49672648ad592110e142c6348b9', '/etc/nginx/nginx.conf': 'ad9580d1ad6592cf7e4927e0b4049bed025f131e00aa370677e3c2231d5a5e9e'}
+actual={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in expected}
+print('POST_NGINX_HASHES='+json.dumps(actual));assert actual==expected
+assert pathlib.Path('/opt/cps-novel/current').resolve()==root
+assert not pathlib.Path('/opt/cps-novel/shared/maintenance/enabled').exists()
+print('BACKUP_TIMER=RUNNING')
+print('POST_CHECK=PASS')
+
+import os
+pre=subprocess.run([str(root/'scripts/preproduction/preflight.sh')],env=dict(os.environ,GIT_COMMIT=final,CPS_NOVEL_APP_IMAGE='cps-novel:0.6.4-50e3e06'),text=True,capture_output=True)
+print(pre.stdout);print(pre.stderr);assert pre.returncode==0
+assert 'PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery open=catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery' in pre.stdout
+print('POST_PREFLIGHT_UNCHANGED=PASS')
+subprocess.run(['docker','exec','cps-novel-worker-1','tsx','scripts/ops/effective-tag-projection.ts','check'],check=True)
+status=json.loads(run(['docker','exec','cps-novel-worker-light-1','tsx','scripts/indexnow-status.ts']))
+print('INDEXNOW_STATUS='+json.dumps({'breakerOpen':status['control']['breaker']['open'],'rateLimitWaiting':status['control']['rateLimit']['waiting'],'keyValidationState':status['keyValidation']['state'],'dueUrls':status['outbox']['dueUrls'],'deadLetters':len(status['outbox']['deadLetters']),'inFlightBatchTasks':len(status['tasks']['inFlightBatchTasks'])},ensure_ascii=False))
+assert not status['control']['breaker']['open'] and not status['control']['rateLimit']['waiting']
+assert status['keyValidation']['state']!='none' and not status['outbox']['deadLetters'] and status['outbox']['dueUrls']==0
+assert not status['tasks']['inFlightBatchTasks']
+assert all(status['tasks']['deliveryTaskItemsByStatus'].get(k,0)==0 for k in ['pending','processing'])
+print('INDEXNOW_POST_STATUS=PASS')
+
+flags={'FEATURE_SITEMAP_AUTO_REFRESH': 'true', 'FEATURE_INDEXNOW_OUTBOX': 'true', 'INDEXNOW_OUTBOX_ALLOW_WRITE': 'true', 'FEATURE_INDEXNOW_DELIVERY': 'true', 'INDEXNOW_DELIVERY_ALLOW_WRITE': 'true', 'PREPROD_APPROVED_OPEN_WRITE_GATES': 'catalog_write,promo_write,sitemap_write,auto_tag_write,indexnow_outbox,indexnow_delivery', 'WORKER_TASK_ALLOWLIST': 'credential.validate.v1,credential.supersede.v1,catalog_scan,promo_link.claim.v1,batch.materialize.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,moboreader.preview_refresh.v1,tagging.auto_classify,changdu.revenue_sync.v1', 'WORKER_LIGHT_TASK_ALLOWLIST': 'sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1,article.publish.batch.v1,article.publish.v1,indexnow_delivery'}
+raw=pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_text().splitlines()
+actual={k:next((l.split('=',1)[1] for l in raw if l.startswith(k+'=')),None) for k in flags};assert actual==flags
+assert hashlib.sha256(pathlib.Path('/opt/cps-novel/shared/env/preprod.env').read_bytes()).hexdigest()=='431d4734632c4b2a5c6bb724812b8a41943733bbd69ae2e6a1db8dc83f7df494'
+print('ENV_FLAGS_ALLOWLISTS=PASS unchanged=yes')

@@ -3,7 +3,19 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-19 · 共 1379 个 commit
+生成时间：2026-10-20 · 共 1388 个 commit
+- `9c85771` 2026-10-20 治理（v0.6.4）：记录第一阶段门禁与不可变归档，等待批准部署  — _codex · GPT-6_
+
+## v0.6.4
+
+- `50e3e06` 2026-10-20 发布：准备海阅 v0.6.4 PATCH 六文件版本身份  — _codex · GPT-6_
+- `0f5fe7e` 2026-10-20 治理：公开网址冻结登记 Owner 单独批准的例外 B-50（/drama/* 301 到短剧站）  — _claude-code · claude-opus-5-5_
+- `7cc19ec` 2026-10-20 合并：v0.6.4 B-50 公开站 /drama/* 301 到短剧站、B-51 后台不加载 GA、B-44 目录同步页按剧场筛选与领取自动跳过暂停剧场  — _claude-code · claude-opus-5-5_
+- `2a08342` 2026-10-20 功能（B-44）：目录同步页按剧场筛选、换页清空勾选、领取自动跳过暂停剧场  — _claude-code · Claude Opus 5.5_
+- `9dbc66d` 2026-10-19 测试（B-50）：CPS 域名守卫只精确放行跳转目标常量  — _claude-code · Claude Opus 5.5_
+- `63c98eb` 2026-10-19 功能（B-51）：后台子域名不加载 Google Analytics  — _claude-code · Claude Opus 5.5_
+- `fbc7bf0` 2026-10-19 功能（B-50）：公开站 /drama/* 永久跳到短剧站 enpulsedrama.com  — _claude-code · Claude Opus 5.5_
+- `e92447f` 2026-10-19 治理（v0.6.3）：按 Owner 运营确认关闭剩余验收项并正式收官  — _codex · GPT-6_
 - `22c94f5` 2026-10-19 治理（v0.6.3）：补齐 nginx 日志验收与正式发布台账、日志及 Notion 回读  — _codex · GPT-6_
 - `b84946b` 2026-10-19 治理（v0.6.3）：记录部署 D 与自动核验 E，按 Owner 裁定修正后台路由矩阵  — _codex · GPT-6_
 - `2a2171d` 2026-10-18 发布：交付海阅 v0.6.3 第一阶段归档与完整门禁证据  — _codex · GPT-6_

@@ -1,0 +1,129 @@
+import datetime, json, pathlib, re
+from zoneinfo import ZoneInfo
+
+root = pathlib.Path.cwd()
+base = root / '.tmp/v064-release/phase2'
+phase1 = json.loads((root / '.tmp/v064-release/phase1-handoff.json').read_text())
+deployment = json.loads((base / 'deployment-result.json').read_text())
+backup = json.loads((base / 'backup-result.json').read_text())
+env = json.loads((base / 'env-result.json').read_text())
+runtime = json.loads((base / 'server-final-readonly.json').read_text())
+http = json.loads((base / 'remote-evidence/post-http-results.json').read_text())
+for name in ['01-remote-initial', '02-upload', '03-remote-artifacts', '04-backup', '05-proxy-forward-check',
+             '06-pre-deploy-ready', '07-env', '08-launch-deploy', '10-post-check', '11-post-database',
+             '12-post-http', '13-final-readonly']:
+    assert json.loads((base / (name + '.meta.json')).read_text())['exitCode'] == 0, name
+assert deployment['releasePass'] and deployment['exit']['exit'] == 0 and not deployment['maintenanceEnabled']
+assert http['status'] == 'PASS' and http['requests'] == 13
+assert runtime['status'] == 'PASS' and all(r['error'] == r['permissionDenied'] == 0 for r in runtime['services'])
+events = {r['event']: r['at'] for r in deployment['timeline']}
+on = datetime.datetime.fromisoformat(events['MAINTENANCE=ON'])
+off = datetime.datetime.fromisoformat(events['MAINTENANCE=OFF'])
+finished = datetime.datetime.fromisoformat(events['DEPLOY_FINISHED'])
+jst = lambda d: d.astimezone(ZoneInfo('Asia/Tokyo'))
+cst = lambda d: d.astimezone(ZoneInfo('Asia/Shanghai'))
+seconds = (off - on).total_seconds()
+result = {'status': 'deployed_technical_pass_owner_operator_acceptance_pending', 'final': phase1['final'],
+          'tree': phase1['tree'], 'branch': phase1['branch'], 'target': 'haiyue-vps', 'image': phase1['imageTag'],
+          'releaseExit': 0, 'maintenanceOn': on.isoformat(), 'maintenanceOff': off.isoformat(),
+          'maintenanceSeconds': seconds, 'finishedAt': finished.isoformat(), 'backup': backup, 'env': env,
+          'services': runtime['services'], 'runtimeCheckedUntil': runtime['until'], 'postgresIdUnchanged': True,
+          'migrationCount': 29, 'tableCount': 60, 'migrationChecksumsUnchanged': True,
+          'nginxSha256': phase1['nginxCandidateSha256'], 'externalHttpRequests': 13, 'httpBudget': 15,
+          'B50': 'PASS', 'B51': 'PASS', 'effectiveTag': {'missing': 0, 'extra': 0, 'changed': 0},
+          'indexnow': {'breakerOpen': False, 'rateLimitWaiting': False, 'dueUrls': 0, 'deadLetters': 0},
+          'sudoUsed': False, 'nginxInstalled': False, 'manualProductionWriteSql': False,
+          'businessAcceptance': {'catalogSyncOperator': 'pending', 'ownerGaRealtime': 'pending',
+                                 'operatorDramaTriggerRetirement': 'pending'},
+          'governance': {'annotatedTag': 'local_then_push_after_checks', 'changelog': 'generated',
+                         'versionRegistry': 'updated', 'developmentLog': 'one_release_entry', 'notion': 'pending_sync'}}
+(base / 'phase2-result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+summary = ['RELEASE=PASS', 'RELEASE_EXIT=0', 'FINAL=' + phase1['final'], 'TREE=' + phase1['tree'],
+           f'MAINTENANCE_SECONDS={seconds:.6f}', 'MIGRATIONS=29 FINISHED=29 ROLLED_BACK=0 TABLES=60',
+           'B50=PASS', 'B51=PASS public_ga=present admin_ga=absent',
+           'EXTERNAL_HTTP=PASS requests=13 budget=15', 'EFFECTIVE_TAG_CHECK missing=0 extra=0 changed=0',
+           'INDEXNOW_POST_STATUS=PASS breaker_open=no rate_limit_waiting=no due_urls=0 dead_letters=0',
+           'POSTGRES_ID=UNCHANGED', 'ENV_TWO_LINES_ONLY=PASS', 'NGINX_SHA256=' + phase1['nginxCandidateSha256'],
+           'BACKUP_LIST_VERIFY=PASS', 'BACKUP_TIMER=RUNNING', 'OWNER_OPERATOR_ACCEPTANCE=PENDING']
+summary += [f"SERVICE={r['service']} healthy=yes error={r['error']} permission_denied={r['permissionDenied']}" for r in runtime['services']]
+(base / 'phase2-summary.txt').write_text('\n'.join(summary) + '\n')
+
+record = root / 'docs/governance/releases/v0.6.4-preproduction.md'
+s = record.read_text()
+s = s.replace('## 当前状态：第一阶段完成，尚未部署', '## 当前状态：已部署正式站，技术验收PASS；Owner/运营验收待回执', 1)
+s = s.replace('第一阶段仅本地升版、门禁、GitHub推送、不可变归档及本地镜像端到端核验。', '第一阶段交付时（历史）：仅本地升版、门禁、GitHub推送、不可变归档及本地镜像端到端核验。', 1)
+s = s.replace('## 第二阶段：等待Owner“批准部署”', '## 第二阶段执行口径（已获Owner“批准部署”并执行）', 1)
+s = s.replace('## Owner和运营验收、回滚及治理', '## 第一阶段交付时的Owner/运营验收、回滚及治理安排（历史）', 1)
+s += f'''
+
+## 第二阶段实测（{jst(finished).strftime('%Y-%m-%d')} JST）
+
+Owner在本会话明确“批准部署”，仅操作haiyue-vps。三项代码已部署；技术验收PASS，运营页面交互与Owner GA实时报告待人工回执。本轮没有仓库门禁失败或线上异常。
+
+- 部署前只读：current/health为v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`；env及nginx SHA256与交接完全一致，暂停闸与preflight PASS，指定发布/生成/收入同步/推广领取任务均无pending或processing。首次流量3/3后自然降为1/0/0取得窗口；最后复核重新取得低流量窗口，不暂停或取消任务。
+- 上传归档及代码增量bundle，全部运输文件SHA256通过；新不可变目录`/opt/cps-novel/releases/{phase1['final']}`的HEAD/tree与Final完全一致。原消费端核验归档、OCI引用链并load，target/config与第一阶段一致；工件目录`/opt/cps-novel/shared/artifacts/verified/v064`。
+- 在线逻辑备份`{backup['path']}`，{backup['bytes']}字节、SHA256 `{backup['sha256']}`；原backup-logical.sh、pg_restore --list、checksum及部署前复核全部PASS。没有恢复或回填生产数据。
+- env备份`{env['envBackup']}`，改前SHA256 `{env['beforeSha256']}`，改后`{env['afterSha256']}`。仅APP_VERSION从0.6.3改0.6.4、NEXT_PUBLIC_BUILD_VERSION从v0.6.3改v0.6.4，脱敏diff及其余字节cmp PASS，写闸和白名单保持。
+- 原`release.sh deploy`得到`RELEASE=PASS / EXIT=0`；维护{jst(on).strftime('%H:%M:%S.%f')}–{jst(off).strftime('%H:%M:%S.%f')} JST，**{seconds:.6f}秒**；完成{jst(finished).strftime('%H:%M:%S.%f')} JST（+0800为{cst(finished).strftime('%H:%M:%S.%f')}）。无新增迁移，原流程检查29条均已应用并单事务重放grants；没有手写写入SQL。
+- health为0.6.4/Final，metadataConsistency及database passed；五应用healthy，postgres健康且ID仍`691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。29finished/0rolled_back、60表，迁移名称/checksum一致；四应用Next16.3.8、无vitest/tinypool及运行依赖检查PASS。effective-tag missing0/extra0/changed0，IndexNow熔断关闭、无429等待/积压/死信，写闸及白名单不变，BACKUP_TIMER=RUNNING。
+- B-50三项全部PASS：指定ChatGPT来源长URL返回301，Location的路径与查询串原样保留且目标为enpulsedrama.com；后台/drama/x404；公开/dramas404。已发布小说返回200。B-51公开首页GA存在，后台/login200、无WWW-Authenticate，HTML不含googletagmanager或公开GA编号；编号和Turnstile站点密钥未输出。
+- 三个后台健康接口匿名401、经原preprod-curl.conf认证200；公开health为新Final。验收外部请求**13/15**，全部经客户机127.0.0.1:7899代理、不跟随跳转。原机curl通过临时SSH本地回环转发使用该代理，认证配置始终留原机，仅经curl --config使用；转发随SSH退出关闭，没有改nginx、compose或持久网络配置。
+- 六服务web/worker/worker-light/scheduler/backup-timer/postgres自部署开始至{runtime['until']}的error及permission denied均0。最终只读复核current、health、env、nginx和postgres身份保持预期，维护关闭。本版不装nginx，不使用sudo，不改变公开网址冻结例外之外的行为。
+
+原始结果见[phase2-summary.txt](evidence/v064-release/phase2/phase2-summary.txt)，机器结果见[phase2-result.json](evidence/v064-release/phase2/phase2-result.json)。第一阶段曾修复的升版包装器问题保留；本轮辅助tag缺席查询改用git tag --list判空，不影响门禁或生产状态。
+
+## 第二阶段治理与剩余人工验收
+
+annotated `v0.6.4`固定Final，CHANGELOG使用原生成器与core.abbrev=7生成；本地PATCH台账、本发布记录、唯一发版级开发日志和脱敏证据已补齐。Notion待本地治理提交门禁及推送后同步当前快照、版本表、正式手账与唯一日志镜像，并回读核验。每次治理提交后都先tsc/lint零错误再推送；治理HEAD不改变工件Final，不重建镜像或重启服务。
+
+剩余验收交Owner与运营：①/catalog-sync剧场下拉、改排序/翻页清空勾选、混选后跳过PlotNovel并提示；验收到对话框后关闭，不提交领码；②Owner查看GA实时报告，后台浏览不再新增zbcwf主机事件；③运营可撤掉每周/drama流量触发器。尚未收到人工回执，不登记为业务验收全部PASS或正式收官。
+
+回滚仅v0.6.3 Final及其不可变目录，先恢复本次env备份；SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES仍须Owner在回滚时另行明确批准，本次没有执行回滚。
+'''
+record.write_text(s)
+
+registry = root / 'docs/governance/version-registry.md'
+s = registry.read_text()
+start = s.index('### v0.6.4')
+end = s.index('### v0.6.3', start)
+snapshot = f'''### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（{jst(finished).strftime('%Y-%m-%d')}）
+
+- **PATCH**，Final `{phase1['final']}` / tree `{phase1['tree']}`，annotated `v0.6.4`固定Final；发布分支`{phase1['branch']}`，治理提交不改变工件身份。镜像`{phase1['imageTag']}`，linux/amd64；归档{phase1['archiveBytes']}字节/SHA256 `{phase1['archiveSha256']}`。
+- B-50公开站/drama及/drama/*301到短剧站同路径并保留查询串，属于Owner10-19单独批准、已登记的网址冻结例外；B-51后台不加载GA；B-44剧场筛选、排序/翻页清空勾选、领取自动跳过暂停剧场并提示，三项代码已部署。公开网址其余冻结，nginx/compose/后台路由/任务白名单不变，不装nginx、不用sudo。
+- Owner本会话“批准部署”，仅haiyue-vps；原RELEASE=PASS/EXIT=0，维护{jst(on).strftime('%H:%M:%S')}–{jst(off).strftime('%H:%M:%S')} JST、{seconds:.6f}秒。env仅改两版本行、cmp PASS，备份及restore-list/checksum PASS；零新增迁移，29finished/0rolled_back、60表、字典1401/active1331/drift0，名称checksum一致，原流程单事务grants。
+- health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变；六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压、四应用Next16.3.8及无测试依赖、写闸白名单和备份定时器PASS。nginx SHA256 `{phase1['nginxCandidateSha256']}`保持。
+- B-50指定URL301及两个负向404、已发布小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康接口匿名401/认证200，公开health正确。外部13/15次，全走指定代理且不跟随跳转，密钥和编号不输出。
+- 第一阶段全量11616通过、真实库全量11626通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异及最终镜像端到端PASS。tag/生成CHANGELOG/唯一日志及本地证据已补齐；Notion待本地治理门禁与推送后同步回读。**运营/catalog-sync与Owner GA实时报告待回执，不能登记为业务全部验收或正式收官。** [发布记录](releases/v0.6.4-preproduction.md)。
+
+'''
+s = s[:start] + snapshot + s[end:]
+rows = s.splitlines()
+matches = [i for i, l in enumerate(rows) if l.startswith('| `v0.6.4` |')]
+assert len(matches) == 1
+rows[matches[0]] = f"| `v0.6.4` | {cst(finished).strftime('%Y-%m-%d %H:%M:%S')} | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `{phase1['final']}`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |"
+registry.write_text('\n'.join(rows) + '\n')
+
+log = root / 'docs/governance/development-log.md'
+s = log.read_text()
+assert '**变更类型**：海阅 v0.6.4' not in s
+entry = f'''### {jst(finished).strftime('%Y-%m-%d %H:%M')} - codex（GPT-6，正式发版执行；JST / +0800为{cst(finished).strftime('%H:%M')}）
+
+**变更类型**：海阅 v0.6.4 **PATCH** 正式站部署，仅haiyue-vps；Owner明确“批准部署”，原RELEASE=PASS/EXIT=0，技术验收PASS；Owner/运营交互验收待回执。annotated v0.6.4固定Final `{phase1['final']}`，tree `{phase1['tree']}`，治理提交不改变工件身份。
+
+**背景**：B-50来源已确认ChatGPT把短剧路径安到本站域名；10-17至18的ChatGPT来源20次浏览中15次（75%）落在/drama404。Owner10-19原话：“同意推荐：现在选 a，运营在 GA 报表里加过滤；登记触发器，满足条件时把 b2（应用层跳转）并入当轮发版。”本轮符合下一版顺带条件，例外已登记AI_WORKFLOW.md。B-51为后台停止加载GA。B-44来自运营反馈；Owner10-19选定“照 CPS 换页即清空”和“自动跳过并提示”。来源feat/v064-drama-ga-theater经no-ff合并7cc19ece，0f5fe7e0登记冻结例外。
+
+**变更内容**：公开站/drama和/drama/*301到enpulsedrama.com同路径并保留查询串，后台及近似路径不跳；后台子域名不输出GA；/catalog-sync按剧场筛选，排序/翻页清空勾选，领取跳过领取暂停剧场（当前PlotNovel）并提示，运营确认才提交。
+
+**影响范围**：三项均为应用层改动，零新增迁移，29条/60表、字典1401/active1331/drift0；grants、环境变量集合、compose、nginx、后台路由、任务白名单不变。env备份后只改APP_VERSION/NEXT_PUBLIC_BUILD_VERSION、其余cmp PASS；不装nginx、不用sudo，除B-50已批准例外外公开网址冻结。没有额外领码、业务同步、回填或手写写入SQL。
+
+**验证方式**：全量11616通过、真实库全量11626通过、零失败/无Unhandled；37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异、audit和最终镜像归档端到端PASS。第二阶段维护{seconds:.6f}秒（{jst(on).strftime('%H:%M:%S.%f')}–{jst(off).strftime('%H:%M:%S.%f')} JST），在线备份及restore-list/checksum通过，29迁移无pending、原流程grants成功；health0.6.4/Final/metadata passed、五应用healthy、postgres ID不变、六服务error/permission denied0。投影0/0/0、IndexNow无熔断/429等待/积压，Next16.3.8、无vitest/tinypool、写闸/白名单/备份和nginx哈希通过。外部13/15次全部经代理：B-50精确301和两个负向404、小说200；B-51公开GA存在/后台无GA且login200无WWW；三个健康匿名401/认证200。第一阶段版本编辑包装器误替换已在推送前纠正，依赖未变，原证据保留。
+
+**后续待办**：运营/catalog-sync确认剧场下拉、排序翻页清空、混选后提示跳过PlotNovel，验收到对话框关闭，不提交领码；Owner GA实时报告确认后台浏览不再新增zbcwf；运营可撤掉每周/drama流量触发器。Notion待本地治理门禁和推送后同步回读，人工未回执前不登记正式收官。回滚目标v0.6.3 Final `6543af6876b1dda857ec6b28ae13df1e2c1a49c6`，先恢复本次env备份；兼容标志须Owner另批。完整[发布记录](releases/v0.6.4-preproduction.md)与[第二阶段证据](releases/evidence/v064-release/phase2/)。
+
+'''
+anchor = '## 发版记录（新条目在最上面）\n\n'
+assert s.count(anchor) == 1
+log.write_text(s.replace(anchor, anchor + entry, 1))
+(base / 'notion-development-log-source.txt').write_text(entry)
+(base / 'notion-snapshot-source.txt').write_text(snapshot)
+print('PHASE2_LOCAL_GOVERNANCE=PREPARED technical_pass=yes business_acceptance=pending')

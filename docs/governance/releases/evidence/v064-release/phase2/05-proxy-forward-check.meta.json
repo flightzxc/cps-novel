@@ -1,0 +1,11 @@
+{
+  "name": "05-proxy-forward-check",
+  "command": [
+    "python3",
+    ".tmp/v064-release/phase2/remote-client-proxy.py.txt",
+    ".tmp/v064-release/phase2/proxy-forward-check.py.txt"
+  ],
+  "exitCode": 0,
+  "startedAt": 1792460354.9771142,
+  "finishedAt": 1792460358.314467
+}

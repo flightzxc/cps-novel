@@ -1,0 +1,10 @@
+import pathlib,json,re
+p=pathlib.Path('/opt/cps-novel/logs/release-v0.6.4-50e3e06.log')
+s=p.read_text() if p.exists() else ''
+x={'maintenanceEnabled':pathlib.Path('/opt/cps-novel/shared/maintenance/enabled').exists(),'releasePass':'RELEASE=PASS' in s,'releaseFailed':'RELEASE=FAILED' in s,'logBytes':p.stat().st_size if p.exists() else 0}
+for suffix,key in [('.timeline.json','timeline'),('.exit.json','exit')]:
+ q=p.with_suffix(suffix)
+ if q.exists():x[key]=json.loads(q.read_text())
+print('DEPLOY_STATUS='+json.dumps(x))
+if x.get('exit'):
+ assert x['exit']['exit']==0 and x['releasePass'] and not x['releaseFailed']
