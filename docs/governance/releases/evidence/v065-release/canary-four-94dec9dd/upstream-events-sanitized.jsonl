@@ -1,0 +1,4 @@
+2026-10-21T07:45:05.445276187Z {"event":"upstream_call","endpoint":"getvideoinfo","httpStatus":200,"outcome":"ok"}
+2026-10-21T07:45:06.541948692Z {"event":"upstream_call","endpoint":"getvideoinfo","httpStatus":200,"outcome":"ok"}
+2026-10-21T07:45:07.653810458Z {"event":"upstream_call","endpoint":"getvideoinfo","httpStatus":200,"outcome":"ok"}
+2026-10-21T07:45:09.156774959Z {"event":"upstream_call","endpoint":"getvideoinfo","httpStatus":200,"outcome":"ok"}

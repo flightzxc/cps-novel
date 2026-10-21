@@ -1,0 +1,1 @@
+{"scope":"local generated transport wrapper quoting only","failure":"remote Python syntax parse failed before any statement executed","productionActionsExecutedByFailedAttempt":0,"fix":"use raw Python template strings preserving newline literals","reviewedOpsSourceChanged":false}

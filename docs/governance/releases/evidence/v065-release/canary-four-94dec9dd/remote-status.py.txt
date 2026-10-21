@@ -1,0 +1,13 @@
+import pathlib,subprocess,json,datetime
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+folder=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/canary-four-94dec9dd')
+assert json.loads((folder/'submit-exit.json').read_text())['exit']==0
+command=['docker','exec','-w','/app','cps-novel-web-1','tsx','--tsconfig=/app/tsconfig.json','/tmp/promo-reclaim-53-reviewed-94dec9dd.ts','status','--baseline','/tmp/promo-reclaim-53-phase-a-700e01cc.json','--baseline-sha256','244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d','--actor-id','71f0e655-0640-4f07-bcbb-041f027fa7cb','--request-id','promo-reclaim-53-2026-10-20-canary']
+r=subprocess.run(command,capture_output=True,text=True)
+n=len(list(folder.glob('status-*.json')))+1
+for name,data in [(f'status-{n:03}.json',r.stdout),(f'status-{n:03}-stderr.txt',r.stderr)]:
+ p=folder/name;p.write_text(data);p.chmod(0o600)
+print(r.stdout,flush=True)
+if r.returncode:print(r.stderr,flush=True);raise SystemExit(r.returncode)
+s=json.loads(r.stdout);assert s['task']['id']==json.loads((folder/'submit.json').read_text())['taskId'] and len(s['rows'])==4
+print('CANARY_STATUS='+json.dumps({'poll':n,'counts':s['counts'],'parentStatus':s['task']['status'],'allFourTerminal':all(x['status'] in ['success','already_available','failed'] for x in s['rows'])}),flush=True)

@@ -1,0 +1,65 @@
+{
+  "startedAt": "2026-10-21T07:43:06.640Z",
+  "endedAt": "2026-10-21T07:47:02.480Z",
+  "services": [
+    {
+      "service": "web",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 4,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker-light",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "scheduler",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 1,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "backup-timer",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "postgres",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 17,
+      "errorLines": 0,
+      "permissionDenied": 0
+    }
+  ],
+  "upstreamHttp429OrCooldownEvents": 0,
+  "breakerOpenEvents": 0,
+  "rateGateEventCounts": {},
+  "upstreamEventTotal": 4,
+  "collection": "six bounded docker log streams; safe projection only; original log bodies not saved"
+}

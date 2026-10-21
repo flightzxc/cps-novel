@@ -19,7 +19,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.5 —— PATCH 已部署，甲阶段冻结；金丝雀提交前停点（2026-10-21）
+### v0.6.5 —— PATCH 已部署，四本金丝雀PASS，48本待另批（2026-10-21）
 
 - 基线 `58cdb94da40e3103ddc4ebba7c267ce0c23b905e` / tree `0948319541fc29610e109b0a1a3a5473a359f172`，发布分支 `release/v0.6.5-2026-10-20`。版本类型 **PATCH**。
 - 领码前确认、领码后核对、异常恢复改用 `getvideoinfo` 按编号精确回读，修复短书名候选超过100条无法领码；getcode 请求、错误分类、意图状态机及绝不重复调用约束不变。
@@ -33,6 +33,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 后续主控裁定原MINE STOP为定位规则问题；ops@700e01cc已复核通过。以审核脚本重启captureBaseline后53/53和四项前提通过，五本完整ID与余48ID摘要冻结，635条摘要冻结；没有领码提交。历史STOP记录保留，当前等待运营金丝雀，余48仍需另行批准。[甲交接](releases/evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)。
 
 - 2026-10-21：Owner授权Codex提交5本，主控审核ops@e991694a通过；原生web_app提交前核对发现MINE已有带码链接，前提4/5通过，已在调用submit-canary前停下。5本not_submitted、requestId任务不存在；635条摘要不变、无其它领码在途、无42501。链接写入来源尚未建立，不登记already_available或金丝雀PASS。余48未提交，仍待另批。[停点证据](releases/evidence/v065-release/canary-2026-10-21/README.md)。
+
+- 2026-10-21当前：主控查明MINE由目录扫描解决，审核ops@94dec9dd的四本方案通过后，原生web_app仅提交4本一次；批次`0dcc1e9d-5900-4987-b686-3210b66f4602`，4本均already_available有码有网址，MINE单列resolved_by_catalog_scan。53 = 1 + 4 + 48。窗口getcode0=新增意图0、getvideoinfo4；意图上限5行均0，无其它在途/未决/转人工/429/熔断，六服务error/permission denied0，635条摘要不变。窗口已关闭，48本未提交，等待Owner另说“批准重领”。[金丝雀证据](releases/evidence/v065-release/canary-four-94dec9dd/README.md)。
 
 ### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）
 
@@ -562,7 +564,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，技术及甲阶段PASS；金丝雀提交前MINE已有带码链接停手，5本未提交；48待另批 |
+| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，4本金丝雀全部already_available且核对PASS；MINE目录扫描解决；48待另批 |
 | `v0.6.4` | 2026-10-20 09:41:09 | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |

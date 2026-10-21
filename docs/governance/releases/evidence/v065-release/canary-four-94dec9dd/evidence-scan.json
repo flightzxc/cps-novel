@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "rawUpstreamOrServiceLogsIncluded": false,
+  "upstreamEventFields": [
+    "event",
+    "endpoint",
+    "httpStatus",
+    "outcome"
+  ],
+  "codeUrlCredentialValuesIncluded": false,
+  "accountLabelIncluded": false,
+  "scriptsTxtSuffix": true,
+  "reviewedOpsBytesUnchanged": true,
+  "baselineBytesUnchanged": true
+}

@@ -1,0 +1,5 @@
+Captured remote Python stderr before execution:
+  File "<stdin>", line 17
+    p=folder/'identity-pre.json';p.write_text(json.dumps(identity,indent=2)+'
+                                                                            ^
+SyntaxError: unterminated string literal (detected at line 17)

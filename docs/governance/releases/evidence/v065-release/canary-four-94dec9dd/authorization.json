@@ -1,0 +1,12 @@
+{
+  "OwnerMessage": "主控复核ops@94dec9dd及脚本SHA256通过，请按post-review-runbook执行4本，回报后停止，48本另批",
+  "productionCanaryScope": [
+    "17f20eb7-f286-4f36-9078-3237c84742ac",
+    "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+    "4265a05f-1bf4-46df-84ee-76d65aa64453",
+    "49e254d4-6106-4e41-9899-71f8b06e1d6a"
+  ],
+  "resolvedMine": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+  "reconciliation": "53 = 1 + 4 + 48",
+  "remaining48Authorized": false
+}

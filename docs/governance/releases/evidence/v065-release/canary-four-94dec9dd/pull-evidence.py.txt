@@ -1,0 +1,10 @@
+from pathlib import Path
+import subprocess,json,base64,hashlib
+out=Path('/Users/chenweifeng/Documents/cps海阅/release-v0.6.5/.tmp/v065-release/canary-four-94dec9dd');dest=out/'remote-evidence';dest.mkdir()
+names=['identity-pre.json','preflight.json','submit-attempt.json','submit.json','submit-exit.json','submit-stderr.txt','status-001.json','status-002.json','postflight.json','postflight-stderr.txt','window.json','window-closed.json','counter-snapshot.json','service-window.json','upstream-events-sanitized.jsonl','reviewed-ops.ts.txt','snapshot.ts.txt']
+remote="import pathlib,json,base64,hashlib\np=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/canary-four-94dec9dd')\nnames="+repr(names)+"\nprint(json.dumps({n:{'bytes':base64.b64encode((p/n).read_bytes()).decode(),'sha256':hashlib.sha256((p/n).read_bytes()).hexdigest()} for n in names}))\n"
+r=subprocess.run(['ssh','-o','KexAlgorithms=curve25519-sha256','-o','ConnectTimeout=20','-o','BatchMode=yes','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=2','haiyue-vps','python3','-u','-'],input=remote.encode(),capture_output=True,check=True)
+receipt=[]
+for n,row in json.loads(r.stdout).items():
+ data=base64.b64decode(row['bytes']);assert hashlib.sha256(data).hexdigest()==row['sha256'];p=dest/n;p.write_bytes(data);p.chmod(0o600);receipt.append({'file':n,'sha256':row['sha256']})
+(out/'pull-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print('SAFE_EVIDENCE_PULL=PASS files='+str(len(receipt)))

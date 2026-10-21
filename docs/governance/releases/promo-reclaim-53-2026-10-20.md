@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：部署技术PASS、甲阶段53本冻结；Owner改为授权Codex提交5本，主控复核ops@e991694a通过。本轮提交前MINE已有带码链接，4本前提通过、1本不满足，提交前STOP，未调用submit-canary。其余48本未提交。
+当前：v0.6.5部署技术PASS；主控复核ops@94dec9dd后4本金丝雀已执行并核对PASS，全部already_available有码有网址，MINE为目录扫描已解决。53 = 1 + 4 + 48；已停止等待Owner另行“批准重领”，48本未提交。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -61,3 +61,9 @@
 Owner将5本改为Codex提交，主控复核ops@e991694a（tsc0、28/28、无42501）后要求执行。新鲜只读核对无其它领码在途，但MINE c838c281已存在带码链接，createdAt=2026-10-21T01:27:16.927Z、fetched/upstream_existing；与冻结甲阶段的无带码链接条件不同。其余4本前提通过。按原审核脚本不得绕过已有带码排除，因此没有调用submit-canary，没有拆4本，没有删除链接或改基线。canary requestId下task=null，5本均not_submitted；不能将现有链接记作本次already_available。
 
 本轮只读观测UTC01:53:00.827–01:54:00.062，独占提交窗口未开启；5本意图上限均0、MINE0，635条摘要不变，web_app无42501。已有链接写入来源尚未查明。没有窗口HTTP总数或服务错误验收结论，不能登记金丝雀PASS。详见[停点证据](evidence/v065-release/canary-2026-10-21/README.md)与[结论行](evidence/v065-release/canary-2026-10-21/summary.txt)。等待Owner/主控裁定后再继续，余48另待“批准重领”。历史运营说明已由Owner改授权覆盖，旧证据保留。tag/生成CHANGELOG/唯一发版日志/Notion仍待重领结果明确后收官。
+
+## 当前：四本金丝雀 PASS，等待48本另行批准（2026-10-21）
+
+Owner转达主控复核ops@94dec9dd及SHA256通过后，本轮只提交其余4本一次。原baseline原字节与48范围不变。requestId=promo-reclaim-53-2026-10-20-canary，批次`0dcc1e9d-5900-4987-b686-3210b66f4602`；四本均already_available、有推广码及网址、意图上限0，MINE仍单列resolved_by_catalog_scan且未提交。53 = 1 + 4 + 48。
+
+UTC窗口2026-10-21T07:43:06.640Z–2026-10-21T07:47:02.480Z（JST2026-10-21T16:43:06.640+09:00–2026-10-21T16:47:02.480+09:00）：getcode窗口总调用数0=getcode新增意图0，getvideoinfo窗口总调用数4。前后无其它领码/目录扫描在途，六服务error/permission denied0，未决/转人工/429/熔断0，635条摘要不变。没有重放或失败重试，没有48本plan/submit。独占窗口关闭，停止等待Owner另说“批准重领”。[本轮结果](evidence/v065-release/canary-four-94dec9dd/README.md)及[原始结论](evidence/v065-release/canary-four-94dec9dd/summary.txt)。早前五本运营说明及d9a124e8停点为保留历史，当前按本节口径。

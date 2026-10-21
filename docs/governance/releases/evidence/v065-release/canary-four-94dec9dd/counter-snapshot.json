@@ -1,0 +1,44 @@
+{
+  "startedAt": "2026-10-21T07:43:06.640Z",
+  "endedAt": "2026-10-21T07:47:02.480Z",
+  "otherInflightStart": 0,
+  "otherInflightEnd": 0,
+  "catalogScanInflightStart": 0,
+  "catalogScanInflightEnd": 0,
+  "newIntentTotal": 0,
+  "newScopeIntentTotal": 0,
+  "books": [
+    {
+      "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+      "intentCount": 0
+    },
+    {
+      "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+      "intentCount": 0
+    },
+    {
+      "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+      "intentCount": 0
+    },
+    {
+      "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+      "intentCount": 0
+    },
+    {
+      "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+      "intentCount": 0
+    }
+  ],
+  "unresolvedIntentTotal": 0,
+  "manualReviewTotal": 0,
+  "manual635DigestUnchanged": true,
+  "manual635Count": 635,
+  "manual635Sha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "reconciliation": {
+    "total": 53,
+    "resolvedByCatalogScan": 1,
+    "canary": 4,
+    "remaining": 48,
+    "equation": "53 = 1 + 4 + 48"
+  }
+}
