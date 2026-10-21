@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前Owner 2026-10-21裁定：金丝雀5本改由Codex薄脚本提交，转交即授权这5本；但新增submit-canary须本次主控复核通过后才能用于生产。其余48本仍须Owner另说“批准重领”。甲阶段已通过，冻结基线不变；本轮仅本地实现、冒烟、推送复核，不连接生产或提交领码。
+当前Owner/主控2026-10-21裁定：MINE已由目录扫描解决，不再提交。金丝雀改为原冻结5本排除MINE后的4本，53 = 1 + 4 + 48；baseline原字节、48本范围不变。本次只改ops分支并做本地门禁，新SHA主控复核前不连接生产或提交。原e991694a复核与d9a124e8停点保留为历史。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -87,3 +87,15 @@ Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结�
 - 回报即停，余48本绝不自动提交，仍等Owner明确“批准重领”。本次复核材料中的未来生产步骤不表示已经执行。
 
 本次代码提交`ca765e56e0414522fb8be3903bdc96e864ffc03e`，脚本SHA256 `f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d`。tsc0/lint0error（16既有warning），真实web_app初次及变异还原后完整冒烟均28/28、无跳过/Unhandled/42501，精确五本守卫删除变异行为红并还原git diff --quiet；原账户校验20行逐字不变。当前未连接生产、未提交五本；本次主控复核仍待通过。材料：[核心diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/script-diff.txt)、[完整diff](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/review-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/summary.txt)、[主控复核包](evidence/promo-reclaim-53-2026-10-20/canary-submit-2026-10-21/controller-review.txt)。
+
+## 当前执行口径：1本已解决 + 4本金丝雀 + 48本待批（2026-10-21）
+
+本节和[Owner裁定](../../adr/ADR-V065-RECLAIM-CATALOG-RESOLUTION.md)替代前文“五本提交/MINE already_available”的历史口径。主控已只读查实MINE来自目录扫描84a47861，开始10:27:05 JST、11:06完成，开始11秒后upstream_existing/fetched写入，无getcode；本次不重复查来源、不连接生产。MINE单列resolved_by_catalog_scan，不能记为本轮already_available。
+
+- 排除固定完整ID `c838c281-c9ba-482a-aa80-05792e8fdc4a`；每次plan/submit/status核对恰好1条带码链接、origin=upstream_existing、任意意图0、在途0，否则resolved_mine_preconditions_failed停手。原历史captureBaseline仅供原基线复现，实际不重新捕获或改变基线。
+- submit-canary只用baseline.canaryIds排除此ID后的4本：Fran/en、Heart/en、Obsession/fr、SOLD/en。数量4、无重复、精确范围；原五本或MINE换入均拒绝。确认短语 `PROMO_RECLAIM_CANARY_4`，旧_5拒绝；requestId仍为 `promo-reclaim-53-2026-10-20-canary`，不与48本共用。
+- 提交与48本共用原路径；提交前只读事务、原校验事务钩子均拒绝pending/processing的catalog_scan，status也检查，因此窗口开始/结束均检查。任意剧场的扫描都不能在途。状态输出otherInflightCatalogScans=[]表示本次只读核对时点无在途扫描，不是并发锁。
+- status的rows/counts只包含对应批次4本或48本，resolvedByCatalogScan单列MINE，reconciliation固定对账53 = 1 + 4 + 48；原baseline.canaryIds仍5条，所有原始摘要保持。
+- 运行身份、账户校验20行逐字复制、enabled双闸、临期审计、635条摘要、意图上限与窗口日志总数核对不变。前后无其它领码/目录扫描在途；操作人整个窗口不提交其它领码或扫描。
+
+新SHA主控复核后，原生web容器仅执行一次submit-canary，使用原baseline摘要244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d、原actorId及账户。status --request-id promo-reclaim-53-2026-10-20-canary跟踪4本终态，同时持续断言MINE状态。窗口证据将MINE0与4本意图上限逐项列出；getcode窗口总数等于新增意图总数，getvideoinfo仅报窗口总数；635摘要及六服务error/permission denied核对不变。遇原停手条件或在途扫描立即停止，不重试失败书。4本回报后停下，48仍待Owner另行“批准重领”。

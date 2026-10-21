@@ -16,6 +16,8 @@ import type { PromoLinkClaimCredentialWarning } from "../../src/domain/catalog-b
 export const FINAL = "b378910a8ec4b78029e71ad1bac92c742efb9f5b";
 export const REQUEST_ID = "promo-reclaim-53-2026-10-20";
 export const CANARY_REQUEST_ID = "promo-reclaim-53-2026-10-20-canary";
+// Owner/controller 2026-10-21: catalog_scan 84a47861 resolved MINE; never submit it.
+export const RESOLVED_MINE_ID = "c838c281-c9ba-482a-aa80-05792e8fdc4a";
 export const APP = "85c2fb3e-28f8-476a-83f2-9647e2206192";
 export const ACTOR = "71f0e655-0640-4f07-bcbb-041f027fa7cb";
 export const PLOT_APP = "00de5521-d075-4472-87eb-cc5d1732f4d0";
@@ -81,6 +83,7 @@ function validateBaseline(b: Baseline) {
   check(Array.isArray(b.allIds) && b.allIds.length === 53 && b.allIds.every(x => typeof x === "string" && UUID.test(x)) && new Set(b.allIds).size === 53, "scope_53_invalid");
   check(same(b.allIds.map(x => x.slice(0, 8)), PREFIXES), "appendix_b_mismatch");
   check(Array.isArray(b.canaryIds) && b.canaryIds.length === 5 && b.canaryIds.every(x => b.allIds.includes(x)) && same(b.canaryIds.map(x => x.slice(0, 8)), CANARY_PREFIXES), "canary_scope_invalid");
+  check(b.canaryIds.includes(RESOLVED_MINE_ID), "resolved_mine_baseline_missing");
   check(b.remainingIdsSha256 === idsSha(b.allIds.filter(x => !b.canaryIds.includes(x))), "phase_a_ids_sha256_mismatch");
   check(b.manualReviewCount === 635 && SHA.test(b.manualReviewSha256), "plotnovel_baseline_invalid");
 }
@@ -145,6 +148,26 @@ async function otherInflight(tx: Prisma.TransactionClient, ownTaskId?: string) {
   }, select: { id: true, status: true, items: { where: { status: { in: ["pending", "processing"] } }, select: { id: true }, take: 1 } } });
   return rows.filter(r => ["pending", "processing"].includes(r.status) || r.items.length > 0).map(r => r.id);
 }
+// Baseline keeps its original five canaries and SHA; only this execution scope changes.
+function canarySubmissionIds(b: Baseline) { return b.canaryIds.filter(id => id !== RESOLVED_MINE_ID); }
+function reconciliation(b: Baseline) {
+  return { total: b.allIds.length, resolvedByCatalogScan: 1, canary: canarySubmissionIds(b).length,
+    remaining: b.allIds.filter(id => !b.canaryIds.includes(id)).length, equation: "53 = 1 + 4 + 48" };
+}
+async function checkNoCatalogScan(tx: Prisma.TransactionClient) {
+  const scans = await tx.genericTask.findMany({ where: { taskType: "catalog_scan", status: { in: ["pending", "processing"] } }, select: { id: true } });
+  check(scans.length === 0, "catalog_scan_inflight");
+}
+async function checkResolvedMine(tx: Prisma.TransactionClient) {
+  const mine = await tx.novelSourceItem.findFirst({ where: { id: RESOLVED_MINE_ID, channelAppId: APP }, select: { title: true, sourceLocale: true } });
+  const links = await tx.promoLink.findMany({ where: { novelSourceItemId: RESOLVED_MINE_ID, upstreamCodePresent: true }, select: { origin: true, webUrl: true, appUrl: true } });
+  const intents = await tx.sideEffectIntent.count({ where: { requestSummary: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } } });
+  const active = await tx.genericTaskItem.count({ where: { status: { in: ["pending", "processing"] }, task: { taskType: { startsWith: "promo_link.claim." } },
+    OR: [{ targetId: RESOLVED_MINE_ID }, { payload: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } }] } });
+  check(mine?.title.trim() === "MINE" && mine.sourceLocale === "en" && links.length === 1 && links[0].origin === "upstream_existing" && intents === 0 && active === 0, "resolved_mine_preconditions_failed");
+  return { id: RESOLVED_MINE_ID, status: "resolved_by_catalog_scan", origin: "upstream_existing", promoCodePresent: true,
+    promoUrlPresent: !!links[0].webUrl || !!links[0].appUrl, getcodeUpperBoundByIntent: intents, unresolvedIntents: 0, inflightClaimItems: active };
+}
 async function eligibleIds(tx: Prisma.TransactionClient, ids: string[]) {
   const rows = await tx.novelSourceItem.findMany({ where: { id: { in: ids }, channelAppId: APP, status: "linked", novelId: { not: null },
     promoLinks: { none: { upstreamCodePresent: true } },
@@ -181,6 +204,7 @@ export async function plan(db: PrismaClient, b: Baseline, baselineSha256: string
   validateBaseline(b); check(SHA.test(baselineSha256), "baseline_sha256_required");
   return readOnly(db, async tx => {
     await context(tx, actorId); await checkManual(tx, b);
+    await checkNoCatalogScan(tx); await checkResolvedMine(tx);
     check(same(await candidateIds(tx), b.allIds), "scope_53_changed");
     check((await otherInflight(tx)).length === 0, "other_claim_inflight");
     const expected = b.allIds.filter(x => !b.canaryIds.includes(x));
@@ -194,8 +218,8 @@ export async function submit(db: PrismaClient, m: Manifest, actorId: string, con
   return submitSelection(db, m, m.ids, actorId, REQUEST_ID, now);
 }
 export async function submitCanary(db: PrismaClient, b: Baseline, ids: readonly string[], actorId: string, confirm: string, now = new Date()) {
-  check(confirm === "PROMO_RECLAIM_CANARY_5", "confirmation_refused"); validateBaseline(b);
-  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");
+  check(confirm === "PROMO_RECLAIM_CANARY_4", "confirmation_refused"); validateBaseline(b);
+  check(Array.isArray(ids) && ids.length === 4 && new Set(ids).size === 4 && same(ids, canarySubmissionIds(b)) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES.filter(prefix => prefix !== RESOLVED_MINE_ID.slice(0, 8))), "canary_ids_invalid");
   return submitSelection(db, b, [...ids], actorId, CANARY_REQUEST_ID, now);
 }
 async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], actorId: string, requestId: typeof REQUEST_ID | typeof CANARY_REQUEST_ID, now: Date) {
@@ -204,19 +228,21 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
   // Replay retains the original fixed scope even after some books have codes.
   const prior = await readOnly(db, async tx => {
     await context(tx, actorId); await checkManual(tx, b);
+    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
     const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${requestId}`)}`;
     const existing = await tx.genericTask.findUnique({ where: { requestToken: token }, select: { id: true } });
     check((await otherInflight(tx, existing?.id)).length === 0, "other_claim_inflight");
     const rows = await tx.novelSourceItem.findMany({ where: { id: { in: ids }, channelAppId: APP }, select: { id: true } });
     check(same(rows.map(r => r.id), ids), "manifest_theater_mismatch");
     if (!existing) check(same(await eligibleIds(tx, ids), ids), "submit_preconditions_failed");
-    return existing;
+    return { existing, resolvedByCatalogScan };
   });
   const enabled = isPromoLinkClaimEnabled() && isPromoLinkClaimWriteAllowed();
   let credentialWarnings: PromoLinkClaimCredentialWarning[] = [];
   const result = await enqueueCatalogBatch(db, {
     operation: "promo_claim", selection, actorId, requestId, channelAccounts,
   }, now, enabled, async (tx) => {
+    await checkNoCatalogScan(tx);
     credentialWarnings = await validatePromoAccountConfiguration(tx, channelAccounts, now);
   });
   if (!result.duplicate && credentialWarnings.length > 0) {
@@ -228,15 +254,17 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
       afterSnapshot: { warnings: credentialWarnings },
     } });
   }
-  check(!prior || result.taskId === prior.id, "replay_task_mismatch");
-  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
+  check(!prior.existing || result.taskId === prior.existing.id, "replay_task_mismatch");
+  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length,
+    resolvedByCatalogScan: prior.resolvedByCatalogScan, reconciliation: reconciliation(b), otherInflightCatalogScans: [] };
 }
 export async function status(db: PrismaClient, m: Baseline | Manifest, actorId: string, requestId: string = REQUEST_ID) {
   check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
   if ("ids" in m) validateManifest(m); else validateBaseline(m);
-  const ids = requestId === CANARY_REQUEST_ID ? m.canaryIds : m.allIds.filter(id => !m.canaryIds.includes(id));
+  const ids = requestId === CANARY_REQUEST_ID ? canarySubmissionIds(m) : m.allIds.filter(id => !m.canaryIds.includes(id));
   return readOnly(db, async tx => {
     const ctx = await context(tx, actorId); await checkManual(tx, m);
+    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
     const token = `catalog_batch:${sha256(`promo_claim\n${actorId}\n${requestId}`)}`;
     const task = await tx.genericTask.findUnique({ where: { requestToken: token }, select: { id: true, status: true } });
     const rows = [];
@@ -262,6 +290,7 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId: 
     const other = await otherInflight(tx, task?.id);
     check(other.length === 0, "other_claim_inflight");
     return { ...ctx, requestId, accountId: m.accountId, task, counts, rows, otherInflight: other,
+      resolvedByCatalogScan, reconciliation: reconciliation(m), otherInflightCatalogScans: [],
       countLabel: "按意图记录推定的每本 getcode 上限", httpCountLabel: "窗口总调用数由宿主机日志单独交叉核对", manualReviewDigestUnchanged: true };
   });
 }
@@ -283,7 +312,7 @@ export async function main(argv: string[]) {
   check(same(Object.keys(values), allowed), "arguments_invalid");
   check(values["--actor-id"] === ACTOR, "owner_actor_mismatch");
   if (command === "submit") check(values["--confirm"] === "PROMO_RECLAIM_48", "confirmation_refused");
-  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_5", "confirmation_refused");
+  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_4", "confirmation_refused");
   const requestId = values["--request-id"] ?? REQUEST_ID;
   if (command === "status") check(requestId === REQUEST_ID || requestId === CANARY_REQUEST_ID, "request_id_refused");
   const input = baselineInput ? loadPinned<Baseline>(values["--baseline"], values["--baseline-sha256"]) : command === "submit" ? loadPinned<Manifest>(values["--manifest"], values["--manifest-sha256"]) : JSON.parse(readFileSync(values["--manifest"], "utf8")) as Manifest;
@@ -295,7 +324,7 @@ export async function main(argv: string[]) {
       writeFileSync(values["--output"], bytes, { mode: 0o600, flag: "wx" });
       console.log(JSON.stringify({ command, actorId: ACTOR, accountId: m.accountId, count: m.ids.length, idsSha256: idsSha(m.ids), manifestSha256: sha256(bytes) }));
     } else if (command === "submit") console.log(JSON.stringify(await submit(prisma, input as Manifest, values["--actor-id"], values["--confirm"])));
-    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, input.canaryIds, values["--actor-id"], values["--confirm"])));
+    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, canarySubmissionIds(input), values["--actor-id"], values["--confirm"])));
     else console.log(JSON.stringify(await status(prisma, input, values["--actor-id"], requestId)));
   } finally { await prisma.$disconnect(); }
 }
