@@ -1,0 +1,134 @@
+{
+  "status": "RECLAIM53_PASS",
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "tree": "0bb390152c2f4e87cb69338e96e4e4722f6f5f05",
+  "reviewedOpsHead": "94dec9ddb216c19c8c17682bd157e15e2c9b8b0e",
+  "scriptSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d",
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "manifestSha256": "46537917902afee740455aa17c6c6bb9c4894ed926653f3c4fb1c5ab770bddff",
+  "remaining48IdsSha256": "19231defb2d3488135d80e3ff6a61baf02e6438e72f916ac9b1c464605e917d6",
+  "requestId": "promo-reclaim-53-2026-10-20",
+  "taskId": "4ab3f194-e194-47ba-b9a4-c0c4a55b181e",
+  "submissionInvocations": 1,
+  "duplicate": false,
+  "actor": {
+    "id": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+    "username": "admin",
+    "role": "super_admin",
+    "status": "active"
+  },
+  "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+  "databaseRole": "web_app",
+  "checksTransactionReadOnly": "on",
+  "nativeUid": 1001,
+  "credentialWarningCount": 0,
+  "windowUtc": {
+    "start": "2026-10-21T07:59:28.822Z",
+    "end": "2026-10-21T08:03:42.242Z"
+  },
+  "windowJst": {
+    "start": "2026-10-21T16:59:28.822+09:00",
+    "end": "2026-10-21T17:03:42.242+09:00"
+  },
+  "remaining48Counts": {
+    "success": 0,
+    "already_available": 48,
+    "failed": 0
+  },
+  "canary4Counts": {
+    "success": 0,
+    "already_available": 4,
+    "failed": 0
+  },
+  "resolvedByCatalogScan": {
+    "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+    "status": "resolved_by_catalog_scan",
+    "origin": "upstream_existing",
+    "promoCodePresent": true,
+    "promoUrlPresent": true,
+    "getcodeUpperBoundByIntent": 0,
+    "unresolvedIntents": 0,
+    "inflightClaimItems": 0
+  },
+  "all53CodeAndUrlPresent": true,
+  "all53IntentUpperBounds": 0,
+  "perBookCountLabel": "按意图记录推定的每本 getcode 上限",
+  "windowCountLabel": "窗口总调用数",
+  "windowGetcode": 0,
+  "windowGetvideoinfo": 48,
+  "newWindowIntents": 0,
+  "globalClaimIntentsStart": 33559,
+  "globalClaimIntentsEnd": 33559,
+  "otherInflightStart": 0,
+  "otherInflightEnd": 0,
+  "catalogScanInflightStart": 0,
+  "catalogScanInflightEnd": 0,
+  "foreignWindowClaimOrScanTasks": 0,
+  "unresolvedIntents": 0,
+  "manualReviewRequired": 0,
+  "upstream429": 0,
+  "breakerOpenEvents": 0,
+  "services": [
+    {
+      "service": "web",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 48,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "worker-light",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "scheduler",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 2,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "backup-timer",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 0,
+      "errorLines": 0,
+      "permissionDenied": 0
+    },
+    {
+      "service": "postgres",
+      "containerIdUnchanged": true,
+      "state": "running",
+      "health": "healthy",
+      "windowLogLines": 2,
+      "errorLines": 0,
+      "permissionDenied": 0
+    }
+  ],
+  "manual635Count": 635,
+  "manual635Sha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "manual635DigestUnchanged": true,
+  "reconciliation": "53 = 1 + 4 + 48 = 1 + 52 already available",
+  "automaticRetriesOrSupplementalBatches": 0,
+  "productCodeImagePublicUrlEnvNginxComposeGrantsChanges": false,
+  "productionExecutionComplete": true
+}

@@ -1,0 +1,19 @@
+import pathlib,subprocess,hashlib,json,datetime
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+folder=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/remaining48-94dec9dd')
+pre=json.loads((folder/'preflight.json').read_text());window=json.loads((folder/'window.json').read_text())
+assert pre['status']['task'] is None and pre['status']['counts']['not_submitted']==48 and pre['status']['otherInflight']==[] and pre['status']['otherInflightCatalogScans']==[]
+assert hashlib.sha256(subprocess.check_output(['docker','exec','cps-novel-web-1','cat','/tmp/promo-reclaim-53-reviewed-94dec9dd.ts'])).hexdigest()=='26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d'
+assert hashlib.sha256(subprocess.check_output(['docker','exec','cps-novel-web-1','cat','/tmp/promo-reclaim-48-manifest-94dec9dd-20261021.json'])).hexdigest()==window['manifestSha256']
+attempt={'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'requestId':window['requestId'],'command':'submit','scopeCount':48,'confirm':'PROMO_RECLAIM_48','atMostOneInvocation':True}
+with (folder/'submit-attempt.json').open('x') as f:json.dump(attempt,f);f.write('\n')
+(folder/'submit-attempt.json').chmod(0o600)
+command=['docker','exec','-w','/app','cps-novel-web-1','tsx','--tsconfig=/app/tsconfig.json','/tmp/promo-reclaim-53-reviewed-94dec9dd.ts','submit','--manifest','/tmp/promo-reclaim-48-manifest-94dec9dd-20261021.json','--manifest-sha256',window['manifestSha256'],'--actor-id','71f0e655-0640-4f07-bcbb-041f027fa7cb','--confirm','PROMO_RECLAIM_48']
+r=subprocess.run(command,capture_output=True,text=True)
+for name,data in [('submit.json',r.stdout),('submit-stderr.txt',r.stderr),('submit-exit.json',json.dumps({'exit':r.returncode})+'\n')]:
+ p=folder/name;p.write_text(data);p.chmod(0o600)
+print(r.stdout,flush=True)
+if r.returncode:print(r.stderr,flush=True);raise SystemExit(r.returncode)
+s=json.loads(r.stdout);assert s['requestId']==window['requestId'] and s['actorId']=='71f0e655-0640-4f07-bcbb-041f027fa7cb' and s['channelAccounts']=={'85c2fb3e-28f8-476a-83f2-9647e2206192':'53f03fd8-951d-433e-ac66-784e82496a84'} and s['enabled'] is True and s['duplicate'] is False
+assert s['resolvedByCatalogScan']['status']=='resolved_by_catalog_scan' and s['reconciliation']['equation']=='53 = 1 + 4 + 48'
+print('REMAINING48_SUBMIT=PASS invocations=1 duplicate=false TASK_ID='+s['taskId'],flush=True)

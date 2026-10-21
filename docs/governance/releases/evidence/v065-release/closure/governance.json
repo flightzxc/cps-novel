@@ -1,0 +1,13 @@
+{
+  "version": "0.6.5",
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "tag": "v0.6.5",
+  "annotatedTagLocal": "PASS",
+  "generatedChangelog": "PASS original script core.abbrev=7",
+  "uniqueReleaseLogCount": 1,
+  "registryReleaseReclaimRecords": "updated to actual 53 PASS",
+  "gitBranchAndTagPush": "pending post-commit gates",
+  "notion": "pending sync/readback",
+  "productionExecution": "COMPLETE no more production actions",
+  "all53Restored": true
+}

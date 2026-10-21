@@ -3,7 +3,22 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-10-20 · 共 1388 个 commit
+生成时间：2026-10-21 · 共 1400 个 commit
+- `d52d5ce` 2026-10-21 治理（v0.6.5）：四本金丝雀回读通过并停止等待48本授权  — _codex · GPT-6_
+- `d9a124e` 2026-10-21 治理（v0.6.5）：记录金丝雀提交前MINE已有带码链接停点  — _codex · GPT-6_
+- `dbe7788` 2026-10-20 治理（v0.6.5）：主控复核后完成甲阶段53本只读核对  — _codex · GPT-6_
+- `9688e56` 2026-10-20 治理（v0.6.5）：记录部署通过与MINE严格定位停点  — _codex · GPT-6_
+- `eade8f1` 2026-10-20 治理（v0.6.5）：记录第一阶段归档与重领脚本门禁  — _codex · GPT-6_
+
+## v0.6.5
+
+- `b378910` 2026-10-20 发布：准备海阅 v0.6.5 PATCH 六文件版本身份  — _codex · GPT-6_
+- `58cdb94` 2026-10-20 合并：领码前确认/领码后核对/异常恢复的回读改用 getvideoinfo 按编号精确点查（照 CPS），修复短书名回读超 100 条领不到码  — _claude-code · claude-opus-5-5_
+- `f531995` 2026-10-20 测试：publication-preview 真实库夹具的 externalAgencyId 与 rawPayload.agencyId 同步为 3366  — _claude-code · claude-sonnet-5-5_
+- `c320cdf` 2026-10-20 文档：追加 getvideoinfo 精确回读修订（探针报告 §14），port-registry N-14 判定更新  — _claude-code · claude-sonnet-5-5_
+- `4692a80` 2026-10-20 修复（领推广码）：领码前后的回读改用 getvideoinfo 按编号精确点查，删除书名定位  — _claude-code · claude-sonnet-5-5_
+- `e6864f6` 2026-10-20 治理（v0.6.4）：补齐Git与Notion回读收据，保留人工验收待办  — _codex · GPT-6_
+- `994d552` 2026-10-20 治理（v0.6.4）：记录正式站部署与技术验收，人工验收待回执  — _codex · GPT-6_
 - `9c85771` 2026-10-20 治理（v0.6.4）：记录第一阶段门禁与不可变归档，等待批准部署  — _codex · GPT-6_
 
 ## v0.6.4

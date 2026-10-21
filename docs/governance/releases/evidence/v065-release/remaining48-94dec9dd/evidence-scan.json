@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "rawUpstreamOrServiceLogsIncluded": false,
+  "codeUrlCredentialValuesIncluded": false,
+  "scriptsTxtSuffix": true,
+  "reviewedOpsBytesUnchanged": true,
+  "manifestBytesUnchanged": true,
+  "baselineBytesUnchanged": true
+}

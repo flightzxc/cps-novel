@@ -1,0 +1,16 @@
+海阅 v0.6.5 PATCH
+
+领码前确认、领码后核对及异常恢复以 getvideoinfo 按编号精确回读，修复短书名候选截断。
+getcode 请求、错误分类、意图状态机及绝不重复调用约束不变。
+Final b378910a8ec4b78029e71ad1bac92c742efb9f5b
+Tree 0bb390152c2f4e87cb69338e96e4e4722f6f5f05
+零新增迁移，29条/60表；grants、环境变量集合、compose、nginx、路由、任务白名单不变。
+
+Owner分阶段批准后已在haiyue-vps部署并完成53本恢复核对：
+1本MINE由目录扫描解决，4本金丝雀及余48本均already_available，有码有网址，失败0。
+按意图记录推定的每本getcode上限均0；两独占窗口getcode事件总数/新增意图均0。
+getvideoinfo窗口总调用数分别4及48；635条PlotNovel人工复核摘要不变。
+没有失败重试、重复提交、sudo或公开网址修改。后续治理提交不改变此工件Final。
+
+Agent: codex
+Model: GPT-6

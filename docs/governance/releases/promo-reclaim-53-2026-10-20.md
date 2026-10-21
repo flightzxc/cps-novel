@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：v0.6.5部署技术PASS；主控复核ops@94dec9dd后4本金丝雀已执行并核对PASS，全部already_available有码有网址，MINE为目录扫描已解决。53 = 1 + 4 + 48；已停止等待Owner另行“批准重领”，48本未提交。
+当前：Owner批准剩余48本后已提交并核对PASS，48本均already_available；先前4本及MINE最终只读复核不变。53 = 1 + 4 + 48，53本有码有网址、意图上限均0、失败0，生产执行结束。旧停点/等待批准段保留作历史，后续仅发版治理收尾。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -67,3 +67,9 @@ Owner将5本改为Codex提交，主控复核ops@e991694a（tsc0、28/28、无425
 Owner转达主控复核ops@94dec9dd及SHA256通过后，本轮只提交其余4本一次。原baseline原字节与48范围不变。requestId=promo-reclaim-53-2026-10-20-canary，批次`0dcc1e9d-5900-4987-b686-3210b66f4602`；四本均already_available、有推广码及网址、意图上限0，MINE仍单列resolved_by_catalog_scan且未提交。53 = 1 + 4 + 48。
 
 UTC窗口2026-10-21T07:43:06.640Z–2026-10-21T07:47:02.480Z（JST2026-10-21T16:43:06.640+09:00–2026-10-21T16:47:02.480+09:00）：getcode窗口总调用数0=getcode新增意图0，getvideoinfo窗口总调用数4。前后无其它领码/目录扫描在途，六服务error/permission denied0，未决/转人工/429/熔断0，635条摘要不变。没有重放或失败重试，没有48本plan/submit。独占窗口关闭，停止等待Owner另说“批准重领”。[本轮结果](evidence/v065-release/canary-four-94dec9dd/README.md)及[原始结论](evidence/v065-release/canary-four-94dec9dd/summary.txt)。早前五本运营说明及d9a124e8停点为保留历史，当前按本节口径。
+
+## 最终：53本恢复 PASS（2026-10-21）
+
+Owner“批准剩下48本”后重新plan及清单sha核对，通过原生web_app原路径提交一次；批次`4ab3f194-e194-47ba-b9a4-c0c4a55b181e`，48本全部already_available、有码有网址、失败0。先前4本最终仍already_available，MINE为resolved_by_catalog_scan未重提。53 = 1 + 4 + 48，53本全部码/网址就绪，按意图记录推定的每本getcode上限均0。
+
+48本独占窗口UTC 2026-10-21T07:59:28.822Z–2026-10-21T08:03:42.242Z（JST 2026-10-21T16:59:28.822+09:00–2026-10-21T17:03:42.242+09:00），getcode窗口总调用数0=新增意图0，getvideoinfo窗口总调用数48。起止无其它领码/目录扫描在途，未决/转人工/429/熔断0，六服务error/permission denied0，635条摘要最终不变；没有重放、失败重试或补领。原baseline/48摘要及工件不变。[最终证据](evidence/v065-release/remaining48-94dec9dd/README.md)及[53本逐项结果](evidence/v065-release/remaining48-94dec9dd/books53.json)。生产执行已结束，后续只补齐发版治理。

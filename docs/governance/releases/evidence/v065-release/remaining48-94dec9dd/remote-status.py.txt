@@ -1,0 +1,37 @@
+import pathlib,subprocess,json,datetime,hashlib,re
+assert subprocess.check_output(['hostname'],text=True).strip()=='haiyue-vps'
+folder=pathlib.Path('/opt/cps-novel/shared/artifacts/verified/v065/remaining48-94dec9dd')
+assert json.loads((folder/'submit-exit.json').read_text())['exit']==0
+command=['docker','exec','-w','/app','cps-novel-web-1','tsx','--tsconfig=/app/tsconfig.json','/tmp/promo-reclaim-53-reviewed-94dec9dd.ts','status','--manifest','/tmp/promo-reclaim-48-manifest-94dec9dd-20261021.json','--actor-id','71f0e655-0640-4f07-bcbb-041f027fa7cb','--request-id','promo-reclaim-53-2026-10-20']
+window=json.loads((folder/'window.json').read_text())
+assert hashlib.sha256(subprocess.check_output(['docker','exec','cps-novel-web-1','cat','/tmp/promo-reclaim-48-manifest-94dec9dd-20261021.json'])).hexdigest()==window['manifestSha256']
+r=subprocess.run(command,capture_output=True,text=True)
+n=len(list(folder.glob('status-*.json')))+1
+for name,data in [(f'status-{n:03}.json',r.stdout),(f'status-{n:03}-stderr.txt',r.stderr)]:
+ p=folder/name;p.write_text(data);p.chmod(0o600)
+print(r.stdout,flush=True)
+if r.returncode:print(r.stderr,flush=True);raise SystemExit(r.returncode)
+s=json.loads(r.stdout);assert s['task']['id']==json.loads((folder/'submit.json').read_text())['taskId'] and len(s['rows'])==48
+print('REMAINING48_STATUS='+json.dumps({'poll':n,'counts':s['counts'],'parentStatus':s['task']['status'],'all48Terminal':all(x['status'] in ['success','already_available','failed'] for x in s['rows'])}),flush=True)
+
+# Bounded read-only live observation. Only counts, never raw upstream lines.
+live_counts={'getcode':0,'getvideoinfo':0};bad429=breaker=0
+until=datetime.datetime.now(datetime.timezone.utc).isoformat()
+for service in ['worker','worker-light']:
+ r=subprocess.run(['docker','logs','--timestamps','--since',window['startedAt'],'--until',until,'cps-novel-'+service+'-1'],capture_output=True,text=True,check=True)
+ for line in (r.stdout+r.stderr).splitlines():
+  parts=line.split(' ',1)
+  if len(parts)!=2:continue
+  try:e=json.loads(parts[1])
+  except ValueError:continue
+  if not isinstance(e,dict):continue
+  event=e.get('event','')
+  if event=='upstream_call':
+   if e.get('endpoint') in live_counts:live_counts[e['endpoint']]+=1
+   bad429+=int(e.get('httpStatus')==429)
+  if isinstance(event,str) and event.startswith('rate_gate.'):bad429+=int(e.get('status')==429)
+  if isinstance(event,str) and re.search('breaker|circuit',event,re.I) and (e.get('open') is True or e.get('state')=='open' or 'open' in event):breaker+=1
+live={'observedAt':until,'callEventsSoFar':live_counts,'http429':bad429,'breakerOpenEvents':breaker}
+p=folder/f'live-{n:03}.json';p.write_text(json.dumps(live,indent=2)+'\n');p.chmod(0o600)
+print('LIVE_READONLY='+json.dumps(live),flush=True)
+assert bad429==0 and breaker==0,'live_429_or_breaker_stop'

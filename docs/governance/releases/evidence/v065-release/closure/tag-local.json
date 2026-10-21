@@ -1,0 +1,9 @@
+{
+  "tag": "v0.6.5",
+  "type": "tag",
+  "tagObject": "219836b3c5da3fc36711109934513c88d77d0b05",
+  "peeled": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "tree": "0bb390152c2f4e87cb69338e96e4e4722f6f5f05",
+  "changelog": "generated using original script with core.abbrev=7",
+  "push": "pending_post_commit_gates"
+}

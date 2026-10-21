@@ -1,0 +1,1 @@
+{"failure":"local generated remote-wrapper newline syntax check failed before SSH","fix":"remove redundant replacement from raw template","productionConnectionsByFailedAttempt":0,"productionQueriesOrSubmissionsByFailedAttempt":0,"reviewedOpsChanged":false}

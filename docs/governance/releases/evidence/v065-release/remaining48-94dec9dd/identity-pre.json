@@ -1,0 +1,42 @@
+{
+  "final": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+  "version": "0.6.5",
+  "uid": 1001,
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "scriptSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d",
+  "envUnchanged": true,
+  "nginxUnchanged": true,
+  "maintenanceEnabled": false,
+  "services": [
+    {
+      "service": "web",
+      "id": "faa596266ca05f4186185cb10b6c79fe1caf32c806e8ab0cd23e138ea15df09d",
+      "health": "healthy"
+    },
+    {
+      "service": "worker",
+      "id": "f5e1ab3d7795a321bbac6e730d7e6d71f2a057331a283a67cc1b46350eef6470",
+      "health": "healthy"
+    },
+    {
+      "service": "worker-light",
+      "id": "3d86d6fd042180ab02c9395bf43d8d20f9799afa491f54fe001f0c0fdd042ec4",
+      "health": "healthy"
+    },
+    {
+      "service": "scheduler",
+      "id": "4053c9a3d705d559234f240cb398a924593c99424cce1559a4a7798dff00698f",
+      "health": "healthy"
+    },
+    {
+      "service": "backup-timer",
+      "id": "20c18a666a3ce68a3afc4ada934b6437071507b1e4d5433a0148cc388067dd0a",
+      "health": "healthy"
+    },
+    {
+      "service": "postgres",
+      "id": "691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e",
+      "health": "healthy"
+    }
+  ]
+}

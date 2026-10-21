@@ -1,0 +1,10 @@
+{
+  "startedAt": "2026-10-21T07:59:28.822Z",
+  "startGlobalClaimIntentTotal": 33559,
+  "otherInflightStart": 0,
+  "catalogScanInflightStart": 0,
+  "requestId": "promo-reclaim-53-2026-10-20",
+  "opsHead": "94dec9ddb216c19c8c17682bd157e15e2c9b8b0e",
+  "manifestSha256": "46537917902afee740455aa17c6c6bb9c4894ed926653f3c4fb1c5ab770bddff",
+  "idsSha256": "19231defb2d3488135d80e3ff6a61baf02e6438e72f916ac9b1c464605e917d6"
+}
