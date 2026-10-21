@@ -1,0 +1,32 @@
+[
+  [
+    "typecheck-post-code",
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  ],
+  [
+    "lint-post-code",
+    [
+      "npm",
+      "run",
+      "lint"
+    ]
+  ],
+  [
+    "mutation-driver",
+    [
+      "python3",
+      ".tmp/promo-reclaim-53/canary-four-2026-10-21/mutations.py.txt"
+    ]
+  ],
+  [
+    "smoke-restored",
+    [
+      "/bin/bash",
+      "scripts/run-promo-reclaim-postgres-verification.sh"
+    ]
+  ]
+]

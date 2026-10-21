@@ -1,0 +1,253 @@
+diff --git a/docs/adr/ADR-V065-RECLAIM-CATALOG-RESOLUTION.md b/docs/adr/ADR-V065-RECLAIM-CATALOG-RESOLUTION.md
+new file mode 100644
+index 00000000..6492cb05
+--- /dev/null
++++ b/docs/adr/ADR-V065-RECLAIM-CATALOG-RESOLUTION.md
+@@ -0,0 +1,33 @@
++# v0.6.5：目录扫描已解决的 MINE 从金丝雀提交范围排除
++
++状态：Owner/主控 2026-10-21 裁定；新 ops SHA 仍须主控复核后方可生产执行。
++
++主控已只读查实：MoboReader 的非定时 apply/catalog_scan 任务 84a47861 于
++2026-10-21 10:27:05 JST 开始，11:06 JST 完成；开始11秒后将 MINE
++`c838c281-c9ba-482a-aa80-05792e8fdc4a` 以 upstream_existing/fetched 捡回，
++没有调用 getcode，与重领无关。53本只有这一行获得带码链接，其余52本没有。
++这是主控提供的已核实结论；本次实现不重复连接生产调查来源。
++
++原停点 d9a124e8 保留。MINE 记作 resolved_by_catalog_scan，不再提交；金丝雀为
++原冻结 baseline.canaryIds 排除上述完整 UUID 后的4本，余48范围和 baseline
++原字节不变。始终对账 53 = 1 + 4 + 48。
++
++ops 只读检查 MINE 的剧场/标题/语种身份、恰好1条带码链接且 origin=upstream_existing、
++任何领码意图0、在途领码条目0；不满足就停。金丝雀提交数量必须4、无重复、
++与原五本减 MINE 完全一致；旧5本和以 MINE 替换任一本均拒绝。
++确认短语改为 PROMO_RECLAIM_CANARY_4，避免仍标注5本；旧确认短语拒绝。
++requestId 仍为独立的 promo-reclaim-53-2026-10-20-canary；原 requestId 下尚无批次，
++若发现已存在不同输入，则沿原 enqueueCatalogBatch 的重放一致性规则拒绝。
++
++窗口开始与结束均拒绝任何 pending/processing 的 catalog_scan（不按剧场放宽）；
++submit 只读预检、原提交事务校验钩子和 status 均检查，plan 亦检查。
++这提供核对时点的检查，不是阻止其它操作人随后创建任务的锁；窗口期间 Owner/运营
++仍须暂停其它领码及目录扫描提交。若状态核对发现扫描，立即停手回报。
++
++按钮逐字复制的账户校验、原 enqueueCatalogBatch、enabled 双闸、临期审计不变；
++web 容器原生 web_app，不读取 raw_payload、不读推广码原值，不更改 grants/角色。
++每本 getcode 仍只报告按意图记录推定的上限，MINE=0，窗口总调用数另以宿主日志核对；
++635条 PlotNovel 人工复核摘要不变。发布 Final、镜像、迁移、公开网址均不变。
++
++本次只本地实现、真实 grants 冒烟和推送复核；主控明确批准新 SHA 后才提交4本。
++余48本仍待 Owner 看过金丝雀结果并另说“批准重领”。
+diff --git a/docs/governance/releases/promo-reclaim-53-2026-10-20.md b/docs/governance/releases/promo-reclaim-53-2026-10-20.md
+index a3df9dfe..d8c97918 100644
+--- a/docs/governance/releases/promo-reclaim-53-2026-10-20.md
++++ b/docs/governance/releases/promo-reclaim-53-2026-10-20.md
+@@ -3 +3 @@
+-当前Owner 2026-10-21裁定：金丝雀5本改由Codex薄脚本提交，转交即授权这5本；但新增submit-canary须本次主控复核通过后才能用于生产。其余48本仍须Owner另说“批准重领”。甲阶段已通过，冻结基线不变；本轮仅本地实现、冒烟、推送复核，不连接生产或提交领码。
++当前Owner/主控2026-10-21裁定：MINE已由目录扫描解决，不再提交。金丝雀改为原冻结5本排除MINE后的4本，53 = 1 + 4 + 48；baseline原字节、48本范围不变。本次只改ops分支并做本地门禁，新SHA主控复核前不连接生产或提交。原e991694a复核与d9a124e8停点保留为历史。
+@@ -89,0 +90,12 @@ Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结
++
++## 当前执行口径：1本已解决 + 4本金丝雀 + 48本待批（2026-10-21）
++
++本节和[Owner裁定](../../adr/ADR-V065-RECLAIM-CATALOG-RESOLUTION.md)替代前文“五本提交/MINE already_available”的历史口径。主控已只读查实MINE来自目录扫描84a47861，开始10:27:05 JST、11:06完成，开始11秒后upstream_existing/fetched写入，无getcode；本次不重复查来源、不连接生产。MINE单列resolved_by_catalog_scan，不能记为本轮already_available。
++
++- 排除固定完整ID `c838c281-c9ba-482a-aa80-05792e8fdc4a`；每次plan/submit/status核对恰好1条带码链接、origin=upstream_existing、任意意图0、在途0，否则resolved_mine_preconditions_failed停手。原历史captureBaseline仅供原基线复现，实际不重新捕获或改变基线。
++- submit-canary只用baseline.canaryIds排除此ID后的4本：Fran/en、Heart/en、Obsession/fr、SOLD/en。数量4、无重复、精确范围；原五本或MINE换入均拒绝。确认短语 `PROMO_RECLAIM_CANARY_4`，旧_5拒绝；requestId仍为 `promo-reclaim-53-2026-10-20-canary`，不与48本共用。
++- 提交与48本共用原路径；提交前只读事务、原校验事务钩子均拒绝pending/processing的catalog_scan，status也检查，因此窗口开始/结束均检查。任意剧场的扫描都不能在途。状态输出otherInflightCatalogScans=[]表示本次只读核对时点无在途扫描，不是并发锁。
++- status的rows/counts只包含对应批次4本或48本，resolvedByCatalogScan单列MINE，reconciliation固定对账53 = 1 + 4 + 48；原baseline.canaryIds仍5条，所有原始摘要保持。
++- 运行身份、账户校验20行逐字复制、enabled双闸、临期审计、635条摘要、意图上限与窗口日志总数核对不变。前后无其它领码/目录扫描在途；操作人整个窗口不提交其它领码或扫描。
++
++新SHA主控复核后，原生web容器仅执行一次submit-canary，使用原baseline摘要244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d、原actorId及账户。status --request-id promo-reclaim-53-2026-10-20-canary跟踪4本终态，同时持续断言MINE状态。窗口证据将MINE0与4本意图上限逐项列出；getcode窗口总数等于新增意图总数，getvideoinfo仅报窗口总数；635摘要及六服务error/permission denied核对不变。遇原停手条件或在途扫描立即停止，不重试失败书。4本回报后停下，48仍待Owner另行“批准重领”。
+diff --git a/scripts/ops/promo-reclaim-53.ts b/scripts/ops/promo-reclaim-53.ts
+index 660c7f56..3516c699 100644
+--- a/scripts/ops/promo-reclaim-53.ts
++++ b/scripts/ops/promo-reclaim-53.ts
+@@ -18,0 +19,2 @@ export const CANARY_REQUEST_ID = "promo-reclaim-53-2026-10-20-canary";
++// Owner/controller 2026-10-21: catalog_scan 84a47861 resolved MINE; never submit it.
++export const RESOLVED_MINE_ID = "c838c281-c9ba-482a-aa80-05792e8fdc4a";
+@@ -83,0 +86 @@ function validateBaseline(b: Baseline) {
++  check(b.canaryIds.includes(RESOLVED_MINE_ID), "resolved_mine_baseline_missing");
+@@ -147,0 +151,20 @@ async function otherInflight(tx: Prisma.TransactionClient, ownTaskId?: string) {
++// Baseline keeps its original five canaries and SHA; only this execution scope changes.
++function canarySubmissionIds(b: Baseline) { return b.canaryIds.filter(id => id !== RESOLVED_MINE_ID); }
++function reconciliation(b: Baseline) {
++  return { total: b.allIds.length, resolvedByCatalogScan: 1, canary: canarySubmissionIds(b).length,
++    remaining: b.allIds.filter(id => !b.canaryIds.includes(id)).length, equation: "53 = 1 + 4 + 48" };
++}
++async function checkNoCatalogScan(tx: Prisma.TransactionClient) {
++  const scans = await tx.genericTask.findMany({ where: { taskType: "catalog_scan", status: { in: ["pending", "processing"] } }, select: { id: true } });
++  check(scans.length === 0, "catalog_scan_inflight");
++}
++async function checkResolvedMine(tx: Prisma.TransactionClient) {
++  const mine = await tx.novelSourceItem.findFirst({ where: { id: RESOLVED_MINE_ID, channelAppId: APP }, select: { title: true, sourceLocale: true } });
++  const links = await tx.promoLink.findMany({ where: { novelSourceItemId: RESOLVED_MINE_ID, upstreamCodePresent: true }, select: { origin: true, webUrl: true, appUrl: true } });
++  const intents = await tx.sideEffectIntent.count({ where: { requestSummary: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } } });
++  const active = await tx.genericTaskItem.count({ where: { status: { in: ["pending", "processing"] }, task: { taskType: { startsWith: "promo_link.claim." } },
++    OR: [{ targetId: RESOLVED_MINE_ID }, { payload: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } }] } });
++  check(mine?.title.trim() === "MINE" && mine.sourceLocale === "en" && links.length === 1 && links[0].origin === "upstream_existing" && intents === 0 && active === 0, "resolved_mine_preconditions_failed");
++  return { id: RESOLVED_MINE_ID, status: "resolved_by_catalog_scan", origin: "upstream_existing", promoCodePresent: true,
++    promoUrlPresent: !!links[0].webUrl || !!links[0].appUrl, getcodeUpperBoundByIntent: intents, unresolvedIntents: 0, inflightClaimItems: active };
++}
+@@ -183,0 +207 @@ export async function plan(db: PrismaClient, b: Baseline, baselineSha256: string
++    await checkNoCatalogScan(tx); await checkResolvedMine(tx);
+@@ -197,2 +221,2 @@ export async function submitCanary(db: PrismaClient, b: Baseline, ids: readonly
+-  check(confirm === "PROMO_RECLAIM_CANARY_5", "confirmation_refused"); validateBaseline(b);
+-  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");
++  check(confirm === "PROMO_RECLAIM_CANARY_4", "confirmation_refused"); validateBaseline(b);
++  check(Array.isArray(ids) && ids.length === 4 && new Set(ids).size === 4 && same(ids, canarySubmissionIds(b)) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES.filter(prefix => prefix !== RESOLVED_MINE_ID.slice(0, 8))), "canary_ids_invalid");
+@@ -206,0 +231 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
++    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
+@@ -213 +238 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
+-    return existing;
++    return { existing, resolvedByCatalogScan };
+@@ -219,0 +245 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
++    await checkNoCatalogScan(tx);
+@@ -231,2 +257,3 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
+-  check(!prior || result.taskId === prior.id, "replay_task_mismatch");
+-  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
++  check(!prior.existing || result.taskId === prior.existing.id, "replay_task_mismatch");
++  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length,
++    resolvedByCatalogScan: prior.resolvedByCatalogScan, reconciliation: reconciliation(b), otherInflightCatalogScans: [] };
+@@ -237 +264 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
+-  const ids = requestId === CANARY_REQUEST_ID ? m.canaryIds : m.allIds.filter(id => !m.canaryIds.includes(id));
++  const ids = requestId === CANARY_REQUEST_ID ? canarySubmissionIds(m) : m.allIds.filter(id => !m.canaryIds.includes(id));
+@@ -239,0 +267 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
++    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
+@@ -264,0 +293 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
++      resolvedByCatalogScan, reconciliation: reconciliation(m), otherInflightCatalogScans: [],
+@@ -286 +315 @@ export async function main(argv: string[]) {
+-  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_5", "confirmation_refused");
++  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_4", "confirmation_refused");
+@@ -298 +327 @@ export async function main(argv: string[]) {
+-    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, input.canaryIds, values["--actor-id"], values["--confirm"])));
++    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, canarySubmissionIds(input), values["--actor-id"], values["--confirm"])));
+diff --git a/tests/integration/ops/promo-reclaim-53-postgres.test.ts b/tests/integration/ops/promo-reclaim-53-postgres.test.ts
+index 75115f14..a346b8d7 100644
+--- a/tests/integration/ops/promo-reclaim-53-postgres.test.ts
++++ b/tests/integration/ops/promo-reclaim-53-postgres.test.ts
+@@ -49 +49 @@ function baseline() { const file = path.join(dir, "baseline.json"), bytes = read
+-function canaryArgs() { const x = baseline(); return ["submit-canary", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--confirm", "PROMO_RECLAIM_CANARY_5"]; }
++function canaryArgs() { const x = baseline(); return ["submit-canary", "--actor-id", actor, "--baseline", x.file, "--baseline-sha256", x.digest, "--confirm", "PROMO_RECLAIM_CANARY_4"]; }
+@@ -90,0 +91,2 @@ async function seed() {
++  // The frozen baseline predates the independent catalog scan resolving MINE.
++  await addCode(mineTarget);
+@@ -126,3 +128,5 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-  it("submit-canary fixes five IDs, replays once, isolates request IDs and preserves the remaining plan after completion", async () => {
+-    const five = baseline().data.canaryIds;
+-    expect(five).toHaveLength(5); expect(five.map(id => id.slice(0, 8)).sort()).toEqual(["17f20eb7", "191da4c8", "4265a05f", "49e254d4", "c838c281"]);
++  it("submit-canary fixes four IDs, excludes resolved MINE, replays once and preserves the remaining 48 plan", async () => {
++    const pinned = baseline(), frozenBytes = readFileSync(pinned.file, "utf8");
++    const four = pinned.data.canaryIds.filter(id => id !== mineTarget);
++    expect(pinned.data.canaryIds).toHaveLength(5); expect(four).toHaveLength(4);
++    expect(four.map(id => id.slice(0, 8)).sort()).toEqual(["17f20eb7", "191da4c8", "4265a05f", "49e254d4"]);
+@@ -131,0 +136,3 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    expect(first.data.resolvedByCatalogScan).toMatchObject({ id: mineTarget, status: "resolved_by_catalog_scan", getcodeUpperBoundByIntent: 0 });
++    expect(first.data.reconciliation).toEqual({ total: 53, resolvedByCatalogScan: 1, canary: 4, remaining: 48, equation: "53 = 1 + 4 + 48" });
++    expect(first.data.otherInflightCatalogScans).toEqual([]);
+@@ -134 +141,2 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    expect(params.requestId).toBe(canaryRequest); expect(params.selection.scope).toBe("explicit_ids"); expect([...params.selection.ids].sort()).toEqual([...five].sort());
++    expect(params.requestId).toBe(canaryRequest); expect(params.selection.scope).toBe("explicit_ids"); expect([...params.selection.ids].sort()).toEqual([...four].sort());
++    expect(params.selection.ids).not.toContain(mineTarget);
+@@ -139,3 +147,2 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    const pending = baselineStatus(canaryRequest); expect(pending.exit).toBe(0); expect(pending.data.requestId).toBe(canaryRequest); expect(pending.data.rows).toHaveLength(5);
+-    // Existing quiet-window rule still blocks the 48 plan while canaries run.
+-    const blocked = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
++    const pending = baselineStatus(canaryRequest); expect(pending.exit).toBe(0); expect(pending.data.rows).toHaveLength(4);
++    const blocked = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(pinned.file)},'utf8')),${JSON.stringify(pinned.digest)},${JSON.stringify(actor)});`);
+@@ -143 +150 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    // Simulated terminal worker results only: no upstream/adapter is invoked.
++    // Simulated worker terminal states; fixture never calls an upstream adapter.
+@@ -146,2 +153,2 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    await owner.genericTask.create({ data: { parentTaskId: first.data.taskId, taskType: "promo_link.claim.v1", operationScopeHash: hash("canary-terminal"), requestToken: "canary-terminal", status: "completed", items: { create: five.map(id => ({ targetType: "novel_source_item", targetId: id, payload: { novelSourceItemId: id }, status: "success", result: { decision: id === mineTarget ? "already_available" : "claimed" } })) } } });
+-    for (const id of five) {
++    await owner.genericTask.create({ data: { parentTaskId: first.data.taskId, taskType: "promo_link.claim.v1", operationScopeHash: hash("canary-terminal"), requestToken: "canary-terminal", status: "completed", items: { create: four.map(id => ({ targetType: "novel_source_item", targetId: id, payload: { novelSourceItemId: id }, status: "success", result: { decision: "claimed" } })) } } });
++    for (const id of four) {
+@@ -149 +156 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-      if (id !== mineTarget) await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-" + id), idempotencyKey: hash("canary-idem-" + id), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: id, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: id } } });
++      await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-" + id), idempotencyKey: hash("canary-idem-" + id), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: id, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: id } } });
+@@ -152 +159,2 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    const done = baselineStatus(canaryRequest); expect(done.exit).toBe(0); expect(done.data.counts).toEqual({ success: 4, already_available: 1, failed: 0 });
++    const done = baselineStatus(canaryRequest); expect(done.exit).toBe(0); expect(done.data.counts).toEqual({ success: 4, already_available: 0, failed: 0 });
++    expect(done.data.rows).toHaveLength(4); expect(done.data.rows.some((x: { id: string }) => x.id === mineTarget)).toBe(false);
+@@ -154,3 +162,5 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    expect(done.data.rows.every((x: { promoCodePresent: boolean; promoUrlPresent: boolean }) => x.promoCodePresent && x.promoUrlPresent)).toBe(true);
+-    expect(done.data.rows.find((x: { id: string }) => x.id === mineTarget).getcodeUpperBoundByIntent).toBe(0);
+-    const notSubmitted = baselineStatus(remainingRequest); expect(notSubmitted.exit).toBe(0); expect(notSubmitted.data.requestId).toBe(remainingRequest); expect(notSubmitted.data.rows).toHaveLength(48); expect(notSubmitted.data.task).toBeNull();
++    expect(done.data.rows.every((x: { promoCodePresent: boolean; promoUrlPresent: boolean; getcodeUpperBoundByIntent: number }) => x.promoCodePresent && x.promoUrlPresent && x.getcodeUpperBoundByIntent === 1)).toBe(true);
++    expect(done.data.resolvedByCatalogScan).toMatchObject({ id: mineTarget, status: "resolved_by_catalog_scan", promoCodePresent: true, getcodeUpperBoundByIntent: 0 });
++    expect(done.data.reconciliation).toEqual(first.data.reconciliation);
++    const notSubmitted = baselineStatus(remainingRequest); expect(notSubmitted.exit).toBe(0); expect(notSubmitted.data.rows).toHaveLength(48); expect(notSubmitted.data.task).toBeNull();
++    expect(notSubmitted.data.resolvedByCatalogScan.status).toBe("resolved_by_catalog_scan");
+@@ -158,2 +168,3 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    const planned = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(baseline().digest)},${JSON.stringify(actor)});`);
+-    expect(planned.exit, JSON.stringify(planned.data)).toBe(0); expect(planned.data.ids).toEqual(m.ids); expect(planned.data.ids.some((id: string) => five.includes(id))).toBe(false);
++    const planned = inline(`return ops.plan(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(pinned.file)},'utf8')),${JSON.stringify(pinned.digest)},${JSON.stringify(actor)});`);
++    expect(planned.exit, JSON.stringify(planned.data)).toBe(0); expect(planned.data.ids).toEqual(m.ids); expect(planned.data.ids.some((id: string) => pinned.data.canaryIds.includes(id))).toBe(false);
++    expect(readFileSync(pinned.file, "utf8")).toBe(frozenBytes); expect(baseline().digest).toBe(pinned.digest);
+@@ -164 +175 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    for (const phrase of ["wrong", "PROMO_RECLAIM_48"]) { const args = canaryArgs(); args[args.indexOf("--confirm") + 1] = phrase; expect(cli(args).data.code).toBe("confirmation_refused"); }
++    for (const phrase of ["wrong", "PROMO_RECLAIM_48", "PROMO_RECLAIM_CANARY_5"]) { const args = canaryArgs(); args[args.indexOf("--confirm") + 1] = phrase; expect(cli(args).data.code).toBe("confirmation_refused"); }
+@@ -169 +180 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    expect(cli(["submit-canary", "--actor-id", actor, "--baseline", file, "--baseline-sha256", hash(bytes), "--confirm", "PROMO_RECLAIM_CANARY_5"]).data.code).toBe("canary_scope_invalid");
++    expect(cli(["submit-canary", "--actor-id", actor, "--baseline", file, "--baseline-sha256", hash(bytes), "--confirm", "PROMO_RECLAIM_CANARY_4"]).data.code).toBe("canary_scope_invalid");
+@@ -172,2 +183,2 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-  it.each(["short", "duplicate", "outsider"])("rejects canary ID selections outside the frozen five: %s", async kind => {
+-    const selected = [...baseline().data.canaryIds];
++  it.each(["short", "duplicate", "outsider", "mine_instead", "original_five"])("rejects canary ID selections outside the approved four: %s", async kind => {
++    const selected = baseline().data.canaryIds.filter(id => id !== mineTarget);
+@@ -177 +188,3 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    const result = inline(`return ops.submitCanary(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(selected)},${JSON.stringify(actor)},'PROMO_RECLAIM_CANARY_5');`);
++    if (kind === "mine_instead") selected[0] = mineTarget;
++    if (kind === "original_five") selected.push(mineTarget);
++    const result = inline(`return ops.submitCanary(db,JSON.parse(require('fs').readFileSync(${JSON.stringify(baseline().file)},'utf8')),${JSON.stringify(selected)},${JSON.stringify(actor)},'PROMO_RECLAIM_CANARY_4');`);
+@@ -182,4 +195,4 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
+-    if (kind === "existing_code") await addCode(mineTarget);
+-    if (kind === "historical_intent") await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-existing"), idempotencyKey: hash("canary-existing-idem"), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: mineTarget, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: mineTarget } } });
+-    if (kind === "not_linked") await owner.novelSourceItem.update({ where: { id: mineTarget }, data: { status: "pending" } });
+-    if (kind === "inflight_item" || kind === "other_inflight") await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", operationScopeHash: hash(kind), requestToken: kind, status: kind === "inflight_item" ? "completed" : "pending", ...(kind === "inflight_item" ? { items: { create: { targetType: "novel_source_item", targetId: mineTarget, payload: { novelSourceItemId: mineTarget } } } } : {}) } });
++    if (kind === "existing_code") await addCode(baseline().data.canaryIds.find(id => id !== mineTarget)!);
++    if (kind === "historical_intent") await owner.sideEffectIntent.create({ data: { effectKey: hash("canary-existing"), idempotencyKey: hash("canary-existing-idem"), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: baseline().data.canaryIds.find(id => id !== mineTarget)!, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: baseline().data.canaryIds.find(id => id !== mineTarget)! } } });
++    if (kind === "not_linked") await owner.novelSourceItem.update({ where: { id: baseline().data.canaryIds.find(id => id !== mineTarget)! }, data: { status: "pending" } });
++    if (kind === "inflight_item" || kind === "other_inflight") await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", operationScopeHash: hash(kind), requestToken: kind, status: kind === "inflight_item" ? "completed" : "pending", ...(kind === "inflight_item" ? { items: { create: { targetType: "novel_source_item", targetId: baseline().data.canaryIds.find(id => id !== mineTarget)!, payload: { novelSourceItemId: baseline().data.canaryIds.find(id => id !== mineTarget)! } } } } : {}) } });
+@@ -188,0 +202,34 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++  it.each(["missing_link", "wrong_origin", "two_code_links", "intent", "inflight"])("stops when resolved MINE changes before submit or at status: %s", async kind => {
++    if (kind === "missing_link") await owner.promoLink.deleteMany({ where: { novelSourceItemId: mineTarget } });
++    if (kind === "wrong_origin") await owner.promoLink.updateMany({ where: { novelSourceItemId: mineTarget }, data: { origin: "claimed" } });
++    if (kind === "two_code_links") {
++      const book = await owner.novelSourceItem.findUniqueOrThrow({ where: { id: mineTarget }, select: { novelId: true } });
++      await owner.promoLink.create({ data: { novelId: book.novelId!, novelSourceItemId: mineTarget, channelAppId: app, channelAccountId: account, offerType: "upstream_existing", origin: "upstream_existing", idempotencyKey: hash("second-mine-link"), publicRedirectCode: "secondminefixture", upstreamCode: "fixture-not-printed", status: "fetched" } });
++    }
++    if (kind === "intent") await owner.sideEffectIntent.create({ data: { effectKey: hash("resolved-mine-intent"), idempotencyKey: hash("resolved-mine-intent-idem"), operationType: "promo_link.claim_promo", targetType: "promo_link", targetId: mineTarget, channelAppId: app, status: "confirmed", requestSummary: { novelSourceItemId: mineTarget } } });
++    if (kind === "inflight") await owner.genericTask.create({ data: { taskType: "promo_link.claim.v1", operationScopeHash: hash("resolved-mine-active"), requestToken: "resolved-mine-active", status: "completed", items: { create: { targetType: "novel_source_item", targetId: mineTarget, payload: { novelSourceItemId: mineTarget }, status: "pending" } } } });
++    const submitted = cli(canaryArgs()); expect(submitted.exit).toBe(64); expect(submitted.data.code).toBe("resolved_mine_preconditions_failed");
++    const checked = baselineStatus(canaryRequest); expect(checked.exit).toBe(64); expect(checked.data.code).toBe("resolved_mine_preconditions_failed");
++    expect(cli(submitArgs()).data.code).toBe("resolved_mine_preconditions_failed");
++    expect(await owner.genericTask.count({ where: { params: { path: ["requestId"], equals: canaryRequest } } })).toBe(0);
++  });
++  it.each(["pending", "processing"])("rejects catalog scans at window start and end: %s", async scanStatus => {
++    const data = { taskType: "catalog_scan", operationScopeHash: hash("scan-" + scanStatus), requestToken: "scan-" + scanStatus, status: scanStatus };
++    const scan = await owner.genericTask.create({ data });
++    const before = cli(canaryArgs()); expect(before.exit).toBe(64); expect(before.data.code).toBe("catalog_scan_inflight");
++    expect(baselineStatus(canaryRequest).data.code).toBe("catalog_scan_inflight");
++    expect(cli(submitArgs()).data.code).toBe("catalog_scan_inflight");
++    await owner.genericTask.update({ where: { id: scan.id }, data: { status: "completed" } });
++    const first = cli(canaryArgs()); expect(first.exit, JSON.stringify(first.data)).toBe(0);
++    await owner.genericTask.update({ where: { id: first.data.taskId }, data: { status: "completed" } });
++    await owner.genericTaskItem.updateMany({ where: { taskId: first.data.taskId }, data: { status: "success" } });
++    const four = baseline().data.canaryIds.filter(id => id !== mineTarget);
++    await owner.genericTask.create({ data: { parentTaskId: first.data.taskId, taskType: "promo_link.claim.v1", operationScopeHash: hash("scan-window-terminal"), requestToken: "scan-window-terminal", status: "completed", items: { create: four.map(id => ({ targetType: "novel_source_item", targetId: id, payload: { novelSourceItemId: id }, status: "success", result: { decision: "claimed" } })) } } });
++    for (const id of four) await addCode(id);
++    expect(baselineStatus(canaryRequest).data.counts).toEqual({ success: 4, already_available: 0, failed: 0 });
++    await owner.genericTask.update({ where: { id: scan.id }, data: { status: scanStatus } });
++    const after = baselineStatus(canaryRequest); expect(after.exit).toBe(64); expect(after.data.code).toBe("catalog_scan_inflight");
++    expect(cli(canaryArgs()).data.code).toBe("catalog_scan_inflight");
++    await owner.genericTask.update({ where: { id: scan.id }, data: { status: "completed" } });
++    expect(baselineStatus(canaryRequest).exit).toBe(0);
++  });
+@@ -196,0 +244 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    await owner.promoLink.deleteMany({ where: { novelSourceItemId: mineTarget } });
+@@ -209,0 +258 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    await owner.promoLink.deleteMany({ where: { novelSourceItemId: mineTarget } });
+@@ -214,0 +264 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    await owner.promoLink.deleteMany({ where: { novelSourceItemId: mineTarget } });
+@@ -221,0 +272 @@ describe.runIf(enabled)("promo reclaim real web_app CLI", () => {
++    await owner.promoLink.deleteMany({ where: { novelSourceItemId: mineTarget } });

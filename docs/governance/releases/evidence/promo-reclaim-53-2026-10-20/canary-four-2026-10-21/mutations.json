@@ -1,0 +1,37 @@
+[
+  {
+    "mutation": "exact-four",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+  },
+  {
+    "mutation": "resolved-mine",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+  },
+  {
+    "mutation": "catalog-scan",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+  },
+  {
+    "mutation": "existing-code",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+  },
+  {
+    "mutation": "binding-check",
+    "redExit": 1,
+    "behaviorAssertionRed": true,
+    "restoredDiffQuiet": true,
+    "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "sha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "originalCanaryCount": 5,
+  "canarySubmissionCount": 4,
+  "remainingIdsSha256": "19231defb2d3488135d80e3ff6a61baf02e6438e72f916ac9b1c464605e917d6",
+  "reconciliation": "53 = 1 + 4 + 48",
+  "baselineRewritten": false
+}

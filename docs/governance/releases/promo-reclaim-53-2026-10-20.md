@@ -99,3 +99,5 @@ Owner因运营忙将五本金丝雀改由Codex执行，授权限甲阶段冻结�
 - 运行身份、账户校验20行逐字复制、enabled双闸、临期审计、635条摘要、意图上限与窗口日志总数核对不变。前后无其它领码/目录扫描在途；操作人整个窗口不提交其它领码或扫描。
 
 新SHA主控复核后，原生web容器仅执行一次submit-canary，使用原baseline摘要244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d、原actorId及账户。status --request-id promo-reclaim-53-2026-10-20-canary跟踪4本终态，同时持续断言MINE状态。窗口证据将MINE0与4本意图上限逐项列出；getcode窗口总数等于新增意图总数，getvideoinfo仅报窗口总数；635摘要及六服务error/permission denied核对不变。遇原停手条件或在途扫描立即停止，不重试失败书。4本回报后停下，48仍待Owner另行“批准重领”。
+
+四本金丝雀代码提交`7dd53c50ac30cbb52ad2c106de877f13c8db399b`，脚本SHA256 `26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d`。tsc0、lint0error/16既有warning，真实web_app完整冒烟初次及还原后均37/37、无跳过/Unhandled/42501；精确四本、MINE断言、目录扫描、已有带码排除、绑定检查5组删除变异均红并还原git diff --quiet。账户校验20/20逐行一致。发布/integration/fix/CPS不变，本轮生产连接/提交0。主控新SHA复核待通过，不能执行。详见[复核材料](evidence/promo-reclaim-53-2026-10-20/canary-four-2026-10-21/controller-review.txt)、[核心diff](evidence/promo-reclaim-53-2026-10-20/canary-four-2026-10-21/script-diff.txt)、[结论行](evidence/promo-reclaim-53-2026-10-20/canary-four-2026-10-21/summary.txt)。

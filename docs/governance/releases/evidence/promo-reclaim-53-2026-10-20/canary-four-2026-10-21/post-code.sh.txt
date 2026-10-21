@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+cd '/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops'
+lock='/Users/chenweifeng/Documents/cps海阅/.heavy-test.lock'
+while ! mkdir "$lock" 2>/dev/null; do sleep 15; done
+trap 'rmdir "$lock"' EXIT
+python3 .tmp/promo-reclaim-53/canary-four-2026-10-21/run-stage.py.txt .tmp/promo-reclaim-53/canary-four-2026-10-21/post-code.json

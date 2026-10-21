@@ -1,0 +1,37 @@
+OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (37 tests | 2 failed | 35 skipped) 3400ms
+     × rejects catalog scans at window start and end: pending 1730ms
+     × rejects catalog scans at window start and end: processing 1656ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects catalog scans at window start and end: pending
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects catalog scans at window start and end: processing
+AssertionError: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:219:59
+    217|     const data = { taskType: "catalog_scan", operationScopeHash: hash(…
+    218|     const scan = await owner.genericTask.create({ data });
+    219|     const before = cli(canaryArgs()); expect(before.exit).toBe(64); ex…
+       |                                                           ^
+    220|     expect(baselineStatus(canaryRequest).data.code).toBe("catalog_scan…
+    221|     expect(cli(submitArgs()).data.code).toBe("catalog_scan_inflight");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 35 skipped (37)
+   Start at  14:56:43
+   Duration  3.52s (transform 26ms, setup 0ms, import 51ms, tests 3.40s, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

@@ -1,0 +1,22 @@
+Source baseline 58cdb94da40e3103ddc4ebba7c267ce0c23b905e src/app/(admin)/catalog-sync/_actions.ts
+Current scripts/ops/promo-reclaim-53.ts; exact text comparison PASS 20/20
+original:477 | ops:52 | async function validatePromoAccountConfiguration(
+original:478 | ops:53 |   db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+original:479 | ops:54 |   accounts: Readonly<Record<string, string>>,
+original:480 | ops:55 |   now: Date,
+original:481 | ops:56 | ): Promise<PromoLinkClaimCredentialWarning[]> {
+original:482 | ops:57 |   const warnings: PromoLinkClaimCredentialWarning[] = [];
+original:483 | ops:58 |   for (const [channelAppId, accountId] of Object.entries(accounts)) {
+original:484 | ops:59 |     const binding = await db.channelApp.findFirst({ where: {
+original:485 | ops:60 |       id: channelAppId, status: "active",
+original:486 | ops:61 |       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+original:487 | ops:62 |     }, select: { id: true } });
+original:488 | ops:63 |     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+original:489 | ops:64 |     const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+original:490 | ops:65 |     if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+original:491 | ops:66 |     if (admission.expiringSoon && admission.expiresAt) {
+original:492 | ops:67 |       warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+original:493 | ops:68 |     }
+original:494 | ops:69 |   }
+original:495 | ops:70 |   return warnings;
+original:496 | ops:71 | }

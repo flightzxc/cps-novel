@@ -1,0 +1,6 @@
+MUTATION=PASS name=exact-four red=yes restored_git_diff_quiet=yes
+MUTATION=PASS name=resolved-mine red=yes restored_git_diff_quiet=yes
+MUTATION=PASS name=catalog-scan red=yes restored_git_diff_quiet=yes
+MUTATION=PASS name=existing-code red=yes restored_git_diff_quiet=yes
+MUTATION=PASS name=binding-check red=yes restored_git_diff_quiet=yes
+CANARY_FOUR_MUTATIONS=PASS count=5

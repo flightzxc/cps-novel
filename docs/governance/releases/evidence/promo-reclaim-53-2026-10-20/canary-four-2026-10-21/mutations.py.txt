@@ -1,0 +1,30 @@
+from pathlib import Path
+import json,subprocess,os,time,hashlib
+out=Path('.tmp/promo-reclaim-53/canary-four-2026-10-21');p=Path('scripts/ops/promo-reclaim-53.ts');original=p.read_bytes();s=original.decode()
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+four='  check(Array.isArray(ids) && ids.length === 4 && new Set(ids).size === 4 && same(ids, canarySubmissionIds(b)) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES.filter(prefix => prefix !== RESOLVED_MINE_ID.slice(0, 8))), "canary_ids_invalid");\n'
+mine='  check(mine?.title.trim() === "MINE" && mine.sourceLocale === "en" && links.length === 1 && links[0].origin === "upstream_existing" && intents === 0 && active === 0, "resolved_mine_preconditions_failed");\n'
+mutations=[
+ ('exact-four',four,'','rejects canary ID selections outside the approved four: short'),
+ ('resolved-mine',mine,'','stops when resolved MINE changes before submit or at status: wrong_origin'),
+ ('catalog-scan','  check(scans.length === 0, "catalog_scan_inflight");\n','','rejects catalog scans at window start and end'),
+ ('existing-code','    promoLinks: { none: { upstreamCodePresent: true } },\n','','existing code is excluded'),
+ ('binding-check','    if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");','    void binding;','uses the button error')]
+rows=[]
+try:
+ for name,needle,replacement,test in mutations:
+  assert s.count(needle)==1,name
+  while os.getloadavg()[0]>18:time.sleep(15)
+  p.write_text(s.replace(needle,replacement,1))
+  with (out/('mutation-'+name+'.log')).open('x') as log:
+   r=subprocess.run(['/bin/bash','scripts/run-promo-reclaim-postgres-verification.sh'],env=dict(os.environ,PROMO_RECLAIM_TEST_FILTER=test),stdout=log,stderr=subprocess.STDOUT)
+  text=(out/('mutation-'+name+'.log')).read_text()
+  assert r.returncode!=0 and 'AssertionError' in text and 'failed' in text,(name,'not behavior assertion red')
+  assert '42501' not in text and 'Unhandled' not in text and 'PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes' in text,name
+  p.write_bytes(original);assert subprocess.run(['git','diff','--quiet']).returncode==0
+  rows.append({'mutation':name,'redExit':r.returncode,'behaviorAssertionRed':True,'restoredDiffQuiet':True,'restoredSourceSha256':hashlib.sha256(original).hexdigest()})
+  (out/'mutations.json').write_text(json.dumps(rows,indent=2)+'\n')
+  print('MUTATION=PASS name='+name+' red=yes restored_git_diff_quiet=yes',flush=True)
+finally:p.write_bytes(original)
+assert subprocess.run(['git','diff','--quiet']).returncode==0
+print('CANARY_FOUR_MUTATIONS=PASS count=5',flush=True)

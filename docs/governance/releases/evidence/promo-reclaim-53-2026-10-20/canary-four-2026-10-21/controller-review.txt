@@ -1,0 +1,15 @@
+主控复核包：v0.6.5 金丝雀改为4本（MINE由目录扫描解决）
+代码SHA：7dd53c50ac30cbb52ad2c106de877f13c8db399b
+脚本SHA256：26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d
+父基线：ops@e991694abf89ed23188f598dbbd87fb58f0f062f；停点release@d9a124e8保留。
+
+请对照script-diff.txt及review-diff.txt核对：
+1. 原baseline五本及原文件摘要不变；完整MINE UUID显式排除，4本精确范围，旧5本/换入MINE拒绝。
+2. MINE单条带码链接/origin=upstream_existing/任意意图0/在途0的只读断言和单列resolved_by_catalog_scan；53=1+4+48。
+3. pending/processing catalog_scan在提交前、校验事务及status拒绝；真实终态末端亦覆盖。
+4. 确认短语PROMO_RECLAIM_CANARY_4；独立canary requestId不变。原enqueue、enabled、复制函数20/20及临期审计不变。
+5. tsc0/lint0error，真实web_app37/37两次，5组双向变异红并恢复diffquiet，29迁移/60表/drift0，隔离PASS。
+6. baseline/48摘要不变；来源84a47861引用Owner转达的主控只读结论，不重复查生产。
+
+本轮未连接生产，无提交；此代码必须主控审核新SHA通过后才执行4本。余48仍待Owner另说批准重领。
+实际运行步骤见post-review-runbook.txt；禁止用旧五本脚本或重捕baseline。

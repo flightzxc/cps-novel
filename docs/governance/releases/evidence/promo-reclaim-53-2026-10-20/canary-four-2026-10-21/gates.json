@@ -1,0 +1,64 @@
+{
+  "codeHead": "7dd53c50ac30cbb52ad2c106de877f13c8db399b",
+  "codeTree": "1e3fb2bd692ec2485586c7fbc571af5f8f8d36c5",
+  "scriptSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d",
+  "tsc": 0,
+  "lintErrors": 0,
+  "lintExistingWarnings": 16,
+  "initialSmoke": {
+    "passed": 37,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0
+  },
+  "restoredSmoke": {
+    "passed": 37,
+    "failed": 0,
+    "skipped": 0,
+    "unhandled": 0,
+    "sql42501": 0
+  },
+  "mutations": [
+    {
+      "mutation": "exact-four",
+      "redExit": 1,
+      "behaviorAssertionRed": true,
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+    },
+    {
+      "mutation": "resolved-mine",
+      "redExit": 1,
+      "behaviorAssertionRed": true,
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+    },
+    {
+      "mutation": "catalog-scan",
+      "redExit": 1,
+      "behaviorAssertionRed": true,
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+    },
+    {
+      "mutation": "existing-code",
+      "redExit": 1,
+      "behaviorAssertionRed": true,
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+    },
+    {
+      "mutation": "binding-check",
+      "redExit": 1,
+      "behaviorAssertionRed": true,
+      "restoredDiffQuiet": true,
+      "restoredSourceSha256": "26304f9e8435bddbd702d758fae0c997e17ce23a9a69a32f7e5351fb5c826d9d"
+    }
+  ],
+  "reconciliation": "53 = 1 + 4 + 48",
+  "mineStatus": "resolved_by_catalog_scan",
+  "productionConnections": 0,
+  "productionSubmissions": 0,
+  "reviewGate": "new_controller_review_pending"
+}

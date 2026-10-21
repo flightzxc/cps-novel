@@ -1,0 +1,40 @@
+OPS_TEST_TSX=4.21.0 external_cache=yes project_dependencies_unchanged=yes
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.2 -> 8.0.0-rc.23                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+
+ RUN  v4.1.11 /Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops
+
+ ❯ |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts (37 tests | 1 failed | 36 skipped) 1868ms
+     × rejects canary ID selections outside the approved four: short 1847ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| tests/integration/ops/promo-reclaim-53-postgres.test.ts > promo reclaim real web_app CLI > rejects canary ID selections outside the approved four: short
+AssertionError: {"taskId":"c0964837-d457-4882-8e09-ef717f9974f6","duplicate":false,"taskStatus":"pending","requestId":"promo-reclaim-53-2026-10-20-canary","actorId":"71f0e655-0640-4f07-bcbb-041f027fa7cb","channelAccounts":{"85c2fb3e-28f8-476a-83f2-9647e2206192":"8169482b-b569-4972-b74f-0ad9106429d5"},"enabled":true,"credentialWarningCount":1,"resolvedByCatalogScan":{"id":"c838c281-c9ba-482a-aa80-05792e8fdc4a","status":"resolved_by_catalog_scan","origin":"upstream_existing","promoCodePresent":true,"promoUrlPresent":true,"getcodeUpperBoundByIntent":0,"unresolvedIntents":0,"inflightClaimItems":0},"reconciliation":{"total":53,"resolvedByCatalogScan":1,"canary":4,"remaining":48,"equation":"53 = 1 + 4 + 48"},"otherInflightCatalogScans":[]}: expected +0 to be 64 // Object.is equality
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ tests/integration/ops/promo-reclaim-53-postgres.test.ts:191:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 36 skipped (37)
+   Start at  14:56:29
+   Duration  2.01s (transform 26ms, setup 0ms, import 59ms, tests 1.87s, environment 0ms)
+
+PROMO_RECLAIM_DISPOSABLE_DATABASE_CLEANED=yes

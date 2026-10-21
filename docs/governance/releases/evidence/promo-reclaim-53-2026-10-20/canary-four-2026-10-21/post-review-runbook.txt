@@ -1,0 +1,44 @@
+仅供新ops SHA主控复核通过后执行；本轮未连接生产、未提交。
+
+先与Owner/运营确认整个窗口不提交其它领码或目录扫描。仅haiyue-vps，确认部署
+Final b378910a8ec4b78029e71ad1bac92c742efb9f5b/0.6.5、原生web uid1001。
+审核脚本原字节复制到web /tmp 的新唯一文件名，核对本包给出的SHA256；不得使用
+旧e991694a五本脚本。原baseline保持244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d。
+web_app是唯一脚本运行身份；任何42501停止，不换角色、不改grants。
+
+提交前以status --request-id promo-reclaim-53-2026-10-20-canary只读检查：
+resolvedByCatalogScan.id=c838c281-c9ba-482a-aa80-05792e8fdc4a，
+status=resolved_by_catalog_scan，带码链接恰1且origin=upstream_existing（函数断言），
+意图上限0、在途0；4本rows均not_submitted、task=null，无其它领码及目录扫描在途。
+635条摘要不变，reconciliation为53 = 1 + 4 + 48。其余4本四项前提会在实际提交前
+再按原eligibleIds核对，原账户绑定和凭据校验在原事务钩子中执行。
+记录UTC独占窗口起点及全局/本轮意图快照；不得先提交再补起点。
+
+以下 <审核脚本> 必须替换为新审核SHA对应的已校验绝对路径，只执行一次：
+docker exec -w /app cps-novel-web-1 tsx --tsconfig=/app/tsconfig.json <审核脚本> submit-canary \
+ --baseline /tmp/promo-reclaim-53-phase-a-700e01cc.json \
+ --baseline-sha256 244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d \
+ --actor-id 71f0e655-0640-4f07-bcbb-041f027fa7cb --confirm PROMO_RECLAIM_CANARY_4
+
+固定requestId=promo-reclaim-53-2026-10-20-canary；与48本独立。
+检查输出actor为原active admin/super_admin、account=53f03fd8-951d-433e-ac66-784e82496a84，
+channelAccounts只有MoboReader、enabled=true、4本原始范围。凭据临期时按原按钮审计，
+不得输出口令码、URL原值或凭据。禁止自动重放；提交返回不确定时仅用status查已有任务。
+
+docker exec -w /app cps-novel-web-1 tsx --tsconfig=/app/tsconfig.json <审核脚本> status \
+ --baseline /tmp/promo-reclaim-53-phase-a-700e01cc.json \
+ --baseline-sha256 244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d \
+ --actor-id 71f0e655-0640-4f07-bcbb-041f027fa7cb \
+ --request-id promo-reclaim-53-2026-10-20-canary
+
+等4本全部终态；MINE始终单列已由目录扫描解决，不计入本轮success或already_available。
+结束前再确认其它领码和pending/processing catalog_scan均0，记录UTC终点。
+按同一[start,end)窗口只读收集脱敏upstream_call字段，总getcode=新增全局意图=
+新增4本范围意图；getvideoinfo只报窗口总数。逐本明确标“按意图记录推定的每本getcode上限”，
+4本均≤1，MINE=0；可给原window-counts包装器的books同时附MINE0与4本计数，窗口新增
+scope只含4本。另验证两端catalog_scan=0、reconciliation及MINE状态，不以只看计数代替。
+核对未决/转人工0、635条摘要不变、六服务error与permission denied均0、无429/熔断。
+
+任一原停手条件、MINE状态变化、在途扫描或名单不符，立即停手回报；失败书不重试。
+回报后停止；其余48范围/摘要不变，只有Owner另说“批准重领”后才能提交。
+主控关于目录扫描84a47861来源的只读结论引用Owner本轮转达，不重新查询raw_payload。

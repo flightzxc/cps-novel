@@ -1,0 +1,63 @@
+diff --git a/scripts/ops/promo-reclaim-53.ts b/scripts/ops/promo-reclaim-53.ts
+index 660c7f56..3516c699 100644
+--- a/scripts/ops/promo-reclaim-53.ts
++++ b/scripts/ops/promo-reclaim-53.ts
+@@ -18,0 +19,2 @@ export const CANARY_REQUEST_ID = "promo-reclaim-53-2026-10-20-canary";
++// Owner/controller 2026-10-21: catalog_scan 84a47861 resolved MINE; never submit it.
++export const RESOLVED_MINE_ID = "c838c281-c9ba-482a-aa80-05792e8fdc4a";
+@@ -83,0 +86 @@ function validateBaseline(b: Baseline) {
++  check(b.canaryIds.includes(RESOLVED_MINE_ID), "resolved_mine_baseline_missing");
+@@ -147,0 +151,20 @@ async function otherInflight(tx: Prisma.TransactionClient, ownTaskId?: string) {
++// Baseline keeps its original five canaries and SHA; only this execution scope changes.
++function canarySubmissionIds(b: Baseline) { return b.canaryIds.filter(id => id !== RESOLVED_MINE_ID); }
++function reconciliation(b: Baseline) {
++  return { total: b.allIds.length, resolvedByCatalogScan: 1, canary: canarySubmissionIds(b).length,
++    remaining: b.allIds.filter(id => !b.canaryIds.includes(id)).length, equation: "53 = 1 + 4 + 48" };
++}
++async function checkNoCatalogScan(tx: Prisma.TransactionClient) {
++  const scans = await tx.genericTask.findMany({ where: { taskType: "catalog_scan", status: { in: ["pending", "processing"] } }, select: { id: true } });
++  check(scans.length === 0, "catalog_scan_inflight");
++}
++async function checkResolvedMine(tx: Prisma.TransactionClient) {
++  const mine = await tx.novelSourceItem.findFirst({ where: { id: RESOLVED_MINE_ID, channelAppId: APP }, select: { title: true, sourceLocale: true } });
++  const links = await tx.promoLink.findMany({ where: { novelSourceItemId: RESOLVED_MINE_ID, upstreamCodePresent: true }, select: { origin: true, webUrl: true, appUrl: true } });
++  const intents = await tx.sideEffectIntent.count({ where: { requestSummary: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } } });
++  const active = await tx.genericTaskItem.count({ where: { status: { in: ["pending", "processing"] }, task: { taskType: { startsWith: "promo_link.claim." } },
++    OR: [{ targetId: RESOLVED_MINE_ID }, { payload: { path: ["novelSourceItemId"], equals: RESOLVED_MINE_ID } }] } });
++  check(mine?.title.trim() === "MINE" && mine.sourceLocale === "en" && links.length === 1 && links[0].origin === "upstream_existing" && intents === 0 && active === 0, "resolved_mine_preconditions_failed");
++  return { id: RESOLVED_MINE_ID, status: "resolved_by_catalog_scan", origin: "upstream_existing", promoCodePresent: true,
++    promoUrlPresent: !!links[0].webUrl || !!links[0].appUrl, getcodeUpperBoundByIntent: intents, unresolvedIntents: 0, inflightClaimItems: active };
++}
+@@ -183,0 +207 @@ export async function plan(db: PrismaClient, b: Baseline, baselineSha256: string
++    await checkNoCatalogScan(tx); await checkResolvedMine(tx);
+@@ -197,2 +221,2 @@ export async function submitCanary(db: PrismaClient, b: Baseline, ids: readonly
+-  check(confirm === "PROMO_RECLAIM_CANARY_5", "confirmation_refused"); validateBaseline(b);
+-  check(Array.isArray(ids) && ids.length === 5 && new Set(ids).size === 5 && same(ids, b.canaryIds) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES), "canary_ids_invalid");
++  check(confirm === "PROMO_RECLAIM_CANARY_4", "confirmation_refused"); validateBaseline(b);
++  check(Array.isArray(ids) && ids.length === 4 && new Set(ids).size === 4 && same(ids, canarySubmissionIds(b)) && same(ids.map(id => id.slice(0, 8)), CANARY_PREFIXES.filter(prefix => prefix !== RESOLVED_MINE_ID.slice(0, 8))), "canary_ids_invalid");
+@@ -206,0 +231 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
++    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
+@@ -213 +238 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
+-    return existing;
++    return { existing, resolvedByCatalogScan };
+@@ -219,0 +245 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
++    await checkNoCatalogScan(tx);
+@@ -231,2 +257,3 @@ async function submitSelection(db: PrismaClient, b: Baseline, ids: string[], act
+-  check(!prior || result.taskId === prior.id, "replay_task_mismatch");
+-  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length };
++  check(!prior.existing || result.taskId === prior.existing.id, "replay_task_mismatch");
++  return { ...result, requestId, actorId, channelAccounts, enabled, credentialWarningCount: credentialWarnings.length,
++    resolvedByCatalogScan: prior.resolvedByCatalogScan, reconciliation: reconciliation(b), otherInflightCatalogScans: [] };
+@@ -237 +264 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
+-  const ids = requestId === CANARY_REQUEST_ID ? m.canaryIds : m.allIds.filter(id => !m.canaryIds.includes(id));
++  const ids = requestId === CANARY_REQUEST_ID ? canarySubmissionIds(m) : m.allIds.filter(id => !m.canaryIds.includes(id));
+@@ -239,0 +267 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
++    await checkNoCatalogScan(tx); const resolvedByCatalogScan = await checkResolvedMine(tx);
+@@ -264,0 +293 @@ export async function status(db: PrismaClient, m: Baseline | Manifest, actorId:
++      resolvedByCatalogScan, reconciliation: reconciliation(m), otherInflightCatalogScans: [],
+@@ -286 +315 @@ export async function main(argv: string[]) {
+-  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_5", "confirmation_refused");
++  if (command === "submit-canary") check(values["--confirm"] === "PROMO_RECLAIM_CANARY_4", "confirmation_refused");
+@@ -298 +327 @@ export async function main(argv: string[]) {
+-    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, input.canaryIds, values["--actor-id"], values["--confirm"])));
++    else if (command === "submit-canary") console.log(JSON.stringify(await submitCanary(prisma, input, canarySubmissionIds(input), values["--actor-id"], values["--confirm"])));

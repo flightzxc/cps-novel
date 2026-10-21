@@ -1,0 +1,10 @@
+{
+  "controllerDecision": "MINE resolved by catalog_scan 84a47861; exclude complete UUID; canary four; baseline and48 unchanged",
+  "priorStop": "release@d9a124e8",
+  "sourceProvenance": "Controller already verified read-only; not queried this turn",
+  "pauseAndResume": "Owner paused while operator was active, then said 好了 and 批准继续; only local preparation resumed",
+  "productionGate": "New ops SHA requires controller review before executing four",
+  "remaining48Gate": "Owner must separately say 批准重领",
+  "productionConnectionsThisTurn": 0,
+  "productionSubmissionsThisTurn": 0
+}
