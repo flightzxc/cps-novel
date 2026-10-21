@@ -1,0 +1,127 @@
+{
+  "phase": "pre",
+  "observed_at": "2026-10-21 01:53:00.827402+00",
+  "role": "web_app",
+  "read_only": "on",
+  "observedAt": "2026-10-21T01:53:00.827Z",
+  "books": [
+    {
+      "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+      "title": "Fran",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked"
+    },
+    {
+      "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+      "title": "Heart",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked"
+    },
+    {
+      "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+      "title": "Obsession",
+      "sourceLocale": "fr",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked"
+    },
+    {
+      "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+      "title": "SOLD",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked"
+    },
+    {
+      "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+      "title": "MINE ",
+      "sourceLocale": "en",
+      "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+      "status": "linked"
+    }
+  ],
+  "globalClaimIntentTotal": 33559,
+  "scopeIntents": [],
+  "windowIntents": [],
+  "windowClaimTasks": [],
+  "status": {
+    "actor": {
+      "id": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+      "username": "admin",
+      "role": "super_admin",
+      "status": "active"
+    },
+    "databaseRole": "web_app",
+    "transactionReadOnly": "on",
+    "requestId": "promo-reclaim-53-2026-10-20-canary",
+    "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+    "task": null,
+    "counts": {
+      "success": 0,
+      "already_available": 0,
+      "failed": 0,
+      "not_submitted": 5
+    },
+    "rows": [
+      {
+        "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+        "status": "not_submitted",
+        "promoCodePresent": true,
+        "promoUrlPresent": true,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      }
+    ],
+    "otherInflight": [],
+    "countLabel": "按意图记录推定的每本 getcode 上限",
+    "httpCountLabel": "窗口总调用数由宿主机日志单独交叉核对",
+    "manualReviewDigestUnchanged": true
+  },
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "manual635Count": 635,
+  "manual635ExpectedSha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "manual635DigestUnchanged": true
+}

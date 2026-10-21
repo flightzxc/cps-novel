@@ -19,7 +19,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.6.5 —— PATCH 已部署，甲阶段核对通过，等待运营金丝雀（2026-10-20）
+### v0.6.5 —— PATCH 已部署，甲阶段冻结；金丝雀提交前停点（2026-10-21）
 
 - 基线 `58cdb94da40e3103ddc4ebba7c267ce0c23b905e` / tree `0948319541fc29610e109b0a1a3a5473a359f172`，发布分支 `release/v0.6.5-2026-10-20`。版本类型 **PATCH**。
 - 领码前确认、领码后核对、异常恢复改用 `getvideoinfo` 按编号精确回读，修复短书名候选超过100条无法领码；getcode 请求、错误分类、意图状态机及绝不重复调用约束不变。
@@ -31,6 +31,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 第二阶段原RELEASE=PASS/EXIT=0，维护48.476629秒；env只改两行、备份/list/checksum、29迁移/60表、六服务日志、健康/投影/IndexNow/nginx均PASS，外部9/10次。甲阶段严格MINE定位失败后未追加生产查询；金丝雀及余48本暂停，待Owner/主控裁定。tag/生成CHANGELOG/唯一发版日志/Notion按计划待重领结果补齐，尚未整版收官。
 
 - 后续主控裁定原MINE STOP为定位规则问题；ops@700e01cc已复核通过。以审核脚本重启captureBaseline后53/53和四项前提通过，五本完整ID与余48ID摘要冻结，635条摘要冻结；没有领码提交。历史STOP记录保留，当前等待运营金丝雀，余48仍需另行批准。[甲交接](releases/evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)。
+
+- 2026-10-21：Owner授权Codex提交5本，主控审核ops@e991694a通过；原生web_app提交前核对发现MINE已有带码链接，前提4/5通过，已在调用submit-canary前停下。5本not_submitted、requestId任务不存在；635条摘要不变、无其它领码在途、无42501。链接写入来源尚未建立，不登记already_available或金丝雀PASS。余48未提交，仍待另批。[停点证据](releases/evidence/v065-release/canary-2026-10-21/README.md)。
 
 ### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）
 
@@ -560,7 +562,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，技术及甲阶段53本核对PASS；等待运营金丝雀，余48待另批 |
+| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，技术及甲阶段PASS；金丝雀提交前MINE已有带码链接停手，5本未提交；48待另批 |
 | `v0.6.4` | 2026-10-20 09:41:09 | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |

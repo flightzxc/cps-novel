@@ -1,0 +1,69 @@
+{
+  "status": "STOP_BEFORE_SUBMIT",
+  "reason": "fresh_canary_preconditions_failed_existing_code_link",
+  "opsHead": "e991694abf89ed23188f598dbbd87fb58f0f062f",
+  "scriptSha256": "f086710f61f0d9b94633f393bdd0ee4cafd9aedadcaaf2331151b971a7002f5d",
+  "baselineSha256": "244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d",
+  "readOnlyObservationWindowUtc": {
+    "start": "2026-10-21T01:53:00.827Z",
+    "end": "2026-10-21T01:54:00.062Z"
+  },
+  "exclusiveSubmissionWindowOpened": false,
+  "submitCanaryInvoked": false,
+  "claimBatchesSubmittedByThisRun": 0,
+  "upstreamCallsInitiatedByThisRun": 0,
+  "canaryRequestId": "promo-reclaim-53-2026-10-20-canary",
+  "canaryTask": null,
+  "canaryNotSubmittedCount": 5,
+  "otherInflightStart": 0,
+  "otherInflightEnd": 0,
+  "preconditionsPassed": 4,
+  "preconditionsFailed": 1,
+  "mineExistingLink": {
+    "id": "cd24df05-ac66-4ba8-bdb3-510df2026147",
+    "status": "fetched",
+    "origin": "upstream_existing",
+    "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+    "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+    "createdAt": "2026-10-21T01:27:16.927Z",
+    "updatedAt": "2026-10-21T01:27:16.927Z",
+    "fetchedAt": "2026-10-21T01:27:15.760Z",
+    "deletedAt": null,
+    "upstreamCodePresent": true
+  },
+  "perBookCountLabel": "按意图记录推定的每本 getcode 上限",
+  "books": [
+    {
+      "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+      "intentUpperBound": 0
+    },
+    {
+      "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+      "intentUpperBound": 0
+    },
+    {
+      "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+      "intentUpperBound": 0
+    },
+    {
+      "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+      "intentUpperBound": 0
+    },
+    {
+      "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+      "intentUpperBound": 0
+    }
+  ],
+  "manual635Count": 635,
+  "manual635Sha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "manual635DigestUnchanged": true,
+  "permissionDeniedObserved": false,
+  "databaseRole": "web_app",
+  "transactionReadOnly": "on",
+  "rawPayloadRead": false,
+  "productionRolesOrGrantsChanged": false,
+  "actualCanaryWindowHttpTotals": "not_applicable_no_submission_window_opened",
+  "serviceErrorWindowCounts": "not_collected_no_submission_window_opened",
+  "writeOrigin": "not established by bounded read-only evidence",
+  "next": "Controller/Owner decision required for existing-code target; do not delete link, alter exact-five scope, retry, or submit48"
+}

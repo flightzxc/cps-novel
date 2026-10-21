@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：v0.6.5部署技术PASS；主控复核ops@700e01cc通过后重新执行甲阶段，53本、五本金丝雀完整ID及余48本ID摘要已核对冻结。原MINE定位STOP已由主控裁定并修正，原证据保留。金丝雀交运营，余48本仍待Owner另行“批准重领”；Codex本轮未提交批次。
+当前：部署技术PASS、甲阶段53本冻结；Owner改为授权Codex提交5本，主控复核ops@e991694a通过。本轮提交前MINE已有带码链接，4本前提通过、1本不满足，提交前STOP，未调用submit-canary。其余48本未提交。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -55,3 +55,9 @@
 ## 甲阶段重新核对通过
 
 主控复核通过ops@700e01cc，脚本SHA256 `08cc8d899f3103f772a07c0fa52c0c4137f3f3539efb5402ff6d2bf0d6404a15`；原生web_app只读captureBaseline通过53/53，附录B书名/语种一致，四项前提全部满足，Contract排除，MINE英语尾空格目标唯一。基线/48ID摘要、actor/运营账户及635条PlotNovel摘要均已冻结。详见[甲阶段交接](evidence/v065-release/phase-a-700e01cc/operator-canary-handoff.md)及[结果](evidence/v065-release/phase-a-700e01cc/phase-a-result.json)。当前停下交运营；不提交领码、不创建48本submit清单。原STOP段为历史，seriesId引用主控查实，不重查raw_payload。
+
+## 2026-10-21 金丝雀提交前 STOP
+
+Owner将5本改为Codex提交，主控复核ops@e991694a（tsc0、28/28、无42501）后要求执行。新鲜只读核对无其它领码在途，但MINE c838c281已存在带码链接，createdAt=2026-10-21T01:27:16.927Z、fetched/upstream_existing；与冻结甲阶段的无带码链接条件不同。其余4本前提通过。按原审核脚本不得绕过已有带码排除，因此没有调用submit-canary，没有拆4本，没有删除链接或改基线。canary requestId下task=null，5本均not_submitted；不能将现有链接记作本次already_available。
+
+本轮只读观测UTC01:53:00.827–01:54:00.062，独占提交窗口未开启；5本意图上限均0、MINE0，635条摘要不变，web_app无42501。已有链接写入来源尚未查明。没有窗口HTTP总数或服务错误验收结论，不能登记金丝雀PASS。详见[停点证据](evidence/v065-release/canary-2026-10-21/README.md)与[结论行](evidence/v065-release/canary-2026-10-21/summary.txt)。等待Owner/主控裁定后再继续，余48另待“批准重领”。历史运营说明已由Owner改授权覆盖，旧证据保留。tag/生成CHANGELOG/唯一发版日志/Notion仍待重领结果明确后收官。

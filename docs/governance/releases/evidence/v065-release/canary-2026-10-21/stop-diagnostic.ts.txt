@@ -1,0 +1,25 @@
+// Read-only stop evidence. No submission function is called, no raw_payload/code.
+import {createRequire} from 'node:module';
+const load=createRequire('/app/package.json');const{PrismaClient}=load('@prisma/client');
+const ops=load('/tmp/promo-reclaim-53-reviewed-e991694a.ts');
+const b=ops.loadPinned('/tmp/promo-reclaim-53-phase-a-700e01cc.json','244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d');const db=new PrismaClient();
+(async()=>{try{
+ const status=await ops.status(db,b,ops.ACTOR,ops.CANARY_REQUEST_ID);
+ const data=await ops.readOnly(db,async(tx:any)=>{
+ const[connection]=await tx.$queryRawUnsafe("SELECT current_user::text role,current_setting('transaction_read_only') read_only,clock_timestamp()::text observed_at");
+ const rows=[];
+ for(const id of b.canaryIds){
+  const linked=await tx.novelSourceItem.count({where:{id,channelAppId:ops.APP,status:'linked',novelId:{not:null}}});
+  const codedLinks=await tx.promoLink.findMany({where:{novelSourceItemId:id,upstreamCodePresent:true},select:{id:true,status:true,origin:true,channelAccountId:true,channelAppId:true,createdAt:true,updatedAt:true,fetchedAt:true,deletedAt:true,upstreamCodePresent:true}});
+  const intentCount=await tx.sideEffectIntent.count({where:{requestSummary:{path:['novelSourceItemId'],equals:id}}});
+  const active=await tx.genericTaskItem.count({where:{status:{in:['pending','processing']},task:{taskType:{startsWith:'promo_link.claim.'}},OR:[{targetId:id},{payload:{path:['novelSourceItemId'],equals:id}}]}});
+  rows.push({id,linked:linked===1,codedLinkCount:codedLinks.length,codedLinks,anyIntentCount:intentCount,inflightClaimItems:active,eligible:linked===1&&codedLinks.length===0&&intentCount===0&&active===0});
+ }
+ const mine='c838c281-c9ba-482a-aa80-05792e8fdc4a';
+ const history=await tx.genericTaskItem.findMany({where:{task:{taskType:{startsWith:'promo_link.claim.'}},OR:[{targetId:mine},{payload:{path:['novelSourceItemId'],equals:mine}}]},orderBy:{createdAt:'desc'},take:8,select:{id:true,taskId:true,status:true,createdAt:true,finishedAt:true,result:true,error:true,task:{select:{id:true,parentTaskId:true,status:true,createdAt:true}}}});
+ const projected=history.map((x:any)=>({id:x.id,taskId:x.taskId,status:x.status,createdAt:x.createdAt,finishedAt:x.finishedAt,decision:['already_available','claimed','manual_review_required'].includes(x.result?.decision)?x.result.decision:null,errorCode:typeof x.error?.code==='string'&&/^[a-z0-9_]+$/.test(x.error.code)?x.error.code:null,task:x.task}));
+ const recentAudit=await tx.operationAudit.findMany({where:{OR:[{entityId:mine},{entityId:{in:rows.flatMap((x:any)=>x.codedLinks.map((p:any)=>p.id))}}]},orderBy:{createdAt:'desc'},take:8,select:{actorType:true,actorId:true,action:true,entityType:true,entityId:true,requestId:true,taskId:true,createdAt:true}});
+ return{connection,preconditions:rows,mineClaimHistory:projected,mineEntityAudit:recentAudit};
+ });
+ console.log(JSON.stringify({stop:'submit_preconditions_failed',submissionAttempted:false,canaryWindowOpened:false,...data,status,manual635ExpectedSha256:b.manualReviewSha256,manual635DigestUnchanged:status.manualReviewDigestUnchanged}));
+}catch(e){console.error(JSON.stringify({stopped:true,code:e instanceof ops.OpsError?e.code:/permission denied/i.test(String(e))?'permission_denied_stop':'diagnostic_failed_stop'}));process.exitCode=64;}finally{await db.$disconnect();}})();

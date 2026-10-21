@@ -1,0 +1,28 @@
+// Canary evidence only; native web_app connection, explicit authorized columns,
+// RepeatableRead READ ONLY. No raw_payload or upstream/code values are read.
+import {createRequire} from 'node:module';
+const load=createRequire('/app/package.json');
+const {PrismaClient}=load('@prisma/client');
+const ops=load('/tmp/promo-reclaim-53-reviewed-e991694a.ts');
+const b=ops.loadPinned('/tmp/promo-reclaim-53-phase-a-700e01cc.json','244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d');
+const db=new PrismaClient();
+(async()=>{try{
+ const report=await ops.status(db,b,ops.ACTOR,ops.CANARY_REQUEST_ID);
+ const phase=process.argv[2];
+ if(phase==='pre' && (report.task!==null || report.rows.some((r:any)=>r.getcodeUpperBoundByIntent!==0)))throw new ops.OpsError('canary_already_submitted_stop');
+ if(phase==='post' && report.rows.some((r:any)=>!['success','already_available','failed'].includes(r.status)))throw new ops.OpsError('canary_not_terminal');
+ const detail=await ops.readOnly(db,async(tx:any)=>{
+  const [clock]=await tx.$queryRawUnsafe("SELECT clock_timestamp()::text observed_at,current_user::text role,current_setting('transaction_read_only') read_only");
+  const books=await tx.novelSourceItem.findMany({where:{id:{in:b.canaryIds}},orderBy:{id:'asc'},select:{id:true,title:true,sourceLocale:true,channelAppId:true,status:true}});
+  const linked=await tx.novelSourceItem.count({where:{id:{in:b.canaryIds},channelAppId:ops.APP,status:'linked',novelId:{not:null}}});
+  if(books.length!==5 || linked!==5)throw new ops.OpsError('canary_identity_stop');
+  const total=await tx.sideEffectIntent.count({where:{operationType:'promo_link.claim_promo'}});
+  const scope=await tx.sideEffectIntent.findMany({where:{operationType:'promo_link.claim_promo',OR:b.canaryIds.map((id:string)=>({requestSummary:{path:['novelSourceItemId'],equals:id}}))},select:{id:true,status:true,createdAt:true}});
+  const endedAt=new Date(clock.observed_at).toISOString();
+  const window=phase==='post'?await tx.sideEffectIntent.findMany({where:{operationType:'promo_link.claim_promo',createdAt:{gte:new Date(process.argv[3]),lt:new Date(endedAt)}},select:{id:true,status:true,createdAt:true,requestSummary:true}}):[];
+  const projected=window.map((x:any)=>({id:x.id,status:x.status,createdAt:x.createdAt,sourceItemId:x.requestSummary?.novelSourceItemId??null}));
+  const tasks=phase==='post'?await tx.genericTask.findMany({where:{createdAt:{gte:new Date(process.argv[3]),lt:new Date(endedAt)},OR:[{taskType:{startsWith:'promo_link.claim.'}},{taskType:'batch.materialize.v1',params:{path:['operation'],equals:'promo_claim'}}]},select:{id:true,parentTaskId:true,taskType:true,status:true,createdAt:true}}):[];
+  return{...clock,observedAt:endedAt,books,globalClaimIntentTotal:total,scopeIntents:scope,windowIntents:projected,windowClaimTasks:tasks};
+ });
+ console.log(JSON.stringify({phase,...detail,status:report,baselineSha256:'244a096fa262f46a2b21d305e5de5829e21b1f8eabcc5ce881bb79cbdb16e99d',manual635Count:b.manualReviewCount,manual635ExpectedSha256:b.manualReviewSha256,manual635DigestUnchanged:report.manualReviewDigestUnchanged}));
+}catch(e){console.error(JSON.stringify({stopped:true,code:e instanceof ops.OpsError?e.code:/permission denied/i.test(String(e))?'permission_denied_stop':'snapshot_failed_stop'}));process.exitCode=64;}finally{await db.$disconnect();}})();

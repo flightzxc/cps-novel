@@ -1,0 +1,165 @@
+{
+  "stop": "submit_preconditions_failed",
+  "submissionAttempted": false,
+  "canaryWindowOpened": false,
+  "connection": {
+    "role": "web_app",
+    "read_only": "on",
+    "observed_at": "2026-10-21 01:54:00.062159+00"
+  },
+  "preconditions": [
+    {
+      "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+      "linked": true,
+      "codedLinkCount": 0,
+      "codedLinks": [],
+      "anyIntentCount": 0,
+      "inflightClaimItems": 0,
+      "eligible": true
+    },
+    {
+      "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+      "linked": true,
+      "codedLinkCount": 0,
+      "codedLinks": [],
+      "anyIntentCount": 0,
+      "inflightClaimItems": 0,
+      "eligible": true
+    },
+    {
+      "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+      "linked": true,
+      "codedLinkCount": 0,
+      "codedLinks": [],
+      "anyIntentCount": 0,
+      "inflightClaimItems": 0,
+      "eligible": true
+    },
+    {
+      "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+      "linked": true,
+      "codedLinkCount": 0,
+      "codedLinks": [],
+      "anyIntentCount": 0,
+      "inflightClaimItems": 0,
+      "eligible": true
+    },
+    {
+      "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+      "linked": true,
+      "codedLinkCount": 1,
+      "codedLinks": [
+        {
+          "id": "cd24df05-ac66-4ba8-bdb3-510df2026147",
+          "status": "fetched",
+          "origin": "upstream_existing",
+          "channelAccountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+          "channelAppId": "85c2fb3e-28f8-476a-83f2-9647e2206192",
+          "createdAt": "2026-10-21T01:27:16.927Z",
+          "updatedAt": "2026-10-21T01:27:16.927Z",
+          "fetchedAt": "2026-10-21T01:27:15.760Z",
+          "deletedAt": null,
+          "upstreamCodePresent": true
+        }
+      ],
+      "anyIntentCount": 0,
+      "inflightClaimItems": 0,
+      "eligible": false
+    }
+  ],
+  "mineClaimHistory": [
+    {
+      "id": "11f819f4-6787-449d-9c33-f1fd17aec841",
+      "taskId": "29453eeb-aa4d-44fa-89ae-f390d87c2045",
+      "status": "failed",
+      "createdAt": "2026-10-20T05:53:25.041Z",
+      "finishedAt": "2026-10-20T05:56:44.448Z",
+      "decision": null,
+      "errorCode": "claim_readback_ambiguous",
+      "task": {
+        "id": "29453eeb-aa4d-44fa-89ae-f390d87c2045",
+        "parentTaskId": "6a18840d-c9b5-4d39-a768-91c43feaf4a5",
+        "status": "completed_with_errors",
+        "createdAt": "2026-10-20T05:53:25.009Z"
+      }
+    }
+  ],
+  "mineEntityAudit": [],
+  "status": {
+    "actor": {
+      "id": "71f0e655-0640-4f07-bcbb-041f027fa7cb",
+      "username": "admin",
+      "role": "super_admin",
+      "status": "active"
+    },
+    "databaseRole": "web_app",
+    "transactionReadOnly": "on",
+    "requestId": "promo-reclaim-53-2026-10-20-canary",
+    "accountId": "53f03fd8-951d-433e-ac66-784e82496a84",
+    "task": null,
+    "counts": {
+      "success": 0,
+      "already_available": 0,
+      "failed": 0,
+      "not_submitted": 5
+    },
+    "rows": [
+      {
+        "id": "17f20eb7-f286-4f36-9078-3237c84742ac",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "191da4c8-d71e-49a7-a016-9873dbeb0d9b",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "4265a05f-1bf4-46df-84ee-76d65aa64453",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "49e254d4-6106-4e41-9899-71f8b06e1d6a",
+        "status": "not_submitted",
+        "promoCodePresent": false,
+        "promoUrlPresent": false,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      },
+      {
+        "id": "c838c281-c9ba-482a-aa80-05792e8fdc4a",
+        "status": "not_submitted",
+        "promoCodePresent": true,
+        "promoUrlPresent": true,
+        "failureCode": null,
+        "reason": null,
+        "getcodeUpperBoundByIntent": 0,
+        "unresolvedIntents": 0
+      }
+    ],
+    "otherInflight": [],
+    "countLabel": "按意图记录推定的每本 getcode 上限",
+    "httpCountLabel": "窗口总调用数由宿主机日志单独交叉核对",
+    "manualReviewDigestUnchanged": true
+  },
+  "manual635ExpectedSha256": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+  "manual635DigestUnchanged": true
+}
