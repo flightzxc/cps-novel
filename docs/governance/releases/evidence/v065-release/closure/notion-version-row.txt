@@ -1,0 +1,8 @@
+<tr color="green_bg">
+<td>**v0.6.5**</td>
+<td><date start="2026-10-20" start-time="18:26" time-zone="Asia/Shanghai"/>（JST19:26部署）；53本恢复于<date start="2026-10-21" start-time="17:03" time-zone="Asia/Tokyo"/>完成</td>
+<td>PATCH</td>
+<td>getvideoinfo按编号精确回读；零新增迁移，29条/60表；53本均有码有网址，公开网址不改</td>
+<td>Final `b378910a8ec4b78029e71ad1bac92c742efb9f5b`；annotated v0.6.5；image cps-novel:0.6.5-b378910；恢复治理 `cdc5ca693e9864a0ae13a431a88177ebc17bbdef`</td>
+<td>已部署，技术及53本恢复核对PASS：MINE目录扫描解决，4+48均already_available，失败0；最终53本意图上限0</td>
+</tr>

@@ -1,0 +1,26 @@
+{
+  "/Users/chenweifeng/Documents/cps海阅/release-v0.6.5": {
+    "result": "release_governance_changes_only",
+    "head": "cdc5ca693e9864a0ae13a431a88177ebc17bbdef"
+  },
+  "/Users/chenweifeng/Documents/cps海阅/promo-reclaim-ops": {
+    "result": "unchanged",
+    "head": "94dec9ddb216c19c8c17682bd157e15e2c9b8b0e"
+  },
+  "/Users/chenweifeng/Documents/cps海阅/integration-v0.6.5": {
+    "result": "unchanged",
+    "head": "58cdb94da40e3103ddc4ebba7c267ce0c23b905e"
+  },
+  "/Users/chenweifeng/Documents/cps海阅/promo-readback-getvideoinfo": {
+    "result": "unchanged",
+    "head": "f5319950da997eecb040023a7ea8fce0a1044448"
+  },
+  "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux": {
+    "result": "unchanged",
+    "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c"
+  },
+  "/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin": {
+    "result": "unchanged",
+    "head": "5096765a7d53ba704bc8d07322864c366cb41895"
+  }
+}

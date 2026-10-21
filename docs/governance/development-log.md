@@ -51,7 +51,7 @@
 
 **验证方式**：第一阶段全量11639通过、零失败/Unhandled，37原运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异、audit和归档端到端PASS。第二阶段维护48.476629秒，在线备份/list/checksum、29迁移/60表、health0.6.5/Final、六服务、投影0/0/0、IndexNow、依赖/写闸/白名单/备份/nginx均PASS，外部9/10次。ops初次及还原后37/37、5组守卫变异红并恢复、无42501；生产核对全程web_app/READ ONLY。金丝雀窗16:43:06.640–16:47:02.480 JST，getcode总调用0/getvideoinfo4；48窗2026-10-21T16:59:28.822+09:00–2026-10-21T17:03:42.242+09:00，getcode0/getvideoinfo48。两个窗口各自新增意图0，与getcode事件总数相等；按意图记录推定的每本getcode上限最终53本均0，MINE0。两端无其它领码或扫描在途，未决/转人工/429/熔断0，六服务error/permission denied0，635条PlotNovel摘要最终不变。
 
-**后续待办**：本次53本恢复已完成，不再提交、补领或自动重试。本地tag/生成CHANGELOG/台账/发布与重领记录及唯一日志按本轮结果补齐；Notion同步回读收据以发布记录为准。公开网址继续冻结；回滚须Owner另行明确批准schema兼容声明，本次没有回滚。完整[发布记录](releases/v0.6.5-preproduction.md)及[最终恢复证据](releases/evidence/v065-release/remaining48-94dec9dd/README.md)。
+**后续待办**：本次53本恢复已完成，不再提交、补领或自动重试。annotated tag/原生成器CHANGELOG/台账/发布与重领记录及本唯一日志已补齐并推送回读PASS；Notion四处同步回读PASS（收据记录2026-10-21 08:14:01 UTC），原历史3910行保持，可见未知块0。公开网址继续冻结；回滚须Owner另行明确批准schema兼容声明，本次没有回滚。完整[发布记录](releases/v0.6.5-preproduction.md)及[最终恢复证据](releases/evidence/v065-release/remaining48-94dec9dd/README.md)。
 
 ### 2026-10-20 10:41 - codex（GPT-6，正式发版执行；JST / +0800为09:41）
 

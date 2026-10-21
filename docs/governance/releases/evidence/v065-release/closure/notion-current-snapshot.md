@@ -1,0 +1,8 @@
+### v0.6.5 —— 已部署，技术及53本恢复核对PASS（2026-10-21）
+
+- **PATCH**；Final `b378910a8ec4b78029e71ad1bac92c742efb9f5b` / tree `0bb390152c2f4e87cb69338e96e4e4722f6f5f05`，annotated `v0.6.5`固定Final；发布分支`release/v0.6.5-2026-10-20`，治理提交不改变工件。镜像`cps-novel:0.6.5-b378910`、linux/amd64，归档SHA256 `187158e6a80b6ee02939e0e38154945993bd39aa50dd66b28e1eeb95cb43fb9b`。
+- 领码前确认、领码后核对及异常恢复由getlistpc书名搜索改用getvideoinfo按编号精确回读，修复短书名超过100条的候选截断；MINE原返回228条。getcode请求、错误分类、意图状态机与绝不重复调用约束不变。
+- 零新增迁移，29条/60表、字典1401/active1331/drift0；grants、环境变量集合、compose、nginx、后台路由及任务白名单不变，无sudo，公开网址继续冻结。仅haiyue-vps原流程部署，维护48.476629秒，备份/list/checksum及env两版本行/cmp通过；health0.6.5/Final、六服务、投影0/0/0、IndexNow、依赖/写闸/白名单/备份/nginx均PASS，外部9/10次。
+- Owner分阶段授权后53本恢复完成：MINE由目录扫描84a47861解决，4本金丝雀及剩余48本均`already_available`、有码有网址，失败0；53 = 1 + 4 + 48。原生web_app仅各提交一次，主控审核ops@94dec9dd，原baseline及48范围保持。没有重放、补领或失败重试；这是已有链接回收，不称为新生成52个推广码。
+- 金丝雀独占窗口16:43:06.640–16:47:02.480 JST，窗口总调用数getcode0/getvideoinfo4；48窗16:59:28.822–17:03:42.242 JST，getcode0/getvideoinfo48，均在<date start="2026-10-21"/>。两窗各自新增意图0=getcode事件总数；**按意图记录推定的每本getcode上限**最终53本均0，MINE0；不伪造逐本实际HTTP次数。两端无其它领码/目录扫描在途、无未决/转人工/429/熔断，六服务error/permission denied0，635条PlotNovel摘要不变。
+- 原全量11639通过、37运行器、严格1750探针、100动态/2静态路由、nginx三模式/27变异、audit及归档端到端通过；ops真实web_app初次及还原后37/37，5组守卫变异红并恢复，无42501，原账户校验20/20行不变。annotated tag、生成CHANGELOG、台账、唯一发版日志及分支已推送回读PASS；本页同步当前快照/版本表/正式手账/唯一日志镜像，回读收据以仓库为准。生产执行结束，不再提交书目。[发布记录](https://github.com/flightzxc/cps-novel/blob/release/v0.6.5-2026-10-20/docs/governance/releases/v0.6.5-preproduction.md) · [最终53本结果](https://github.com/flightzxc/cps-novel/blob/release/v0.6.5-2026-10-20/docs/governance/releases/evidence/v065-release/remaining48-94dec9dd/README.md)。

@@ -1,0 +1,59 @@
+{
+  "pageId": "3e4601b5fd3481b5a39bcf48408015c2",
+  "pageUrl": "https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2?pvs=204",
+  "readback": "PASS",
+  "pageLastEditedAt": "2026-10-21T08:12:35.681Z",
+  "counts": {
+    "snapshot": 1,
+    "journal": 1,
+    "uniqueLog": 1,
+    "versionRows": 1
+  },
+  "markerChecks": [
+    {
+      "marker": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+      "found": true
+    },
+    {
+      "marker": "0bb390152c2f4e87cb69338e96e4e4722f6f5f05",
+      "found": true
+    },
+    {
+      "marker": "4ab3f194-e194-47ba-b9a4-c0c4a55b181e",
+      "found": true
+    },
+    {
+      "marker": "46537917902afee740455aa17c6c6bb9c4894ed926653f3c4fb1c5ab770bddff",
+      "found": true
+    },
+    {
+      "marker": "53 = 1 + 4 + 48",
+      "found": true
+    },
+    {
+      "marker": "f95469197e264588a1a9a99c298632d13a8b65882f64342770d29f225717b454",
+      "found": true
+    }
+  ],
+  "visibleUnknownBlockTags": 0,
+  "nativeUnknownBlockCount": null,
+  "completePageWrapper": true,
+  "oldHistoryCanonicalLinesPreserved": true,
+  "beforeCanonicalLines": 3910,
+  "afterHistoricalCanonicalLines": 3910,
+  "sections": [
+    "current_snapshot",
+    "version_table",
+    "release_journal",
+    "unique_release_log"
+  ],
+  "git": {
+    "branchHead": "cdc5ca693e9864a0ae13a431a88177ebc17bbdef",
+    "annotatedTagObject": "219836b3c5da3fc36711109934513c88d77d0b05",
+    "peeledFinal": "b378910a8ec4b78029e71ad1bac92c742efb9f5b",
+    "branchAndTagPushReadback": "PASS",
+    "postCommitTsc": 0,
+    "postCommitLintErrors": 0
+  },
+  "recordedAt": "2026-10-21 08:14:01 UTC"
+}

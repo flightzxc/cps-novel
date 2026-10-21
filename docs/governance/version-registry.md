@@ -13,13 +13,15 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
 > v0.5.7 第二阶段当前快照、版本表、正式手账、完整 G 报告和 24 样本已同步 Notion 并回读 PASS（2026-10-01T16:01:28.183Z），历史版本与模板保留。
+> v0.6.5 当前快照、版本表、正式手账与唯一日志镜像已同步Notion并回读PASS，收据记录2026-10-21 08:14:01 UTC；历史规范化3910行保持，可见未知块0。
+
 > 本文件是仓库内镜像；v0.5.6 当前快照、版本表、正式手账及 v0.5.5 分类遗留了结已同步 Notion 并回读核对。v0.5.7 第一阶段当前快照、版本表与详细记录已同步并回读 PASS（2026-10-01T13:32:26.469Z）（第一阶段历史）；当前第二阶段 E/F/G 已完成，Notion 同步状态按本页最终补记。本文件变更不会自动写入 Notion。
 
 > v0.5.7 第三阶段实际差集已PASS；最终Notion已同步并回读PASS（2026-10-01T20:42:52.094Z），次日备份仍待复核。
 
 ## 当前快照
 
-### v0.6.5 —— PATCH 已部署，53本恢复核对PASS（2026-10-21）
+### v0.6.5 —— PATCH 已部署，53本恢复及发版治理完成（2026-10-21）
 
 - 基线 `58cdb94da40e3103ddc4ebba7c267ce0c23b905e` / tree `0948319541fc29610e109b0a1a3a5473a359f172`，发布分支 `release/v0.6.5-2026-10-20`。版本类型 **PATCH**。
 - 领码前确认、领码后核对、异常恢复改用 `getvideoinfo` 按编号精确回读，修复短书名候选超过100条无法领码；getcode 请求、错误分类、意图状态机及绝不重复调用约束不变。
@@ -37,6 +39,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 2026-10-21当前：主控查明MINE由目录扫描解决，审核ops@94dec9dd的四本方案通过后，原生web_app仅提交4本一次；批次`0dcc1e9d-5900-4987-b686-3210b66f4602`，4本均already_available有码有网址，MINE单列resolved_by_catalog_scan。53 = 1 + 4 + 48。窗口getcode0=新增意图0、getvideoinfo4；意图上限5行均0，无其它在途/未决/转人工/429/熔断，六服务error/permission denied0，635条摘要不变。窗口已关闭，48本未提交，等待Owner另说“批准重领”。[金丝雀证据](releases/evidence/v065-release/canary-four-94dec9dd/README.md)。
 
 - 最终：Owner已明确“批准剩下48本”，本轮48本均already_available、有推广码及网址、失败0，批次`4ab3f194-e194-47ba-b9a4-c0c4a55b181e`，仅提交一次。MINE目录扫描解决+4本金丝雀+48本=53本全部恢复，最终53本意图上限0。48窗getcode0=新增意图0、getvideoinfo48；无其它在途/未决/转人工/429/熔断，六服务错误/权限拒绝0，635条摘要不变。[最终证据](releases/evidence/v065-release/remaining48-94dec9dd/README.md)。生产执行结束，治理收尾不改变Final。
+
+- 发版治理完成：annotated v0.6.5远端peeled为原Final，原生成器CHANGELOG、台账/发布与重领记录、唯一日志已补齐并推送；Notion四处同步回读PASS。见[治理总收据](releases/evidence/v065-release/closure/governance.json)。本次生产执行已停止，无失败重试或补领待办。
 
 ### v0.6.4 —— 已部署正式站，技术验收PASS；Owner/运营验收待回执（2026-10-20）
 
@@ -566,7 +570,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | Final b378910a；release/v0.6.5-2026-10-20 | 已部署，53本恢复核对PASS：1目录扫描+4及48全部already_available，失败0；治理收尾中 |
+| `v0.6.5` | 2026-10-20 | PATCH | getvideoinfo按编号精确回读；零新增迁移，29迁移/60表 | annotated v0.6.5 / Final b378910a；release/v0.6.5-2026-10-20 | 已部署，53本恢复核对PASS：1目录扫描+4及48全部already_available，失败0；发版治理及Notion回读完成 |
 | `v0.6.4` | 2026-10-20 09:41:09 | PATCH | B-50短剧误入301、B-51后台不加载GA、B-44剧场筛选和暂停剧场跳过；零迁移 | Final `50e3e06a413fe2b8ead4ad05ce8fc75733321e45`；annotated v0.6.4；[发布记录](releases/v0.6.4-preproduction.md) | 已部署正式站；技术PASS，Owner/运营验收待回执 |
 | `v0.6.3` | 2026-10-19 | PATCH | 后台移除 Basic Auth（健康检查保留）；B-49 国家口径说明；零迁移 | `6543af6` / [发布记录](releases/v0.6.3-preproduction.md) | 已正式收官，技术及Owner/运营验收PASS |
 | `v0.6.2` | 2026-10-17 | PATCH | 收入按书与国家新用户／激活；迁移29、表60、grants新增；B-48及v0.6.1证据后缀修复 | `release/v0.6.2-2026-10-17`；基线 `004c81c0` | 已部署正式站；技术及业务验收PASS（国家明细合计=国家接口total，跨接口已知口径差异按Owner裁定接受） |

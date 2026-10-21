@@ -1,0 +1,7 @@
+{
+  "failure": "local governance evidence scanner missing import re after local document updates",
+  "productionOperations": 0,
+  "fix": "complete remaining scan and checksum with import re; do not repeat document insertion",
+  "notionFinalConfirmation": "PASS",
+  "productSourceChanged": false
+}

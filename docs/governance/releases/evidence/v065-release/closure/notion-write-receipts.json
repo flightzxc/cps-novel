@@ -1,0 +1,17 @@
+{
+  "update": {
+    "page_id": "3e4601b5-fd34-81b5-a39b-cf48408015c2",
+    "warnings": [
+      {
+        "code": "markdown_parser_warning",
+        "message": "<mention-date> is enhanced Markdown, not Markdown vNext, and was automatically converted to <date>. Write <date start=\"YYYY-MM-DD\" end=\"YYYY-MM-DD\" start-time=\"HH:mm\" end-time=\"HH:mm\" time-zone=\"IANA_TZ\" /> instead.",
+        "category": "deprecated_tag",
+        "autofix": true
+      }
+    ]
+  },
+  "append": {
+    "page_id": "3e4601b5-fd34-81b5-a39b-cf48408015c2"
+  },
+  "rawPageContentArchived": false
+}

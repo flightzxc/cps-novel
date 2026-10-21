@@ -1,6 +1,6 @@
 # 53 本 MoboReader 重领：独立 ops 脚本与执行约定
 
-当前：Owner批准剩余48本后已提交并核对PASS，48本均already_available；先前4本及MINE最终只读复核不变。53 = 1 + 4 + 48，53本有码有网址、意图上限均0、失败0，生产执行结束。旧停点/等待批准段保留作历史，后续仅发版治理收尾。
+当前：Owner批准剩余48本后已提交并核对PASS，48本均already_available；先前4本及MINE最终只读复核不变。53 = 1 + 4 + 48，53本有码有网址、意图上限均0、失败0，生产执行及发版治理均完成。旧停点/等待批准段保留作历史。
 
 发布Final固定为 `b378910a8ec4b78029e71ad1bac92c742efb9f5b`。ops分支 `ops/promo-reclaim-53-2026-10-20` 从Final切出，仅留档不合入集成/发布镜像。脚本源与门禁结果在完成后记录于本页。
 
@@ -73,3 +73,5 @@ UTC窗口2026-10-21T07:43:06.640Z–2026-10-21T07:47:02.480Z（JST2026-10-21T16:
 Owner“批准剩下48本”后重新plan及清单sha核对，通过原生web_app原路径提交一次；批次`4ab3f194-e194-47ba-b9a4-c0c4a55b181e`，48本全部already_available、有码有网址、失败0。先前4本最终仍already_available，MINE为resolved_by_catalog_scan未重提。53 = 1 + 4 + 48，53本全部码/网址就绪，按意图记录推定的每本getcode上限均0。
 
 48本独占窗口UTC 2026-10-21T07:59:28.822Z–2026-10-21T08:03:42.242Z（JST 2026-10-21T16:59:28.822+09:00–2026-10-21T17:03:42.242+09:00），getcode窗口总调用数0=新增意图0，getvideoinfo窗口总调用数48。起止无其它领码/目录扫描在途，未决/转人工/429/熔断0，六服务error/permission denied0，635条摘要最终不变；没有重放、失败重试或补领。原baseline/48摘要及工件不变。[最终证据](evidence/v065-release/remaining48-94dec9dd/README.md)及[53本逐项结果](evidence/v065-release/remaining48-94dec9dd/books53.json)。生产执行已结束，后续只补齐发版治理。
+
+最终治理收据：annotated v0.6.5固定原Final、生成CHANGELOG、台账、唯一日志及Notion四处同步回读全部PASS；原历史3910行保持。见[治理总收据](evidence/v065-release/closure/governance.json)。生产执行已停止，不再补领或重试。
